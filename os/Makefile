@@ -74,13 +74,13 @@ run-inner: qemu-version-check build
 debug: qemu-version-check build
 	@tmux new-session -d \
 		"qemu-system-riscv64 $(QEMU_ARGS) -s -S" && \
-		tmux split-window -h "riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
+		tmux split-window -h "gdb-multiarch -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
 		tmux -2 attach-session -d
 
 gdbserver: qemu-version-check build
 	@qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
 gdbclient:
-	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
+	@gdb-multiarch -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
 
 .PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check
