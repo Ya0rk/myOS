@@ -30,7 +30,7 @@ impl PageTableEntry {
     ///Create a PTE from ppn
     pub fn new(ppn: PhysPageNum, flags: PTEFlags) -> Self {
         PageTableEntry {
-            bits: ppn.0 << 10 | flags.bits as usize,
+            bits: ppn.0 << 10 | flags.bits() as usize,
         }
     }
     ///Return an empty PTE
@@ -47,19 +47,19 @@ impl PageTableEntry {
     }
     ///Check PTE valid
     pub fn is_valid(&self) -> bool {
-        (self.flags() & PTEFlags::V) != PTEFlags::empty()
+        self.flags().contains(PTEFlags::V)
     }
     ///Check PTE readable
     pub fn readable(&self) -> bool {
-        (self.flags() & PTEFlags::R) != PTEFlags::empty()
+        self.flags().contains(PTEFlags::R)
     }
     ///Check PTE writable
     pub fn writable(&self) -> bool {
-        (self.flags() & PTEFlags::W) != PTEFlags::empty()
+        self.flags().contains(PTEFlags::W)
     }
     ///Check PTE executable
     pub fn executable(&self) -> bool {
-        (self.flags() & PTEFlags::X) != PTEFlags::empty()
+        self.flags().contains(PTEFlags::X)
     }
 }
 
