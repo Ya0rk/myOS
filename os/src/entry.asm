@@ -2,11 +2,36 @@
     .globl _start
 _start:
     la sp, boot_stack_top
-    call rust_main
+    # 因为现在内核链接地址在 0xffff_ffc0_8020_0000（这是虚拟地址）
+    # 所以我们要打开页表机制，这样才能找到正确的物理地址
+    # satp: 8 << 60 | boot_pagetable （开启页表机制 三级页表）
+    la t0, boot_pagetable
+    li t1, 8 << 60
+    srli t0, t0, 12
+    or t0, t0, t1
+    csrw satp, t0
+    sfence.vma
+
+    # 调用 辅助函数（在utils/boot.rs中），在辅助函数中调用真正的程序入口
+    call jump_helper
 
     .section .bss.stack
     .globl boot_stack_lower_bound
 boot_stack_lower_bound:
-    .space 4096 * 16
+    .space 4096 * 16 * 1 # 根据CPU数量开辟栈空间
     .globl boot_stack_top
 boot_stack_top:
+
+.section .data
+    .align 12
+boot_pagetable:
+    # 这是大页表
+    # 里面只需要两个pte，供我们找到正确的物理地址
+    # 0x0000_0000_8000_0000 -> 0x0000_0000_8000_0000
+    # 0xffff_fc00_8000_0000 -> 0x0000_0000_8000_0000
+    .quad 0
+    .quad 0
+    .quad (0x80000 << 10) | 0xcf # VRWXAD
+    .zero 8 * 255
+    .quad (0x80000 << 10) | 0xcf # VRWXAD
+    .zero 8 * 253

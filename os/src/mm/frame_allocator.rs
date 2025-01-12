@@ -1,7 +1,7 @@
 //! Implementation of [`FrameAllocator`] which
 //! controls all the frames in the operating system.
 use super::{PhysAddr, PhysPageNum};
-use crate::config::MEMORY_END;
+use crate::{config::MEMORY_END, mm::address::KernelAddr};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use core::fmt::{self, Debug, Formatter};
@@ -98,8 +98,8 @@ pub fn init_frame_allocator() {
         fn ekernel();
     }
     FRAME_ALLOCATOR.exclusive_access().init(
-        PhysAddr::from(ekernel as usize).ceil(),
-        PhysAddr::from(MEMORY_END).floor(),
+        PhysAddr::from(KernelAddr(ekernel as usize)).ceil(),
+        PhysAddr::from(KernelAddr(MEMORY_END)).floor(),
     );
 }
 /// allocate a frame

@@ -1,4 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
+
+use super::address::KernelAddr;
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
@@ -135,6 +137,7 @@ impl PageTable {
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
         self.find_pte(vpn).map(|pte| *pte)
     }
+    /// 根据虚拟地址找到物理地址，翻译
     pub fn translate_va(&self, va: VirtAddr) -> Option<PhysAddr> {
         self.find_pte(va.clone().floor()).map(|pte| {
             //println!("translate_va:va = {:?}", va);
@@ -145,6 +148,7 @@ impl PageTable {
             (aligned_pa_usize + offset).into()
         })
     }
+    /// 获取根页表 ppn
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
@@ -177,9 +181,10 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let mut string = String::new();
     let mut va = ptr as usize;
     loop {
-        let ch: u8 = *(page_table
+        // 这里需要扩展地址到kernelAddr，不然不能根据程序名找到对应程序
+        let ch: u8 = *(KernelAddr::from(page_table
             .translate_va(VirtAddr::from(va))
-            .unwrap()
+            .unwrap())
             .get_mut());
         if ch == 0 {
             break;
@@ -196,8 +201,8 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     let page_table = PageTable::from_token(token);
     let va = ptr as usize;
     //println!("translated_refmut: before translate_va");
-    page_table
+    KernelAddr::from(page_table
         .translate_va(VirtAddr::from(va))
-        .unwrap()
+        .unwrap())
         .get_mut()
 }

@@ -1,9 +1,10 @@
 //! Implementation of [`MapArea`] and [`MemorySet`].
+use super::address::KernelAddr;
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT, USER_STACK_SIZE};
+use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT, USER_STACK_SIZE};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -83,7 +84,7 @@ impl MemorySet {
     fn map_trampoline(&mut self) {
         self.page_table.map(
             VirtAddr::from(TRAMPOLINE).into(),
-            PhysAddr::from(strampoline as usize).into(),
+            PhysAddr::from(KernelAddr::from(strampoline as usize)).into(),
             PTEFlags::R | PTEFlags::X,
         );
     }
@@ -105,7 +106,7 @@ impl MemorySet {
             MapArea::new(
                 (stext as usize).into(),
                 (etext as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::X,
             ),
             None,
@@ -115,7 +116,7 @@ impl MemorySet {
             MapArea::new(
                 (srodata as usize).into(),
                 (erodata as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R,
             ),
             None,
@@ -125,7 +126,7 @@ impl MemorySet {
             MapArea::new(
                 (sdata as usize).into(),
                 (edata as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -135,7 +136,7 @@ impl MemorySet {
             MapArea::new(
                 (sbss_with_stack as usize).into(),
                 (ebss as usize).into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -145,7 +146,7 @@ impl MemorySet {
             MapArea::new(
                 (ekernel as usize).into(),
                 MEMORY_END.into(),
-                MapType::Identical,
+                MapType::Direct,
                 MapPermission::R | MapPermission::W,
             ),
             None,
@@ -155,13 +156,14 @@ impl MemorySet {
             memory_set.push(
                 MapArea::new(
                     (*pair).0.into(),
-                    ((*pair).0 + (*pair).1).into(),
-                    MapType::Identical,
+                    ((*pair).0 + (*pair).1 - KERNEL_ADDR_OFFSET).into(),
+                    MapType::Direct,
                     MapPermission::R | MapPermission::W,
                 ),
                 None,
             );
         }
+        // println!("kernel memory set initialized");
         memory_set
     }
     /// Include sections in elf and trampoline and TrapContext and user stack,
@@ -305,9 +307,11 @@ impl MapArea {
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
-            MapType::Identical => {
-                ppn = PhysPageNum(vpn.0);
+            // 直接映射 直接相减就能得到物理页号
+            MapType::Direct => {
+                ppn = PhysPageNum(vpn.0 - KERNEL_PGNUM_OFFSET);
             }
+            // 间接映射
             MapType::Framed => {
                 let frame = frame_alloc().unwrap();
                 ppn = frame.ppn;
@@ -360,7 +364,7 @@ impl MapArea {
 #[derive(Copy, Clone, PartialEq, Debug)]
 /// map type for memory set: identical or framed
 pub enum MapType {
-    Identical,
+    Direct,
     Framed,
 }
 
@@ -382,24 +386,25 @@ bitflags! {
 #[allow(unused)]
 ///Check PageTable running correctly
 pub fn remap_test() {
+    // msg("start");
     let mut kernel_space = KERNEL_SPACE.exclusive_access();
-    let mid_text: VirtAddr = ((stext as usize + etext as usize) / 2).into();
-    let mid_rodata: VirtAddr = ((srodata as usize + erodata as usize) / 2).into();
-    let mid_data: VirtAddr = ((sdata as usize + edata as usize) / 2).into();
+    let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
+    let mid_rodata: VirtAddr = (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
+    let mid_data: VirtAddr = (sdata as usize + (edata as usize - sdata as usize) / 2).into();
     assert!(!kernel_space
         .page_table
         .translate(mid_text.floor())
         .unwrap()
-        .writable(),);
+        .writable(), "a");
     assert!(!kernel_space
         .page_table
         .translate(mid_rodata.floor())
         .unwrap()
-        .writable(),);
+        .writable(),"b");
     assert!(!kernel_space
         .page_table
         .translate(mid_data.floor())
         .unwrap()
-        .executable(),);
+        .executable(),"c");
     println!("remap_test passed!");
 }

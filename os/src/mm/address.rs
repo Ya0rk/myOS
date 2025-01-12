@@ -1,6 +1,6 @@
 //! Implementation of physical and virtual address and page number.
 use super::PageTableEntry;
-use crate::config::{PAGE_SIZE, PAGE_SIZE_BITS};
+use crate::config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
 /// physical address
 const PA_WIDTH_SV39: usize = 56;
@@ -8,6 +8,8 @@ const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+pub struct KernelAddr(pub usize);
 /// physical address
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
@@ -22,6 +24,12 @@ pub struct PhysPageNum(pub usize);
 pub struct VirtPageNum(pub usize);
 
 /// Debugging
+
+impl Debug for KernelAddr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("KernelAddr:{:#x}", self.0))
+    }
+}
 
 impl Debug for VirtAddr {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -48,6 +56,42 @@ impl Debug for PhysPageNum {
 /// T -> usize: T.0
 /// usize -> T: usize.into()
 
+impl From<usize> for KernelAddr {
+    fn from(v: usize) -> Self {
+        Self(v)
+    }
+}
+
+impl From<KernelAddr> for PhysAddr {
+    fn from(v: KernelAddr) -> Self {
+        Self(v.0 - KERNEL_ADDR_OFFSET)
+    }
+}
+
+impl From<KernelAddr> for PhysPageNum {
+    fn from(v: KernelAddr) -> Self {
+        PhysAddr::from(v).floor()
+    }
+}
+
+impl From<PhysAddr> for KernelAddr {
+    fn from(v: PhysAddr) -> Self {
+        Self(v.0 + KERNEL_ADDR_OFFSET)
+    }
+}
+
+impl From<KernelAddr> for VirtAddr {
+    fn from(v: KernelAddr) -> Self {
+        Self(v.0)
+    }
+}
+
+impl From<VirtAddr> for KernelAddr {
+    fn from(v: VirtAddr) -> Self {
+        Self(v.0)
+    }
+}
+
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
         Self(v & ((1 << PA_WIDTH_SV39) - 1))
@@ -58,14 +102,22 @@ impl From<usize> for PhysPageNum {
         Self(v & ((1 << PPN_WIDTH_SV39) - 1))
     }
 }
+
 impl From<usize> for VirtAddr {
     fn from(v: usize) -> Self {
-        Self(v & ((1 << VA_WIDTH_SV39) - 1))
+        // 拓展虚拟地址到512GB，在这之前需要做检查
+        let tmp = (v as isize >> VA_WIDTH_SV39) as isize;
+        let is_valid = tmp == 0 || tmp == -1;
+        assert!(is_valid, "invalid v to VirtAddr: {:#x}", v);
+        Self(v)
     }
 }
 impl From<usize> for VirtPageNum {
     fn from(v: usize) -> Self {
-        Self(v & ((1 << VPN_WIDTH_SV39) - 1))
+        let tmp = v >> (VPN_WIDTH_SV39 - 1);
+        let is_valid = tmp == 0 || tmp == (1 << (52 - VPN_WIDTH_SV39 + 1)) - 1;
+        assert!(is_valid, "invalid v to VirtPageNum: {:#x}", v);
+        Self(v)
     }
 }
 impl From<PhysAddr> for usize {
@@ -179,21 +231,32 @@ impl PhysAddr {
         unsafe { (self.0 as *mut T).as_mut().unwrap() }
     }
 }
+impl KernelAddr {
+    pub fn get_ref<T>(&self) -> &'static T {
+        unsafe { (self.0 as *const T).as_ref().unwrap() }
+    }
+    pub fn get_mut<T>(&self) -> &'static mut T {
+        unsafe { (self.0 as *mut T).as_mut().unwrap() }
+    }
+}
 impl PhysPageNum {
     ///Get `PageTableEntry` on `PhysPageNum`
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
         let pa: PhysAddr = (*self).into();
-        unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut PageTableEntry, 512) }
+        let va = KernelAddr::from(pa).0;
+        unsafe { core::slice::from_raw_parts_mut(va as *mut PageTableEntry, 512) }
     }
     ///
     pub fn get_bytes_array(&self) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
-        unsafe { core::slice::from_raw_parts_mut(pa.0 as *mut u8, 4096) }
+        let va = KernelAddr::from(pa).0;
+        unsafe { core::slice::from_raw_parts_mut(va as *mut u8, 4096) }
     }
     ///
     pub fn get_mut<T>(&self) -> &'static mut T {
         let pa: PhysAddr = (*self).into();
-        pa.get_mut()
+        let va = KernelAddr::from(pa);
+        va.get_mut()
     }
 }
 

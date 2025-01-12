@@ -1,6 +1,6 @@
 OUTPUT_ARCH(riscv)
 ENTRY(_start)
-BASE_ADDRESS = 0x80200000;
+BASE_ADDRESS = 0xffffffc080200000; /*将内核地址链接到高地址*/
 
 SECTIONS
 {

@@ -32,3 +32,9 @@ macro_rules! println {
         $crate::console::print(format_args!(concat!($fmt, "\n") $(, $($arg)+)?));
     }
 }
+
+/// 打印 info
+#[allow(unused)]
+pub fn msg(info: &str) {
+    println!("\x1b[33m{}\x1b[0m", info);
+}
