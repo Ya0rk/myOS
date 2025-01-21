@@ -10,10 +10,15 @@ BOARD := qemu
 SBI ?= rustsbi
 BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 
+# GDB wrapper to handle virtual path to core lib and types display in Rust
+GDB_PATH := /mnt/f/wsldir/ru/gdb-14.2/build-riscv64/bin/riscv64-unknown-elf-gdb
+gdb := RUST_GDB=$(GDB_PATH) rust-gdb
+
 # Building mode argument
 ifeq ($(MODE), release)
 	MODE_ARG := --release
-else
+endif
+ifeq ($(MODE), debug)
 	MODE_ARG :=
 endif
 
@@ -71,18 +76,19 @@ qemu-version-check:
 	@sh scripts/qemu-ver-check.sh $(QEMU_NAME)
 
 run-inner: qemu-version-check build
+	@echo "Running QEMU with arguments: $(QEMU_ARGS)"
 	@qemu-system-riscv64 $(QEMU_ARGS)
 
 debug: qemu-version-check build
 	@tmux new-session -d \
 		"qemu-system-riscv64 $(QEMU_ARGS) -s -S" && \
-		tmux split-window -h "gdb-multiarch -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
+		tmux split-window -h "$(gdb) -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
 		tmux -2 attach-session -d
 
 gdbserver: qemu-version-check build
 	@qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
 gdbclient:
-	@gdb-multiarch -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
+	@$(gdb) -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
 
 .PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check
