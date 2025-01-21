@@ -1,7 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
 use super::address::KernelAddr;
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -66,8 +66,8 @@ impl PageTableEntry {
 }
 
 pub struct PageTable {
-    root_ppn: PhysPageNum,
-    frames: Vec<FrameTracker>,
+    pub root_ppn: PhysPageNum,
+    pub frames: Vec<FrameTracker>,
 }
 
 /// Assume that it won't oom when creating/mapping.
@@ -123,12 +123,14 @@ impl PageTable {
         result
     }
     #[allow(unused)]
+    /// 建立虚拟地址和物理地址的映射
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
-        assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn);
+        assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
     #[allow(unused)]
+    /// 解除映射
     pub fn unmap(&mut self, vpn: VirtPageNum) {
         let pte = self.find_pte(vpn).unwrap();
         assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
@@ -156,23 +158,11 @@ impl PageTable {
 /// translate a pointer to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token);
-    let mut start = ptr as usize;
-    let end = start + len;
+    let va = VirtAddr::from(ptr as usize);
+    let ppn = page_table.translate(va.floor()).unwrap().ppn();
     let mut v = Vec::new();
-    while start < end {
-        let start_va = VirtAddr::from(start);
-        let mut vpn = start_va.floor();
-        let ppn = page_table.translate(vpn).unwrap().ppn();
-        vpn.step();
-        let mut end_va: VirtAddr = vpn.into();
-        end_va = end_va.min(VirtAddr::from(end));
-        if end_va.page_offset() == 0 {
-            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
-        } else {
-            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
-        }
-        start = end_va.into();
-    }
+    let offset = va.page_offset();
+    v.push(ppn.bytes_array_from_offset(offset, len));
     v
 }
 /// translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`

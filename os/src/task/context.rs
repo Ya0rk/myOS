@@ -4,12 +4,9 @@ use crate::trap::trap_return;
 #[repr(C)]
 /// task context structure containing some registers
 pub struct TaskContext {
-    /// return address ( e.g. __restore ) of __switch ASM function
-    ra: usize,
-    /// kernel stack pointer of app
-    sp: usize,
-    /// s0-11 register, callee saved
-    s: [usize; 12],
+    /* 0 */  ra: usize,
+    /* 1 */  sp: usize,
+    /*2-13*/ s: [usize; 12], // s0-11 register, callee saved
 }
 
 impl TaskContext {

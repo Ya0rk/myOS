@@ -258,6 +258,12 @@ impl PhysPageNum {
         let va = KernelAddr::from(pa);
         va.get_mut()
     }
+    ///Get u8 array on `PhysPageNum` with given length
+    pub fn bytes_array_from_offset(&self, offset: usize, len: usize) -> &'static mut [u8] {
+        let pa: PhysAddr = (*self).into();
+        let kernel_va = KernelAddr::from(pa).0 + offset;
+        unsafe { core::slice::from_raw_parts_mut(kernel_va as *mut u8, len) }
+    }
 }
 
 pub trait StepByOne {

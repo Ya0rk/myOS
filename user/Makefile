@@ -1,5 +1,5 @@
 TARGET := riscv64gc-unknown-none-elf
-MODE := release
+MODE := debug
 APP_DIR := src/bin
 TARGET_DIR := target/$(TARGET)/$(MODE)
 APPS := $(wildcard $(APP_DIR)/*.rs)
@@ -12,8 +12,14 @@ CP := cp
 
 TEST ?= 
 
+ifeq ($(MODE), release)
+	MODE_ARG := --release
+else
+	MODE_ARG :=
+endif
+
 elf: $(APPS)
-	@cargo build --release
+	@cargo build $(MODE_ARG)
 ifeq ($(TEST), 1)
 	@$(CP) $(TARGET_DIR)/usertests $(TARGET_DIR)/initproc
 endif

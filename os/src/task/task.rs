@@ -1,8 +1,8 @@
 //!Implementation of [`TaskControlBlock`]
 use super::TaskContext;
 use super::{pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::config::USER_TRAP_CONTEXT;
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -53,17 +53,26 @@ impl TaskControlBlock {
     pub fn inner_exclusive_access(&self) -> RefMut<'_, TaskControlBlockInner> {
         self.inner.exclusive_access()
     }
+    /// 创建新task,只有initproc会调用
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
-        let kernel_stack_top = kernel_stack.get_top();
+        
+        // 每个task有自己的kernel stack
+        let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
+        memory_set.insert_framed_area(
+            kernel_stack_bottom.into(), 
+            kernel_stack_top.into(), 
+            MapPermission::R | MapPermission::W,
+        );
+        
         // push a task context which goes to trap_return to the top of kernel stack
         let task_control_block = Self {
             pid: pid_handle,
@@ -86,19 +95,29 @@ impl TaskControlBlock {
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
+            // KERNEL_SPACE.exclusive_access().token(),
             kernel_stack_top,
             trap_handler as usize,
         );
+        println!("initproc successfully created, pid: {}", task_control_block.getpid());
+        println!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
         task_control_block
     }
     pub fn exec(&self, elf_data: &[u8]) {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
+
+        // 建立该进程的kernel stack
+        let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
+        memory_set.insert_framed_area(
+            kernel_stack_bottom.into(),
+            kernel_stack_top.into(),
+            MapPermission::R | MapPermission::W,
+        );
 
         // **** access inner exclusively
         let mut inner = self.inner_exclusive_access();
@@ -113,7 +132,6 @@ impl TaskControlBlock {
         *trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            KERNEL_SPACE.exclusive_access().token(),
             self.kernel_stack.get_top(),
             trap_handler as usize,
         );
@@ -123,25 +141,32 @@ impl TaskControlBlock {
         // ---- access parent PCB exclusively
         let mut parent_inner = self.inner_exclusive_access();
         // copy user space(include trap context)
-        let memory_set = MemorySet::from_existed_user(&parent_inner.memory_set);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+        let mut child_memory_set = MemorySet::clone_from_existed_proc(&parent_inner.memory_set);
+        let child_trap_cx_ppn = child_memory_set
+            .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
-        let kernel_stack_top = kernel_stack.get_top();
+
+        let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
+        child_memory_set.insert_framed_area(
+            kernel_stack_bottom.into(),
+            kernel_stack_top.into(),
+            MapPermission::R | MapPermission::W,
+        );
+
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
-                    trap_cx_ppn,
+                    trap_cx_ppn: child_trap_cx_ppn,
                     base_size: parent_inner.base_size,
                     task_cx: TaskContext::goto_trap_return(kernel_stack_top),
                     task_status: TaskStatus::Ready,
-                    memory_set,
+                    memory_set: child_memory_set,
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     exit_code: 0,

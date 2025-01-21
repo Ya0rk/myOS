@@ -13,6 +13,8 @@ BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 # Building mode argument
 ifeq ($(MODE), release)
 	MODE_ARG := --release
+else
+	MODE_ARG :=
 endif
 
 # KERNEL ENTRY
@@ -43,7 +45,7 @@ kernel:
 	@cd ../user && make build TEST=$(TEST)
 	@echo Platform: $(BOARD)
 	@cp src/linker-$(BOARD).ld src/linker.ld
-	@cargo build --release
+	@cargo build $(MODE_ARG)
 	@rm src/linker.ld
 
 clean:

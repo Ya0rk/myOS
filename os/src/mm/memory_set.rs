@@ -1,14 +1,14 @@
 //! Implementation of [`MapArea`] and [`MemorySet`].
-use super::address::KernelAddr;
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
-use super::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
-use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT, USER_STACK_SIZE};
+use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, USER_SPACE_TOP, USER_STACK_SIZE, USER_TRAP_CONTEXT};
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use alloc::vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
@@ -23,7 +23,6 @@ extern "C" {
     fn sbss_with_stack();
     fn ebss();
     fn ekernel();
-    fn strampoline();
 }
 
 lazy_static! {
@@ -33,15 +32,35 @@ lazy_static! {
 }
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
-    page_table: PageTable,
+    pub page_table: PageTable,
     areas: Vec<MapArea>,
 }
 
 impl MemorySet {
-    ///Create an empty `MemorySet`
+    /// 创建一个空的 `MemorySet`
     pub fn new_bare() -> Self {
         Self {
             page_table: PageTable::new(),
+            areas: Vec::new(),
+        }
+    }
+
+    /// 创建一个带有kernel pagetable的 `MemorySet`
+    /// 创建pagetable时初始化了kernel的页表
+    /// 每个进程有自己的页表（不同的用户页表+相同的内核页表）
+    pub fn new_with_kernel_pagetable() -> Self {
+        let frame = frame_alloc().unwrap();
+        let kernel_page_table = &KERNEL_SPACE.exclusive_access().page_table;
+        let kernel_root_ppn = kernel_page_table.root_ppn;
+        // 第一级页表
+        let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
+        frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
+        
+        Self {
+            page_table: PageTable {
+                root_ppn: frame.ppn,
+                frames: vec![frame],
+            },
             areas: Vec::new(),
         }
     }
@@ -49,6 +68,7 @@ impl MemorySet {
     pub fn token(&self) -> usize {
         self.page_table.token()
     }
+    
     /// Assume that no conflicts.
     pub fn insert_framed_area(
         &mut self,
@@ -61,6 +81,7 @@ impl MemorySet {
             None,
         );
     }
+
     ///Remove `MapArea` that starts with `start_vpn`
     pub fn remove_area_with_start_vpn(&mut self, start_vpn: VirtPageNum) {
         if let Some((idx, area)) = self
@@ -80,19 +101,11 @@ impl MemorySet {
         }
         self.areas.push(map_area);
     }
-    /// Mention that trampoline is not collected by areas.
-    fn map_trampoline(&mut self) {
-        self.page_table.map(
-            VirtAddr::from(TRAMPOLINE).into(),
-            PhysAddr::from(KernelAddr::from(strampoline as usize)).into(),
-            PTEFlags::R | PTEFlags::X,
-        );
-    }
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
         // map trampoline
-        memory_set.map_trampoline();
+        // memory_set.map_trampoline();
         // map kernel sections
         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
@@ -169,9 +182,9 @@ impl MemorySet {
     /// Include sections in elf and trampoline and TrapContext and user stack,
     /// also returns user_sp and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
-        let mut memory_set = Self::new_bare();
+        let mut memory_set = Self::new_with_kernel_pagetable();
         // map trampoline
-        memory_set.map_trampoline();
+        // memory_set.map_trampoline();
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
@@ -221,8 +234,8 @@ impl MemorySet {
         // map TrapContext
         memory_set.push(
             MapArea::new(
-                TRAP_CONTEXT.into(),
-                TRAMPOLINE.into(),
+                USER_TRAP_CONTEXT.into(),
+                USER_SPACE_TOP.into(),
                 MapType::Framed,
                 MapPermission::R | MapPermission::W,
             ),
@@ -235,15 +248,17 @@ impl MemorySet {
         )
     }
     ///Clone a same `MemorySet`
-    pub fn from_existed_user(user_space: &Self) -> Self {
-        let mut memory_set = Self::new_bare();
+    pub fn clone_from_existed_proc(user_space: &Self) -> Self {
+        let mut memory_set = Self::new_with_kernel_pagetable();
         // map trampoline
-        memory_set.map_trampoline();
-        // copy data sections/trap_context/user_stack
+        // memory_set.map_trampoline();
+
+        // 复制每一个逻辑段数据
         for area in user_space.areas.iter() {
-            let new_area = MapArea::from_another(area);
+            let new_area = MapArea::clone_from_another(area);
             memory_set.push(new_area, None);
-            // copy data from another space
+            
+            // 复制页表中的每一个页表项
             for vpn in area.vpn_range {
                 let src_ppn = user_space.translate(vpn).unwrap().ppn();
                 let dst_ppn = memory_set.translate(vpn).unwrap().ppn();
@@ -296,7 +311,7 @@ impl MapArea {
             map_perm,
         }
     }
-    pub fn from_another(another: &Self) -> Self {
+    pub fn clone_from_another(another: &Self) -> Self {
         Self {
             vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
             data_frames: BTreeMap::new(),
@@ -362,7 +377,7 @@ impl MapArea {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-/// map type for memory set: identical or framed
+/// map type for memory set: dirct or framed
 pub enum MapType {
     Direct,
     Framed,

@@ -2,32 +2,41 @@
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 #[repr(C)]
-///trap context structure containing sstatus, sepc and registers
+pub struct SstatusWrapper(Sstatus);
+
+impl From<Sstatus> for SstatusWrapper {
+    fn from(sstatus: Sstatus) -> Self {
+        SstatusWrapper(sstatus)
+    }
+}
+
+impl Into<Sstatus> for SstatusWrapper {
+    fn into(self) -> Sstatus {
+        self.0
+    }
+}
+
+#[repr(C)]
 pub struct TrapContext {
-    /// general regs[0..31]
-    /*0-31*/pub x: [usize; 32],
-    /// CSR sstatus      
-    /* 32 */pub sstatus: Sstatus,
-    /// CSR sepc
-    /* 33 */pub sepc: usize,
-    /// Addr of Page Table
-    /* 34 */pub kernel_satp: usize,
-    /// kernel stack
-    /* 35 */pub kernel_sp: usize,
-    /// Addr of trap_handler function
-    /* 36 */pub trap_handler: usize,
+    /* 0-31 */ pub user_x: [usize; 32], 
+    /*  32  */ pub sstatus: Sstatus,
+    /*  33  */ pub sepc: usize,
+    /*  34  */ pub kernel_sp: usize,
+    /*  35  */ pub trap_handler: usize,
+    /* 36-47*/ pub kernel_s: [usize; 12],
+    /*  48  */ pub kernel_fp: usize,
+    /*  49  */ pub kernel_tp: usize,
 }
 
 impl TrapContext {
     ///set stack pointer to x_2 reg (sp)
     pub fn set_sp(&mut self, sp: usize) {
-        self.x[2] = sp;
+        self.user_x[2] = sp;
     }
     ///init app context
     pub fn app_init_context(
         entry: usize,
         sp: usize,
-        kernel_satp: usize,
         kernel_sp: usize,
         trap_handler: usize,
     ) -> Self {
@@ -35,12 +44,14 @@ impl TrapContext {
         // set CPU privilege to User after trapping back
         sstatus.set_spp(SPP::User);
         let mut cx = Self {
-            x: [0; 32],
+            user_x: [0; 32],
             sstatus,
             sepc: entry,
-            kernel_satp,
             kernel_sp,
             trap_handler,
+            kernel_s: [0; 12],
+            kernel_fp: 0,
+            kernel_tp: 0,
         };
         cx.set_sp(sp);
         cx

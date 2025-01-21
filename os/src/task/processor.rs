@@ -2,6 +2,7 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::mm::KERNEL_SPACE;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -45,11 +46,12 @@ pub fn run_tasks() {
     loop {
         let mut processor = PROCESSOR.exclusive_access();
         if let Some(task) = fetch_task() {
-            let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
+            let idle_task_cx_ptr = processor.get_idle_task_cx_ptr(); // 内核线程负责分发用户线程
             // access coming task TCB exclusively
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            task_inner.memory_set.activate(); // 更新stap寄存器和刷新TLB
             drop(task_inner);
             // release coming task TCB manually
             processor.current = Some(task);
@@ -58,6 +60,8 @@ pub fn run_tasks() {
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
+            // TODO(其实我感觉不需要) 切换到内核页表
+            KERNEL_SPACE.exclusive_access().activate();
         }
     }
 }

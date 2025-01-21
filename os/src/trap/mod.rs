@@ -1,25 +1,11 @@
-//! Trap handling functionality
-//!
-//! For rCore, we have a single trap entry point, namely `__alltraps`. At
-//! initialization in [`init()`], we set the `stvec` CSR to point to it.
-//!
-//! All traps go through `__alltraps`, which is defined in `trap.S`. The
-//! assembly language code does just enough work restore the kernel space
-//! context, ensuring that Rust code safely runs, and transfers control to
-//! [`trap_handler()`].
-//!
-//! It then calls different functionality based on what exactly the exception
-//! was. For example, timer interrupts trigger task preemption, and syscalls go
-//! to [`syscall()`].
 mod context;
-
-use crate::config::{TRAMPOLINE, TRAP_CONTEXT};
+pub use context::TrapContext;
 use crate::syscall::syscall;
 use crate::task::{
-    current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next,
+    current_trap_cx, exit_current_and_run_next, suspend_current_and_run_next,
 };
 use crate::timer::set_next_trigger;
-use core::arch::{asm, global_asm};
+use core::arch::global_asm;
 use riscv::register::{
     mtvec::TrapMode,
     scause::{self, Exception, Interrupt, Trap},
@@ -27,20 +13,30 @@ use riscv::register::{
 };
 
 global_asm!(include_str!("trap.S"));
+
+// 申明外部函数，这些函数是在汇编代码中实现的，用于从用户态和内核态切换
+extern {
+    fn __trap_from_user();
+    #[allow(improper_ctypes)]
+    fn __return_to_user(ctx: *mut TrapContext);
+}
+
 /// initialize CSR `stvec` as the entry of `__alltraps`
 pub fn init() {
     set_kernel_trap_entry();
 }
 
+// 在trap handler中设置内核态的trap entry
 fn set_kernel_trap_entry() {
     unsafe {
         stvec::write(trap_from_kernel as usize, TrapMode::Direct);
     }
 }
 
+// 在trap return中重新修改stvec设置用户态的trap entry
 fn set_user_trap_entry() {
     unsafe {
-        stvec::write(TRAMPOLINE as usize, TrapMode::Direct);
+        stvec::write(__trap_from_user as usize, TrapMode::Direct);
     }
 }
 /// enable timer interrupt in sie CSR
@@ -52,7 +48,7 @@ pub fn enable_timer_interrupt() {
 
 #[no_mangle]
 /// handle an interrupt, exception, or system call from user space
-pub fn trap_handler() -> ! {
+pub fn trap_handler() {
     set_kernel_trap_entry();
     let scause = scause::read();
     let stval = stval::read();
@@ -62,10 +58,10 @@ pub fn trap_handler() -> ! {
             let mut cx = current_trap_cx();
             cx.sepc += 4;
             // get system call return value
-            let result = syscall(cx.x[17], [cx.x[10], cx.x[11], cx.x[12]]);
+            let result = syscall(cx.user_x[17], [cx.user_x[10], cx.user_x[11], cx.user_x[12]]);
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
-            cx.x[10] = result as usize;
+            cx.user_x[10] = result as usize;
         }
         Trap::Exception(Exception::StoreFault)
         | Trap::Exception(Exception::StorePageFault)
@@ -106,32 +102,18 @@ pub fn trap_handler() -> ! {
 /// set the new addr of __restore asm function in TRAMPOLINE page,
 /// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
 /// finally, jump to new addr of __restore asm function
-pub fn trap_return() -> ! {
+pub fn trap_return() {
     set_user_trap_entry();
-    let trap_cx_ptr = TRAP_CONTEXT;
-    let user_satp = current_user_token();
-    extern "C" {
-        fn __alltraps();
-        fn __restore();
-    }
-    let restore_va = __restore as usize - __alltraps as usize + TRAMPOLINE;
+
+    let trap_cx = current_trap_cx();
     unsafe {
-        asm!(
-            "fence.i",
-            "jr {restore_va}",
-            restore_va = in(reg) restore_va,
-            in("a0") trap_cx_ptr,
-            in("a1") user_satp,
-            options(noreturn)
-        );
+        __return_to_user(trap_cx);
     }
 }
 
 #[no_mangle]
 /// Unimplement: traps/interrupts/exceptions from kernel mode
 /// Todo: Chapter 9: I/O device
-pub fn trap_from_kernel() -> ! {
+pub fn trap_from_kernel() {
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }
-
-pub use context::TrapContext;
