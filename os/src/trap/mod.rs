@@ -104,7 +104,7 @@ pub fn trap_handler() {
             );
         }
     }
-    trap_return();
+    // trap_return();
 }
 
 #[no_mangle]
