@@ -4,7 +4,7 @@ use super::{pid_alloc, KernelStack, PidHandle};
 use crate::config::USER_TRAP_CONTEXT;
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr};
 use crate::sync::UPSafeCell;
-use crate::trap::{trap_handler, TrapContext};
+use crate::trap::{trap_loop, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use log::info;
@@ -82,7 +82,7 @@ impl TaskControlBlock {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
                     base_size: user_sp,
-                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_cx: TaskContext::goto_trap_loop(kernel_stack_top),
                     task_status: TaskStatus::Ready,
                     memory_set,
                     parent: None,
@@ -98,7 +98,7 @@ impl TaskControlBlock {
             user_sp,
             // KERNEL_SPACE.exclusive_access().token(),
             kernel_stack_top,
-            trap_handler as usize,
+            trap_loop as usize,
         );
         println!("initproc successfully created, pid: {}", task_control_block.getpid());
         println!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
@@ -142,7 +142,7 @@ impl TaskControlBlock {
             entry_point,
             user_sp,
             self.kernel_stack.get_top(),
-            trap_handler as usize,
+            trap_loop as usize,
         );
         *inner.get_trap_cx() = trap_cx;
         info!("task.exec.pid={}", self.pid.0);
@@ -175,7 +175,7 @@ impl TaskControlBlock {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn: child_trap_cx_ppn,
                     base_size: parent_inner.base_size,
-                    task_cx: TaskContext::goto_trap_return(kernel_stack_top),
+                    task_cx: TaskContext::goto_trap_loop(kernel_stack_top),
                     task_status: TaskStatus::Ready,
                     memory_set: child_memory_set,
                     parent: Some(Arc::downgrade(self)),

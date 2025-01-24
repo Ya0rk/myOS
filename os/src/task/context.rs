@@ -1,5 +1,5 @@
 //! Implementation of [`TaskContext`]
-use crate::trap::trap_return;
+use crate::trap::{trap_loop, trap_return};
 
 #[repr(C)]
 /// task context structure containing some registers
@@ -22,6 +22,14 @@ impl TaskContext {
     pub fn goto_trap_return(kstack_ptr: usize) -> Self {
         Self {
             ra: trap_return as usize,
+            sp: kstack_ptr,
+            s: [0; 12],
+        }
+    }
+
+    pub fn goto_trap_loop(kstack_ptr: usize) -> Self {
+        Self {
+            ra: trap_loop as usize,
             sp: kstack_ptr,
             s: [0; 12],
         }

@@ -48,6 +48,13 @@ pub fn enable_timer_interrupt() {
     }
 }
 
+pub fn trap_loop() {
+    loop {
+        trap_return();
+        trap_handler(); 
+    }
+}
+
 #[no_mangle]
 /// handle an interrupt, exception, or system call from user space
 pub fn trap_handler() {
@@ -97,12 +104,7 @@ pub fn trap_handler() {
             );
         }
     }
-    // trap_return();
-    set_user_trap_entry();
-    let trap_cx = current_trap_cx();
-    unsafe {
-        __return_to_user2(trap_cx);
-    }
+    trap_return();
 }
 
 #[no_mangle]

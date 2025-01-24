@@ -66,7 +66,7 @@ __return_to_user:
 
     # 保存 kernel callee-saved 寄存器
     sd sp, 34*8(a0)
-    # sd ra, 35*8(a0)
+    sd ra, 35*8(a0)
     sd s0, 36*8(a0)
     sd s1, 37*8(a0)
     sd s2, 38*8(a0)
