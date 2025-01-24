@@ -56,7 +56,7 @@ __trap_from_user:
     ld tp, 49*8(sp)
     ld sp, 34*8(sp)
     
-    ret  
+    ret
 
 # kernel -> user
 __return_to_user:
@@ -66,7 +66,7 @@ __return_to_user:
 
     # 保存 kernel callee-saved 寄存器
     sd sp, 34*8(a0)
-    sd ra, 35*8(a0)
+    # sd ra, 35*8(a0)
     sd s0, 36*8(a0)
     sd s1, 37*8(a0)
     sd s2, 38*8(a0)
@@ -100,5 +100,47 @@ __return_to_user:
     .endr
 
     # 修改栈指针，返回用户栈
+    ld sp, 2*8(sp)
+    sret
+
+__return_to_user2:
+    # a0: *TrapContext in user space(Constant); a1: user space token
+    # switch to user space
+
+    # let sscratch store the trap context's address
+    csrw sscratch, a0
+    # save kernel callee-saved regs
+    sd s0, 34*8(a0)
+    # sd ra, 35*8(a0)
+    sd s0, 36*8(a0)
+    sd s1, 37*8(a0)
+    sd s2, 38*8(a0)
+    sd s3, 39*8(a0)
+    sd s4, 40*8(a0)
+    sd s5, 41*8(a0)
+    sd s6, 42*8(a0)
+    sd s7, 43*8(a0)
+    sd s8, 44*8(a0)
+    sd s9, 45*8(a0)
+    sd s10, 46*8(a0)
+    sd s11, 47*8(a0)
+    sd fp, 48*8(a0)
+    sd tp, 49*8(a0)
+
+    mv sp, a0
+    # now sp points to TrapContext in kernel space, start restoring based on it
+    # restore sstatus/sepc
+    ld t0, 32*8(sp)
+    ld t1, 33*8(sp)
+    csrw sstatus, t0
+    csrw sepc, t1
+    # restore general purpose registers except x0/sp/
+    ld x1, 1*8(sp)
+    .set n, 3
+    .rept 29
+        LOAD_GP %n
+        .set n, n+1
+    .endr
+    # back to user stack
     ld sp, 2*8(sp)
     sret

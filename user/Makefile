@@ -8,9 +8,9 @@ BINS := $(patsubst $(APP_DIR)/%.rs, $(TARGET_DIR)/%.bin, $(APPS))
 
 OBJDUMP := rust-objdump --arch-name=riscv64
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
-CP := cp 
+CP := cp
 
-TEST ?= 
+TEST ?=
 
 ifeq ($(MODE), release)
 	MODE_ARG := --release
@@ -19,17 +19,17 @@ else
 endif
 
 elf: $(APPS)
-	@cargo build $(MODE_ARG)
+	cargo build $(MODE_ARG)
 ifeq ($(TEST), 1)
-	@$(CP) $(TARGET_DIR)/usertests $(TARGET_DIR)/initproc
+	$(CP) $(TARGET_DIR)/usertests $(TARGET_DIR)/initproc
 endif
 
 binary: elf
-	@$(foreach elf, $(ELFS), $(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(TARGET_DIR)/%, $(TARGET_DIR)/%.bin, $(elf));)
+	$(foreach elf, $(ELFS), $(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(TARGET_DIR)/%, $(TARGET_DIR)/%.bin, $(elf));)
 
 build: binary
 
 clean:
-	@cargo clean
+	cargo clean
 
 .PHONY: elf binary build clean

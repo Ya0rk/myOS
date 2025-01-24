@@ -17,3 +17,12 @@ sbi-rt = { version = "0.0.3", features = ["legacy"] }
 
 [profile.release]
 debug = true
+
+[features]
+board_qemu = []
+default = ["info"]
+error = []
+warn = []
+info = []
+debug = []
+trace = []

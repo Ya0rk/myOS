@@ -2,7 +2,7 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
-use crate::mm::KERNEL_SPACE;
+// use crate::mm::KERNEL_SPACE;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -61,7 +61,7 @@ pub fn run_tasks() {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
             // TODO(其实我感觉不需要) 切换到内核页表
-            KERNEL_SPACE.exclusive_access().activate();
+            // KERNEL_SPACE.exclusive_access().activate();
         }
     }
 }

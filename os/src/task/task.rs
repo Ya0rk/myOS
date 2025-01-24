@@ -7,6 +7,7 @@ use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use log::info;
 use core::cell::RefMut;
 
 pub struct TaskControlBlock {
@@ -105,6 +106,7 @@ impl TaskControlBlock {
     }
     pub fn exec(&self, elf_data: &[u8]) {
         // memory_set with elf program headers/trampoline/trap context/user stack
+        info!("exec start");
         let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
@@ -118,7 +120,7 @@ impl TaskControlBlock {
             kernel_stack_top.into(),
             MapPermission::R | MapPermission::W,
         );
-
+        info!("exec memory_set created");
         // **** access inner exclusively
         let mut inner = self.inner_exclusive_access();
         // substitute memory_set
@@ -126,15 +128,24 @@ impl TaskControlBlock {
         // update trap_cx ppn
         inner.trap_cx_ppn = trap_cx_ppn;
         // initialize base_size
-        inner.base_size = user_sp;
+        // inner.base_size = user_sp;
+
         // initialize trap_cx
-        let trap_cx = inner.get_trap_cx();
-        *trap_cx = TrapContext::app_init_context(
+        // let trap_cx = inner.get_trap_cx();
+        // *trap_cx = TrapContext::app_init_context(
+        //     entry_point,
+        //     user_sp,
+        //     self.kernel_stack.get_top(),
+        //     trap_handler as usize,
+        // );
+        let trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
             self.kernel_stack.get_top(),
             trap_handler as usize,
         );
+        *inner.get_trap_cx() = trap_cx;
+        info!("task.exec.pid={}", self.pid.0);
         // **** release inner automatically
     }
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {

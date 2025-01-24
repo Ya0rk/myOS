@@ -168,22 +168,35 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 /// translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
-    let mut string = String::new();
-    let mut va = ptr as usize;
-    loop {
-        // 这里需要扩展地址到kernelAddr，不然不能根据程序名找到对应程序
-        let ch: u8 = *(KernelAddr::from(page_table
-            .translate_va(VirtAddr::from(va))
-            .unwrap())
-            .get_mut());
-        if ch == 0 {
-            break;
-        } else {
-            string.push(ch as char);
-            va += 1;
+    // let mut string = String::new();
+    // let mut va = ptr as usize;
+    // loop {
+    //     // 这里需要扩展地址到kernelAddr，不然不能根据程序名找到对应程序
+    //     let ch: u8 = *(KernelAddr::from(page_table
+    //         .translate_va(VirtAddr::from(va))
+    //         .unwrap())
+    //         .get_mut());
+    //     if ch == 0 {
+    //         break;
+    //     } else {
+    //         string.push(ch as char);
+    //         va += 1;
+    //     }
+    // }
+    // string
+    let ptr: *mut u8 = KernelAddr::from(
+        page_table
+            .translate_va(VirtAddr::from(ptr as usize))
+            .unwrap(),
+    )
+    .0 as _;
+    let mut len: isize = 0;
+    unsafe {
+        while *ptr.offset(len) != 0 {
+            len += 1;
         }
+        String::from_utf8(core::slice::from_raw_parts_mut(ptr, len as usize).to_vec()).unwrap()
     }
-    string
 }
 ///translate a generic through page table and return a mutable reference
 pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {

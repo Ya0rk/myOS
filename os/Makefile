@@ -1,6 +1,6 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
-MODE := release
+MODE ?= release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
@@ -35,6 +35,15 @@ DISASM ?= -x
 # Run usertests or usershell
 TEST ?=
 
+#qemu
+QEMU_NAME := qemu-system-riscv64
+
+QEMU_ARGS = -machine virt 
+QEMU_ARGS += -m 128M 
+QEMU_ARGS += -nographic 
+QEMU_ARGS += -bios $(BOOTLOADER) 
+QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+
 build: env $(KERNEL_BIN)
 
 env:
@@ -44,51 +53,45 @@ env:
 	rustup component add llvm-tools-preview
 
 $(KERNEL_BIN): kernel
-	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
+	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
 kernel:
-	@cd ../user && make build TEST=$(TEST)
-	@echo Platform: $(BOARD)
-	@cp src/linker-$(BOARD).ld src/linker.ld
-	@cargo build $(MODE_ARG)
-	@rm src/linker.ld
+	cd ../user && make build TEST=$(TEST)
+	echo Platform: $(BOARD)
+	cp src/linker-$(BOARD).ld src/linker.ld
+	cargo build $(MODE_ARG)
+	rm src/linker.ld
 
 clean:
-	@cargo clean
+	cargo clean
 
 disasm: kernel
-	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
+	$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
 
 disasm-vim: kernel
-	@$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(DISASM_TMP)
-	@vim $(DISASM_TMP)
-	@rm $(DISASM_TMP)
+	$(OBJDUMP) $(DISASM) $(KERNEL_ELF) > $(DISASM_TMP)
+	vim $(DISASM_TMP)
+	rm $(DISASM_TMP)
 
 run: run-inner
 
-QEMU_ARGS := -machine virt \
-			 -nographic \
-			 -bios $(BOOTLOADER) \
-			 -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
-
-QEMU_NAME := qemu-system-riscv64
 qemu-version-check:
-	@sh scripts/qemu-ver-check.sh $(QEMU_NAME)
+	sh scripts/qemu-ver-check.sh $(QEMU_NAME)
 
 run-inner: qemu-version-check build
-	@echo "Running QEMU with arguments: $(QEMU_ARGS)"
-	@qemu-system-riscv64 $(QEMU_ARGS)
+	echo "Running QEMU with arguments: $(QEMU_ARGS)"
+	qemu-system-riscv64 $(QEMU_ARGS)
 
 debug: qemu-version-check build
-	@tmux new-session -d \
-		"qemu-system-riscv64 $(QEMU_ARGS) -s -S" && \
-		tmux split-window -h "$(gdb) -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
-		tmux -2 attach-session -d
+	tmux new-session -d \
+	"qemu-system-riscv64 $(QEMU_ARGS) -s -S" && \
+	tmux split-window -h "$(gdb) -ex "file $(KERNEL_ELF)" -x ./gdbinit" && \
+	tmux -2 attach-session -d
 
 gdbserver: qemu-version-check build
-	@qemu-system-riscv64 $(QEMU_ARGS) -s -S
+	qemu-system-riscv64 $(QEMU_ARGS) -s -S
 
 gdbclient:
-	@$(gdb) -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
+	$(gdb) -ex "file $(KERNEL_ELF)" -x ./gdbinit
 
 .PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check

@@ -19,6 +19,8 @@ extern {
     fn __trap_from_user();
     #[allow(improper_ctypes)]
     fn __return_to_user(ctx: *mut TrapContext);
+    #[allow(improper_ctypes)]
+    fn __return_to_user2(cx: *mut TrapContext);
 }
 
 /// initialize CSR `stvec` as the entry of `__alltraps`
@@ -95,7 +97,12 @@ pub fn trap_handler() {
             );
         }
     }
-    trap_return();
+    // trap_return();
+    set_user_trap_entry();
+    let trap_cx = current_trap_cx();
+    unsafe {
+        __return_to_user2(trap_cx);
+    }
 }
 
 #[no_mangle]

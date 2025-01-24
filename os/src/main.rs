@@ -26,6 +26,7 @@ pub mod syscall;
 pub mod task;
 pub mod trap;
 pub mod utils;
+pub mod logger;
 
 use core::arch::global_asm;
 
@@ -48,6 +49,7 @@ fn clear_bss() {
 pub fn rust_main() -> ! {
     clear_bss();
     println!("[kernel] Hello, world!");
+    logger::init();
     mm::init();
     mm::remap_test();
     trap::init();
