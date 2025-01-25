@@ -168,8 +168,8 @@ impl MemorySet {
         for pair in MMIO {
             memory_set.push(
                 MapArea::new(
-                    (*pair).0.into(),
-                    ((*pair).0 + (*pair).1 - KERNEL_ADDR_OFFSET).into(),
+                    ((*pair).0 + KERNEL_ADDR_OFFSET).into(),
+                    ((*pair).0 + KERNEL_ADDR_OFFSET + (*pair).1).into(),
                     MapType::Direct,
                     MapPermission::R | MapPermission::W,
                 ),

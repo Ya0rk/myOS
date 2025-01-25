@@ -5,6 +5,7 @@ use crate::task::{
     current_trap_cx, exit_current_and_run_next, suspend_current_and_run_next,
 };
 use crate::timer::set_next_trigger;
+use crate::utils::backtrace;
 use core::arch::global_asm;
 use riscv::register::{
     mtvec::TrapMode,
@@ -17,10 +18,9 @@ global_asm!(include_str!("trap.S"));
 // 申明外部函数，这些函数是在汇编代码中实现的，用于从用户态和内核态切换
 extern {
     fn __trap_from_user();
+    fn __trap_from_kernel();
     #[allow(improper_ctypes)]
     fn __return_to_user(ctx: *mut TrapContext);
-    #[allow(improper_ctypes)]
-    fn __return_to_user2(cx: *mut TrapContext);
 }
 
 /// initialize CSR `stvec` as the entry of `__alltraps`
@@ -31,7 +31,7 @@ pub fn init() {
 // 在trap handler中设置内核态的trap entry
 fn set_kernel_trap_entry() {
     unsafe {
-        stvec::write(trap_from_kernel as usize, TrapMode::Direct);
+        stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
     }
 }
 
@@ -62,7 +62,7 @@ pub fn trap_handler() {
     let scause = scause::read();
     let stval = stval::read();
     match scause.cause() {
-        Trap::Exception(Exception::UserEnvCall) => {
+        Trap::Exception(Exception::UserEnvCall) => { // 7
             // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
@@ -72,14 +72,15 @@ pub fn trap_handler() {
             cx = current_trap_cx();
             cx.user_x[10] = result as usize;
         }
-        Trap::Exception(Exception::StoreFault)
-        | Trap::Exception(Exception::StorePageFault)
-        | Trap::Exception(Exception::InstructionFault)
-        | Trap::Exception(Exception::InstructionPageFault)
-        | Trap::Exception(Exception::LoadFault)
-        | Trap::Exception(Exception::LoadPageFault) => {
+        Trap::Exception(Exception::StoreFault) // 6
+        | Trap::Exception(Exception::StorePageFault) // 11
+        | Trap::Exception(Exception::InstructionFault) // 1
+        | Trap::Exception(Exception::InstructionPageFault) // 9
+        | Trap::Exception(Exception::LoadFault) // 4
+        | Trap::Exception(Exception::LoadPageFault) => { // 10
             println!(
-                "[kernel] {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                "[kernel] {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                scause.bits(),
                 scause.cause(),
                 stval,
                 current_trap_cx().sepc,
@@ -87,12 +88,12 @@ pub fn trap_handler() {
             // page fault exit code
             exit_current_and_run_next(-2);
         }
-        Trap::Exception(Exception::IllegalInstruction) => {
+        Trap::Exception(Exception::IllegalInstruction) => { // 2
             println!("[kernel] IllegalInstruction in application, kernel killed it.");
             // illegal instruction exit code
             exit_current_and_run_next(-3);
         }
-        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+        Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
             set_next_trigger();
             suspend_current_and_run_next();
         }
@@ -123,6 +124,13 @@ pub fn trap_return() {
 #[no_mangle]
 /// Unimplement: traps/interrupts/exceptions from kernel mode
 /// Todo: Chapter 9: I/O device
-pub fn trap_from_kernel() {
+pub fn kernel_trap_handler() {
+    backtrace();
+    println!("nihoa : a trap {:?} = {:?} from kernel! stval = {:?}, sepc = {:#x}",
+            scause::read().cause(),
+            scause::read().bits(),
+            stval::read(),
+            current_trap_cx().sepc,
+        );
     panic!("a trap {:?} from kernel!", scause::read().cause());
 }

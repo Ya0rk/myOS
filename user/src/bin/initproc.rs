@@ -9,6 +9,7 @@ use user_lib::{exec, fork, wait, yield_};
 #[no_mangle]
 fn main() -> i32 {
     if fork() == 0 {
+        println!("Hello, this is called before usershell!");
         exec("user_shell\0");
     } else {
         loop {

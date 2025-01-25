@@ -2,5 +2,5 @@ set arch riscv:rv64
 target remote localhost:1234
 add-symbol-file /mnt/f/wsldir/ru/todOS/user/target/riscv64gc-unknown-none-elf/release/initproc
 add-symbol-file /mnt/f/wsldir/ru/todOS/user/target/riscv64gc-unknown-none-elf/release/user_shell
-b initproc.rs:12
+b os::task::task::TaskControlBlock::exec
 c
