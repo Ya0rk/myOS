@@ -112,7 +112,8 @@ impl TaskControlBlock {
             .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
             .unwrap()
             .ppn();
-
+        info!("satp before : {:#x}", riscv::register::satp::read().bits());
+        
         // 建立该进程的kernel stack
         let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
         memory_set.insert_framed_area(
@@ -121,6 +122,7 @@ impl TaskControlBlock {
             MapPermission::R | MapPermission::W,
         );
         info!("exec memory_set created");
+        
         // **** access inner exclusively
         let mut inner = self.inner_exclusive_access();
         // substitute memory_set

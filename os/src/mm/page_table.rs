@@ -1,7 +1,9 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use crate::config::KERNEL_PGNUM_OFFSET;
+
 use super::address::KernelAddr;
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -32,7 +34,7 @@ impl PageTableEntry {
     ///Create a PTE from ppn
     pub fn new(ppn: PhysPageNum, flags: PTEFlags) -> Self {
         PageTableEntry {
-            bits: ppn.0 << 10 | flags.bits() as usize,
+            bits: ppn.0 << 10 | flags.bits as usize,
         }
     }
     ///Return an empty PTE
@@ -74,6 +76,18 @@ pub struct PageTable {
 impl PageTable {
     pub fn new() -> Self {
         let frame = frame_alloc().unwrap();
+        PageTable {
+            root_ppn: frame.ppn,
+            frames: vec![frame],
+        }
+    }
+    pub fn new_from_kernel() -> Self {
+        let frame = frame_alloc().unwrap();
+        let kernel_page_table = &KERNEL_SPACE.exclusive_access().page_table;
+        let kernel_root_ppn = kernel_page_table.root_ppn;
+        // 第一级页表
+        let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
+        frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
         PageTable {
             root_ppn: frame.ppn,
             frames: vec![frame],

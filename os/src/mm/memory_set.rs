@@ -8,7 +8,8 @@ use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use alloc::vec;
+// use alloc::vec;
+use log::info;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
@@ -49,18 +50,22 @@ impl MemorySet {
     /// 创建pagetable时初始化了kernel的页表
     /// 每个进程有自己的页表（不同的用户页表+相同的内核页表）
     pub fn new_with_kernel_pagetable() -> Self {
-        let frame = frame_alloc().unwrap();
-        let kernel_page_table = &KERNEL_SPACE.exclusive_access().page_table;
-        let kernel_root_ppn = kernel_page_table.root_ppn;
-        // 第一级页表
-        let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
-        frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
+        // let frame = frame_alloc().unwrap();
+        // let kernel_page_table = &KERNEL_SPACE.exclusive_access().page_table;
+        // let kernel_root_ppn = kernel_page_table.root_ppn;
+        // // 第一级页表
+        // let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
+        // frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
         
+        // Self {
+        //     page_table: PageTable {
+        //         root_ppn: frame.ppn,
+        //         frames: vec![frame],
+        //     },
+        //     areas: Vec::new(),
+        // }
         Self {
-            page_table: PageTable {
-                root_ppn: frame.ppn,
-                frames: vec![frame],
-            },
+            page_table: PageTable::new_from_kernel(),
             areas: Vec::new(),
         }
     }
@@ -183,8 +188,7 @@ impl MemorySet {
     /// also returns user_sp and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
         let mut memory_set = Self::new_with_kernel_pagetable();
-        // map trampoline
-        // memory_set.map_trampoline();
+        info!("from_elf new stap={:#x}", memory_set.page_table.token());
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
@@ -222,6 +226,7 @@ impl MemorySet {
         // guard page
         user_stack_bottom += PAGE_SIZE;
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
+        info!("user_stack_bottom={:#x}, user_stack_top={:#x}", user_stack_bottom, user_stack_top);
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),
@@ -231,7 +236,6 @@ impl MemorySet {
             ),
             None,
         );
-        // map TrapContext
         memory_set.push(
             MapArea::new(
                 USER_TRAP_CONTEXT.into(),
@@ -316,7 +320,7 @@ impl MapArea {
             vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
             data_frames: BTreeMap::new(),
             map_type: another.map_type,
-            map_perm: another.map_perm.clone(),
+            map_perm: another.map_perm,
         }
     }
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
@@ -333,7 +337,7 @@ impl MapArea {
                 self.data_frames.insert(vpn, frame);
             }
         }
-        let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
+        let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
         page_table.map(vpn, ppn, pte_flags);
     }
     pub fn unmap_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
@@ -385,7 +389,6 @@ pub enum MapType {
 
 bitflags! {
     /// map permission corresponding to that in pte: `R W X U`
-    #[derive(Clone)]
     pub struct MapPermission: u8 {
         ///Readable
         const R = 1 << 1;

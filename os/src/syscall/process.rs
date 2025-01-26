@@ -46,6 +46,8 @@ pub fn sys_exec(path: *const u8) -> isize {
     if let Some(data) = get_app_data_by_name(path.as_str()) {
         let task = current_task().unwrap();
         task.exec(data);
+        // let inner = task.inner_exclusive_access();
+        // inner.memory_set.activate(); // 更新stap寄存器和刷新TLB
         0
     } else {
         -1
