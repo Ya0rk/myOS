@@ -1,22 +1,19 @@
-//!Implementation of [`Processor`] and Intersection of control flow
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
-// use crate::mm::KERNEL_SPACE;
+use crate::mm::KERNEL_SPACE;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
-///Processor management structure
+
+///CPU 结构体，包含当前正在运行的任务和内核线程的上下文
 pub struct Processor {
-    ///The task currently executing on the current processor
     current: Option<Arc<TaskControlBlock>>,
-    ///The basic control flow of each core, helping to select and switch process
     idle_task_cx: TaskContext,
 }
 
 impl Processor {
-    ///Create an empty Processor
     pub fn new() -> Self {
         Self {
             current: None,
@@ -38,6 +35,7 @@ impl Processor {
 }
 
 lazy_static! {
+    /// 多核管理器 TODO
     pub static ref PROCESSOR: UPSafeCell<Processor> = unsafe { UPSafeCell::new(Processor::new()) };
 }
 ///The main part of process execution and scheduling
@@ -60,8 +58,7 @@ pub fn run_tasks() {
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
-            // TODO(其实我感觉不需要) 切换到内核页表
-            // KERNEL_SPACE.exclusive_access().activate();
+            KERNEL_SPACE.exclusive_access().activate();
         }
     }
 }

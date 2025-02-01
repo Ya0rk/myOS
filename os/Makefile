@@ -1,9 +1,13 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
-MODE := debug
+MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
+APPS := ../user/src/bin/*
+
+# fs image
+FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 
 # BOARD
 BOARD := qemu
@@ -39,12 +43,15 @@ TEST ?=
 QEMU_NAME := qemu-system-riscv64
 
 QEMU_ARGS = -machine virt 
-QEMU_ARGS += -m 128M 
+# QEMU_ARGS += -m 128M 
 QEMU_ARGS += -nographic 
 QEMU_ARGS += -bios $(BOOTLOADER) 
 QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
-build: env $(KERNEL_BIN)
+
+build: env $(KERNEL_BIN) fs-img
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
@@ -55,6 +62,13 @@ env:
 $(KERNEL_BIN): kernel
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
+fs-img: $(APPS)
+	@cd ../user && make build TEST=$(TEST)
+	@rm -f $(FS_IMG)
+	@cd ../easy-fs-fuse && cargo run $(MODE_ARG) -- -s ../user/src/bin/ -t ../user/target/$(TARGET)/$(MODE)/
+
+$(APPS):
+
 kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
@@ -64,6 +78,7 @@ kernel:
 
 clean:
 	cargo clean
+	cd ../user && make clean
 
 disasm: kernel
 	$(OBJDUMP) $(DISASM) $(KERNEL_ELF) | less
@@ -94,4 +109,4 @@ gdbserver: qemu-version-check build
 gdbclient:
 	$(gdb) -ex "file $(KERNEL_ELF)" -x ./gdbinit
 
-.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check
+.PHONY: build env kernel clean disasm disasm-vim run-inner gdbserver gdbclient qemu-version-check fs-img

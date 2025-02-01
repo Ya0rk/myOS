@@ -8,18 +8,23 @@ const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
 
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct KernelAddr(pub usize);
 /// physical address
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
 /// virtual address
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct VirtAddr(pub usize);
 /// physical page number
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysPageNum(pub usize);
 /// virtual page number
+#[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct VirtPageNum(pub usize);
 
@@ -92,23 +97,29 @@ impl From<VirtAddr> for KernelAddr {
     }
 }
 
+fn check_addr_valid(addr: usize, offset: usize) {
+    let tmp: isize = (addr as isize >> offset) as isize;
+    assert!(tmp == 0 || tmp == -1, "invalid addr: {:#x}", addr);
+}
+
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
-        Self(v & ((1 << PA_WIDTH_SV39) - 1))
+        check_addr_valid(v, PA_WIDTH_SV39);
+        Self(v)
     }
 }
+
 impl From<usize> for PhysPageNum {
     fn from(v: usize) -> Self {
-        Self(v & ((1 << PPN_WIDTH_SV39) - 1))
+        check_addr_valid(v, PPN_WIDTH_SV39);
+        Self(v)
     }
 }
 
 impl From<usize> for VirtAddr {
     fn from(v: usize) -> Self {
         // 拓展虚拟地址到512GB，在这之前需要做检查
-        let tmp = (v as isize >> VA_WIDTH_SV39) as isize;
-        let is_valid = tmp == 0 || tmp == -1;
-        assert!(is_valid, "invalid v to VirtAddr: {:#x}", v);
+        check_addr_valid(v, VA_WIDTH_SV39);
         Self(v)
     }
 }
@@ -213,7 +224,7 @@ impl From<PhysPageNum> for PhysAddr {
 }
 
 impl VirtPageNum {
-    ///Return VPN 3 level index
+    ///返回虚拟地址的三级索引
     pub fn indexes(&self) -> [usize; 3] {
         let mut vpn = self.0;
         let mut idx = [0usize; 3];
@@ -229,6 +240,9 @@ impl PhysAddr {
     ///Get mutable reference to `PhysAddr` value
     pub fn get_mut<T>(&self) -> &'static mut T {
         unsafe { (self.0 as *mut T).as_mut().unwrap() }
+    }
+    pub fn get_ref<T>(&self) -> &'static T {
+        unsafe { (self.0 as *const T).as_ref().unwrap() }
     }
 }
 impl KernelAddr {
@@ -270,6 +284,11 @@ pub trait StepByOne {
     fn step(&mut self);
 }
 impl StepByOne for VirtPageNum {
+    fn step(&mut self) {
+        self.0 += 1;
+    }
+}
+impl StepByOne for PhysPageNum {
     fn step(&mut self) {
         self.0 += 1;
     }

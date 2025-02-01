@@ -1,11 +1,9 @@
-use core::arch::asm;
-
-use log::warn;
-
-use crate::mm::VirtAddr;
-
 ///! This module contains utility functions that are used throughout the OS.
 pub mod boot;
+
+use core::arch::asm;
+use log::warn;
+use crate::mm::VirtAddr;
 
 pub fn backtrace() {
     unsafe {

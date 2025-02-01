@@ -1,17 +1,15 @@
 mod context;
+
 pub use context::TrapContext;
-use crate::syscall::syscall;
-use crate::task::{
-    current_trap_cx, current_user_token, exit_current_and_run_next, suspend_current_and_run_next
-};
-use crate::timer::set_next_trigger;
-use crate::utils::backtrace;
+
 use core::arch::global_asm;
-use riscv::register::{
-    mtvec::TrapMode,
-    scause::{self, Exception, Interrupt, Trap},
-    sie, stval, stvec,
-};
+use riscv::register::mtvec::TrapMode;
+use riscv::register::{sie, stval, stvec,};
+use riscv::register::scause::{self, Exception, Interrupt, Trap};
+use crate::syscall::syscall;
+use crate::utils::backtrace;
+use crate::timer::set_next_trigger;
+use crate::task::{current_trap_cx, exit_current_and_run_next, suspend_current_and_run_next};
 
 global_asm!(include_str!("trap.S"));
 
@@ -20,7 +18,7 @@ extern {
     fn __trap_from_user();
     fn __trap_from_kernel();
     #[allow(improper_ctypes)]
-    fn __return_to_user(ctx: *mut TrapContext, satp: usize);
+    fn __return_to_user(ctx: *mut TrapContext);
 }
 
 /// initialize CSR `stvec` as the entry of `__alltraps`
@@ -63,10 +61,9 @@ pub fn trap_handler() {
     let stval = stval::read();
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => { // 7
-            // jump to next instruction anyway
             let mut cx = current_trap_cx();
             cx.sepc += 4;
-            // get system call return value
+
             let result = syscall(cx.user_x[17], [cx.user_x[10], cx.user_x[11], cx.user_x[12]]);
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
@@ -116,9 +113,8 @@ pub fn trap_return() {
     set_user_trap_entry();
 
     let trap_cx = current_trap_cx();
-    let satp = current_user_token();
     unsafe {
-        __return_to_user(trap_cx, satp);
+        __return_to_user(trap_cx);
     }
 }
 

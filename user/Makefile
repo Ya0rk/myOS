@@ -1,5 +1,5 @@
 TARGET := riscv64gc-unknown-none-elf
-MODE := debug
+MODE := release
 APP_DIR := src/bin
 TARGET_DIR := target/$(TARGET)/$(MODE)
 APPS := $(wildcard $(APP_DIR)/*.rs)
@@ -8,28 +8,31 @@ BINS := $(patsubst $(APP_DIR)/%.rs, $(TARGET_DIR)/%.bin, $(APPS))
 
 OBJDUMP := rust-objdump --arch-name=riscv64
 OBJCOPY := rust-objcopy --binary-architecture=riscv64
-CP := cp
+CP := cp 
 
-TEST ?=
+TEST ?= 
 
+# Building mode argument
 ifeq ($(MODE), release)
 	MODE_ARG := --release
-else
-	MODE_ARG :=
+endif
+
+ifeq ($(MODE), debug)
+	MODE_ARG := 
 endif
 
 elf: $(APPS)
-	cargo build $(MODE_ARG)
+	@cargo build $(MODE_ARG)
 ifeq ($(TEST), 1)
-	$(CP) $(TARGET_DIR)/usertests $(TARGET_DIR)/initproc
+	@$(CP) $(TARGET_DIR)/usertests $(TARGET_DIR)/initproc
 endif
 
 binary: elf
-	$(foreach elf, $(ELFS), $(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(TARGET_DIR)/%, $(TARGET_DIR)/%.bin, $(elf));)
+	@$(foreach elf, $(ELFS), $(OBJCOPY) $(elf) --strip-all -O binary $(patsubst $(TARGET_DIR)/%, $(TARGET_DIR)/%.bin, $(elf));)
 
 build: binary
 
 clean:
-	cargo clean
+	@cargo clean
 
 .PHONY: elf binary build clean

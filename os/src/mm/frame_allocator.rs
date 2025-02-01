@@ -1,5 +1,3 @@
-//! Implementation of [`FrameAllocator`] which
-//! controls all the frames in the operating system.
 use super::{PhysAddr, PhysPageNum};
 use crate::{config::MEMORY_END, mm::address::KernelAddr};
 use crate::sync::UPSafeCell;
@@ -9,7 +7,6 @@ use lazy_static::*;
 
 /// manage a frame which has the same lifecycle as the tracker
 pub struct FrameTracker {
-    ///
     pub ppn: PhysPageNum,
 }
 
@@ -110,7 +107,7 @@ pub fn frame_alloc() -> Option<FrameTracker> {
         .map(FrameTracker::new)
 }
 /// deallocate a frame
-fn frame_dealloc(ppn: PhysPageNum) {
+pub fn frame_dealloc(ppn: PhysPageNum) {
     FRAME_ALLOCATOR.exclusive_access().dealloc(ppn);
 }
 

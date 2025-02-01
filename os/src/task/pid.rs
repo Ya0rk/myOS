@@ -1,11 +1,10 @@
-//!Implementation of [`PidAllocator`]
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
 use crate::mm::{VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;
 use log::debug;
-///Pid Allocator struct
+///分配和管理pid号，避免重复
 pub struct PidAllocator {
     current: usize,
     recycled: Vec<usize>,
@@ -70,7 +69,7 @@ pub struct KernelStack {
 }
 
 impl KernelStack {
-    ///Create a kernelstack from pid
+    ///每个进程有不同的pid，根据pid来分配的kernel stack位置也不同
     pub fn new(pid_handle: &PidHandle) -> Self {
         let pid = pid_handle.0;
         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(pid);

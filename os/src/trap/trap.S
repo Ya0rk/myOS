@@ -61,9 +61,6 @@ __trap_from_user:
 
 # kernel -> user
 __return_to_user:
-    # a1 指向 satp
-    csrw satp, a1
-    sfence.vma
     # a0: *TrapContext in user space(Constant);
     # 让sscratch 指向 TrapContext
     csrw sscratch, a0

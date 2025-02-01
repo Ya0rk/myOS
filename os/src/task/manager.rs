@@ -1,4 +1,3 @@
-//!Implementation of [`TaskManager`]
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
 use alloc::collections::VecDeque;
@@ -28,6 +27,7 @@ impl TaskManager {
 }
 
 lazy_static! {
+    // 承载有当前所有的任务
     pub static ref TASK_MANAGER: UPSafeCell<TaskManager> =
         unsafe { UPSafeCell::new(TaskManager::new()) };
 }

@@ -1,4 +1,3 @@
-//! Implementation of [`TrapContext`]
 use riscv::register::sstatus::{self, Sstatus, SPP};
 
 #[repr(C)]
@@ -29,7 +28,6 @@ pub struct TrapContext {
 }
 
 impl TrapContext {
-    ///set stack pointer to x_2 reg (sp)
     pub fn set_sp(&mut self, sp: usize) {
         self.user_x[2] = sp;
     }

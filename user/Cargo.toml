@@ -1,13 +1,14 @@
 [package]
 name = "user_lib"
 version = "0.1.0"
-authors = ["Yao Junjie <345024941@qq.com>"]
+authors = ["Yifan Wu <shinbokuow@163.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 buddy_system_allocator = "0.11.0"
+bitflags = "2.8.0"
 
 [profile.release]
 debug = true

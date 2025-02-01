@@ -1,4 +1,3 @@
-//! SBI console driver, for text output
 use crate::sbi::console_putchar;
 use core::fmt::{self, Write};
 
@@ -33,8 +32,3 @@ macro_rules! println {
     }
 }
 
-/// 打印 info
-#[allow(unused)]
-pub fn msg(info: &str) {
-    println!("\x1b[33m{}\x1b[0m", info);
-}

@@ -1,4 +1,4 @@
-use crate::loader::get_app_data_by_name;
+use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_refmut, translated_str};
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
@@ -30,12 +30,13 @@ pub fn sys_fork() -> isize {
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
     // modify trap context of new_task, because it returns immediately after switching
-    let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
-    // we do not have to move to next instruction since we have done it before
-    // for child process, fork returns 0
-    trap_cx.user_x[10] = 0;
-    // add new task to scheduler
+    let child_trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+    // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
+    // 只需要修改子进程返回值为0即可
+    child_trap_cx.user_x[10] = 0;
+    // 将子进程加入调度器，等待被调度
     add_task(new_task);
+    // 父进程返回子进程的pid
     new_pid as isize
 }
 
@@ -43,11 +44,10 @@ pub fn sys_exec(path: *const u8) -> isize {
     let token = current_user_token();
     let path = translated_str(token, path);
     println!("sys_exec: path = {:?}", path);
-    if let Some(data) = get_app_data_by_name(path.as_str()) {
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
         let task = current_task().unwrap();
-        task.exec(data);
-        // let inner = task.inner_exclusive_access();
-        // inner.memory_set.activate(); // 更新stap寄存器和刷新TLB
+        task.exec(all_data.as_slice());
         0
     } else {
         -1

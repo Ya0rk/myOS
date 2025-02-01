@@ -1,4 +1,3 @@
-//! Uniprocessor interior mutability primitives
 use core::cell::{RefCell, RefMut};
 
 /// Wrap a static data structure inside it so that we are
@@ -26,5 +25,9 @@ impl<T> UPSafeCell<T> {
     /// Exclusive access inner data in UPSafeCell. Panic if the data has been borrowed.
     pub fn exclusive_access(&self) -> RefMut<'_, T> {
         self.inner.borrow_mut()
+    }
+    #[allow(unused)]
+    pub fn try_exclusive_access(&self) -> Option<RefMut<'_, T>> {
+        self.inner.try_borrow_mut().ok()
     }
 }

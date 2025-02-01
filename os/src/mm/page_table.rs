@@ -1,5 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use core::arch::asm;
+
 use crate::config::KERNEL_PGNUM_OFFSET;
 
 use super::address::KernelAddr;
@@ -8,7 +10,9 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
+use riscv::register::satp;
 
+// TODO(COW标志位可以设置在这里)
 bitflags! {
     pub struct PTEFlags: u8 {
         const V = 1 << 0;
@@ -34,7 +38,7 @@ impl PageTableEntry {
     ///Create a PTE from ppn
     pub fn new(ppn: PhysPageNum, flags: PTEFlags) -> Self {
         PageTableEntry {
-            bits: ppn.0 << 10 | flags.bits as usize,
+            bits: ppn.0 << 10 | flags.bits() as usize,
         }
     }
     ///Return an empty PTE
@@ -65,6 +69,11 @@ impl PageTableEntry {
     pub fn executable(&self) -> bool {
         self.flags().contains(PTEFlags::X)
     }
+}
+
+pub unsafe fn switch_pgtable(page_table_token: usize) {
+    satp::write(page_table_token);
+    asm!("sfence.vma");
 }
 
 pub struct PageTable {
@@ -168,6 +177,9 @@ impl PageTable {
     pub fn token(&self) -> usize {
         8usize << 60 | self.root_ppn.0
     }
+    pub unsafe fn switch(&self) {
+        switch_pgtable(self.token());
+    }
 }
 /// translate a pointer to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
@@ -182,6 +194,7 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 /// translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
+    // TODO
     // let mut string = String::new();
     // let mut va = ptr as usize;
     // loop {
@@ -222,4 +235,61 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .translate_va(VirtAddr::from(va))
         .unwrap())
         .get_mut()
+}
+
+///Array of u8 slice that user communicate with os
+pub struct UserBuffer {
+    ///U8 vec
+    pub buffers: Vec<&'static mut [u8]>,
+}
+
+impl UserBuffer {
+    ///Create a `UserBuffer` by parameter
+    pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
+        Self { buffers }
+    }
+    ///Length of `UserBuffer`
+    pub fn len(&self) -> usize {
+        let mut total: usize = 0;
+        for b in self.buffers.iter() {
+            total += b.len();
+        }
+        total
+    }
+}
+
+impl IntoIterator for UserBuffer {
+    type Item = *mut u8;
+    type IntoIter = UserBufferIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        UserBufferIterator {
+            buffers: self.buffers,
+            current_buffer: 0,
+            current_idx: 0,
+        }
+    }
+}
+/// Iterator of `UserBuffer`
+pub struct UserBufferIterator {
+    buffers: Vec<&'static mut [u8]>,
+    current_buffer: usize,
+    current_idx: usize,
+}
+
+impl Iterator for UserBufferIterator {
+    type Item = *mut u8;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_buffer >= self.buffers.len() {
+            None
+        } else {
+            let r = &mut self.buffers[self.current_buffer][self.current_idx] as *mut _;
+            if self.current_idx + 1 == self.buffers[self.current_buffer].len() {
+                self.current_idx = 0;
+                self.current_buffer += 1;
+            } else {
+                self.current_idx += 1;
+            }
+            Some(r)
+        }
+    }
 }

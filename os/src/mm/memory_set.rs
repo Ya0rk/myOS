@@ -1,4 +1,3 @@
-//! Implementation of [`MapArea`] and [`MemorySet`].
 use super::{frame_alloc, FrameTracker};
 use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysPageNum, VirtAddr, VirtPageNum};
@@ -8,7 +7,6 @@ use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-// use alloc::vec;
 use log::info;
 use core::arch::asm;
 use lazy_static::*;
@@ -31,6 +29,11 @@ lazy_static! {
     pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
         Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
 }
+
+pub fn kernel_token() -> usize {
+    KERNEL_SPACE.exclusive_access().token()
+}
+
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
     pub page_table: PageTable,
@@ -109,6 +112,7 @@ impl MemorySet {
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
+        info!("kernel satp : {:#x}", memory_set.page_table.token());
         // map trampoline
         // memory_set.map_trampoline();
         // map kernel sections
@@ -181,7 +185,7 @@ impl MemorySet {
                 None,
             );
         }
-        // println!("kernel memory set initialized");
+        println!("kernel memory set initialized");
         memory_set
     }
     /// Include sections in elf and trampoline and TrapContext and user stack,
@@ -274,7 +278,7 @@ impl MemorySet {
         memory_set
     }
     ///Refresh TLB with `sfence.vma`
-    pub fn activate(&self) {
+    pub fn activate(& self) {
         let satp = self.page_table.token();
         unsafe {
             satp::write(satp);
@@ -289,6 +293,9 @@ impl MemorySet {
     pub fn recycle_data_pages(&mut self) {
         //*self = Self::new_bare();
         self.areas.clear();
+    }
+    pub unsafe fn switch_pgtable(&self) {
+        self.page_table.switch();
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
@@ -320,7 +327,7 @@ impl MapArea {
             vpn_range: VPNRange::new(another.vpn_range.get_start(), another.vpn_range.get_end()),
             data_frames: BTreeMap::new(),
             map_type: another.map_type,
-            map_perm: another.map_perm,
+            map_perm: another.map_perm.clone(),
         }
     }
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
@@ -337,7 +344,7 @@ impl MapArea {
                 self.data_frames.insert(vpn, frame);
             }
         }
-        let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
+        let pte_flags = PTEFlags::from_bits(self.map_perm.bits()).unwrap();
         page_table.map(vpn, ppn, pte_flags);
     }
     pub fn unmap_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
@@ -388,6 +395,7 @@ pub enum MapType {
 }
 
 bitflags! {
+    // #[derive(Clone)]
     /// map permission corresponding to that in pte: `R W X U`
     pub struct MapPermission: u8 {
         ///Readable
