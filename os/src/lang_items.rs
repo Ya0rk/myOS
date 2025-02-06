@@ -1,7 +1,6 @@
-//! The panic handler
-use crate::sbi::shutdown;
-use core::panic::PanicInfo;
 use log::*;
+use crate::arch::shutdown;
+use core::panic::PanicInfo;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {

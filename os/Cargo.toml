@@ -15,6 +15,7 @@ easy-fs = { path = "../easy-fs" }
 log = "0.4"
 sbi-rt = { version = "0.0.3", features = ["legacy"] }
 spin = "0.9.8"
+sbi-spec = "0.0.8"
 
 [features]
 board_qemu = []

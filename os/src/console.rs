@@ -1,7 +1,6 @@
 use spin::Mutex;
-
-use crate::sbi::console_putchar;
 use core::fmt::{self, Write};
+use crate::arch::console_putchar;
 
 struct Stdout;
 

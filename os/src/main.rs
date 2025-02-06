@@ -1,4 +1,3 @@
-// #![deny(missing_docs)]
 #![deny(warnings)]
 #![no_std]
 #![no_main]
@@ -17,7 +16,6 @@ mod board;
 mod console;
 mod config;
 mod lang_items;
-mod sbi;
 mod timer;
 pub mod mm;
 pub mod fs;
@@ -28,6 +26,7 @@ pub mod utils;
 pub mod logger;
 pub mod syscall;
 pub mod drivers;
+pub mod arch;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
@@ -42,7 +41,6 @@ static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
-/// the rust entry-point of os
 pub fn rust_main(hart_id: usize) -> ! {
     if FIRST_HART
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
@@ -75,8 +73,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         KERNEL_SPACE.lock().activate();
         trap::enable_timer_interrupt();
         timer::set_next_trigger();
-
-        // loop {}
     }
     if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
         fs::list_apps();
