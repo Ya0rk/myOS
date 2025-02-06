@@ -23,7 +23,6 @@ pub const USER_TRAP_CONTEXT: usize = USER_SPACE_TOP - PAGE_SIZE;
 
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 
-#[allow(unused)]
 pub const HART_NUM: usize = 2;
 
 /// hart start address

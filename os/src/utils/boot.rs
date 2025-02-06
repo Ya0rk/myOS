@@ -1,5 +1,5 @@
 use core::arch::asm;
-use crate::{arch::hart_start, mm::VirtAddr};
+use crate::{arch::hart_start_success, mm::VirtAddr};
 use crate::config::{HART_NUM, HART_START_ADDR, KERNEL_ADDR_OFFSET};
 
 /// 这里是一个简单的启动代码，它将在启动时运行。
@@ -51,9 +51,10 @@ pub fn clear_bss() {
 /// boot start_hart之外的所有 hart
 pub fn boot_all_harts(hartid: usize) {
     for i in (0..HART_NUM).filter(|id| *id != hartid) {
-        if !hart_start(i, HART_START_ADDR){
+        if !hart_start_success(i, HART_START_ADDR){
             println!("[kernel] ---------- hart {} start failed!!!... ----------", i);
+        } else {
+            println!("[kernel] ---------- hart {} is starting... ----------", i);
         }
-        println!("[kernel] ---------- hart {} is starting... ----------", i);
     }
 }

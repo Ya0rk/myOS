@@ -19,6 +19,6 @@ pub fn shutdown(failuer: bool) -> ! {
 }
 
 /// use sbi call to start the specific core
-pub fn hart_start(hartid: usize, start_addr: usize) -> bool {
+pub fn hart_start_success(hartid: usize, start_addr: usize) -> bool {
     sbi::hart_start(hartid, start_addr)
 }

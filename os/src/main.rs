@@ -30,7 +30,6 @@ pub mod arch;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
-use mm::KERNEL_SPACE;
 use task::get_current_hart_id;
 use utils::boot;
 
@@ -49,9 +48,11 @@ pub fn rust_main(hart_id: usize) -> ! {
         boot::clear_bss();
         boot::logo();
 
-        mm::init();
+        mm::init(true);
         mm::remap_test();
         logger::init();
+
+        // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
             hart_id
@@ -61,22 +62,23 @@ pub fn rust_main(hart_id: usize) -> ! {
         task::add_initproc();
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
+        #[cfg(feature = "mul_hart")]
         boot::boot_all_harts(hart_id);
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
     } else {
-        // barrier
-        while !INIT_FINISHED.load(Ordering::SeqCst) {}
+        // while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
-        
         trap::init();
-        KERNEL_SPACE.lock().activate();
-        trap::enable_timer_interrupt();
-        timer::set_next_trigger();
+        mm::init(false);        
     }
+    
+    trap::enable_timer_interrupt();
+    timer::set_next_trigger();
+
+    // 列出目前的应用
     if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
         fs::list_apps();
     }
+
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }

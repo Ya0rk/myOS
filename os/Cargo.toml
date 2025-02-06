@@ -16,15 +16,17 @@ log = "0.4"
 sbi-rt = { version = "0.0.3", features = ["legacy"] }
 spin = "0.9.8"
 sbi-spec = "0.0.8"
+num_enum = { version = "0.7.2", default-features = false }
 
 [features]
 board_qemu = []
-default = ["info"]
+default = ["info", "mul_hart"]
 error = []
 warn = []
 info = []
 debug = []
 trace = []
+mul_hart = []
 
 [profile.release]
 debug = true

@@ -88,14 +88,14 @@ pub fn run_tasks() {
             let mut task_inner = task.inner_lock();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
-            task_inner.memory_set.activate(); // 更新stap寄存器和刷新TLB
+            unsafe { task_inner.memory_set.activate() }; // 更新stap寄存器和刷新TLB
             drop(task_inner);
             // release coming task TCB manually
             processor.current = Some(task);
             unsafe {
                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
             }
-            KERNEL_SPACE.lock().activate();
+            unsafe { KERNEL_SPACE.lock().activate() };
         }
     }
 }

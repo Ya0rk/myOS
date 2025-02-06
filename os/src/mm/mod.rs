@@ -16,8 +16,10 @@ use page_table::PTEFlags;
 use address::VPNRange;
 
 /// initiate heap allocator, frame allocator and kernel space
-pub fn init() {
-    heap_allocator::init_heap();
-    frame_allocator::init_frame_allocator();
-    KERNEL_SPACE.lock().activate();
+pub fn init(first: bool) {
+    if first {
+        heap_allocator::init_heap();
+        frame_allocator::init_frame_allocator();
+    }
+    unsafe { KERNEL_SPACE.lock().activate() }; // 切换到kernel page table
 }
