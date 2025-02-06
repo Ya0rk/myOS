@@ -4,31 +4,31 @@ use crate::mm::{
     frame_alloc, frame_dealloc, kernel_token, FrameTracker, KernelAddr, PageTable, PhysAddr,
     PhysPageNum, StepByOne, VirtAddr,
 };
-use crate::sync::UPSafeCell;
 use crate::task::{current_task, current_user_token};
 use alloc::vec::Vec;
 use lazy_static::*;
+use spin::Mutex;
 use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 
 #[allow(unused)]
 const VIRTIO0: usize = 0x10001000 + KERNEL_ADDR_OFFSET;
 
-pub struct VirtIOBlock(UPSafeCell<VirtIOBlk<'static, VirtioHal>>);
+pub struct VirtIOBlock(Mutex<VirtIOBlk<'static, VirtioHal>>);
 
 lazy_static! {
-    static ref QUEUE_FRAMES: UPSafeCell<Vec<FrameTracker>> = unsafe { UPSafeCell::new(Vec::new()) };
+    static ref QUEUE_FRAMES: Mutex<Vec<FrameTracker>> = Mutex::new(Vec::new());
 }
 
 impl BlockDevice for VirtIOBlock {
     fn read_block(&self, block_id: usize, buf: &mut [u8]) {
         self.0
-            .exclusive_access()
+            .lock()
             .read_block(block_id, buf)
             .expect("Error when reading VirtIOBlk");
     }
     fn write_block(&self, block_id: usize, buf: &[u8]) {
         self.0
-            .exclusive_access()
+            .lock()
             .write_block(block_id, buf)
             .expect("Error when writing VirtIOBlk");
     }
@@ -38,7 +38,7 @@ impl VirtIOBlock {
     #[allow(unused)]
     pub fn new() -> Self {
         unsafe {
-            Self(UPSafeCell::new(
+            Self(Mutex::new(
                 VirtIOBlk::<VirtioHal>::new(&mut *(VIRTIO0 as *mut VirtIOHeader))
                     .expect("VirtIOBlk create failed"),
             ))
@@ -57,7 +57,7 @@ impl Hal for VirtioHal {
                 ppn_base = frame.ppn;
             }
             assert_eq!(frame.ppn.0, ppn_base.0 + i);
-            QUEUE_FRAMES.exclusive_access().push(frame);
+            QUEUE_FRAMES.lock().push(frame);
         }
         let pa: PhysAddr = ppn_base.into();
         pa.0

@@ -1,4 +1,5 @@
 use log::{Level, LevelFilter, Metadata, Record};
+use crate::task::get_current_hart_id;
 
 #[cfg(feature = "error")]
 const LOG_LEVEL: log::LevelFilter = LevelFilter::Error;
@@ -19,9 +20,10 @@ impl log::Log for SimpleLogger {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             println!(
-                "\x1b[{}m[{}] {}\x1b[0m",
+                "\x1b[{}m[{}] [PID{}] {}\x1b[0m",
                 level_color(record.level()),
                 record.level(),
+                get_current_hart_id(),
                 record.args()
             );
         }

@@ -10,10 +10,10 @@ pub use manager::TaskManager;
 pub use context::TaskContext;
 pub use pid::{KernelStack, PidHandle, PidAllocator};
 pub use processor::Processor;
-pub use manager::add_task;
 pub use pid::pid_alloc;
-pub use processor::{current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task};
+pub use manager::add_task;
 pub use manager::fetch_task;
+pub use processor::{init_processors, current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task, get_current_hart_id};
 
 use crate::fs::OpenFlags;
 use alloc::sync::Arc;
@@ -25,20 +25,20 @@ use switch::__switch;
 
 /// Suspend the current 'Running' task and run the next task in task list.
 pub fn suspend_current_and_run_next() {
-    let task = take_current_task().unwrap();
+    if let Some(task) = take_current_task(){
+        // ---- access current TCB exclusively
+        let mut task_inner = task.inner_lock();
+        let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
+        // Change status to Ready
+        task_inner.task_status = TaskStatus::Ready;
+        drop(task_inner);
+        // ---- release current PCB
 
-    // ---- access current TCB exclusively
-    let mut task_inner = task.inner_exclusive_access();
-    let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
-    // Change status to Ready
-    task_inner.task_status = TaskStatus::Ready;
-    drop(task_inner);
-    // ---- release current PCB
-
-    // push back to ready queue.
-    add_task(task);
-    // jump to scheduling cycle
-    schedule(task_cx_ptr);
+        // push back to ready queue.
+        add_task(task);
+        // jump to scheduling cycle
+        schedule(task_cx_ptr);
+    }
 }
 
 /// pid of usertests app in make run TEST=1
@@ -65,7 +65,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     }
 
     // **** access current TCB exclusively
-    let mut inner = task.inner_exclusive_access();
+    let mut inner = task.inner_lock();
     // Change status to Zombie
     inner.task_status = TaskStatus::Zombie;
     // Record exit code
@@ -75,9 +75,9 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // 将当前进程的子进程移动到initproc下
     // ++++++ access initproc TCB exclusively
     {
-        let mut initproc_inner = INITPROC.inner_exclusive_access();
+        let mut initproc_inner = INITPROC.inner_lock();
         for child in inner.children.iter() {
-            child.inner_exclusive_access().parent = Some(Arc::downgrade(&INITPROC));
+            child.inner_lock().parent = Some(Arc::downgrade(&INITPROC));
             initproc_inner.children.push(child.clone());
         }
     }

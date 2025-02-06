@@ -1,9 +1,9 @@
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
 use crate::mm::{VirtAddr, KERNEL_SPACE};
-use crate::sync::UPSafeCell;
 use alloc::vec::Vec;
 use lazy_static::*;
 use log::debug;
+use spin::Mutex;
 ///分配和管理pid号，避免重复
 pub struct PidAllocator {
     current: usize,
@@ -40,21 +40,19 @@ impl PidAllocator {
 }
 
 lazy_static! {
-    pub static ref PID_ALLOCATOR: UPSafeCell<PidAllocator> =
-        unsafe { UPSafeCell::new(PidAllocator::new()) };
+    pub static ref PID_ALLOCATOR: Mutex<PidAllocator> = Mutex::new(PidAllocator::new());
 }
 ///Bind pid lifetime to `PidHandle`
 pub struct PidHandle(pub usize);
 
 impl Drop for PidHandle {
     fn drop(&mut self) {
-        //println!("drop pid {}", self.0);
-        PID_ALLOCATOR.exclusive_access().dealloc(self.0);
+        PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
 ///Allocate a pid from PID_ALLOCATOR
 pub fn pid_alloc() -> PidHandle {
-    PID_ALLOCATOR.exclusive_access().alloc()
+    PID_ALLOCATOR.lock().alloc()
 }
 
 /// Return (bottom, top) of a kernel stack in kernel space.
@@ -113,7 +111,7 @@ impl Drop for KernelStack {
         let (kernel_stack_bottom, _) = kernel_stack_position(self.pid);
         let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
         KERNEL_SPACE
-            .exclusive_access()
+            .lock()
             .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
     }
 }

@@ -9,7 +9,7 @@ use riscv::register::scause::{self, Exception, Interrupt, Trap};
 use crate::syscall::syscall;
 use crate::utils::backtrace;
 use crate::timer::set_next_trigger;
-use crate::task::{current_trap_cx, exit_current_and_run_next, suspend_current_and_run_next};
+use crate::task::{current_trap_cx, exit_current_and_run_next, get_current_hart_id, suspend_current_and_run_next};
 
 global_asm!(include_str!("trap.S"));
 
@@ -76,7 +76,8 @@ pub fn trap_handler() {
         | Trap::Exception(Exception::LoadFault) // 4
         | Trap::Exception(Exception::LoadPageFault) => { // 10
             println!(
-                "[kernel] {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                "[kernel] hart_id = {:?}, {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                get_current_hart_id(),
                 scause.bits(),
                 scause.cause(),
                 stval,
@@ -86,7 +87,9 @@ pub fn trap_handler() {
             exit_current_and_run_next(-2);
         }
         Trap::Exception(Exception::IllegalInstruction) => { // 2
-            println!("[kernel] IllegalInstruction in application, kernel killed it.");
+            println!("[kernel] hart_id = {:?}, IllegalInstruction in application, kernel killed it.",
+                get_current_hart_id()
+            );
             // illegal instruction exit code
             exit_current_and_run_next(-3);
         }
@@ -96,7 +99,8 @@ pub fn trap_handler() {
         }
         _ => {
             panic!(
-                "Unsupported trap {:?}, stval = {:#x}!",
+                "hart_id = {:?}, Unsupported trap {:?}, stval = {:#x}!",
+                get_current_hart_id(),
                 scause.cause(),
                 stval
             );

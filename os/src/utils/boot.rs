@@ -1,15 +1,17 @@
 use core::arch::asm;
-use crate::config::KERNEL_ADDR_OFFSET;
+use crate::{config::{HART_NUM, HART_START_ADDR, KERNEL_ADDR_OFFSET}, mm::VirtAddr, sbi};
 
 /// 这里是一个简单的启动代码，它将在启动时运行。
 #[no_mangle]
-pub fn jump_helper() {
+pub fn jump_helper(hart_id: usize) {
     unsafe { // 调整栈指针 加上偏移，跳转到 rust_main
         asm!(
             "add sp, sp, {offset}",
             "la t0, rust_main",
             "add t0, t0, {offset}",
+            "mv a0, {hartid}",
             "jalr zero, 0(t0)",
+            hartid = in(reg) hart_id,
             offset = in(reg) KERNEL_ADDR_OFFSET,
             options(noreturn)
         );
@@ -25,19 +27,30 @@ pub fn logo() {
         VMMP 6W'   `Wb 6W'   `Wb MM        MM   `YMMNq. 
          MM  8M     M8 8M     M8 MM.      ,MP .     `MM 
          MM  YA.   ,A9 YA.   ,A9 `Mb.    ,dP' Mb     dM 
-       .JMML. `Ybmd9'   `Ybmd9'    `"bmmd"'   P"Ybmmd"  
+       .JMML. `Ybmd9'   `YooOS'    `"bmmd"'   P"Ybmmd"  
                                                         
     "#);
 }
 
-/// clear BSS segment
 pub fn clear_bss() {
     extern "C" {
         fn sbss();
         fn ebss();
     }
     unsafe {
-        core::slice::from_raw_parts_mut(sbss as usize as *mut u8, ebss as usize - sbss as usize)
+        let start: VirtAddr = VirtAddr(sbss as usize);
+        let end: VirtAddr = VirtAddr(ebss as usize);
+        let len: usize = end.0 - start.0;
+        core::slice::from_raw_parts_mut(start.as_ptr(), len)
             .fill(0);
+    }
+}
+
+
+/// boot start_hart之外的所有 hart
+pub fn boot_all_harts(hartid: usize) {
+    for i in (0..HART_NUM).filter(|id| *id != hartid) {
+        sbi::hart_start(i, HART_START_ADDR).unwrap();
+        println!("[kernel] ---------- hart {} is starting... ----------", i);
     }
 }

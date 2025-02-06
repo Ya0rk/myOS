@@ -177,6 +177,9 @@ impl VirtAddr {
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.0 as *mut u8
+    }
 }
 impl From<VirtAddr> for VirtPageNum {
     fn from(v: VirtAddr) -> Self {

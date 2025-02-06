@@ -1,3 +1,5 @@
+use spin::Mutex;
+
 use crate::sbi::console_putchar;
 use core::fmt::{self, Write};
 
@@ -12,8 +14,11 @@ impl Write for Stdout {
     }
 }
 
+static mut MUTEX_STDOUT: Mutex<Stdout> = Mutex::new(Stdout {});
 pub fn print(args: fmt::Arguments) {
-    Stdout.write_fmt(args).unwrap();
+    unsafe {
+        MUTEX_STDOUT.lock().write_fmt(args).unwrap();
+    }
 }
 
 #[macro_export]

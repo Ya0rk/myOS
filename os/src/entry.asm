@@ -1,7 +1,14 @@
     .section .text.entry
     .globl _start
 _start:
+    # 启动时rust sbi将hart_id放在a0中
+    mv tp,a0
+
+    # 根据hart_id不同设置kernel stack的sp
+    slli t0, a0, 16  # t0 = hart_id << 16(4096 * 16)
     la sp, boot_stack_top
+    sub sp, sp, t0  # sp = stack top - hart_id * stack_size
+
     # 因为现在内核链接地址在 0xffff_ffc0_8020_0000（这是虚拟地址）
     # 所以我们要打开页表机制，这样才能找到正确的物理地址
     # satp: 8 << 60 | boot_pagetable （开启页表机制 三级页表）
@@ -18,7 +25,7 @@ _start:
     .section .bss.stack
     .globl boot_stack_lower_bound
 boot_stack_lower_bound:
-    .space 4096 * 16 * 1 # 根据CPU数量开辟栈空间
+    .space 4096 * 16 * 2 # 根据CPU数量开辟栈空间
     .globl boot_stack_top
 boot_stack_top:
 

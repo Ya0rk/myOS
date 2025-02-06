@@ -92,7 +92,7 @@ impl PageTable {
     }
     pub fn new_from_kernel() -> Self {
         let frame = frame_alloc().unwrap();
-        let kernel_page_table = &KERNEL_SPACE.exclusive_access().page_table;
+        let kernel_page_table = &KERNEL_SPACE.lock().page_table;
         let kernel_root_ppn = kernel_page_table.root_ppn;
         // 第一级页表
         let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];

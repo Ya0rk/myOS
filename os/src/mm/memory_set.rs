@@ -3,11 +3,11 @@ use super::{PTEFlags, PageTable, PageTableEntry};
 use super::{PhysPageNum, VirtAddr, VirtPageNum};
 use super::{StepByOne, VPNRange};
 use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, USER_SPACE_TOP, USER_STACK_SIZE, USER_TRAP_CONTEXT};
-use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use log::info;
+use spin::Mutex;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
@@ -26,12 +26,12 @@ extern "C" {
 
 lazy_static! {
     /// a memory set instance through lazy_static! managing kernel space
-    pub static ref KERNEL_SPACE: Arc<UPSafeCell<MemorySet>> =
-        Arc::new(unsafe { UPSafeCell::new(MemorySet::new_kernel()) });
+    pub static ref KERNEL_SPACE: Arc<Mutex<MemorySet>> =
+        Arc::new(Mutex::new(MemorySet::new_kernel()));
 }
 
 pub fn kernel_token() -> usize {
-    KERNEL_SPACE.exclusive_access().token()
+    KERNEL_SPACE.lock().token()
 }
 
 /// memory set structure, controls virtual-memory space
@@ -53,20 +53,6 @@ impl MemorySet {
     /// 创建pagetable时初始化了kernel的页表
     /// 每个进程有自己的页表（不同的用户页表+相同的内核页表）
     pub fn new_with_kernel_pagetable() -> Self {
-        // let frame = frame_alloc().unwrap();
-        // let kernel_page_table = &KERNEL_SPACE.exclusive_access().page_table;
-        // let kernel_root_ppn = kernel_page_table.root_ppn;
-        // // 第一级页表
-        // let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
-        // frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
-        
-        // Self {
-        //     page_table: PageTable {
-        //         root_ppn: frame.ppn,
-        //         frames: vec![frame],
-        //     },
-        //     areas: Vec::new(),
-        // }
         Self {
             page_table: PageTable::new_from_kernel(),
             areas: Vec::new(),
@@ -395,7 +381,7 @@ pub enum MapType {
 }
 
 bitflags! {
-    // #[derive(Clone)]
+    #[derive(Clone)]
     /// map permission corresponding to that in pte: `R W X U`
     pub struct MapPermission: u8 {
         ///Readable
@@ -413,7 +399,7 @@ bitflags! {
 ///Check PageTable running correctly
 pub fn remap_test() {
     // msg("start");
-    let mut kernel_space = KERNEL_SPACE.exclusive_access();
+    let mut kernel_space = KERNEL_SPACE.lock();
     let mid_text: VirtAddr = (stext as usize + (etext as usize - stext as usize) / 2).into();
     let mid_rodata: VirtAddr = (srodata as usize + (erodata as usize - srodata as usize) / 2).into();
     let mid_data: VirtAddr = (sdata as usize + (edata as usize - sdata as usize) / 2).into();

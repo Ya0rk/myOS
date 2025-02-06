@@ -9,6 +9,9 @@ APPS := ../user/src/bin/*
 # fs image
 FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 
+# cpu hart
+CPUS ?= 2
+
 # BOARD
 BOARD := qemu
 SBI ?= rustsbi
@@ -49,6 +52,7 @@ QEMU_ARGS += -bios $(BOOTLOADER)
 QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+QEMU_ARGS += -smp $(CPUS)
 
 
 build: env $(KERNEL_BIN) fs-img
@@ -78,6 +82,7 @@ kernel:
 
 clean:
 	cargo clean
+	rm -f $(FS_IMG)
 	cd ../user && make clean
 
 disasm: kernel
