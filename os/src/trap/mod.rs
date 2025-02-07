@@ -1,15 +1,13 @@
 mod context;
+mod user_trap;
+mod kernel_trap;
 
 pub use context::TrapContext;
-
+use user_trap::{user_trap_handler, user_trap_return};
 use core::arch::global_asm;
+use core::fmt::Display;
 use riscv::register::mtvec::TrapMode;
-use riscv::register::{sie, stval, stvec,};
-use riscv::register::scause::{self, Exception, Interrupt, Trap};
-use crate::syscall::syscall;
-use crate::utils::backtrace;
-use crate::timer::set_next_trigger;
-use crate::task::{current_trap_cx, exit_current_and_run_next, get_current_hart_id, suspend_current_and_run_next};
+use riscv::register::stvec;
 
 global_asm!(include_str!("trap.S"));
 
@@ -21,117 +19,44 @@ extern {
     fn __return_to_user(ctx: *mut TrapContext);
 }
 
-/// initialize CSR `stvec` as the entry of `__alltraps`
 pub fn init() {
-    set_kernel_trap_entry();
-}
-
-// 在trap handler中设置内核态的trap entry
-fn set_kernel_trap_entry() {
-    unsafe {
-        stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
-    }
-}
-
-// 在trap return中重新修改stvec设置用户态的trap entry
-fn set_user_trap_entry() {
-    unsafe {
-        stvec::write(__trap_from_user as usize, TrapMode::Direct);
-    }
-}
-/// enable timer interrupt in sie CSR
-pub fn enable_timer_interrupt() {
-    unsafe {
-        sie::set_stimer();
-    }
+    set_trap_handler(IndertifyMode::Kernel);
 }
 
 pub fn trap_loop() {
     loop {
-        trap_return();
-        trap_handler(); 
+        user_trap_return();
+        user_trap_handler(); 
     }
 }
 
-#[no_mangle]
-/// handle an interrupt, exception, or system call from user space
-pub fn trap_handler() {
-    set_kernel_trap_entry();
-    let scause = scause::read();
-    let stval = stval::read();
-    match scause.cause() {
-        Trap::Exception(Exception::UserEnvCall) => { // 7
-            let mut cx = current_trap_cx();
-            cx.sepc += 4;
-
-            let result = syscall(cx.user_x[17], [cx.user_x[10], cx.user_x[11], cx.user_x[12]]);
-            // cx is changed during sys_exec, so we have to call it again
-            cx = current_trap_cx();
-            cx.user_x[10] = result as usize;
-        }
-        Trap::Exception(Exception::StoreFault) // 6
-        | Trap::Exception(Exception::StorePageFault) // 11
-        | Trap::Exception(Exception::InstructionFault) // 1
-        | Trap::Exception(Exception::InstructionPageFault) // 9
-        | Trap::Exception(Exception::LoadFault) // 4
-        | Trap::Exception(Exception::LoadPageFault) => { // 10
-            println!(
-                "[kernel] hart_id = {:?}, {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
-                get_current_hart_id(),
-                scause.bits(),
-                scause.cause(),
-                stval,
-                current_trap_cx().sepc,
-            );
-            // page fault exit code
-            exit_current_and_run_next(-2);
-        }
-        Trap::Exception(Exception::IllegalInstruction) => { // 2
-            println!("[kernel] hart_id = {:?}, IllegalInstruction in application, kernel killed it.",
-                get_current_hart_id()
-            );
-            // illegal instruction exit code
-            exit_current_and_run_next(-3);
-        }
-        Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
-            set_next_trigger();
-            suspend_current_and_run_next();
-        }
-        _ => {
-            panic!(
-                "hart_id = {:?}, Unsupported trap {:?}, stval = {:#x}!",
-                get_current_hart_id(),
-                scause.cause(),
-                stval
-            );
-        }
-    }
-    // trap_return();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(unused)]
+enum IndertifyMode {
+    User,
+    Kernel,
 }
 
-#[no_mangle]
-/// set the new addr of __restore asm function in TRAMPOLINE page,
-/// set the reg a0 = trap_cx_ptr, reg a1 = phy addr of usr page table,
-/// finally, jump to new addr of __restore asm function
-pub fn trap_return() {
-    set_user_trap_entry();
-
-    let trap_cx = current_trap_cx();
-    unsafe {
-        __return_to_user(trap_cx);
+impl Display for IndertifyMode {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            IndertifyMode::User => write!(f, "User"),
+            IndertifyMode::Kernel => write!(f, "Kernel"),
+        }
     }
 }
 
-#[no_mangle]
-/// Unimplement: traps/interrupts/exceptions from kernel mode
-/// Todo: Chapter 9: I/O device
-pub fn kernel_trap_handler() {
-    backtrace();
-    println!("nihoa : a trap {:?} = {:?} from kernel! stval = {:?}, sepc = {:#x}",
-            scause::read().cause(),
-            scause::read().bits(),
-            stval::read(),
-            current_trap_cx().sepc,
-        );
-    panic!("a trap {:?} from kernel!", scause::read().cause());
+fn set_trap_handler(mode: IndertifyMode) {
+    match mode {
+        IndertifyMode::User => {
+            unsafe {
+                stvec::write(__trap_from_user as usize, TrapMode::Direct);
+            }
+        },
+        IndertifyMode::Kernel => {
+            unsafe {
+                stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
+            }
+        },
+    }
 }

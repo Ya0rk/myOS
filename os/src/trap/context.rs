@@ -28,12 +28,6 @@ pub struct TrapContext {
 }
 
 impl TrapContext {
-    pub fn set_sp(&mut self, sp: usize) {
-        self.user_x[2] = sp;
-    }
-    pub fn get_sp(&self) -> usize {
-        self.user_x[2]
-    }
     ///init app context
     pub fn app_init_context(
         entry: usize,
@@ -56,5 +50,20 @@ impl TrapContext {
         };
         cx.set_sp(sp);
         cx
+    }
+    pub fn set_sp(&mut self, sp: usize) {
+        self.user_x[2] = sp;
+    }
+    pub fn get_sp(&self) -> usize {
+        self.user_x[2]
+    }
+    pub fn set_sepc(&mut self, sepc: usize) {
+        self.sepc = sepc;
+    }
+    pub fn get_sepc(&self) -> usize {
+        self.sepc
+    }
+    pub fn set_kernel_sp(&mut self, kernel_sp: usize) {
+        self.kernel_sp = kernel_sp;
     }
 }

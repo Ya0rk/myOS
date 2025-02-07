@@ -16,22 +16,21 @@ mod board;
 mod console;
 mod config;
 mod lang_items;
-mod timer;
 pub mod mm;
 pub mod fs;
 pub mod task;
 pub mod trap;
 pub mod sync;
 pub mod utils;
-pub mod logger;
 pub mod syscall;
 pub mod drivers;
 pub mod arch;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
+use sync::timer;
 use task::get_current_hart_id;
-use utils::boot;
+use utils::{boot, logger};
 
 global_asm!(include_str!("entry.asm"));
 
@@ -71,7 +70,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         mm::init(false);        
     }
     
-    trap::enable_timer_interrupt();
+    unsafe { sync::enable_timer_interrupt() };
     timer::set_next_trigger();
 
     // 列出目前的应用

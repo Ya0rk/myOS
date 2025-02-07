@@ -1,5 +1,4 @@
 use core::fmt::{self, Display};
-
 use num_enum::FromPrimitive;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]

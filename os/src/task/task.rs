@@ -201,7 +201,7 @@ impl TaskControlBlock {
         // modify kernel_sp in trap_cx
         // **** access children PCB exclusively
         let trap_cx = task_control_block.inner_lock().get_trap_cx();
-        trap_cx.kernel_sp = kernel_stack_top;
+        trap_cx.set_kernel_sp(kernel_stack_top);
         // return
         task_control_block
         // ---- release parent PCB automatically
