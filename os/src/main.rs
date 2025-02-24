@@ -64,7 +64,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         #[cfg(feature = "mul_hart")]
         boot::boot_all_harts(hart_id);
     } else {
-        // while !INIT_FINISHED.load(Ordering::SeqCst) {}
 
         trap::init();
         mm::init(false);        

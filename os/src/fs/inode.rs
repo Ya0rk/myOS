@@ -15,7 +15,7 @@ pub struct OSInode {
     writable: bool,
     inner: Mutex<OSInodeInner>,
 }
-/// The OS inode inner in 'UPSafeCell'
+/// The OS inode inner in 'Mutex'
 pub struct OSInodeInner {
     offset: usize,
     inode: Arc<Inode>,
