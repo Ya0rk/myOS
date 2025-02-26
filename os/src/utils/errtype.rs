@@ -2,6 +2,10 @@ pub type SysResult<T=()> = Result<T, Errno>;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Errno {
+    // 这是waitpid使用的返回值
+    NOPID = -1,
+    HAVEPID = -2,
+
     ErrUNDEF = 0,
     ErrPERM = 1,
     ErrNOENT = 2,
@@ -134,12 +138,14 @@ pub enum Errno {
     ErrNOTRECOVERABLE = 131,
     ErrRFKILL = 132,
     ErrHWPOISON = 133,
+    ErrBADCALL = 200,
 }
 
 impl Errno {
     pub fn get_info(&self) -> &'static str{
         use self::Errno::*;
         match self {
+            ErrBADCALL => "syscall failed",
             ErrPERM => "Operation not permitted",
             ErrNOENT => "No such file or directory",
             ErrSRCH => "No such process",
@@ -148,7 +154,7 @@ impl Errno {
             ErrNXIO => "No such device or address",
             Err2BIG => "Argument list too long",
             ErrNOEXEC => "Exec format error",
-            ErrBADF => "Bad file number",
+            ErrBADF => "file number out of bounds",
             ErrCHILD => "No child processes",
             ErrAGAIN => "Try again",
             ErrNOMEM => "Out of memory",

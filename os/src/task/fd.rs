@@ -76,14 +76,10 @@ impl FdTable {
         self.table.len()
     }
 
-    pub fn get_file_by_fd(&self, idx: usize) -> Option<Arc<dyn File + Send + Sync>> {
+    pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn File + Send + Sync>>> {
         if idx >= self.table_len() {
-            return  None;
+            return  Err(Errno::ErrBADF);
         }
-        self.table[idx].0.as_ref().map(|fd| fd.clone())
-    }
-
-    pub fn get_fd(&self, idx: usize) -> Fd {
-        self.table[idx].clone()
+        Ok(self.table[idx].0.as_ref().map(|fd| fd.clone()))
     }
 }

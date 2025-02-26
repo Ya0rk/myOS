@@ -44,14 +44,6 @@ impl TaskControlBlockInner {
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
-    // pub fn alloc_fd(&mut self) -> usize {
-    //     if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
-    //         fd
-    //     } else {
-    //         self.fd_table.push(None);
-    //         self.fd_table.len() - 1
-    //     }
-    // }
     pub fn get_current_path(&self) -> String {
         self.current_path.clone()
     }

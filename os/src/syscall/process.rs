@@ -5,6 +5,7 @@ use crate::task::{
     suspend_current_and_run_next,
 };
 use crate::timer::get_time_ms;
+use crate::utils::errtype::{Errno, SysResult};
 use alloc::sync::Arc;
 
 pub fn sys_exit(exit_code: i32) -> ! {
@@ -12,20 +13,20 @@ pub fn sys_exit(exit_code: i32) -> ! {
     panic!("Unreachable in sys_exit!");
 }
 
-pub fn sys_yield() -> isize {
+pub fn sys_yield() -> SysResult<usize> {
     suspend_current_and_run_next();
-    0
+    Ok(0)
 }
 
-pub fn sys_get_time() -> isize {
-    get_time_ms() as isize
+pub fn sys_get_time() -> SysResult<usize> {
+    Ok(get_time_ms() as usize)
 }
 
-pub fn sys_getpid() -> isize {
-    current_task().unwrap().pid.0 as isize
+pub fn sys_getpid() -> SysResult<usize> {
+    Ok(current_task().unwrap().pid.0 as usize)
 }
 
-pub fn sys_fork() -> isize {
+pub fn sys_fork() -> SysResult<usize> {
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
@@ -37,10 +38,10 @@ pub fn sys_fork() -> isize {
     // 将子进程加入调度器，等待被调度
     add_task(new_task);
     // 父进程返回子进程的pid
-    new_pid as isize
+    Ok(new_pid as usize)
 }
 
-pub fn sys_exec(path: *const u8) -> isize {
+pub fn sys_exec(path: *const u8) -> SysResult<usize> {
     let token = current_user_token();
     let path = translated_str(token, path);
     println!("sys_exec: path = {:?}", path);
@@ -48,15 +49,15 @@ pub fn sys_exec(path: *const u8) -> isize {
         let all_data = app_inode.read_all();
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
-        0
+        Ok(0)
     } else {
-        -1
+        Err(Errno::ErrBADCALL)
     }
 }
 
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
-pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
+pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SysResult<usize> {
     let task = current_task().unwrap();
     // find a child process
 
@@ -67,9 +68,10 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         .iter()
         .any(|p| pid == -1 || pid as usize == p.getpid())
     {
-        return -1;
+        return Err(Errno::NOPID);
         // ---- release current PCB
     }
+
     let pair = inner.children.iter().enumerate().find(|(_, p)| {
         // ++++ temporarily access child PCB lock exclusively
         p.inner_lock().is_zombie() && (pid == -1 || pid as usize == p.getpid())
@@ -84,9 +86,9 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
         let exit_code = child.inner_lock().exit_code;
         // ++++ release child PCB
         *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
-        found_pid as isize
+        Ok(found_pid as usize)
     } else {
-        -2
+        Err(Errno::HAVEPID)
     }
     // ---- release current PCB lock automatically
 }

@@ -6,8 +6,10 @@ use fs::*;
 use process::*;
 use sys_num::SysCode;
 
+use crate::utils::errtype::SysResult;
+
 /// handle syscall exception with `syscall_id` and other arguments
-pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
+pub fn syscall(syscall_id: usize, args: [usize; 3]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     match syscode {
         SysCode::SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
