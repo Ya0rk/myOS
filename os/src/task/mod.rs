@@ -3,9 +3,11 @@ mod manager;
 mod pid;
 mod processor;
 mod switch;
+mod fd;
 #[allow(clippy::module_inception)]
 mod task;
 
+pub use fd::{FdTable, Fd};
 pub use manager::TaskManager;
 pub use context::TaskContext;
 pub use pid::{KernelStack, PidHandle, PidAllocator};
