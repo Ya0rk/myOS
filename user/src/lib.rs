@@ -58,6 +58,10 @@ pub fn getcwd(buf: &mut [u8], size: usize) -> isize {
     sys_getcwd(buf, size)
 }
 
+pub fn dup(fd: usize) -> isize {
+    sys_dup(fd)
+}
+
 pub fn open(path: &str, flags: OpenFlags) -> isize {
     sys_open(path, flags.bits())
 }

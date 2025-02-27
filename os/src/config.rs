@@ -31,3 +31,5 @@ pub const HART_START_ADDR: usize = 0x80200000;
 // File
 /// max path name len
 pub const PATH_MAX: usize = 4096;
+/// 最大文件描述符数量
+pub const RLIMIT_NOFILE: usize = 1024;

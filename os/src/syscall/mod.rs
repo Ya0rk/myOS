@@ -13,6 +13,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 3]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     match syscode {
         SysCode::SYSCALL_GETCWD => sys_getcwd(args[0] as *mut u8, args[1]),
+        SysCode::SYSCALL_DUP => sys_dup(args[0]),
         SysCode::SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
         SysCode::SYSCALL_CLOSE => sys_close(args[0]),
         SysCode::SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),

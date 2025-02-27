@@ -1,6 +1,7 @@
 use core::arch::asm;
 
 const SYSCALL_GETCWD: usize = 17;
+const SYSCALL_DUP: usize = 23;
 const SYSCALL_OPEN: usize = 56;
 const SYSCALL_CLOSE: usize = 57;
 const SYSCALL_READ: usize = 63;
@@ -25,6 +26,14 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
         );
     }
     ret
+}
+
+pub fn sys_getcwd(buf: &mut [u8], size: usize) -> isize {
+    syscall(SYSCALL_GETCWD, [buf.as_mut_ptr() as usize, size as usize, 0])
+}
+
+pub fn sys_dup(fd: usize) -> isize {
+    syscall(SYSCALL_DUP, [fd, 0, 0])
 }
 
 pub fn sys_open(path: &str, flags: u32) -> isize {
@@ -73,8 +82,4 @@ pub fn sys_exec(path: &str) -> isize {
 
 pub fn sys_waitpid(pid: isize, exit_code: *mut i32) -> isize {
     syscall(SYSCALL_WAITPID, [pid as usize, exit_code as usize, 0])
-}
-
-pub fn sys_getcwd(buf: &mut [u8], size: usize) -> isize {
-    syscall(SYSCALL_GETCWD, [buf.as_mut_ptr() as usize, size as usize, 0])
 }

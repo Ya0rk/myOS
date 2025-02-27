@@ -6,18 +6,19 @@ use num_enum::FromPrimitive;
 #[allow(unused)]
 #[allow(non_camel_case_types)]
 pub enum SysCode {
-    SYSCALL_GETCWD = 17,
-    SYSCALL_OPEN  = 56,
-    SYSCALL_CLOSE = 57,
-    SYSCALL_READ  = 63,
-    SYSCALL_WRITE = 64,
-    SYSCALL_EXIT  = 93,
-    SYSCALL_YIELD = 124,
-    SYSCALL_GET_TIME = 169,
-    SYSCALL_GETPID   = 172,
-    SYSCALL_FORK     = 220,
-    SYSCALL_EXEC     = 221,
-    SYSCALL_WAITPID  = 260,
+    SYSCALL_GETCWD    = 17,
+    SYSCALL_DUP       = 23,
+    SYSCALL_OPEN      = 56,
+    SYSCALL_CLOSE     = 57,
+    SYSCALL_READ      = 63,
+    SYSCALL_WRITE     = 64,
+    SYSCALL_EXIT      = 93,
+    SYSCALL_YIELD     = 124,
+    SYSCALL_GET_TIME  = 169,
+    SYSCALL_GETPID    = 172,
+    SYSCALL_FORK      = 220,
+    SYSCALL_EXEC      = 221,
+    SYSCALL_WAITPID   = 260,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -33,6 +34,7 @@ impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
             Self::SYSCALL_GETCWD => "getcwd",
+            Self::SYSCALL_DUP => "dup",
             Self::SYSCALL_OPEN => "open",
             Self::SYSCALL_CLOSE => "close",
             Self::SYSCALL_READ => "read",

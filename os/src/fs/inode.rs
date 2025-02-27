@@ -84,6 +84,7 @@ pub fn list_apps() {
 }
 
 bitflags! {
+    #[derive(Clone, Copy)]
     ///Open file flags
     pub struct OpenFlags: u32 {
         ///Read only
@@ -92,6 +93,8 @@ bitflags! {
         const O_WRONLY = 1 << 0;
         ///Read & Write
         const O_RDWR = 1 << 1;
+        /// set close_on_exec 
+        const O_CLOEXEC = 1 << 7;
         ///Allow create
         const O_CREATE = 1 << 9;
         ///Clear file and return an empty one
