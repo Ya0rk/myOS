@@ -27,3 +27,7 @@ pub const HART_NUM: usize = 2;
 
 /// hart start address
 pub const HART_START_ADDR: usize = 0x80200000;
+
+// File
+/// max path name len
+pub const PATH_MAX: usize = 4096;

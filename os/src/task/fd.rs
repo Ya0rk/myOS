@@ -1,4 +1,4 @@
-#![allow(unused)]
+// #![allow(unused)]
 use alloc::{sync::Arc, vec::Vec};
 use crate::{fs::{File, Stdin, Stdout}, utils::errtype::{SysResult, Errno}};
 
@@ -35,13 +35,6 @@ impl FdTable {
         }
     }
 
-    pub fn new_bare() -> Self {
-        let mut fd_table = Vec::new();
-        FdTable {
-            table: fd_table
-        }
-    }
-
     pub fn alloc_fd(&mut self, fd: Fd) -> SysResult<usize> {
         // 先判断是否有没有使用的空闲fd， 用idx作为数组下标
         if let Some(valid_idx) = (0..self.table_len()).find(|idx| self.table[*idx].is_none()) {
@@ -66,7 +59,7 @@ impl FdTable {
 
     pub fn remove(&mut self, fd: usize) -> SysResult {
         if fd >= self.table_len() {
-            return Err(Errno::ErrBADF);
+            return Err(Errno::EBADF);
         }
         self.table[fd].0.take();
         Ok(())
@@ -78,7 +71,7 @@ impl FdTable {
 
     pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn File + Send + Sync>>> {
         if idx >= self.table_len() {
-            return  Err(Errno::ErrBADF);
+            return  Err(Errno::EBADF);
         }
         Ok(self.table[idx].0.as_ref().map(|fd| fd.clone()))
     }

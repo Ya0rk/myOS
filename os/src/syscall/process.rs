@@ -51,7 +51,7 @@ pub fn sys_exec(path: *const u8) -> SysResult<usize> {
         task.exec(all_data.as_slice());
         Ok(0)
     } else {
-        Err(Errno::ErrBADCALL)
+        Err(Errno::EBADCALL)
     }
 }
 

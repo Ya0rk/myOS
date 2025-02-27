@@ -191,7 +191,7 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     v.push(ppn.bytes_array_from_offset(offset, len));
     v
 }
-/// translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
+/// tdranslate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
     // TODO
@@ -248,13 +248,29 @@ impl UserBuffer {
     pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
         Self { buffers }
     }
-    ///Length of `UserBuffer`
+    ///`UserBuffer`中所有切片总长度
     pub fn len(&self) -> usize {
         let mut total: usize = 0;
         for b in self.buffers.iter() {
             total += b.len();
         }
         total
+    }
+    // 将一个buffer的数据写入UserBuffer，返回写入长度
+    pub fn write(&mut self, buff: &[u8]) -> usize {
+        let len = self.len().min(buff.len());
+        let mut current = 0;
+        for sub_buff in self.buffers.iter_mut() {
+            if current >= len {
+                break;
+            }
+            let copy_len = sub_buff.len().min(len - current);
+            let (src, _) = buff.split_at(current + copy_len);
+            let dst = &mut sub_buff[..copy_len];
+            dst.copy_from_slice(&src[current..]);
+            current += copy_len;
+        }
+        current
     }
 }
 

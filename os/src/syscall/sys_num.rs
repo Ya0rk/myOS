@@ -6,6 +6,7 @@ use num_enum::FromPrimitive;
 #[allow(unused)]
 #[allow(non_camel_case_types)]
 pub enum SysCode {
+    SYSCALL_GETCWD = 17,
     SYSCALL_OPEN  = 56,
     SYSCALL_CLOSE = 57,
     SYSCALL_READ  = 63,
@@ -31,6 +32,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_GETCWD => "getcwd",
             Self::SYSCALL_OPEN => "open",
             Self::SYSCALL_CLOSE => "close",
             Self::SYSCALL_READ => "read",
