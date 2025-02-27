@@ -9,12 +9,12 @@ use sys_num::SysCode;
 use crate::utils::errtype::SysResult;
 
 /// handle syscall exception with `syscall_id` and other arguments
-pub fn syscall(syscall_id: usize, args: [usize; 3]) -> SysResult<usize> {
+pub fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     match syscode {
         SysCode::SYSCALL_GETCWD => sys_getcwd(args[0] as *mut u8, args[1]),
         SysCode::SYSCALL_DUP => sys_dup(args[0]),
-        SysCode::SYSCALL_OPEN => sys_open(args[0] as *const u8, args[1] as u32),
+        SysCode::SYSCALL_OPENAT => sys_openat(args[0] as isize, args[1] as *const u8, args[2] as u32, args[3] as usize),
         SysCode::SYSCALL_CLOSE => sys_close(args[0]),
         SysCode::SYSCALL_READ => sys_read(args[0], args[1] as *const u8, args[2]),
         SysCode::SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]),

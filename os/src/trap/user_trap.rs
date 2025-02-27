@@ -20,7 +20,7 @@ pub fn user_trap_handler() {
             let syscall_id = cx.user_x[17];
             cx.set_sepc(old_sepc + 4);
 
-            let result = syscall(syscall_id, [cx.user_x[10], cx.user_x[11], cx.user_x[12]]);
+            let result = syscall(syscall_id, [cx.user_x[10], cx.user_x[11], cx.user_x[12], cx.user_x[13], cx.user_x[14], cx.user_x[15]]);
 
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();

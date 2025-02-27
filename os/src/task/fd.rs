@@ -86,7 +86,7 @@ impl FdTable {
     }
 
     pub fn remove(&mut self, fd: usize) -> SysResult {
-        if fd >= self.table_len() {
+        if fd >= self.table_len() || self.table[fd].is_none() {
             return Err(Errno::EBADF);
         }
         self.table[fd].clear();

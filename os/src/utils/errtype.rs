@@ -138,6 +138,7 @@ pub enum Errno {
     ENOTRECOVERABLE = 131,
     ERFKILL = 132,
     EHWPOISON = 133,
+    /// 处理返回值为-1的情况
     EBADCALL = 200,
 }
 

@@ -62,8 +62,8 @@ pub fn dup(fd: usize) -> isize {
     sys_dup(fd)
 }
 
-pub fn open(path: &str, flags: OpenFlags) -> isize {
-    sys_open(path, flags.bits())
+pub fn openat(fd: isize, path: &str, flags: OpenFlags, mode: usize) -> isize {
+    sys_openat(fd, path, flags.bits(), mode)
 }
 pub fn close(fd: usize) -> isize {
     sys_close(fd)

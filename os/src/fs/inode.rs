@@ -123,7 +123,10 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
 }
 
 ///Open file with flags
+/// 
+/// 相对当前工作目录打开文件时可以使用
 pub fn open(work_path: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
+    // 先找到当前工作目录的节点 inode
     let cur_inode = {
         if work_path == "/" {
             ROOT_INODE.clone()
@@ -138,10 +141,11 @@ pub fn open(work_path: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSInode
     let (readable, writable) = flags.read_write();
     if flags.contains(OpenFlags::O_CREATE) || flags.contains(OpenFlags::O_DIRECTROY) {
         if let Some(inode) = cur_inode.find_vfile_bypath(pathv.clone()) {
+            // 如果文件存在就清空
             inode.clear();
             Some(Arc::new(OSInode::new(readable, writable, inode)))
         } else {
-            // create file
+            // 如果文件不存在就创建 新文件
             let mut create_type = 0;
             if flags.contains(OpenFlags::O_CREATE) {
                 create_type = ATTR_ARCHIVE;
@@ -149,10 +153,13 @@ pub fn open(work_path: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSInode
                 create_type = ATTR_DIRECTORY;
             }
 
+            // 获取新文件的文件名
             let name = pathv.pop().unwrap();
 
-            if let Some(temp_inode) = cur_inode.find_vfile_bypath(pathv.clone()) {
-                temp_inode
+            // 找到新文件的父目录 inode
+            if let Some(parent_inode) = cur_inode.find_vfile_bypath(pathv.clone()) {
+                // 在父目录下创建新文件，并返回新文件的 inode
+                parent_inode
                     .create(name, create_type)
                     .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
             } else {

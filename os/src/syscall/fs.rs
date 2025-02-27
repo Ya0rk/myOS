@@ -1,7 +1,8 @@
 use alloc::string::String;
+use log::info;
 
-use crate::config::{PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open_file, OpenFlags};
+use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
+use crate::fs::{open, open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::errtype::{Errno, SysResult};
@@ -48,32 +49,75 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
     }
 }
 
-pub fn sys_open(path: *const u8, flags: u32) -> SysResult<usize> {
+/// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
+/// 
+/// Success: 返回文件描述符; Fail: 返回-1
+pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
+    info!("start sys_openat");
     let task = current_task().unwrap();
-    let token = current_user_token();
+    let mut inner = task.inner_lock();
+    let token = inner.get_user_token();
     let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags).unwrap();
-    if let Some(inode) = open_file(path.as_str(), flags) {
-        let mut inner = task.inner_lock();
-        let fd = FdTable::alloc_fd(&mut inner.fd_table, Fd::new(inode, flags)).unwrap();
-        Ok(fd as usize)
-    } else {
-        Err(Errno::EBADCALL)
+    
+    // 如果是绝对路径就忽略fd
+    if path.starts_with('/') {
+        if let Some(inode) = open_file(path.as_str(), flags) {
+            let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
+            info!("sys_open finished: fd: {}", fd);
+            return Ok(fd);
+        } else {
+            return Err(Errno::EBADCALL);
+        }
     }
+    
+    // 如果是相对路径
+    // 以当前目录作为出发点 open 文件
+    if fd == AT_FDCWD {
+        let cwd = inner.get_current_path();
+        if let Some(inode) = open(cwd.as_str(), path.as_str(), flags) {
+            let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
+            info!("sys_open finished: fd: {}", fd);
+            return Ok(fd);
+        } else {
+            return Err(Errno::EBADCALL);
+        }
+    }
+    
+    // 如果是相对路径，并且不是以当前目录作为出发点
+    // 就以fd作为出发点 open 文件
+    
+    if fd < 0 || fd as usize > RLIMIT_NOFILE {
+        return Err(Errno::EBADF);
+    }
+
+    if let Some(inode) = inner.fd_table.get_file_by_fd(fd as usize)? {
+        let other_cwd = inode.get_name();
+        if let Some(inode) = open(other_cwd.as_str(), path.as_str(), flags) {
+            let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
+            if fd > RLIMIT_NOFILE {
+                return Err(Errno::EMFILE);
+            }
+            info!("sys_open finished: fd: {}", fd);
+            return Ok(fd);
+        } else {
+            return Err(Errno::EBADCALL);
+        }
+    }
+
+    Err(Errno::EBADCALL)
 }
 
 pub fn sys_close(fd: usize) -> SysResult<usize> {
+    info!("start sys_close");
     let task = current_task().unwrap();
     let mut inner = task.inner_lock();
     if fd >= inner.fd_table_len() {
         return Err(Errno::EBADF);
     }
-    if inner.fd_table.table[fd].is_none() {
-        return Err(Errno::EBADCALL);
-    }
     
     // 删除对应的fd
-    inner.fd_table.table.remove(fd);
+    inner.fd_table.remove(fd)?;
     Ok(0)
 }
 
@@ -85,9 +129,9 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
         return Err(Errno::EINVAL);
     }
 
-    let token = current_user_token();
     let task =  current_task().unwrap();
     let task_inner = task.inner_lock();
+    let token = task_inner.get_user_token();
     let cwd: String = task_inner.get_current_path();
     let length: usize = cwd.len();
 
@@ -98,6 +142,7 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
         return Err(Errno::ERANGE);
     }
 
+    drop(task_inner);
     // TODO: 检测当前cwd是不是被unlinked： ENOENT The current working directory has been unlinked.
     // end
 
@@ -121,7 +166,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.clear_close_on_exec(true);
     let new_fd = FdTable::alloc_fd(&mut inner.fd_table, new_temp_fd)?;
-
+    drop(inner);
     if new_fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
     }
