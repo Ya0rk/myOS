@@ -7,6 +7,7 @@ use alloc::{string::String, sync::Arc};
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
+use log::info;
 use simple_fat32::{create_root_vfile, FAT32Manager, VFile, ATTR_ARCHIVE, ATTR_DIRECTORY};
 use spin::Mutex;
 
@@ -86,21 +87,35 @@ pub fn list_apps() {
 bitflags! {
     #[derive(Clone, Copy)]
     ///Open file flags
-    pub struct OpenFlags: u32 {
-        ///Read only
-        const O_RDONLY = 0;
-        ///Write only
-        const O_WRONLY = 1 << 0;
-        ///Read & Write
-        const O_RDWR = 1 << 1;
-        /// set close_on_exec 
-        const O_CLOEXEC = 1 << 7;
-        ///Allow create
-        const O_CREATE = 1 << 9;
+    pub struct OpenFlags: i32 {
+        // reserve 3 bits for the access mode
+        // NOTE: bitflags do not encourage zero bit flag, we should not directly check `O_RDONLY`
+        const O_RDONLY      = 0;
+        const O_WRONLY      = 1;
+        const O_RDWR        = 2;
+        const O_ACCMODE     = 3;
+        /// If pathname does not exist, create it as a regular file.
+        const O_CREAT       = 0o100;
+        const O_EXCL        = 0o200;
+        const O_NOCTTY      = 0o400;
         ///Clear file and return an empty one
-        const O_TRUNC = 1 << 10;
-        ///Directory
-        const O_DIRECTROY = 1 << 21;
+        const O_TRUNC       = 0o1000;
+        const O_APPEND      = 0o2000;
+        const O_NONBLOCK    = 0o4000;
+        const O_DSYNC       = 0o10000;
+        const O_SYNC        = 0o4010000;
+        const O_RSYNC       = 0o4010000;
+        const O_DIRECTORY   = 0o200000;
+        const O_NOFOLLOW    = 0o400000;
+        /// set close_on_exec 
+        const O_CLOEXEC     = 0o2000000;
+
+        const O_ASYNC       = 0o20000;
+        const O_DIRECT      = 0o40000;
+        const O_LARGEFILE   = 0o100000;
+        const O_NOATIME     = 0o1000000;
+        const O_PATH        = 0o10000000;
+        const O_TMPFILE     = 0o20200000;
     }
 }
 
@@ -135,30 +150,36 @@ pub fn open(work_path: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSInode
             ROOT_INODE.find_vfile_bypath(wpath).unwrap()
         }
     };
-
+    info!("e");
     let mut pathv: Vec<&str> = path.split('/').collect();
 
     let (readable, writable) = flags.read_write();
-    if flags.contains(OpenFlags::O_CREATE) || flags.contains(OpenFlags::O_DIRECTROY) {
+    info!("f");
+    if flags.contains(OpenFlags::O_CREAT) || flags.contains(OpenFlags::O_DIRECTORY) {
+        info!("h");
         if let Some(inode) = cur_inode.find_vfile_bypath(pathv.clone()) {
             // 如果文件存在就清空
+            info!("i");
             inode.clear();
+            info!("j");
             Some(Arc::new(OSInode::new(readable, writable, inode)))
         } else {
             // 如果文件不存在就创建 新文件
+            info!("g");
             let mut create_type = 0;
-            if flags.contains(OpenFlags::O_CREATE) {
+            if flags.contains(OpenFlags::O_CREAT) {
                 create_type = ATTR_ARCHIVE;
-            } else if flags.contains(OpenFlags::O_DIRECTROY) {
+            } else if flags.contains(OpenFlags::O_DIRECTORY) {
                 create_type = ATTR_DIRECTORY;
             }
 
             // 获取新文件的文件名
             let name = pathv.pop().unwrap();
-
+            
             // 找到新文件的父目录 inode
             if let Some(parent_inode) = cur_inode.find_vfile_bypath(pathv.clone()) {
                 // 在父目录下创建新文件，并返回新文件的 inode
+                info!("kk");
                 parent_inode
                     .create(name, create_type)
                     .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))
