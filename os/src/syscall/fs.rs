@@ -210,3 +210,55 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 
     Ok(newfd)
 }
+
+/// 创建一个新目录：https://man7.org/linux/man-pages/man2/mkdir.2.html
+/// 
+/// Success: 0; Fail: 返回-1
+pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let inner = task.inner_lock();
+    let token = inner.get_user_token();
+    let path = translated_str(token, path);
+    info!("sys_mkdirat: path = {}, mode = {}", path, mode);
+
+    // 如果是绝对路径就忽略fd
+    if path.starts_with('/') {
+        drop(inner);
+        if let Some(_) = open_file(path.as_str(), OpenFlags::O_DIRECTORY) {
+            return Ok(0);
+        } else {
+            return Err(Errno::EBADCALL);
+        }
+    }
+
+    // 如果是相对路径
+    // 以当前目录作为出发点 open 文件
+    if dirfd == AT_FDCWD {
+        let cwd = inner.get_current_path();
+        drop(inner);
+        if let Some(_) = open(cwd.as_str(), path.as_str(), OpenFlags::O_DIRECTORY) {
+            return Ok(0);
+        } else {
+            return Err(Errno::EBADCALL);
+        }
+    }
+
+    // 如果是相对路径，并且不是以当前目录作为出发点
+    // 就以fd作为出发点 open 文件
+    if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= inner.fd_table_len() as isize {
+        return Err(Errno::EBADF);
+    }
+
+    if let Some(inode) = inner.fd_table.get_file_by_fd(dirfd as usize)? {
+        let other_cwd = inode.get_name();
+        // 释放锁, 因为在open函数中会再次获取锁
+        drop(inner);
+        if let Some(_) = open(other_cwd.as_str(), path.as_str(), OpenFlags::O_DIRECTORY) {
+            return Ok(0);
+        } else {
+            return Err(Errno::EBADCALL);
+        }
+    }
+
+    Err(Errno::EBADCALL)
+}

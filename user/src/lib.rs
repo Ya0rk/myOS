@@ -71,6 +71,14 @@ pub fn dup3(oldfd: usize, newfd: usize, flags: u32) -> isize {
     sys_dup3(oldfd, newfd, flags)
 }
 
+pub fn mkdir(path: &str, mode: usize) -> isize {
+    sys_mkdir(path, mode)
+}
+
+pub fn mkdirat(fd: isize, path: &str, mode: usize) -> isize {
+    sys_mkdirat(fd, path, mode)
+}
+
 pub fn open(path: &str, flags: OpenFlags) -> isize {
     sys_open(path, flags.bits())
 }
