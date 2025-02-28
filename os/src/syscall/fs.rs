@@ -161,7 +161,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
         return Err(Errno::EBADF);
     }
 
-    let old_temp_fd = inner.fd_table.get_by_fd(oldfd)?;
+    let old_temp_fd = inner.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.clear_close_on_exec(true);
     let new_fd = FdTable::alloc_fd(&mut inner.fd_table, new_temp_fd)?;
@@ -171,4 +171,42 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     }
 
     Ok(new_fd)
+}
+
+/// 将一个现有的文件描述符oldfd复制到一个新的文件描述符newfd上，newfd是用户指定的：https://man7.org/linux/man-pages/man2/dup.2.html
+/// dup2 和 dup3 都使用此函数处理，只是dup3可以设置flags，dup2 的 flag默认为0
+/// 
+/// Success: 返回新的文件描述符; Fail: 返回-1
+pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
+    if oldfd == newfd {
+        return Err(Errno::EINVAL);
+    }
+
+    // 判断flags是否合法
+    let flag = OpenFlags::from_bits(flags as i32).unwrap();
+    let cloexec = {
+        match flag {
+            flags if flags.is_empty() => Some(false),
+            OpenFlags::O_CLOEXEC => Some(true),
+            _ => None,
+        }
+    }.ok_or(Errno::EINVAL)?;
+
+    let task = current_task().unwrap();
+    let mut inner = task.inner_lock();
+    
+    if newfd > RLIMIT_NOFILE ||
+        oldfd >= inner.fd_table_len() ||
+        inner.fd_is_none(oldfd) 
+    {
+        return Err(Errno::EBADF);
+    }
+
+    let old_temp_fd = inner.get_fd(oldfd);
+    // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
+    let new_temp_fd = old_temp_fd.clear_close_on_exec(cloexec);
+    // 将newfd 放到指定位置
+    inner.fd_table.put_in(new_temp_fd, newfd)?;
+
+    Ok(newfd)
 }

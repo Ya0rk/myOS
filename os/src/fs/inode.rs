@@ -84,7 +84,7 @@ pub fn list_apps() {
 }
 
 bitflags! {
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, PartialEq, Eq)]
     ///Open file flags
     pub struct OpenFlags: i32 {
         // reserve 3 bits for the access mode

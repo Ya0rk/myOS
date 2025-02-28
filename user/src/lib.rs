@@ -7,6 +7,7 @@
 pub mod console;
 mod lang_items;
 mod syscall;
+mod ffi;
 
 extern crate alloc;
 #[macro_use]
@@ -60,6 +61,18 @@ pub fn getcwd(buf: &mut [u8], size: usize) -> isize {
 
 pub fn dup(fd: usize) -> isize {
     sys_dup(fd)
+}
+
+pub fn dup2(oldfd: usize, newfd: usize) -> isize {
+    sys_dup2(oldfd, newfd)
+}
+
+pub fn dup3(oldfd: usize, newfd: usize, flags: u32) -> isize {
+    sys_dup3(oldfd, newfd, flags)
+}
+
+pub fn open(path: &str, flags: OpenFlags) -> isize {
+    sys_open(path, flags.bits())
 }
 
 pub fn openat(fd: isize, path: &str, flags: OpenFlags, mode: usize) -> isize {

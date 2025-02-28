@@ -79,7 +79,7 @@ impl FdTable {
     // 在指定位置加入Fd
     pub fn put_in(&mut self, fd: Fd, idx: usize) -> SysResult {
         if idx >= self.table_len() {
-            self.table.push(Fd::new_bare());
+            self.table.resize(idx + 1, Fd::new_bare());
         }
         self.table[idx] = fd;
         Ok(())
@@ -104,7 +104,7 @@ impl FdTable {
         Ok(self.table[idx].file.as_ref().map(|fd| fd.clone()))
     }
 
-    pub fn get_by_fd(&self, idx: usize) -> SysResult<Fd> {
+    pub fn get_fd(&self, idx: usize) -> SysResult<Fd> {
         if idx >= self.table_len() {
             return Err(Errno::EBADF);
         }

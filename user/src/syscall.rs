@@ -1,18 +1,7 @@
 use core::arch::asm;
+use crate::ffi::*;
 
-const SYSCALL_GETCWD: usize = 17;
-const SYSCALL_DUP: usize = 23;
-const SYSCALL_OPENAT: usize = 56;
-const SYSCALL_CLOSE: usize = 57;
-const SYSCALL_READ: usize = 63;
-const SYSCALL_WRITE: usize = 64;
-const SYSCALL_EXIT: usize = 93;
-const SYSCALL_YIELD: usize = 124;
-const SYSCALL_GET_TIME: usize = 169;
-const SYSCALL_GETPID: usize = 172;
-const SYSCALL_FORK: usize = 220;
-const SYSCALL_EXEC: usize = 221;
-const SYSCALL_WAITPID: usize = 260;
+const AT_FDCWD: isize = -100;
 
 fn syscall(id: usize, args: [usize; 6]) -> isize {
     let mut ret: isize;
@@ -37,6 +26,18 @@ pub fn sys_getcwd(buf: &mut [u8], size: usize) -> isize {
 
 pub fn sys_dup(fd: usize) -> isize {
     syscall(SYSCALL_DUP, [fd, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_dup2(oldfd: usize, newfd: usize) -> isize {
+    syscall(SYSCALL_DUP3, [oldfd, newfd, 0, 0, 0, 0])
+}
+
+pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> isize {
+    syscall(SYSCALL_DUP3, [oldfd, newfd, flags as usize, 0, 0, 0])
+}
+
+pub fn sys_open(path: &str, flags: u32) -> isize {
+    syscall(SYSCALL_OPENAT, [AT_FDCWD as usize, path.as_ptr() as usize, flags as usize, 0, 0, 0])
 }
 
 pub fn sys_openat(fd: isize, path: &str, flags: u32, mode: usize) -> isize {

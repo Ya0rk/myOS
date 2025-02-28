@@ -1,4 +1,4 @@
-use super::{FdTable, TaskContext};
+use super::{Fd, FdTable, TaskContext};
 use super::{pid_alloc, KernelStack, PidHandle};
 use crate::config::USER_TRAP_CONTEXT;
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr};
@@ -50,6 +50,15 @@ impl TaskControlBlockInner {
     pub fn fd_table_len(&self) -> usize {
         self.fd_table.table_len()
     }
+    /// 判断是否打开文件描述符fd
+    pub fn fd_is_none(&self, fd: usize) -> bool {
+        self.fd_table.table[fd].is_none()
+    }
+    /// 将fd作为index获取文件描述符
+    pub fn get_fd(&self, fd: usize) -> Fd {
+        self.fd_table.get_fd(fd).unwrap()
+    }
+    
 }
 
 impl TaskControlBlock {

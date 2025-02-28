@@ -8,6 +8,7 @@ use num_enum::FromPrimitive;
 pub enum SysCode {
     SYSCALL_GETCWD    = 17,
     SYSCALL_DUP       = 23,
+    SYSCALL_DUP3      = 24,
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
     SYSCALL_READ      = 63,
@@ -35,6 +36,7 @@ impl SysCode {
         match self {
             Self::SYSCALL_GETCWD => "getcwd",
             Self::SYSCALL_DUP => "dup",
+            Self::SYSCALL_DUP3 => "dup3",
             Self::SYSCALL_OPENAT => "openat",
             Self::SYSCALL_CLOSE => "close",
             Self::SYSCALL_READ => "read",
