@@ -7,7 +7,6 @@ use alloc::{string::String, sync::Arc};
 use alloc::vec::Vec;
 use bitflags::*;
 use lazy_static::*;
-use log::info;
 use simple_fat32::{create_root_vfile, FAT32Manager, VFile, ATTR_ARCHIVE, ATTR_DIRECTORY};
 use spin::Mutex;
 
@@ -150,22 +149,17 @@ pub fn open(work_path: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSInode
             ROOT_INODE.find_vfile_bypath(wpath).unwrap()
         }
     };
-    info!("e");
+
     let mut pathv: Vec<&str> = path.split('/').collect();
 
     let (readable, writable) = flags.read_write();
-    info!("f");
     if flags.contains(OpenFlags::O_CREAT) || flags.contains(OpenFlags::O_DIRECTORY) {
-        info!("h");
         if let Some(inode) = cur_inode.find_vfile_bypath(pathv.clone()) {
             // 如果文件存在就清空
-            info!("i");
             inode.clear();
-            info!("j");
             Some(Arc::new(OSInode::new(readable, writable, inode)))
         } else {
             // 如果文件不存在就创建 新文件
-            info!("g");
             let mut create_type = 0;
             if flags.contains(OpenFlags::O_CREAT) {
                 create_type = ATTR_ARCHIVE;
@@ -179,7 +173,6 @@ pub fn open(work_path: &str, path: &str, flags: OpenFlags) -> Option<Arc<OSInode
             // 找到新文件的父目录 inode
             if let Some(parent_inode) = cur_inode.find_vfile_bypath(pathv.clone()) {
                 // 在父目录下创建新文件，并返回新文件的 inode
-                info!("kk");
                 parent_inode
                     .create(name, create_type)
                     .map(|inode| Arc::new(OSInode::new(readable, writable, inode)))

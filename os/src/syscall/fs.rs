@@ -53,37 +53,34 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
 /// 
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
-    info!("start sys_openat");
     let task = current_task().unwrap();
     let mut inner = task.inner_lock();
     let token = inner.get_user_token();
     let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
-    info!("a");
+
     // 如果是绝对路径就忽略fd
     if path.starts_with('/') {
         if let Some(inode) = open_file(path.as_str(), flags) {
             let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
-            info!("sys_open finished: fd: {}", fd);
             return Ok(fd);
         } else {
             return Err(Errno::EBADCALL);
         }
     }
-    info!("b");
+
     // 如果是相对路径
     // 以当前目录作为出发点 open 文件
     if fd == AT_FDCWD {
         let cwd = inner.get_current_path();
         if let Some(inode) = open(cwd.as_str(), path.as_str(), flags) {
             let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
-            info!("sys_open finished: fd: {}", fd);
             return Ok(fd);
         } else {
             return Err(Errno::EBADCALL);
         }
     }
-    info!("c");
+
     // 如果是相对路径，并且不是以当前目录作为出发点
     // 就以fd作为出发点 open 文件
     
@@ -93,13 +90,14 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
 
     if let Some(inode) = inner.fd_table.get_file_by_fd(fd as usize)? {
         let other_cwd = inode.get_name();
-        info!("d");
+        // 释放锁, 因为在open函数中会再次获取锁
+        drop(inner);
         if let Some(inode) = open(other_cwd.as_str(), path.as_str(), flags) {
+            let mut inner = task.inner_lock();
             let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
             if fd > RLIMIT_NOFILE {
                 return Err(Errno::EMFILE);
             }
-            info!("sys_open finished: fd: {}", fd);
             return Ok(fd);
         } else {
             return Err(Errno::EBADCALL);
