@@ -10,6 +10,10 @@ pub enum SysCode {
     SYSCALL_DUP       = 23,
     SYSCALL_DUP3      = 24,
     SYSCALL_MKDIRAT   = 34,
+    // SYSCALL_UNLINKAT  = 35,
+    // SYSCALL_LINKAT    = 37,
+    SYSCALL_UMOUNT2   = 39,
+    SYSCALL_MOUNT     = 40,
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
     SYSCALL_READ      = 63,
@@ -39,6 +43,10 @@ impl SysCode {
             Self::SYSCALL_DUP => "dup",
             Self::SYSCALL_DUP3 => "dup3",
             Self::SYSCALL_MKDIRAT => "mkdirat",
+            
+            Self::SYSCALL_UMOUNT2 => "umount2",
+            Self::SYSCALL_MOUNT => "mount",
+
             Self::SYSCALL_OPENAT => "openat",
             Self::SYSCALL_CLOSE => "close",
             Self::SYSCALL_READ => "read",

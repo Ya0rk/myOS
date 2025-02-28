@@ -2,7 +2,7 @@ use alloc::string::String;
 use log::info;
 
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open, open_file, OpenFlags};
+use crate::fs::{open, open_file, MountFlags, OpenFlags, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::errtype::{Errno, SysResult};
@@ -261,4 +261,48 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
     }
 
     Err(Errno::EBADCALL)
+}
+
+/// 卸载文件系统：https://man7.org/linux/man-pages/man2/umount.2.html
+/// 
+/// Success: 0; Fail: 返回-1
+pub fn sys_umount2(target: *const u8, flags: u32) -> SysResult<usize> {
+    UmountFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
+
+    let token = current_user_token();
+    let target = translated_str(token, target);
+    match MNT_TABLE.lock().umount(target, flags as u32) {
+        0 => Ok(0),
+        _ => Err(Errno::EBADCALL),
+    }
+}
+
+/// 挂载文件系统: https://man7.org/linux/man-pages/man2/mount.2.html
+/// 
+/// Success: 0; Fail: 返回-1
+pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags: u32, data: *const u8) -> SysResult<usize> {
+    let token = current_user_token();
+    let source = translated_str(token, source);
+    let target = translated_str(token, target);
+    let fstype = translated_str(token, fstype);
+    let data = match data.is_null() {
+        true => String::new(),
+        false => translated_str(token, data),
+    };
+    info!("sys_mount: source = {}, target = {}, fstype = {}, flags = {}, data = {}", source, target, fstype, flags, data);
+
+    let check_flags = MountFlags::from_bits(flags).unwrap();
+
+    let mut mnt_table = MNT_TABLE.lock();
+
+    if check_flags.contains(MountFlags::MS_REMOUNT) && !mnt_table.is_mounted(source.clone())
+        || check_flags.contains(MountFlags::MS_MOVE) && source == "/"
+    {
+        return Err(Errno::EINVAL);
+    }
+
+    match mnt_table.mount(source, target, fstype, flags as u32, data) {
+        0 => Ok(0),
+        _ => Err(Errno::EBADCALL),
+    }
 }

@@ -79,6 +79,18 @@ pub fn mkdirat(fd: isize, path: &str, mode: usize) -> isize {
     sys_mkdirat(fd, path, mode)
 }
 
+pub fn umount2(special: &str, flags: u32) -> isize {
+    sys_umount2(special, flags)
+}
+
+pub fn umount(special: &str) -> isize {
+    sys_umount(special)
+}
+
+pub fn mount(source: &str, target: &str, fstype: &str, flags: u32, data: &str) -> isize {
+    sys_mount(source, target, fstype, flags, data)
+}
+
 pub fn open(path: &str, flags: OpenFlags) -> isize {
     sys_open(path, flags.bits())
 }

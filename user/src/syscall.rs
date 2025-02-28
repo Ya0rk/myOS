@@ -44,6 +44,18 @@ pub fn sys_mkdirat(fd: isize, path: &str, mode: usize) -> isize {
     syscall(SYSCALL_MKDIRAT, [fd as usize, path.as_ptr() as usize, mode as usize, 0, 0, 0])
 }
 
+pub fn sys_umount2(special: &str, flags: u32) -> isize {
+    syscall(SYSCALL_UMOUNT2, [special.as_ptr() as usize, flags as usize, 0, 0, 0, 0])
+}
+
+pub fn sys_umount(special: &str) -> isize {
+    syscall(SYSCALL_UMOUNT2, [special.as_ptr() as usize, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_mount(source: &str, target: &str, fstype: &str, flags: u32, data: &str) -> isize {
+    syscall(SYSCALL_MOUNT, [source.as_ptr() as usize, target.as_ptr() as usize, fstype.as_ptr() as usize, flags as usize, data.as_ptr() as usize, 0])
+}
+
 pub fn sys_open(path: &str, flags: u32) -> isize {
     syscall(SYSCALL_OPENAT, [AT_FDCWD as usize, path.as_ptr() as usize, flags as usize, 0, 0, 0])
 }

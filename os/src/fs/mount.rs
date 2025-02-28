@@ -9,16 +9,16 @@ pub struct MountTable {
 }
 
 impl MountTable {
-    pub fn mount(&mut self, special: String, dir: String, fstype: String, flags: u32) -> isize {
+    pub fn mount(&mut self, special: String, dir: String, fstype: String, flags: u32, _data: String) -> isize {
         if self.mnt_list.len() == MNT_MAXLEN {
             return -1;
         }
         // 已存在
-        if self.mnt_list.iter().find(|&(_, d, _)| *d == dir).is_some() {
+        if self.is_mounted(dir.clone()) {
             return 0;
         }
 
-        // todo
+        // todo: flags and data
         _ = flags;
 
         self.mnt_list.push((special, dir, fstype));
@@ -40,6 +40,10 @@ impl MountTable {
             }
         }
         -1
+    }
+
+    pub fn is_mounted(&self, dir: String) -> bool {
+        self.mnt_list.iter().find(|&(_, d, _)| *d == dir).is_some()
     }
 }
 
