@@ -65,6 +65,12 @@ impl TaskControlBlock {
     pub fn inner_lock(&self) -> MutexGuard<'_, TaskControlBlockInner> {
         self.inner.lock()
     }
+    pub fn get_ppid(&self) -> usize {
+        self.inner_lock().parent.as_ref().map(|p| p.upgrade().unwrap().pid.0).unwrap_or(0)
+    }
+    pub fn get_pid(&self) -> usize {
+        self.pid.0
+    }
     /// 创建新task,只有initproc会调用
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack

@@ -1,17 +1,102 @@
-use crate::{arch::set_timer, config::CLOCK_FREQ};
+use crate::{arch::set_timer, config::CLOCK_FREQ, utils::errtype::Errno};
 use riscv::register::time;
+use core::{hint::spin_loop, mem::size_of, time::Duration};
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
+
+#[repr(C)]
+pub struct TimeVal {
+    /// 秒
+    pub tv_sec: usize,
+    /// 微秒
+    pub tv_usec: usize,
+}
+
+impl TimeVal {
+    pub fn new() -> Self {
+        TimeVal { tv_sec: get_time_s(), tv_usec: get_time_us() }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        let size = size_of::<Self>();
+        unsafe { core::slice::from_raw_parts(self as *const Self as usize as *const u8, size) }
+    }
+}
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+pub struct TimeSepc {
+    /// 秒
+    pub tv_sec: usize,
+    /// 纳秒
+    pub tv_nsec: usize,
+}
+
+impl TimeSepc {
+    pub fn new() -> Result<Self, Errno> {
+        let tv_sec = get_time_s();
+        let tv_nsec = get_time_ns();
+
+        if tv_nsec >= MSEC_PER_SEC * MSEC_PER_SEC * MSEC_PER_SEC {
+            return Err(Errno::EINVAL);
+        }
+
+        Ok(TimeSepc { tv_sec, tv_nsec })
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        let size = size_of::<Self>();
+        unsafe { core::slice::from_raw_parts(self as *const Self as usize as *const u8, size) }
+    }
+
+    pub fn check_valid(&self) -> bool {
+        self.tv_nsec < MSEC_PER_SEC * MSEC_PER_SEC * MSEC_PER_SEC
+    }
+}
+
+impl From<TimeSepc> for Duration {
+    fn from(ts: TimeSepc) -> Self {
+        Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+    }
+}
+
+#[inline(always)]
 ///get current time
 pub fn get_time() -> usize {
     time::read()
 }
+
+#[inline(always)]
 /// get current time in microseconds
 pub fn get_time_ms() -> usize {
     time::read() / (CLOCK_FREQ / MSEC_PER_SEC)
 }
+
+#[inline(always)]
+pub fn get_time_s() -> usize {
+    get_time_ms() / MSEC_PER_SEC
+}
+
+#[inline(always)]
+pub fn get_time_us() -> usize {
+    (get_time_ms() % MSEC_PER_SEC) * MSEC_PER_SEC
+}
+
+#[inline(always)]
+pub fn get_time_ns() -> usize {
+    (get_time_ms() % MSEC_PER_SEC) * MSEC_PER_SEC * MSEC_PER_SEC
+}
+
 /// set the next timer interrupt
 pub fn set_next_trigger() {
     set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);
+}
+
+pub fn sleep_for(ts: TimeSepc) {
+    let start = get_time_ms();
+    let span = ts.tv_sec * 1_000 + ts.tv_nsec / 1_000_000;
+    while get_time_ns() - start < span {
+        spin_loop();
+    }
 }

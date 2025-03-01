@@ -1,10 +1,11 @@
+use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str};
+use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
+use crate::sync::timer::{sleep_for, TimeSepc, TimeVal};
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
 };
-use crate::timer::get_time_ms;
 use crate::utils::errtype::{Errno, SysResult};
 use alloc::sync::Arc;
 
@@ -13,17 +14,35 @@ pub fn sys_exit(exit_code: i32) -> ! {
     panic!("Unreachable in sys_exit!");
 }
 
+pub fn sys_nanosleep(req: *const u8, _rem: *const u8) -> SysResult<usize> {
+    let req = *translated_ref(current_user_token(), req as *const TimeSepc);
+    if !req.check_valid() {
+        return Err(Errno::EINVAL);
+    }
+
+    sleep_for(req);
+    Ok(0)
+}
+
 pub fn sys_yield() -> SysResult<usize> {
     suspend_current_and_run_next();
     Ok(0)
 }
 
-pub fn sys_get_time() -> SysResult<usize> {
-    Ok(get_time_ms() as usize)
+pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
+    let binding = TimeVal::new();
+    let timeval = binding.as_bytes();
+    let mut buffer = UserBuffer::new(translated_byte_buffer(current_user_token(), tv, size_of::<TimeVal>()));
+    buffer.write(timeval);
+    Ok(0)
 }
 
 pub fn sys_getpid() -> SysResult<usize> {
-    Ok(current_task().unwrap().pid.0 as usize)
+    Ok(current_task().unwrap().get_pid() as usize)
+}
+
+pub fn sys_getppid() -> SysResult<usize> {
+    Ok(current_task().unwrap().get_ppid() as usize)
 }
 
 pub fn sys_fork() -> SysResult<usize> {

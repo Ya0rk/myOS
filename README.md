@@ -20,8 +20,8 @@
 - [x] getcwd
 - [ ] getdents
 - [x] getpid
-- [ ] getppid
-- [ ] gettimeofday
+- [x] getppid
+- [x] gettimeofday
 - [x] mkdir_
 - [ ] mmap
 - [x] mount
@@ -30,7 +30,7 @@
 - [x] openat
 - [ ] pipe
 - [x] read
-- [ ] sleep
+- [x] sleep
 - [x] test_echo
 - [ ] times
 - [x] umount
