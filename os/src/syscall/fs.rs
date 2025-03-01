@@ -1,9 +1,8 @@
 use alloc::string::String;
 use log::info;
-
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open, open_file, MountFlags, OpenFlags, UmountFlags, MNT_TABLE};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+use crate::fs::{open, open_file, MountFlags, OpenFlags, Pipe, UmountFlags, MNT_TABLE};
+use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::errtype::{Errno, SysResult};
 
@@ -120,11 +119,35 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
     Ok(0)
 }
 
+/// 创建一个管道：https://man7.org/linux/man-pages/man2/pipe.2.html
+/// 
+/// pipefd\[0] 指向管道的读取端，pipefd\[1] 指向管道的写入端
+/// 
+/// Success: 返回0; Fail: 返回-1
+pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
+    info!("sys_pipe start!");
+    let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
+    let task = current_task().unwrap();
+    let (read_fd, write_fd) = {
+        let mut inner = task.inner_lock();
+        let (read, write) = Pipe::new();
+        (
+            inner.fd_table.alloc_fd(Fd::new(read, flags))?,
+            inner.fd_table.alloc_fd(Fd::new(write, flags))?,
+        )
+    };
+
+    let token = task.inner_lock().get_user_token();
+    *translated_refmut(token, pipefd) = read_fd as u32;
+    *translated_refmut(token, unsafe { pipefd.add(1) }) = write_fd as u32;
+    Ok(0)
+}
+
 /// 获取当前工作目录： https://man7.org/linux/man-pages/man3/getcwd.3.html
 ///
 /// Success: 返回当前工作目录的长度;  Fail: 返回-1
 pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
-    if buf.is_null() || (!buf.is_null() && size == 0) {
+    if buf.is_null() || size == 0 {
         return Err(Errno::EINVAL);
     }
 

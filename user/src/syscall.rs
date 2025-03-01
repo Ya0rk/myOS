@@ -68,6 +68,10 @@ pub fn sys_close(fd: usize) -> isize {
     syscall(SYSCALL_CLOSE, [fd, 0, 0, 0, 0, 0])
 }
 
+pub fn sys_pipe2(fd: &mut [u32], flags: u32) -> isize {
+    syscall(SYSCALL_PIPE2, [fd.as_mut_ptr() as usize, flags as usize, 0, 0, 0, 0])
+}
+
 pub fn sys_read(fd: usize, buffer: &mut [u8]) -> isize {
     syscall(
         SYSCALL_READ,

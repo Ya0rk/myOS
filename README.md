@@ -15,7 +15,7 @@
 - [x] dup
 - [x] execve
 - [ ] exit
-- [x] fork
+- [x] fork // 目前还有bug，可能是wait造成的
 - [ ] fstat
 - [x] getcwd
 - [ ] getdents

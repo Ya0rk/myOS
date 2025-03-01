@@ -1,6 +1,6 @@
 // #![allow(unused)]
 use alloc::{sync::Arc, vec::Vec};
-use crate::{fs::{File, OpenFlags, Stdin, Stdout}, utils::errtype::{Errno, SysResult}};
+use crate::{config::RLIMIT_NOFILE, fs::{File, OpenFlags, Stdin, Stdout}, utils::errtype::{Errno, SysResult}};
 
 #[derive(Clone)]
 pub struct FdTable {
@@ -78,6 +78,9 @@ impl FdTable {
 
     // 在指定位置加入Fd
     pub fn put_in(&mut self, fd: Fd, idx: usize) -> SysResult {
+        if idx > RLIMIT_NOFILE {
+            return Err(Errno::EMFILE);
+        }
         if idx >= self.table_len() {
             self.table.resize(idx + 1, Fd::new_bare());
         }

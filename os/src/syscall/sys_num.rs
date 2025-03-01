@@ -16,6 +16,7 @@ pub enum SysCode {
     SYSCALL_MOUNT     = 40,
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
+    SYSCALL_PIPE2     = 59,
     SYSCALL_READ      = 63,
     SYSCALL_WRITE     = 64,
     SYSCALL_EXIT      = 93,
@@ -51,6 +52,7 @@ impl SysCode {
 
             Self::SYSCALL_OPENAT => "openat",
             Self::SYSCALL_CLOSE => "close",
+            Self::SYSCALL_PIPE2 => "pipe2",
             Self::SYSCALL_READ => "read",
             Self::SYSCALL_WRITE => "write",
             Self::SYSCALL_EXIT => "exit",

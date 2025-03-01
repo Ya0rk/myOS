@@ -10,11 +10,11 @@
 //
 use super::{Dirent, File, Kstat};
 use crate::mm::UserBuffer;
-use crate::sync::UPSafeCell;
 use alloc::{
     string::String,
     sync::{Arc, Weak},
 };
+use spin::Mutex;
 
 use crate::task::suspend_current_and_run_next;
 
@@ -27,12 +27,21 @@ use crate::task::suspend_current_and_run_next;
 pub struct Pipe {
     readable: bool,
     writable: bool,
-    buffer: Arc<UPSafeCell<PipeRingBuffer>>,
+    buffer: Arc<Mutex<PipeRingBuffer>>,
 }
 
 impl Pipe {
+    /// make pipe: read end and wrtie end
+    /// 创建一个管道并返回管道的读端和写端 (read_end, write_end)
+    pub fn new() -> (Arc<Self>, Arc<Self>) {
+        let buffer = Arc::new(Mutex::new(PipeRingBuffer::new()));
+        let read_end = Arc::new(Self::read_end_with_buffer(buffer.clone()));
+        let write_end = Arc::new(Self::write_end_with_buffer(buffer.clone()));
+        buffer.lock().set_write_end(&write_end);
+        (read_end, write_end)
+    }
     /// 创建管道的读端
-    pub fn read_end_with_buffer(buffer: Arc<UPSafeCell<PipeRingBuffer>>) -> Self {
+    pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
         Self {
             readable: true,
             writable: false,
@@ -40,7 +49,7 @@ impl Pipe {
         }
     }
     /// 创建管道的写端
-    pub fn write_end_with_buffer(buffer: Arc<UPSafeCell<PipeRingBuffer>>) -> Self {
+    pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
         Self {
             readable: false,
             writable: true,
@@ -140,14 +149,6 @@ impl PipeRingBuffer {
     }
 }
 
-/// 创建一个管道并返回管道的读端和写端 (read_end, write_end)
-pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
-    let buffer = Arc::new(unsafe { UPSafeCell::new(PipeRingBuffer::new()) });
-    let read_end = Arc::new(Pipe::read_end_with_buffer(buffer.clone()));
-    let write_end = Arc::new(Pipe::write_end_with_buffer(buffer.clone()));
-    buffer.exclusive_access().set_write_end(&write_end);
-    (read_end, write_end)
-}
 
 impl File for Pipe {
     fn readable(&self) -> bool {
@@ -161,7 +162,7 @@ impl File for Pipe {
         let mut buf_iter = buf.into_iter();
         let mut read_size = 0usize;
         loop {
-            let mut ring_buffer = self.buffer.exclusive_access();
+            let mut ring_buffer = self.buffer.lock();
             let loop_read = ring_buffer.available_read();
             if loop_read == 0 {
                 if ring_buffer.all_write_ends_closed() {
@@ -189,7 +190,7 @@ impl File for Pipe {
         let mut buf_iter = buf.into_iter();
         let mut write_size = 0usize;
         loop {
-            let mut ring_buffer = self.buffer.exclusive_access();
+            let mut ring_buffer = self.buffer.lock();
             let loop_write = ring_buffer.available_write();
             if loop_write == 0 {
                 drop(ring_buffer);

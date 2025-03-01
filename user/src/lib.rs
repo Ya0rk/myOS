@@ -101,6 +101,9 @@ pub fn openat(fd: isize, path: &str, flags: OpenFlags, mode: usize) -> isize {
 pub fn close(fd: usize) -> isize {
     sys_close(fd)
 }
+pub fn pipe(fd: &mut [u32]) -> isize {
+    sys_pipe2(fd, 0)
+}
 pub fn read(fd: usize, buf: &mut [u8]) -> isize {
     sys_read(fd, buf)
 }

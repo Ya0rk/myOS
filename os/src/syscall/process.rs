@@ -8,6 +8,7 @@ use crate::task::{
 };
 use crate::utils::errtype::{Errno, SysResult};
 use alloc::sync::Arc;
+use log::info;
 
 pub fn sys_exit(exit_code: i32) -> ! {
     exit_current_and_run_next(exit_code);
@@ -46,6 +47,7 @@ pub fn sys_getppid() -> SysResult<usize> {
 }
 
 pub fn sys_fork() -> SysResult<usize> {
+    info!("start sys_fork");
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
@@ -104,7 +106,9 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SysResult<usize> {
         // ++++ temporarily access child TCB exclusively
         let exit_code = child.inner_lock().exit_code;
         // ++++ release child PCB
-        *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+        if !exit_code_ptr.is_null() {
+            *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+        }
         Ok(found_pid as usize)
     } else {
         Err(Errno::HAVEPID)

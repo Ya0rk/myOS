@@ -6,6 +6,7 @@ pub const SYSCALL_UMOUNT2: usize    = 39;
 pub const SYSCALL_MOUNT: usize      = 40;
 pub const SYSCALL_OPENAT: usize     = 56;
 pub const SYSCALL_CLOSE: usize      = 57;
+pub const SYSCALL_PIPE2: usize      = 59;
 pub const SYSCALL_READ: usize       = 63;
 pub const SYSCALL_WRITE: usize      = 64;
 pub const SYSCALL_EXIT: usize       = 93;

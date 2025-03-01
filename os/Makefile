@@ -11,7 +11,7 @@ APPS := ../user/src/bin/*
 FS_IMG := ../simple-fat32/fat32.img
 
 # cpu hart
-CPUS ?= 2
+CPUS ?= 1
 
 # BOARD
 BOARD := qemu
