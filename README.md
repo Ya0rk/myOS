@@ -34,8 +34,9 @@
 - [x] test_echo
 - [x] times
 - [x] umount
+- [x] uname
 - [ ] unlink
 - [x] wait
-- [ ] waitpid
+- [x] waitpid
 - [x] write
 - [x] yield

@@ -107,6 +107,7 @@ pub fn sys_clone() -> SysResult<usize> {
     child_trap_cx.user_x[10] = 0;
     // 将子进程加入调度器，等待被调度
     add_task(new_task);
+    info!("new pid is : {}", new_pid);
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
 }
@@ -166,7 +167,7 @@ pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: u
 
             // 将退出状态写入用户提供的指针
             if !exit_code_ptr.is_null() {
-                *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+                *translated_refmut(inner.memory_set.token(), exit_code_ptr) = (exit_code & 0xff) << 8;
             }
             return Ok(found_pid as usize);
         } else {
