@@ -14,8 +14,8 @@
 - [x] close
 - [x] dup
 - [x] execve
-- [ ] exit
-- [x] fork // 目前还有bug，可能是wait造成的
+- [x] exit
+- [x] fork
 - [ ] fstat
 - [x] getcwd
 - [ ] getdents
@@ -28,14 +28,14 @@
 - [ ] munmap
 - [x] open
 - [x] openat
-- [ ] pipe
+- [x] pipe
 - [x] read
 - [x] sleep
 - [x] test_echo
-- [ ] times
+- [x] times
 - [x] umount
 - [ ] unlink
-- [ ] wait
+- [x] wait
 - [ ] waitpid
 - [x] write
-- [ ] yield
+- [x] yield

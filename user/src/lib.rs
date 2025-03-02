@@ -116,9 +116,16 @@ pub fn exit(exit_code: i32) -> ! {
 pub fn yield_() -> isize {
     sys_yield()
 }
+pub fn times(tms: &mut [u8]) -> isize {
+    sys_times(tms)
+}
+pub fn uname(buf: &mut [u8]) -> isize {
+    sys_uname(buf)
+}
+
 pub fn get_time() -> isize {
-    let mut tv = [0u8; 16];
-    sys_gettimeofday(tv.as_mut())
+    let mut ts = [0u8; 16];
+    sys_gettimeofday(ts.as_mut())
 }
 pub fn getpid() -> isize {
     sys_getpid()
@@ -134,29 +141,14 @@ pub fn fork() -> isize {
 pub fn exec(path: &str) -> isize {
     sys_exec(path)
 }
+
 pub fn wait(exit_code: &mut i32) -> isize {
-    loop {
-        match sys_waitpid(-1, exit_code as *mut _) {
-            -2 => {
-                yield_();
-            }
-            // -1 or a real pid
-            exit_pid => return exit_pid,
-        }
-    }
+    sys_wait4(-1, exit_code as *mut _, 0)
+}
+pub fn waitpid(pid: usize, exit_code: &mut i32, options: usize) -> isize {
+    sys_wait4(pid as isize, exit_code as *mut _, options)
 }
 
-pub fn waitpid(pid: usize, exit_code: &mut i32) -> isize {
-    loop {
-        match sys_waitpid(pid as isize, exit_code as *mut _) {
-            -2 => {
-                yield_();
-            }
-            // -1 or a real pid
-            exit_pid => return exit_pid,
-        }
-    }
-}
 pub fn sleep(period_ms: usize) {
     let req = [period_ms as u8, 0, 0, 0, 0, 0, 0, 0];
     sys_nanosleep(&req, &[0; 8]);

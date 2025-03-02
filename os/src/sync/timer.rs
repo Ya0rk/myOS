@@ -61,6 +61,36 @@ impl From<TimeSepc> for Duration {
     }
 }
 
+#[allow(non_camel_case_types)]
+type clock_t = isize;
+
+pub struct Tms {
+    /// 进程在用户态（user mode）消耗的 CPU 时间
+    pub tms_utime: clock_t,
+    /// 进程在内核态（system mode）消耗的 CPU 时间
+    pub tms_stime: clock_t,
+    /// 所有已终止子进程的用户态时间总和： sum of the tms_utime and tms_cutime
+    pub tms_cutime: clock_t,
+    /// 所有已终止子进程的内核态时间总和： sum of the tms_stime and tms_cstime
+    pub tms_cstime: clock_t,
+}
+
+impl Tms {
+    pub fn new() -> Self {
+        let now = get_time_ms() as clock_t;
+        Self {
+            tms_utime: now,
+            tms_stime: now,
+            tms_cutime: now,
+            tms_cstime: now,
+        }
+    }
+    pub fn as_bytes(&self) -> &[u8] {
+        let size = size_of::<Self>();
+        unsafe { core::slice::from_raw_parts(self as *const Self as usize as *const u8, size) }
+    }
+}
+
 #[inline(always)]
 ///get current time
 pub fn get_time() -> usize {

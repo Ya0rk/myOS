@@ -23,7 +23,7 @@ pub fn main() -> i32 {
     if pid == 0 {
         sleepy();
     }
-    assert!(waitpid(pid as usize, &mut exit_code) == pid && exit_code == 0);
+    assert!(waitpid(pid as usize, &mut exit_code, 0) == pid && exit_code == 0);
     println!("use {} msecs.", get_time() - current_time);
     println!("sleep pass.");
     0

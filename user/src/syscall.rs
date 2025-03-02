@@ -96,8 +96,16 @@ pub fn sys_yield() -> isize {
     syscall(SYSCALL_YIELD, [0, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_gettimeofday(tv: &mut [u8]) -> isize {
-    syscall(SYSCALL_GETTIMEOFDAY, [tv.as_ptr() as usize, 0, 0, 0, 0, 0])
+pub fn sys_times(tms: &mut [u8]) -> isize {
+    syscall(SYSCALL_TIMES, [tms.as_ptr() as usize, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_uname(buf: &mut [u8]) -> isize {
+    syscall(SYSCALL_UNAME, [buf.as_ptr() as usize, 0, 0, 0, 0, 0])
+}
+
+pub fn sys_gettimeofday(ts: &mut [u8]) -> isize {
+    syscall(SYSCALL_GETTIMEOFDAY, [ts.as_ptr() as usize, 0, 0, 0, 0, 0])
 }
 
 pub fn sys_getpid() -> isize {
@@ -116,6 +124,6 @@ pub fn sys_exec(path: &str) -> isize {
     syscall(SYSCALL_EXEC, [path.as_ptr() as usize, 0, 0, 0, 0, 0])
 }
 
-pub fn sys_waitpid(pid: isize, exit_code: *mut i32) -> isize {
-    syscall(SYSCALL_WAITPID, [pid as usize, exit_code as usize, 0, 0, 0, 0])
+pub fn sys_wait4(pid: isize, exit_code: *mut i32, options: usize) -> isize {
+    syscall(SYSCALL_WAIT4, [pid as usize, exit_code as usize, options as usize, 0, 0, 0])
 }

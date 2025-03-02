@@ -194,23 +194,6 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
 /// tdranslate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
-    // TODO
-    // let mut string = String::new();
-    // let mut va = ptr as usize;
-    // loop {
-    //     // 这里需要扩展地址到kernelAddr，不然不能根据程序名找到对应程序
-    //     let ch: u8 = *(KernelAddr::from(page_table
-    //         .translate_va(VirtAddr::from(va))
-    //         .unwrap())
-    //         .get_mut());
-    //     if ch == 0 {
-    //         break;
-    //     } else {
-    //         string.push(ch as char);
-    //         va += 1;
-    //     }
-    // }
-    // string
     let ptr: *mut u8 = KernelAddr::from(
         page_table
             .translate_va(VirtAddr::from(ptr as usize))

@@ -1,7 +1,7 @@
 use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::sync::timer::{sleep_for, TimeSepc, TimeVal};
+use crate::sync::timer::{sleep_for, TimeSepc, TimeVal, Tms};
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
@@ -9,6 +9,8 @@ use crate::task::{
 use crate::utils::errtype::{Errno, SysResult};
 use alloc::sync::Arc;
 use log::info;
+
+use super::ffi::Utsname;
 
 pub fn sys_exit(exit_code: i32) -> ! {
     exit_current_and_run_next(exit_code);
@@ -30,11 +32,58 @@ pub fn sys_yield() -> SysResult<usize> {
     Ok(0)
 }
 
+/// 功能：获取进程时间；
+/// 
+/// 输入：tms结构体指针，用于获取保存当前进程的运行时间数据；
+/// 
+/// 返回值：成功返回已经过去的滴答数，失败返回-1;
+pub fn sys_times(tms: *const u8) -> SysResult<usize> {
+    if tms.is_null() {
+        return Err(Errno::EBADCALL);
+    }
+    let bind = Tms::new();
+    let time = bind.as_bytes();
+    let mut buffer = UserBuffer::new(translated_byte_buffer(current_user_token(), tms, size_of::<Tms>()));
+    buffer.write(time);
+    Ok(0)
+}
+
+/// 功能：获取时间；
+/// 
+/// 输入： timespec结构体指针用于获得时间值；
+/// 
+/// 返回值：成功返回0，失败返回-1;
 pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
+    if tv.is_null() {
+        return Err(Errno::EBADCALL);
+    }
     let binding = TimeVal::new();
     let timeval = binding.as_bytes();
     let mut buffer = UserBuffer::new(translated_byte_buffer(current_user_token(), tv, size_of::<TimeVal>()));
     buffer.write(timeval);
+    Ok(0)
+}
+
+/// 功能：打印系统信息；https://man7.org/linux/man-pages/man2/uname.2.html
+/// 
+/// 输入：utsname结构体指针用于获得系统信息数据；
+/// 
+/// 返回值：成功返回0，失败返回-1;
+pub fn sys_uname(buf: *const u8) -> SysResult<usize> {
+    info!("sys_name start");
+    if buf.is_null() {
+        return Err(Errno::EBADCALL);
+    }
+
+    let bind = Utsname::new();
+    let utsname = bind.as_bytes();
+    let mut buffer = UserBuffer::new(
+        translated_byte_buffer(
+            current_user_token(), 
+            buf, 
+            size_of::<Utsname>()
+    ));
+    buffer.write(utsname);
     Ok(0)
 }
 
@@ -46,7 +95,7 @@ pub fn sys_getppid() -> SysResult<usize> {
     Ok(current_task().unwrap().get_ppid() as usize)
 }
 
-pub fn sys_fork() -> SysResult<usize> {
+pub fn sys_clone() -> SysResult<usize> {
     info!("start sys_fork");
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
@@ -78,40 +127,53 @@ pub fn sys_exec(path: *const u8) -> SysResult<usize> {
 
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
-pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> SysResult<usize> {
+pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: usize) -> SysResult<usize> {
+    info!("sys_wait4 start, pid = {}, options = {}", pid, options);
     let task = current_task().unwrap();
-    // find a child process
+    
+    loop {
+        // 获取当前任务的内部锁
+        let mut inner = task.inner_lock();
 
-    // ---- access current TCB exclusively
-    let mut inner = task.inner_lock();
-    if !inner
-        .children
-        .iter()
-        .any(|p| pid == -1 || pid as usize == p.getpid())
-    {
-        return Err(Errno::NOPID);
-        // ---- release current PCB
-    }
-
-    let pair = inner.children.iter().enumerate().find(|(_, p)| {
-        // ++++ temporarily access child PCB lock exclusively
-        p.inner_lock().is_zombie() && (pid == -1 || pid as usize == p.getpid())
-        // ++++ release child PCB
-    });
-    if let Some((idx, _)) = pair {
-        let child = inner.children.remove(idx);
-        // confirm that child will be deallocated after removing from children list
-        assert_eq!(Arc::strong_count(&child), 1);
-        let found_pid = child.getpid();
-        // ++++ temporarily access child TCB exclusively
-        let exit_code = child.inner_lock().exit_code;
-        // ++++ release child PCB
-        if !exit_code_ptr.is_null() {
-            *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+        // 快速查看是否存在符合条件的子进程
+        if !inner
+            .children
+            .iter()
+            .any(|p| pid == -1 || pid as usize == p.getpid())
+        {
+            return Err(Errno::NOPID);
         }
-        Ok(found_pid as usize)
-    } else {
-        Err(Errno::HAVEPID)
+
+        // 查找僵尸子进程
+        let zombie_child = inner.children.iter().enumerate().find_map(|(idx, p)| {
+            //检查是否为僵尸进程且符合 PID 条件
+            if p.inner_lock().is_zombie() && (pid == -1 || pid as usize == p.getpid()) {
+                Some(idx)
+            } else {
+                None
+            }
+        });
+
+        if let Some(idx) = zombie_child {
+            // 移除子进程
+            let removed_child = inner.children.remove(idx);
+            // 确认子进程的引用计数为 1
+            assert_eq!(Arc::strong_count(&removed_child), 1);
+
+            // 获取子进程的 PID 和退出状态
+            let found_pid = removed_child.getpid();
+            let exit_code = removed_child.inner_lock().exit_code;
+
+            // 将退出状态写入用户提供的指针
+            if !exit_code_ptr.is_null() {
+                *translated_refmut(inner.memory_set.token(), exit_code_ptr) = exit_code;
+            }
+            return Ok(found_pid as usize);
+        } else {
+            // 未找到僵尸子进程，释放锁并挂起当前任务
+            drop(inner); // 避免死锁
+            suspend_current_and_run_next();
+        }
     }
     // ---- release current PCB lock automatically
 }

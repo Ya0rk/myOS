@@ -69,7 +69,7 @@ fn run_tests(tests: &[(&str, &str, &str, &str, i32)]) -> i32 {
             panic!("unreachable!");
         } else {
             let mut exit_code: i32 = Default::default();
-            let wait_pid = waitpid(pid as usize, &mut exit_code);
+            let wait_pid = waitpid(pid as usize, &mut exit_code, 0);
             assert_eq!(pid, wait_pid);
             if exit_code == test.4 {
                 // summary apps with  exit_code

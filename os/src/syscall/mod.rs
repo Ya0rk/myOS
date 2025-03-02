@@ -1,10 +1,10 @@
 mod fs;
 mod process;
-mod sys_num;
+mod ffi;
 
 use fs::*;
 use process::*;
-use sys_num::SysCode;
+use ffi::SysCode;
 
 use crate::utils::errtype::SysResult;
 
@@ -26,12 +26,14 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_EXIT => sys_exit(args[0] as i32),
         SysCode::SYSCALL_NANOSLEEP => sys_nanosleep(args[0] as *const u8, args[1] as *const u8),
         SysCode::SYSCALL_YIELD => sys_yield(),
+        SysCode::SYSCALL_TIMES => sys_times(args[0] as *const u8),
+        SysCode::SYSCALL_UNAME => sys_uname(args[0] as *const u8),
         SysCode::SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0] as *mut u8, args[1] as *mut u8),
         SysCode::SYSCALL_GETPID => sys_getpid(),
         SysCode::SYSCALL_GETPPID => sys_getppid(),
-        SysCode::SYSCALL_FORK => sys_fork(),
+        SysCode::SYSCALL_CLONE => sys_clone(),
         SysCode::SYSCALL_EXEC => sys_exec(args[0] as *const u8),
-        SysCode::SYSCALL_WAITPID => sys_waitpid(args[0] as isize, args[1] as *mut i32),
+        SysCode::SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1] as *mut i32, args[2] as usize, args[3] as usize),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

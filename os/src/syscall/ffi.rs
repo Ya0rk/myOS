@@ -1,5 +1,46 @@
-use core::fmt::{self, Display};
+use core::{fmt::{self, Display}, mem::size_of};
 use num_enum::FromPrimitive;
+
+#[allow(unused)]
+pub struct Utsname {
+    /// 操作系统名称
+    pub sysname:    [u8; 65],
+    /// 节点名称（主机名称）
+    pub nodename:   [u8; 65],
+    /// 操作系统的发布版本
+    pub release:    [u8; 65],
+    /// 操作系统的版本信息
+    pub version:    [u8; 65],
+    /// 硬件架构标识符
+    pub machine:    [u8; 65],
+    /// NIS 或 YP 域名
+    pub domainname: [u8; 65],
+}
+
+impl Utsname {
+    pub fn new() -> Self {
+        Self {
+            sysname: Self::copy_bytes("YooOs"),
+            nodename: Self::copy_bytes("Ya0rk"),
+            release: Self::copy_bytes("0.1"),
+            version: Self::copy_bytes("0.1"),
+            machine: Self::copy_bytes("riscv64"),
+            domainname: Self::copy_bytes("Ya0rk"),
+        }
+    }
+    fn copy_bytes(s: &str) -> [u8; 65] {
+        let mut buf = [0; 65];
+        let bytes = s.as_bytes();
+        for i in 0..bytes.len() {
+            buf[i] = bytes[i];
+        }
+        buf
+    }
+    pub fn as_bytes(&self) -> &[u8] {
+        let size = size_of::<Self>();
+        unsafe {core::slice::from_raw_parts(self as *const Self as usize as *const u8, size)}
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 #[repr(usize)]
@@ -22,12 +63,14 @@ pub enum SysCode {
     SYSCALL_EXIT      = 93,
     SYSCALL_NANOSLEEP = 101,
     SYSCALL_YIELD     = 124,
+    SYSCALL_TIMES     = 153,
+    SYSCALL_UNAME     = 160,
     SYSCALL_GETTIMEOFDAY  = 169,
     SYSCALL_GETPID    = 172,
     SYSCALL_GETPPID   = 173,
-    SYSCALL_FORK      = 220,
+    SYSCALL_CLONE     = 220,
     SYSCALL_EXEC      = 221,
-    SYSCALL_WAITPID   = 260,
+    SYSCALL_WAIT4     = 260,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -58,12 +101,14 @@ impl SysCode {
             Self::SYSCALL_EXIT => "exit",
             Self::SYSCALL_NANOSLEEP => "nanosleep",
             Self::SYSCALL_YIELD => "yield",
+            Self::SYSCALL_TIMES => "times",
+            Self::SYSCALL_UNAME => "uname",
             Self::SYSCALL_GETTIMEOFDAY => "get_timeofday",
             Self::SYSCALL_GETPID => "getpid",
             Self::SYSCALL_GETPPID => "getppid",
-            Self::SYSCALL_FORK => "fork",
+            Self::SYSCALL_CLONE => "clone",
             Self::SYSCALL_EXEC => "exec",
-            Self::SYSCALL_WAITPID => "waitpid",
+            Self::SYSCALL_WAIT4 => "wait4",
             Self::SYSCALL_UNKNOWN => "unknown",
         }
     }
