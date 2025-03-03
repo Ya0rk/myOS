@@ -56,6 +56,10 @@ pub fn sys_mount(source: &str, target: &str, fstype: &str, flags: u32, data: &st
     syscall(SYSCALL_MOUNT, [source.as_ptr() as usize, target.as_ptr() as usize, fstype.as_ptr() as usize, flags as usize, data.as_ptr() as usize, 0])
 }
 
+pub fn sys_chdir(path: &[u8]) -> isize {
+    syscall(SYSCALL_CHDIR, [path.as_ptr() as usize, 0, 0, 0, 0, 0])
+}
+
 pub fn sys_open(path: &str, flags: u32) -> isize {
     syscall(SYSCALL_OPENAT, [AT_FDCWD as usize, path.as_ptr() as usize, flags as usize, 0, 0, 0])
 }

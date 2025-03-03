@@ -28,6 +28,7 @@ info = []
 debug = []
 trace = []
 mul_hart = []
+test = []
 
 [profile.release]
 debug = true

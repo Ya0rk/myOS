@@ -54,6 +54,7 @@ pub enum SysCode {
     // SYSCALL_LINKAT    = 37,
     SYSCALL_UMOUNT2   = 39,
     SYSCALL_MOUNT     = 40,
+    SYSCALL_CHDIR     = 49,
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
     SYSCALL_PIPE2     = 59,
@@ -93,7 +94,7 @@ impl SysCode {
             
             Self::SYSCALL_UMOUNT2 => "umount2",
             Self::SYSCALL_MOUNT => "mount",
-
+            Self::SYSCALL_CHDIR => "chdir",
             Self::SYSCALL_OPENAT => "openat",
             Self::SYSCALL_CLOSE => "close",
             Self::SYSCALL_PIPE2 => "pipe2",

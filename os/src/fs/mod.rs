@@ -5,6 +5,7 @@ mod mount;
 mod stat;
 mod pipe;
 mod ffi;
+mod path;
 
 /// File trait
 pub trait File: Send + Sync {
@@ -37,3 +38,4 @@ pub use pipe::Pipe;
 pub use stat::Kstat;
 pub use stdio::{Stdin, Stdout};
 pub use ffi::*;
+pub use path::{Path, path_test};

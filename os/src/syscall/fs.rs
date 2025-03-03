@@ -1,9 +1,10 @@
 use alloc::string::String;
+use alloc::sync::Arc;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open, open_file, Dirent, Kstat, MountFlags, OpenFlags, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{open, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
-use crate::task::{current_task, current_user_token, Fd, FdTable};
+use crate::task::{current_task, current_user_token, Fd, FdTable, TaskControlBlock};
 use crate::utils::errtype::{Errno, SysResult};
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
@@ -445,5 +446,42 @@ pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags:
     match mnt_table.mount(source, target, fstype, flags as u32, data) {
         0 => Ok(0),
         _ => Err(Errno::EBADCALL),
+    }
+}
+
+/// 切换到指定目录: https://man7.org/linux/man-pages/man2/chdir.2.html
+/// 
+/// 输入： path:  需要切换到的路径
+/// 
+/// Success: 返回0； 失败： 返回-1；
+pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
+    info!("sys_chdir start");
+
+    let token = current_user_token();
+    let task = current_task().unwrap();
+    let path = Path::string2path(translated_str(token, path));
+
+    // 辅助函数：打开目录并更新当前路径
+    fn change_directory(task: &Arc<TaskControlBlock>, new_path: String) -> SysResult<usize> {
+        if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
+            let mut inner = task.inner_lock();
+            inner.current_path = new_path;
+            Ok(0) // 成功
+        } else {
+            Err(Errno::EBADCALL) // 失败
+        }
+    }
+
+    let inner = task.inner_lock();
+    let current_path = inner.current_path.clone();
+    drop(inner); // 释放锁
+
+    if path.is_absolute() {
+        // 绝对路径
+        change_directory(&task, path.get())
+    } else {
+        // 相对路径
+        let absolute_path = path.join_path_2_absolute(current_path);
+        change_directory(&task, absolute_path.get())
     }
 }

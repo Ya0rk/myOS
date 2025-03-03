@@ -9,7 +9,7 @@
 ## 测试用例
 
 - [ ] brk
-- [ ] chdir
+- [x] chdir
 - [x] clone
 - [x] close
 - [x] dup

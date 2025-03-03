@@ -11,6 +11,7 @@ pub use fd::{FdTable, Fd};
 pub use manager::TaskManager;
 pub use context::TaskContext;
 pub use pid::{KernelStack, PidHandle, PidAllocator};
+pub use task::TaskControlBlock;
 pub use processor::Processor;
 pub use pid::pid_alloc;
 pub use manager::add_task;
@@ -21,7 +22,7 @@ use crate::arch::shutdown;
 use crate::fs::OpenFlags;
 use alloc::sync::Arc;
 use lazy_static::*;
-use task::{TaskControlBlock, TaskStatus};
+use task::TaskStatus;
 use crate::fs::open_file;
 use switch::__switch;
 

@@ -91,6 +91,10 @@ pub fn mount(source: &str, target: &str, fstype: &str, flags: u32, data: &str) -
     sys_mount(source, target, fstype, flags, data)
 }
 
+pub fn chdir(path: &[u8]) -> isize {
+    sys_chdir(path)
+}
+
 pub fn open(path: &str, flags: OpenFlags) -> isize {
     sys_open(path, flags.bits())
 }

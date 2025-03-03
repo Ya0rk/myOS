@@ -4,6 +4,7 @@ pub const SYSCALL_DUP3: usize       = 24;
 pub const SYSCALL_MKDIRAT: usize    = 34;
 pub const SYSCALL_UMOUNT2: usize    = 39;
 pub const SYSCALL_MOUNT: usize      = 40;
+pub const SYSCALL_CHDIR: usize      = 49;
 pub const SYSCALL_OPENAT: usize     = 56;
 pub const SYSCALL_CLOSE: usize      = 57;
 pub const SYSCALL_PIPE2: usize      = 59;

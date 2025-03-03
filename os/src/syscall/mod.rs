@@ -18,6 +18,7 @@ pub fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_MKDIRAT => sys_mkdirat(args[0] as isize, args[1] as *const u8, args[2] as usize),
         SysCode::SYSCALL_UMOUNT2 => sys_umount2(args[0] as *const u8, args[1] as u32),
         SysCode::SYSCALL_MOUNT => sys_mount(args[0] as *const u8, args[1] as *const u8, args[2] as *const u8, args[3] as u32, args[4] as *const u8),
+        SysCode::SYSCALL_CHDIR => sys_chdir(args[0] as *const u8),
         SysCode::SYSCALL_OPENAT => sys_openat(args[0] as isize, args[1] as *const u8, args[2] as u32, args[3] as usize),
         SysCode::SYSCALL_CLOSE => sys_close(args[0]),
         SysCode::SYSCALL_PIPE2 => sys_pipe2(args[0] as *mut u32, args[1] as i32),

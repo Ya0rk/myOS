@@ -49,6 +49,7 @@ pub fn rust_main(hart_id: usize) -> ! {
 
         mm::init(true);
         mm::remap_test();
+        fs::path_test();
         logger::init();
 
         // TODO:后期可以丰富打印的初始化信息
