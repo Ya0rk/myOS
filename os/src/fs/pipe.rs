@@ -226,4 +226,8 @@ impl File for Pipe {
     fn set_offset(&self, offset: usize) {
         panic!("pipe not implement set_offset: {}", offset);
     }
+    
+    fn is_dir(&self) -> bool {
+        todo!()
+    }
 }

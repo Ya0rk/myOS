@@ -104,11 +104,17 @@ pub fn close(fd: usize) -> isize {
 pub fn pipe(fd: &mut [u32]) -> isize {
     sys_pipe2(fd, 0)
 }
+pub fn getdents64(fd: usize, buf: &mut [u8], len: usize) -> isize {
+    sys_getdents64(fd, buf, len)
+}
 pub fn read(fd: usize, buf: &mut [u8]) -> isize {
     sys_read(fd, buf)
 }
 pub fn write(fd: usize, buf: &[u8]) -> isize {
     sys_write(fd, buf)
+}
+pub fn fstat(fd: usize, kst: &mut [u8]) -> isize {
+    sys_fstat(fd, kst)
 }
 pub fn exit(exit_code: i32) -> ! {
     sys_exit(exit_code);

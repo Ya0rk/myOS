@@ -24,6 +24,8 @@ pub trait File: Send + Sync {
     fn get_name(&self) -> String;
 
     fn set_offset(&self, offset: usize);
+
+    fn is_dir(&self) -> bool;
 }
 
 use crate::mm::UserBuffer;

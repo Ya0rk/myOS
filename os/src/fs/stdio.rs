@@ -56,6 +56,10 @@ impl File for Stdin {
     fn set_offset(&self, offset: usize) {
         panic!("Stdin not implement set_offset: {}", offset);
     }
+    
+    fn is_dir(&self) -> bool {
+        todo!()
+    }
 }
 
 impl File for Stdout {
@@ -91,5 +95,9 @@ impl File for Stdout {
 
     fn set_offset(&self, offset: usize) {
         panic!("Stdput not implement set_offset: {}", offset);
+    }
+    
+    fn is_dir(&self) -> bool {
+        todo!()
     }
 }

@@ -10,15 +10,15 @@
 
 - [ ] brk
 - [ ] chdir
-- [ ] clone
+- [x] clone
 - [x] close
 - [x] dup
 - [x] execve
 - [x] exit
 - [x] fork
-- [ ] fstat
+- [x] fstat
 - [x] getcwd
-- [ ] getdents
+- [x] getdents
 - [x] getpid
 - [x] getppid
 - [x] gettimeofday

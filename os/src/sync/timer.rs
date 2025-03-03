@@ -1,10 +1,12 @@
 use crate::{arch::set_timer, config::CLOCK_FREQ, utils::errtype::Errno};
 use riscv::register::time;
-use core::{hint::spin_loop, mem::size_of, time::Duration};
+use zerocopy::{IntoBytes, Immutable};
+use core::{hint::spin_loop, time::Duration};
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
 
+#[derive(IntoBytes, Immutable)]
 #[repr(C)]
 pub struct TimeVal {
     /// 秒
@@ -17,14 +19,9 @@ impl TimeVal {
     pub fn new() -> Self {
         TimeVal { tv_sec: get_time_s(), tv_usec: get_time_us() }
     }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        let size = size_of::<Self>();
-        unsafe { core::slice::from_raw_parts(self as *const Self as usize as *const u8, size) }
-    }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, IntoBytes)]
 #[repr(C)]
 pub struct TimeSepc {
     /// 秒
@@ -45,11 +42,6 @@ impl TimeSepc {
         Ok(TimeSepc { tv_sec, tv_nsec })
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        let size = size_of::<Self>();
-        unsafe { core::slice::from_raw_parts(self as *const Self as usize as *const u8, size) }
-    }
-
     pub fn check_valid(&self) -> bool {
         self.tv_nsec < MSEC_PER_SEC * MSEC_PER_SEC * MSEC_PER_SEC
     }
@@ -64,6 +56,7 @@ impl From<TimeSepc> for Duration {
 #[allow(non_camel_case_types)]
 type clock_t = isize;
 
+#[derive(IntoBytes, Immutable)]
 pub struct Tms {
     /// 进程在用户态（user mode）消耗的 CPU 时间
     pub tms_utime: clock_t,
@@ -84,10 +77,6 @@ impl Tms {
             tms_cutime: now,
             tms_cstime: now,
         }
-    }
-    pub fn as_bytes(&self) -> &[u8] {
-        let size = size_of::<Self>();
-        unsafe { core::slice::from_raw_parts(self as *const Self as usize as *const u8, size) }
     }
 }
 

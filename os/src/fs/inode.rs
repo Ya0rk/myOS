@@ -230,4 +230,7 @@ impl File for OSInode {
         let mut inner = self.inner.lock();
         inner.offset = offset;
     }
+    fn is_dir(&self) -> bool {
+        self.is_dir()
+    }
 }

@@ -1,7 +1,7 @@
 use alloc::string::String;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open, open_file, MountFlags, OpenFlags, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{open, open_file, Dirent, Kstat, MountFlags, OpenFlags, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::errtype::{Errno, SysResult};
@@ -45,6 +45,48 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
             Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) as usize)
         }
         _ => Err(Errno::EBADCALL),
+    }
+}
+
+/// 功能：获取文件状态；用来将参数fd 所指向的文件状态复制到参数kst 所指向的结构中
+/// 
+/// 输入：
+/// 
+/// fd: 文件句柄；
+/// kst: 接收保存文件状态的指针；
+/// 
+/// 返回值：成功返回0，失败返回-1；
+pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let inner = task.inner_lock();
+    if fd >= inner.fd_table_len() || fd > RLIMIT_NOFILE {
+        return Err(Errno::EBADF);
+    }
+
+    if kst.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    let token = inner.get_user_token();
+    let mut buffer = UserBuffer::new(
+        translated_byte_buffer(
+            token, 
+            kst, 
+            core::mem::size_of::<Kstat>()
+    ));
+
+    let mut stat = Kstat::new();
+    match inner.fd_table.get_file_by_fd(fd) {
+        Ok(Some(file)) => {
+            drop(inner);
+            file.get_fstat(&mut stat);
+            buffer.write(stat.as_bytes());
+            info!("fstat finished");
+            return Ok(0);
+        }
+        _ => {
+            return Err(Errno::EBADCALL);
+        }
     }
 }
 
@@ -141,6 +183,82 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     *translated_refmut(token, pipefd) = read_fd as u32;
     *translated_refmut(token, unsafe { pipefd.add(1) }) = write_fd as u32;
     Ok(0)
+}
+
+/// 功能：获取目录的条目;
+///
+/// 输入：
+///
+/// fd：所要读取目录的文件描述符。
+/// 
+/// buf：一个缓存区，用于保存所读取目录的信息。缓存区的结构如下：
+/// 
+/// ```
+/// struct dirent {
+///     uint64 d_ino;	// 索引结点号
+///     int64 d_off;	// 到下一个dirent的偏移
+///     unsigned short d_reclen;	// 当前dirent的长度
+///     unsigned char d_type;	// 文件类型
+///     char d_name[];	//文件名
+/// };
+/// ```
+/// 
+/// len：buf的大小。
+/// 
+/// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
+pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let inner = task.inner_lock();
+    if fd >= inner.fd_table_len() || fd > RLIMIT_NOFILE {
+        return Err(Errno::EBADF);
+    }
+
+    if buf.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    match inner.fd_table.get_file_by_fd(fd) {
+        Ok(Some(file)) => {
+            if !file.readable() {
+                return Err(Errno::EACCES);
+            }
+            if !file.is_dir() {
+                return Err(Errno::ENOENT);
+            }
+
+            let token = inner.get_user_token();
+            drop(inner);
+            let mut buffer = UserBuffer::new(
+                translated_byte_buffer(
+                    token, 
+                    buf, 
+                    len
+            ));
+
+            let mut dirent = Dirent::new();
+            let mut current_wirte_len = 0;
+            let dirent_size = core::mem::size_of::<Dirent>();
+
+            if len < dirent_size {
+                return Err(Errno::EINVAL);
+            }
+
+            // TODO :按照测试用例的话这里不需要循环
+            while len >= dirent_size + current_wirte_len {
+                let readsize: isize = file.get_dirent(&mut dirent);
+                if readsize < 0 {
+                    return Ok(current_wirte_len);
+                }
+                let dirent_bytes = dirent.as_bytes();
+                buffer.write_at(current_wirte_len, dirent_bytes);
+                current_wirte_len += dirent_size;
+            }
+            return Ok(current_wirte_len);
+        }
+        _ => {
+            return Err(Errno::EBADCALL);
+        }
+    }
 }
 
 /// 获取当前工作目录： https://man7.org/linux/man-pages/man3/getcwd.3.html

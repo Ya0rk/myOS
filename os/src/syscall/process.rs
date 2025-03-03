@@ -2,6 +2,7 @@ use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::sync::timer::{sleep_for, TimeSepc, TimeVal, Tms};
+use crate::syscall::ffi::Utsname;
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
@@ -9,8 +10,9 @@ use crate::task::{
 use crate::utils::errtype::{Errno, SysResult};
 use alloc::sync::Arc;
 use log::info;
+use zerocopy::IntoBytes;
 
-use super::ffi::Utsname;
+// use super::ffi::Utsname;
 
 pub fn sys_exit(exit_code: i32) -> ! {
     exit_current_and_run_next(exit_code);

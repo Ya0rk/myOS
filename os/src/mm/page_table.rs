@@ -5,7 +5,7 @@ use core::arch::asm;
 use crate::config::KERNEL_PGNUM_OFFSET;
 
 use super::address::KernelAddr;
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -184,11 +184,29 @@ impl PageTable {
 /// translate a pointer to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token);
-    let va = VirtAddr::from(ptr as usize);
-    let ppn = page_table.translate(va.floor()).unwrap().ppn();
+    let mut start = ptr as usize;
+    let end = start + len;
     let mut v = Vec::new();
-    let offset = va.page_offset();
-    v.push(ppn.bytes_array_from_offset(offset, len));
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let mut vpn = start_va.floor();
+        match page_table.translate(vpn) {
+            None => {
+                println!("[kernel] mm: 0x{:x} not mapped", start);
+            }
+            _ => {}
+        }
+        let ppn = page_table.translate(vpn).unwrap().ppn();
+        vpn.step();
+        let mut end_va: VirtAddr = vpn.into();
+        end_va = end_va.min(VirtAddr::from(end));
+        if end_va.page_offset() == 0 {
+            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..]);
+        } else {
+            v.push(&mut ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()]);
+        }
+        start = end_va.into();
+    }
     v
 }
 /// tdranslate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
@@ -265,6 +283,44 @@ impl UserBuffer {
             current += copy_len;
         }
         current
+    }
+
+    /// 从指定offset写入数据
+    pub fn write_at(&mut self, offset: usize, buff: &[u8]) -> isize {
+        let len = buff.len();
+        if offset + len > self.len() {
+            return -1; // 返回错误码
+        }
+    
+        let mut head = 0; // offset of slice in UBuffer
+        let mut current = 0; // current offset of buff
+    
+        for sub_buff in self.buffers.iter_mut() {
+            let sblen = sub_buff.len();
+            if head + sblen <= offset {
+                head += sblen;
+                continue;
+            }
+    
+            let start = if head < offset { offset - head } else { 0 };
+            let end = (start + len - current).min(sblen);
+    
+            if start >= sblen {
+                head += sblen;
+                continue;
+            }
+    
+            sub_buff[start..end].copy_from_slice(&buff[current..current + (end - start)]);
+            current += end - start;
+    
+            if current == len {
+                return len as isize;
+            }
+    
+            head += sblen;
+        }
+    
+        0
     }
 }
 

@@ -1,7 +1,10 @@
-use core::{fmt::{self, Display}, mem::size_of};
+use core::fmt::{self, Display};
 use num_enum::FromPrimitive;
+use zerocopy::{Immutable, IntoBytes};
 
+#[derive(IntoBytes, Immutable)]
 #[allow(unused)]
+#[repr(C)]
 pub struct Utsname {
     /// 操作系统名称
     pub sysname:    [u8; 65],
@@ -22,8 +25,8 @@ impl Utsname {
         Self {
             sysname: Self::copy_bytes("YooOs"),
             nodename: Self::copy_bytes("Ya0rk"),
-            release: Self::copy_bytes("0.1"),
-            version: Self::copy_bytes("0.1"),
+            release: Self::copy_bytes("1.1"),
+            version: Self::copy_bytes("1.1"),
             machine: Self::copy_bytes("riscv64"),
             domainname: Self::copy_bytes("Ya0rk"),
         }
@@ -35,10 +38,6 @@ impl Utsname {
             buf[i] = bytes[i];
         }
         buf
-    }
-    pub fn as_bytes(&self) -> &[u8] {
-        let size = size_of::<Self>();
-        unsafe {core::slice::from_raw_parts(self as *const Self as usize as *const u8, size)}
     }
 }
 
@@ -58,8 +57,10 @@ pub enum SysCode {
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
     SYSCALL_PIPE2     = 59,
+    SYSCALL_GETDENTS64= 61,
     SYSCALL_READ      = 63,
     SYSCALL_WRITE     = 64,
+    SYSCALL_FSTAT     = 80,
     SYSCALL_EXIT      = 93,
     SYSCALL_NANOSLEEP = 101,
     SYSCALL_YIELD     = 124,
@@ -96,8 +97,10 @@ impl SysCode {
             Self::SYSCALL_OPENAT => "openat",
             Self::SYSCALL_CLOSE => "close",
             Self::SYSCALL_PIPE2 => "pipe2",
+            Self::SYSCALL_GETDENTS64 => "getdents64",
             Self::SYSCALL_READ => "read",
             Self::SYSCALL_WRITE => "write",
+            Self::SYSCALL_FSTAT => "fstat",
             Self::SYSCALL_EXIT => "exit",
             Self::SYSCALL_NANOSLEEP => "nanosleep",
             Self::SYSCALL_YIELD => "yield",
