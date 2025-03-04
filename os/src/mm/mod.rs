@@ -10,7 +10,7 @@ pub use memory_set::{MapPermission, MemorySet, KERNEL_SPACE};
 pub use page_table::{PageTableEntry, PageTable, UserBuffer};
 pub use frame_allocator::{frame_alloc, frame_dealloc};
 pub use memory_set::{remap_test, kernel_token};
-pub use page_table::{translated_byte_buffer, translated_refmut, translated_str};
+pub use page_table::{translated_byte_buffer, translated_refmut, translated_ref, translated_str};
 
 use page_table::PTEFlags;
 use address::VPNRange;

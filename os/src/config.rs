@@ -23,7 +23,15 @@ pub const USER_TRAP_CONTEXT: usize = USER_SPACE_TOP - PAGE_SIZE;
 
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 
-pub const HART_NUM: usize = 2;
+pub const HART_NUM: usize = 1;
 
 /// hart start address
 pub const HART_START_ADDR: usize = 0x80200000;
+
+// File
+/// max path name len
+pub const PATH_MAX: usize = 4096;
+/// 最大文件描述符数量
+pub const RLIMIT_NOFILE: usize = 1024;
+/// 当 filename 为相对路径的情况下将当前进程的工作目录设置为起始路径
+pub const AT_FDCWD: isize = -100;

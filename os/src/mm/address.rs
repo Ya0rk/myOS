@@ -257,13 +257,13 @@ impl KernelAddr {
     }
 }
 impl PhysPageNum {
-    ///Get `PageTableEntry` on `PhysPageNum`
+    /// 取出当前节点的页表项数组
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
         let pa: PhysAddr = (*self).into();
         let va = KernelAddr::from(pa).0;
         unsafe { core::slice::from_raw_parts_mut(va as *mut PageTableEntry, 512) }
     }
-    ///
+    /// 返回一个字节数组的可变引用
     pub fn get_bytes_array(&self) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
         let va = KernelAddr::from(pa).0;

@@ -1,12 +1,11 @@
-use super::TaskContext;
+use super::{Fd, FdTable, TaskContext};
 use super::{pid_alloc, KernelStack, PidHandle};
 use crate::config::USER_TRAP_CONTEXT;
-use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr};
 use crate::trap::{trap_loop, TrapContext};
+use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use alloc::vec;
 use log::info;
 use spin::{Mutex, MutexGuard};
 
@@ -27,7 +26,9 @@ pub struct TaskControlBlockInner {
     pub parent: Option<Weak<TaskControlBlock>>,
     pub children: Vec<Arc<TaskControlBlock>>,
     pub exit_code: i32,
-    pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    // pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub fd_table: FdTable,
+    pub current_path: String,
 }
 
 impl TaskControlBlockInner {
@@ -43,19 +44,32 @@ impl TaskControlBlockInner {
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
-    pub fn alloc_fd(&mut self) -> usize {
-        if let Some(fd) = (0..self.fd_table.len()).find(|fd| self.fd_table[*fd].is_none()) {
-            fd
-        } else {
-            self.fd_table.push(None);
-            self.fd_table.len() - 1
-        }
+    pub fn get_current_path(&self) -> String {
+        self.current_path.clone()
     }
+    pub fn fd_table_len(&self) -> usize {
+        self.fd_table.table_len()
+    }
+    /// 判断是否打开文件描述符fd
+    pub fn fd_is_none(&self, fd: usize) -> bool {
+        self.fd_table.table[fd].is_none()
+    }
+    /// 将fd作为index获取文件描述符
+    pub fn get_fd(&self, fd: usize) -> Fd {
+        self.fd_table.get_fd(fd).unwrap()
+    }
+    
 }
 
 impl TaskControlBlock {
     pub fn inner_lock(&self) -> MutexGuard<'_, TaskControlBlockInner> {
         self.inner.lock()
+    }
+    pub fn get_ppid(&self) -> usize {
+        self.inner_lock().parent.as_ref().map(|p| p.upgrade().unwrap().pid.0).unwrap_or(0)
+    }
+    pub fn get_pid(&self) -> usize {
+        self.pid.0
     }
     /// 创建新task,只有initproc会调用
     pub fn new(elf_data: &[u8]) -> Self {
@@ -91,14 +105,8 @@ impl TaskControlBlock {
                     parent: None,
                     children: Vec::new(),
                     exit_code: 0,
-                    fd_table: vec![
-                        // 0 -> stdin
-                        Some(Arc::new(Stdin)),
-                        // 1 -> stdout
-                        Some(Arc::new(Stdout)),
-                        // 2 -> stderr
-                        Some(Arc::new(Stdout)),
-                    ],
+                    fd_table: FdTable::new(),
+                    current_path: String::from("/"), // root directory
                 }),
         };
         // prepare TrapContext in user space
@@ -170,16 +178,6 @@ impl TaskControlBlock {
             MapPermission::R | MapPermission::W,
         );
 
-        // copy fd table
-        let mut new_fd_table: Vec<Option<Arc<dyn File + Send + Sync>>> = Vec::new();
-        for fd in parent_inner.fd_table.iter() {
-            if let Some(file) = fd {
-                new_fd_table.push(Some(file.clone()));
-            } else {
-                new_fd_table.push(None);
-            }
-        }
-
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
@@ -193,7 +191,8 @@ impl TaskControlBlock {
                     parent: Some(Arc::downgrade(self)),
                     children: Vec::new(),
                     exit_code: 0,
-                    fd_table: new_fd_table,
+                    fd_table: parent_inner.fd_table.clone(),    // copy fd table
+                    current_path: parent_inner.current_path.clone(),
                 }),
         });
         // add child

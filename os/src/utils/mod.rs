@@ -1,6 +1,7 @@
 ///! This module contains utility functions that are used throughout the OS.
 pub mod boot;
 pub mod logger;
+pub mod errtype;
 
 use core::arch::asm;
 use log::warn;

@@ -5,7 +5,7 @@ use core::arch::asm;
 use crate::config::KERNEL_PGNUM_OFFSET;
 
 use super::address::KernelAddr;
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KERNEL_SPACE};
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -184,33 +184,47 @@ impl PageTable {
 /// translate a pointer to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token);
-    let va = VirtAddr::from(ptr as usize);
-    let ppn = page_table.translate(va.floor()).unwrap().ppn();
+    let mut start = ptr as usize;
+    let end = start + len;
     let mut v = Vec::new();
-    let offset = va.page_offset();
-    v.push(ppn.bytes_array_from_offset(offset, len));
+
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let mut vpn = start_va.floor();
+
+        // 翻译虚拟页号
+        let ppn = match page_table.translate(vpn) {
+            Some(pte) => pte.ppn(),
+            _ => {
+                println!("[kernel] mm: 0x{:x} not mapped", start);
+                // TODO: 实现lazy分配后，这里是否需要修改
+                vpn.step();
+                start = vpn.into(); // 跳过未映射的页
+                continue;
+            }
+        };
+        vpn.step();
+        // 计算当前页的结束地址
+        let mut end_va: VirtAddr = vpn.into();
+        end_va = end_va.min(VirtAddr::from(end));
+        // 获取字节数组切片
+        let slice_start = start_va.page_offset();
+        let slice_end = if end_va.page_offset() == 0 {
+            ppn.get_bytes_array().len()
+        } else {
+            end_va.page_offset()
+        };
+        v.push(&mut ppn.get_bytes_array()[slice_start..slice_end]);
+
+        // 更新起始地址
+        start = end_va.into();
+    }
+
     v
 }
-/// translate a pointer to a mutable u8 Vec end with `\0` through page table to a `String`
+/// tdranslate a pointer to a const u8 Vec end with `\0` through page table to a `String`
 pub fn translated_str(token: usize, ptr: *const u8) -> String {
     let page_table = PageTable::from_token(token);
-    // TODO
-    // let mut string = String::new();
-    // let mut va = ptr as usize;
-    // loop {
-    //     // 这里需要扩展地址到kernelAddr，不然不能根据程序名找到对应程序
-    //     let ch: u8 = *(KernelAddr::from(page_table
-    //         .translate_va(VirtAddr::from(va))
-    //         .unwrap())
-    //         .get_mut());
-    //     if ch == 0 {
-    //         break;
-    //     } else {
-    //         string.push(ch as char);
-    //         va += 1;
-    //     }
-    // }
-    // string
     let ptr: *mut u8 = KernelAddr::from(
         page_table
             .translate_va(VirtAddr::from(ptr as usize))
@@ -230,11 +244,22 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     //println!("into translated_refmut!");
     let page_table = PageTable::from_token(token);
     let va = ptr as usize;
-    //println!("translated_refmut: before translate_va");
+
     KernelAddr::from(page_table
         .translate_va(VirtAddr::from(va))
         .unwrap())
         .get_mut()
+}
+/// 通过token，将一个指针转化为 特定的数据结构
+pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
+    //println!("into translated_refmut!");
+    let page_table = PageTable::from_token(token);
+    let va = ptr as usize;
+
+    KernelAddr::from(page_table
+        .translate_va(VirtAddr::from(va))
+        .unwrap())
+        .get_ref()
 }
 
 ///Array of u8 slice that user communicate with os
@@ -248,13 +273,67 @@ impl UserBuffer {
     pub fn new(buffers: Vec<&'static mut [u8]>) -> Self {
         Self { buffers }
     }
-    ///Length of `UserBuffer`
+    ///`UserBuffer`中所有切片总长度
     pub fn len(&self) -> usize {
         let mut total: usize = 0;
         for b in self.buffers.iter() {
             total += b.len();
         }
         total
+    }
+    // 将一个buffer的数据写入UserBuffer，返回写入长度
+    pub fn write(&mut self, buff: &[u8]) -> usize {
+        let len = self.len().min(buff.len());
+        let mut current = 0;
+        for sub_buff in self.buffers.iter_mut() {
+            if current >= len {
+                break;
+            }
+            let copy_len = sub_buff.len().min(len - current);
+            let (src, _) = buff.split_at(current + copy_len);
+            let dst = &mut sub_buff[..copy_len];
+            dst.copy_from_slice(&src[current..]);
+            current += copy_len;
+        }
+        current
+    }
+
+    /// 从指定offset写入数据
+    pub fn write_at(&mut self, offset: usize, buff: &[u8]) -> isize {
+        let len = buff.len();
+        if offset + len > self.len() {
+            return -1; // 返回错误码
+        }
+    
+        let mut head = 0; // offset of slice in UBuffer
+        let mut current = 0; // current offset of buff
+    
+        for sub_buff in self.buffers.iter_mut() {
+            let sblen = sub_buff.len();
+            if head + sblen <= offset {
+                head += sblen;
+                continue;
+            }
+    
+            let start = if head < offset { offset - head } else { 0 };
+            let end = (start + len - current).min(sblen);
+    
+            if start >= sblen {
+                head += sblen;
+                continue;
+            }
+    
+            sub_buff[start..end].copy_from_slice(&buff[current..current + (end - start)]);
+            current += end - start;
+    
+            if current == len {
+                return len as isize;
+            }
+    
+            head += sblen;
+        }
+    
+        0
     }
 }
 

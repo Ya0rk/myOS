@@ -1,7 +1,11 @@
 mod inode;
 mod stdio;
-
-use crate::mm::UserBuffer;
+mod dirent;
+mod mount;
+mod stat;
+mod pipe;
+mod ffi;
+mod path;
 
 /// File trait
 pub trait File: Send + Sync {
@@ -13,7 +17,25 @@ pub trait File: Send + Sync {
     fn read(&self, buf: UserBuffer) -> usize;
     /// Write `UserBuffer` to file
     fn write(&self, buf: UserBuffer) -> usize;
+    
+    fn get_fstat(&self, kstat: &mut Kstat);
+
+    fn get_dirent(&self, dirent: &mut Dirent) -> isize;
+
+    fn get_name(&self) -> String;
+
+    fn set_offset(&self, offset: usize);
+
+    fn is_dir(&self) -> bool;
 }
 
-pub use inode::{list_apps, open_file, OSInode, OpenFlags};
+use crate::mm::UserBuffer;
+use alloc::string::String;
+pub use inode::{list_apps, open, OSInode, chdir, open_file};
+pub use dirent::Dirent;
+pub use mount::MNT_TABLE;
+pub use pipe::Pipe;
+pub use stat::Kstat;
 pub use stdio::{Stdin, Stdout};
+pub use ffi::*;
+pub use path::{Path, path_test};

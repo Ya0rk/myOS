@@ -3,12 +3,15 @@ mod manager;
 mod pid;
 mod processor;
 mod switch;
+mod fd;
 #[allow(clippy::module_inception)]
 mod task;
 
+pub use fd::{FdTable, Fd};
 pub use manager::TaskManager;
 pub use context::TaskContext;
 pub use pid::{KernelStack, PidHandle, PidAllocator};
+pub use task::TaskControlBlock;
 pub use processor::Processor;
 pub use pid::pid_alloc;
 pub use manager::add_task;
@@ -19,7 +22,7 @@ use crate::arch::shutdown;
 use crate::fs::OpenFlags;
 use alloc::sync::Arc;
 use lazy_static::*;
-use task::{TaskControlBlock, TaskStatus};
+use task::TaskStatus;
 use crate::fs::open_file;
 use switch::__switch;
 
@@ -99,7 +102,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
-        let inode = open_file("initproc", OpenFlags::RDONLY).unwrap();
+        let inode = open_file("initproc", OpenFlags::O_RDONLY).unwrap();
         let v = inode.read_all();
         TaskControlBlock::new(v.as_slice())
     });

@@ -1,4 +1,6 @@
-use super::File;
+use alloc::string::String;
+
+use super::{Dirent, File, Kstat};
 use crate::arch::console_getchar;
 use crate::mm::UserBuffer;
 use crate::task::suspend_current_and_run_next;
@@ -36,6 +38,28 @@ impl File for Stdin {
     fn write(&self, _user_buf: UserBuffer) -> usize {
         panic!("Cannot write to stdin!");
     }
+    
+    #[allow(unused_variables)]
+    fn get_fstat(&self, kstat: &mut Kstat) {
+        panic!("Stdin not implement get_fstat");
+    }
+
+    #[allow(unused_variables)]
+    fn get_dirent(&self, dirent: &mut Dirent) -> isize {
+        panic!("Stdin not implement get_dirent");
+    }
+
+    fn get_name(&self) -> String {
+        panic!("Stdin not implement get_name");
+    }
+
+    fn set_offset(&self, offset: usize) {
+        panic!("Stdin not implement set_offset: {}", offset);
+    }
+    
+    fn is_dir(&self) -> bool {
+        todo!()
+    }
 }
 
 impl File for Stdout {
@@ -53,5 +77,27 @@ impl File for Stdout {
             print!("{}", core::str::from_utf8(*buffer).unwrap());
         }
         user_buf.len()
+    }
+
+    #[allow(unused_variables)]
+    fn get_fstat(&self, kstat: &mut Kstat) {
+        panic!("Stdout not implement get_fstat");
+    }
+
+    #[allow(unused_variables)]
+    fn get_dirent(&self, dirent: &mut Dirent) -> isize {
+        panic!("Stdout not implement get_dirent");
+    }
+
+    fn get_name(&self) -> String {
+        panic!("Stdout not implement get_name");
+    }
+
+    fn set_offset(&self, offset: usize) {
+        panic!("Stdput not implement set_offset: {}", offset);
+    }
+    
+    fn is_dir(&self) -> bool {
+        todo!()
     }
 }
