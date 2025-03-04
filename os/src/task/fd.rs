@@ -1,6 +1,6 @@
 // #![allow(unused)]
 use alloc::{sync::Arc, vec::Vec};
-use crate::{config::RLIMIT_NOFILE, fs::{File, OpenFlags, Stdin, Stdout}, utils::errtype::{Errno, SysResult}};
+use crate::{config::RLIMIT_NOFILE, fs::{File, OpenFlags, Stdin, Stdout}, utils::{Errno, SysResult}};
 
 #[derive(Clone)]
 pub struct FdTable {

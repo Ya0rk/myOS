@@ -7,7 +7,7 @@ use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
 };
-use crate::utils::errtype::{Errno, SysResult};
+use crate::utils::{Errno, SysResult};
 use alloc::sync::Arc;
 use log::info;
 use zerocopy::IntoBytes;

@@ -5,7 +5,7 @@ use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::{open, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable, TaskControlBlock};
-use crate::utils::errtype::{Errno, SysResult};
+use crate::utils::{Errno, SysResult};
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
     let token = current_user_token();

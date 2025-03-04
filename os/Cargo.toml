@@ -21,7 +21,7 @@ zerocopy = { version = "0.8.21", features = ["derive"]}
 
 [features]
 board_qemu = []
-default = ["info", "mul_hart"]
+default = ["info", "mul_hart", "test"]
 error = []
 warn = []
 info = []

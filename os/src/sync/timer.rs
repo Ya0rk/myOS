@@ -1,4 +1,4 @@
-use crate::{arch::set_timer, config::CLOCK_FREQ, utils::errtype::Errno};
+use crate::{arch::set_timer, config::CLOCK_FREQ, utils::Errno};
 use riscv::register::time;
 use zerocopy::{IntoBytes, Immutable};
 use core::{hint::spin_loop, time::Duration};

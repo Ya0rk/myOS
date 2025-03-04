@@ -6,7 +6,7 @@ use fs::*;
 use process::*;
 use ffi::SysCode;
 
-use crate::utils::errtype::SysResult;
+use crate::utils::SysResult;
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {

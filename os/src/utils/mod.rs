@@ -1,11 +1,15 @@
 ///! This module contains utility functions that are used throughout the OS.
-pub mod boot;
-pub mod logger;
-pub mod errtype;
+mod boot;
+mod logger;
+mod errtype;
 
 use core::arch::asm;
 use log::warn;
 use crate::mm::VirtAddr;
+
+pub use errtype::{Errno, SysResult};
+pub use logger::logger_init;
+pub use boot::{boot_all_harts, jump_helper, clear_bss, logo};
 
 pub fn backtrace() {
     unsafe {

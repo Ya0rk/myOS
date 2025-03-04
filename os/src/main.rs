@@ -30,7 +30,6 @@ pub mod arch;
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::timer;
 use task::get_current_hart_id;
-use utils::{boot, logger};
 
 global_asm!(include_str!("entry.asm"));
 
@@ -44,13 +43,18 @@ pub fn rust_main(hart_id: usize) -> ! {
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
         .is_ok() 
     {
-        boot::clear_bss();
-        boot::logo();
+        utils::clear_bss();
+        utils::logo();
 
         mm::init(true);
-        mm::remap_test();
-        fs::path_test();
-        logger::init();
+        
+        #[cfg(feature = "test")]
+        {
+            mm::remap_test();
+            fs::path_test();
+        }
+
+        utils::logger_init();
 
         // TODO:后期可以丰富打印的初始化信息
         println!(
@@ -63,7 +67,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]
-        boot::boot_all_harts(hart_id);
+        utils::boot_all_harts(hart_id);
     } else {
 
         trap::init();

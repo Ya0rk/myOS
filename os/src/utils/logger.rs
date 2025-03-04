@@ -32,7 +32,7 @@ impl log::Log for SimpleLogger {
 }
 
 static LOGGER: SimpleLogger = SimpleLogger;
-pub fn init() {
+pub fn logger_init() {
     log::set_logger(&LOGGER)
         .map(|()| log::set_max_level(LOG_LEVEL))
         .unwrap();
