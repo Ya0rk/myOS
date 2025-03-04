@@ -10,12 +10,12 @@ fn panic(info: &PanicInfo) -> ! {
             get_current_hart_id(),
             location.file(),
             location.line(),
-            info.message().unwrap()
+            info.message()
         );
     } else {
         error!("[kernel] Hart {}, Panicked: {}",
             get_current_hart_id(),
-            info.message().unwrap()
+            info.message()
         );
     }
     backtrace();

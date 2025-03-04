@@ -12,7 +12,7 @@ use riscv::register::stvec;
 global_asm!(include_str!("trap.S"));
 
 // 申明外部函数，这些函数是在汇编代码中实现的，用于从用户态和内核态切换
-extern {
+extern "C" {
     fn __trap_from_user();
     fn __trap_from_kernel();
     #[allow(improper_ctypes)]

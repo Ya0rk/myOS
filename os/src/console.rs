@@ -1,6 +1,7 @@
 use spin::Mutex;
 use core::fmt::{self, Write};
 use crate::arch::console_putchar;
+use lazy_static::*;
 
 struct Stdout;
 
@@ -13,11 +14,13 @@ impl Write for Stdout {
     }
 }
 
-static mut MUTEX_STDOUT: Mutex<Stdout> = Mutex::new(Stdout {});
+lazy_static! {
+    static ref MUTEX_STDOUT: Mutex<Stdout> = Mutex::new(Stdout {});
+}
 pub fn print(args: fmt::Arguments) {
-    unsafe {
+    // unsafe {
         MUTEX_STDOUT.lock().write_fmt(args).unwrap();
-    }
+    // }
 }
 
 #[macro_export]

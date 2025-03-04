@@ -1,10 +1,9 @@
 use alloc::string::String;
-use alloc::sync::Arc;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
-use crate::task::{current_task, current_user_token, Fd, FdTable, TaskControlBlock};
+use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
@@ -95,58 +94,100 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
 /// 
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
+    // let task = current_task().unwrap();
+    // let mut inner = task.inner_lock();
+    // let token = inner.get_user_token();
+    // let path = translated_str(token, path);
+    // let flags = OpenFlags::from_bits(flags as i32).unwrap();
+
+    // // 如果是绝对路径就忽略fd
+    // if path.starts_with('/') {
+    //     if let Some(inode) = open_file(path.as_str(), flags) {
+    //         let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
+    //         return Ok(fd);
+    //     } else {
+    //         return Err(Errno::EBADCALL);
+    //     }
+    // }
+
+    // // 如果是相对路径
+    // // 以当前目录作为出发点 open 文件
+    // if fd == AT_FDCWD {
+    //     let cwd = inner.get_current_path();
+    //     if let Some(inode) = open(cwd.as_str(), path.as_str(), flags) {
+    //         let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
+    //         return Ok(fd);
+    //     } else {
+    //         return Err(Errno::EBADCALL);
+    //     }
+    // }
+
+    // // 如果是相对路径，并且不是以当前目录作为出发点
+    // // 就以fd作为出发点 open 文件
+    
+    // if fd < 0 || fd as usize > RLIMIT_NOFILE {
+    //     return Err(Errno::EBADF);
+    // }
+
+    // if let Some(inode) = inner.fd_table.get_file_by_fd(fd as usize)? {
+    //     let other_cwd = inode.get_name();
+    //     // 释放锁, 因为在open函数中会再次获取锁
+    //     drop(inner);
+    //     if let Some(inode) = open(other_cwd.as_str(), path.as_str(), flags) {
+    //         let mut inner = task.inner_lock();
+    //         let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
+    //         if fd > RLIMIT_NOFILE {
+    //             return Err(Errno::EMFILE);
+    //         }
+    //         return Ok(fd);
+    //     } else {
+    //         return Err(Errno::EBADCALL);
+    //     }
+    // }
+
+    // Err(Errno::EBADCALL)
+    info!("sys_openat start");
+
     let task = current_task().unwrap();
-    let mut inner = task.inner_lock();
-    let token = inner.get_user_token();
-    let path = translated_str(token, path);
+    let token = current_user_token();
+    let path = Path::string2path(translated_str(token, path));
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
 
-    // 如果是绝对路径就忽略fd
-    if path.starts_with('/') {
-        if let Some(inode) = open_file(path.as_str(), flags) {
-            let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
-            return Ok(fd);
-        } else {
-            return Err(Errno::EBADCALL);
+    let inner = task.inner_lock();
+
+    // 计算目标路径
+    let target_path = if path.is_absolute() {
+        // 绝对路径，忽略 fd
+        path.get()
+    } else if fd == AT_FDCWD {
+        // 相对路径，以当前目录为起点
+        let current_path = inner.get_current_path();
+        path.join_path_2_absolute(current_path).get()
+    } else {
+        // 相对路径，以 fd 对应的目录为起点
+        if fd < 0 || fd as usize > RLIMIT_NOFILE {
+            return Err(Errno::EBADF);
         }
-    }
-
-    // 如果是相对路径
-    // 以当前目录作为出发点 open 文件
-    if fd == AT_FDCWD {
-        let cwd = inner.get_current_path();
-        if let Some(inode) = open(cwd.as_str(), path.as_str(), flags) {
-            let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
-            return Ok(fd);
-        } else {
-            return Err(Errno::EBADCALL);
-        }
-    }
-
-    // 如果是相对路径，并且不是以当前目录作为出发点
-    // 就以fd作为出发点 open 文件
-    
-    if fd < 0 || fd as usize > RLIMIT_NOFILE {
-        return Err(Errno::EBADF);
-    }
-
-    if let Some(inode) = inner.fd_table.get_file_by_fd(fd as usize)? {
+        let inode = inner.fd_table.get_file_by_fd(fd as usize)?.unwrap();
         let other_cwd = inode.get_name();
-        // 释放锁, 因为在open函数中会再次获取锁
-        drop(inner);
-        if let Some(inode) = open(other_cwd.as_str(), path.as_str(), flags) {
-            let mut inner = task.inner_lock();
-            let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
-            if fd > RLIMIT_NOFILE {
-                return Err(Errno::EMFILE);
-            }
-            return Ok(fd);
-        } else {
-            return Err(Errno::EBADCALL);
-        }
-    }
+        path.join_path_2_absolute(other_cwd).get()
+    };
 
-    Err(Errno::EBADCALL)
+    drop(inner);
+    // 检查路径是否有效并打开文件
+    let result = if let Some(inode) = open_file(target_path.as_str(), flags) {
+        let mut inner = task.inner_lock();
+        let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
+        if fd > RLIMIT_NOFILE {
+            Err(Errno::EMFILE)
+        } else {
+            Ok(fd)
+        }
+    } else {
+        Err(Errno::EBADCALL)
+    };
+
+    result
 }
 
 pub fn sys_close(fd: usize) -> SysResult<usize> {
@@ -357,52 +398,89 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usize> {
+    // let task = current_task().unwrap();
+    // let inner = task.inner_lock();
+    // let token = inner.get_user_token();
+    // let path = translated_str(token, path);
+    // info!("sys_mkdirat: path = {}, mode = {}", path, mode);
+
+    // // 如果是绝对路径就忽略fd
+    // if path.starts_with('/') {
+    //     drop(inner);
+    //     if let Some(_) = open_file(path.as_str(), OpenFlags::O_DIRECTORY) {
+    //         return Ok(0);
+    //     } else {
+    //         return Err(Errno::EBADCALL);
+    //     }
+    // }
+
+    // // 如果是相对路径
+    // // 以当前目录作为出发点 open 文件
+    // if dirfd == AT_FDCWD {
+    //     let cwd = inner.get_current_path();
+    //     drop(inner);
+    //     if let Some(_) = open(cwd.as_str(), path.as_str(), OpenFlags::O_DIRECTORY) {
+    //         return Ok(0);
+    //     } else {
+    //         return Err(Errno::EBADCALL);
+    //     }
+    // }
+
+    // // 如果是相对路径，并且不是以当前目录作为出发点
+    // // 就以fd作为出发点 open 文件
+    // if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= inner.fd_table_len() as isize {
+    //     return Err(Errno::EBADF);
+    // }
+
+    // if let Some(inode) = inner.fd_table.get_file_by_fd(dirfd as usize)? {
+    //     let other_cwd = inode.get_name();
+    //     // 释放锁, 因为在open函数中会再次获取锁
+    //     drop(inner);
+    //     if let Some(_) = open(other_cwd.as_str(), path.as_str(), OpenFlags::O_DIRECTORY) {
+    //         return Ok(0);
+    //     } else {
+    //         return Err(Errno::EBADCALL);
+    //     }
+    // }
+
+    // Err(Errno::EBADCALL)
+    info!("sys_mkdirat start");
+
     let task = current_task().unwrap();
+    let token = current_user_token();
+    let path = Path::string2path(translated_str(token, path));
+    info!("sys_mkdirat: path = {}, mode = {}", path.get(), mode);
+
     let inner = task.inner_lock();
-    let token = inner.get_user_token();
-    let path = translated_str(token, path);
-    info!("sys_mkdirat: path = {}, mode = {}", path, mode);
 
-    // 如果是绝对路径就忽略fd
-    if path.starts_with('/') {
-        drop(inner);
-        if let Some(_) = open_file(path.as_str(), OpenFlags::O_DIRECTORY) {
-            return Ok(0);
-        } else {
-            return Err(Errno::EBADCALL);
+    // 计算目标路径
+    let target_path = if path.is_absolute() {
+        // 绝对路径，忽略 dirfd
+        path.get()
+    } else if dirfd == AT_FDCWD {
+        // 相对路径，以当前目录为起点
+        let current_path = inner.get_current_path();
+        path.join_path_2_absolute(current_path).get()
+    } else {
+        // 相对路径，以 dirfd 对应的目录为起点
+        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= inner.fd_table_len() as isize {
+            return Err(Errno::EBADF);
         }
-    }
-
-    // 如果是相对路径
-    // 以当前目录作为出发点 open 文件
-    if dirfd == AT_FDCWD {
-        let cwd = inner.get_current_path();
-        drop(inner);
-        if let Some(_) = open(cwd.as_str(), path.as_str(), OpenFlags::O_DIRECTORY) {
-            return Ok(0);
-        } else {
-            return Err(Errno::EBADCALL);
-        }
-    }
-
-    // 如果是相对路径，并且不是以当前目录作为出发点
-    // 就以fd作为出发点 open 文件
-    if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= inner.fd_table_len() as isize {
-        return Err(Errno::EBADF);
-    }
-
-    if let Some(inode) = inner.fd_table.get_file_by_fd(dirfd as usize)? {
+        let inode = inner.fd_table.get_file_by_fd(dirfd as usize)?.unwrap();
         let other_cwd = inode.get_name();
-        // 释放锁, 因为在open函数中会再次获取锁
-        drop(inner);
-        if let Some(_) = open(other_cwd.as_str(), path.as_str(), OpenFlags::O_DIRECTORY) {
-            return Ok(0);
-        } else {
-            return Err(Errno::EBADCALL);
-        }
-    }
+        path.join_path_2_absolute(other_cwd).get()
+    };
 
-    Err(Errno::EBADCALL)
+    drop(inner);
+
+    // 检查路径是否有效并创建目录
+    let result = if let Some(_) = open_file(target_path.as_str(), OpenFlags::O_DIRECTORY) {
+        Ok(0) // 成功
+    } else {
+        Err(Errno::EBADCALL) // 失败
+    };
+
+    result
 }
 
 /// 卸载文件系统：https://man7.org/linux/man-pages/man2/umount.2.html
@@ -455,33 +533,58 @@ pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags:
 /// 
 /// Success: 返回0； 失败： 返回-1；
 pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
+    // info!("sys_chdir start");
+
+    // let token = current_user_token();
+    // let task = current_task().unwrap();
+    // let path = Path::string2path(translated_str(token, path));
+
+    // // 辅助函数：打开目录并更新当前路径
+    // fn change_directory(task: &Arc<TaskControlBlock>, new_path: String) -> SysResult<usize> {
+    //     if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
+    //         let mut inner = task.inner_lock();
+    //         inner.current_path = new_path;
+    //         Ok(0) // 成功
+    //     } else {
+    //         Err(Errno::EBADCALL) // 失败
+    //     }
+    // }
+
+    // let inner = task.inner_lock();
+    // let current_path = inner.current_path.clone();
+    // drop(inner); // 释放锁
+
+    // if path.is_absolute() {
+    //     // 绝对路径
+    //     change_directory(&task, path.get())
+    // } else {
+    //     // 相对路径
+    //     let absolute_path = path.join_path_2_absolute(current_path);
+    //     change_directory(&task, absolute_path.get())
+    // }
     info!("sys_chdir start");
 
     let token = current_user_token();
     let task = current_task().unwrap();
     let path = Path::string2path(translated_str(token, path));
 
-    // 辅助函数：打开目录并更新当前路径
-    fn change_directory(task: &Arc<TaskControlBlock>, new_path: String) -> SysResult<usize> {
-        if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
-            let mut inner = task.inner_lock();
-            inner.current_path = new_path;
-            Ok(0) // 成功
-        } else {
-            Err(Errno::EBADCALL) // 失败
-        }
-    }
-
-    let inner = task.inner_lock();
+    let mut inner = task.inner_lock();
     let current_path = inner.current_path.clone();
-    drop(inner); // 释放锁
 
-    if path.is_absolute() {
-        // 绝对路径
-        change_directory(&task, path.get())
+    // 计算新路径
+    let new_path = if path.is_absolute() {
+        path.get()
     } else {
-        // 相对路径
-        let absolute_path = path.join_path_2_absolute(current_path);
-        change_directory(&task, absolute_path.get())
-    }
+        path.join_path_2_absolute(current_path).get()
+    };
+
+    // 检查路径是否有效
+    let result = if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
+        inner.current_path = new_path; // 更新当前路径
+        Ok(0) // 成功
+    } else {
+        Err(Errno::EBADCALL) // 失败
+    };
+
+    result
 }

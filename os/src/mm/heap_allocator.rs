@@ -1,4 +1,5 @@
 //! The global allocator
+use core::cell::UnsafeCell;
 use crate::config::KERNEL_HEAP_SIZE;
 use buddy_system_allocator::LockedHeap;
 
@@ -12,7 +13,16 @@ pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
     panic!("Heap allocation error, layout = {:?}", layout);
 }
 /// heap space ([u8; KERNEL_HEAP_SIZE])
-static mut HEAP_SPACE: [u8; KERNEL_HEAP_SIZE] = [0; KERNEL_HEAP_SIZE];
+pub struct SyncHeapSpace(UnsafeCell<[u8; KERNEL_HEAP_SIZE]>);
+
+impl SyncHeapSpace {
+    fn as_ptr(&self) -> *mut u8 {
+        self.0.get() as *mut u8
+    }
+}
+
+unsafe impl Sync for SyncHeapSpace {}
+static HEAP_SPACE: SyncHeapSpace = SyncHeapSpace(UnsafeCell::new([0; KERNEL_HEAP_SIZE]));
 /// initiate heap allocator
 pub fn init_heap() {
     unsafe {

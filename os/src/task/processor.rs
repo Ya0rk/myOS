@@ -1,3 +1,5 @@
+use core::cell::UnsafeCell;
+
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
@@ -43,15 +45,19 @@ impl Processor {
     }
 }
 
+pub struct SyncProcessors(UnsafeCell<[Processor; HART_NUM]>);
+
+unsafe impl Sync for SyncProcessors {}
+
 /// 多核管理器 TODO
 /// 每个核只会访对应id的Processor，所以不需要加锁
 const PROCESSOR: Processor = Processor::new();
-pub static mut PROCESSORS: [Processor; HART_NUM] = [PROCESSOR; HART_NUM];
+pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSOR; HART_NUM]));
 
 ///Init PROCESSORS
 pub fn init_processors() {
     unsafe {
-        for (id, p) in PROCESSORS.iter_mut().enumerate() {
+        for (id, p) in (&mut *PROCESSORS.0.get()).iter_mut().enumerate() {
             p.idle_task_cx = Some(Box::new(TaskContext::zero_init()));
             p.hart_id = id;
         }
@@ -60,7 +66,7 @@ pub fn init_processors() {
 }
 
 pub fn get_proc_by_hartid(hartid: usize) -> &'static mut Processor {
-    unsafe { &mut PROCESSORS[hartid] }
+    unsafe { &mut (*PROCESSORS.0.get())[hartid] }
 }
 
 /// 获取当前运行的 CPU 核
