@@ -8,7 +8,9 @@ APPS := ../user/src/bin/*
 
 # fs image
 # FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
-FS_IMG := ../simple-fat32/fat32.img
+FS = lwext4_rust
+FS_IMG := ../$(FS)/ext4.img
+# FS_IMG := ../simple-fat32/fat32.img
 
 # cpu hart
 CPUS ?= 2
@@ -81,7 +83,7 @@ fs-img: $(APPS)
 PHONY += fs-img
 
 copy_to_fs: 
-	cd ../simple-fat32 && sh create_img.sh 
+	cd ../$(FS) && sh create_img.sh 
 PHONY += copy_to_fs
 
 $(APPS):

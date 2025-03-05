@@ -47,6 +47,14 @@ impl OpenFlags {
             (true, true)
         }
     }
+
+    pub fn node_type(&self) -> InodeType {
+        if self.contains(OpenFlags::O_DIRECTORY) {
+            InodeType::Dir
+        } else {
+            InodeType::File
+        }
+    }
 }
 
 bitflags! {
