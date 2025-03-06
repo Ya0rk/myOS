@@ -1,15 +1,11 @@
-use super::{File, Ioctl};
-use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut};
-use crate::task::current_task;
-use crate::utils::{SysErrNo, SyscallRet};
+use super::File;
+use crate::arch::console_getchar;
+use crate::utils::Errno;
 use crate::{
     mm::UserBuffer,
-    sbi::console_getchar,
-    syscall::{IoctlCommand, PollEvents},
     task::suspend_current_and_run_next,
 };
 use alloc::vec::Vec;
-use core::mem::size_of;
 /// # 标准输入输出接口
 /// `os/src/fs/stdio.rs`
 /// ```
@@ -34,7 +30,7 @@ impl File for Stdin {
     fn writable(&self) -> bool {
         false
     }
-    fn read(&self, mut user_buf: UserBuffer) -> SyscallRet {
+    fn read(&self, mut user_buf: UserBuffer) -> usize {
         /*
         //一次读取单个字符
         assert_eq!(user_buf.len(), 1);
@@ -84,68 +80,72 @@ impl File for Stdin {
             }
         }
         user_buf.write(buf.as_slice());
-        Ok(count)
+        count
     }
-    fn write(&self, _user_buf: UserBuffer) -> SyscallRet {
-        Err(SysErrNo::EINVAL)
+    fn write(&self, _user_buf: UserBuffer) -> usize {
+        Errno::EINVAL.into()
         // panic!("Cannot write to stdin!");
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::IN) {
-            revents |= PollEvents::IN;
-        }
-        revents
+    
+    fn get_name(&self) -> alloc::string::String {
+        todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     revents
+    // }
 }
 
-impl Ioctl for Stdin {
-    fn ioctl(&self, cmd: usize, arg: usize) -> isize {
-        let cmd = IoctlCommand::from(cmd);
-        let task = current_task().unwrap();
-        let mut inner = task.inner_lock();
-        let token = inner.user_token();
+// impl Ioctl for Stdin {
+//     fn ioctl(&self, cmd: usize, arg: usize) -> isize {
+//         let cmd = IoctlCommand::from(cmd);
+//         let task = current_task().unwrap();
+//         let mut inner = task.inner_lock();
+//         let token = inner.get_user_token();
 
-        match cmd {
-            IoctlCommand::TCGETS | IoctlCommand::TCGETA => {
-                let mut arg = UserBuffer::new(
-                    translated_byte_buffer(token, arg as *const u8, size_of::<Termios>()).unwrap(),
-                );
-                arg.write(IOINFO.lock().termios.as_bytes());
-                return 0;
-            }
-            IoctlCommand::TCSETS | IoctlCommand::TCSETSW | IoctlCommand::TCSETSF => {
-                let arg = translated_ref(token, arg as *const Termios);
-                IOINFO.lock().termios.update(arg);
-                return 0;
-            }
-            IoctlCommand::TIOCGPGRP => {
-                *translated_refmut(token, arg as *mut u32) = IOINFO.lock().foreground_pgid;
-                return 0;
-            }
-            IoctlCommand::TIOCSPGRP => {
-                let arg = translated_ref(token, arg as *const u32);
-                IOINFO.lock().foreground_pgid = *arg;
-                return 0;
-            }
-            IoctlCommand::TIOCGWINSZ => {
-                let mut arg = UserBuffer::new(
-                    translated_byte_buffer(token, arg as *const u8, size_of::<WinSize>()).unwrap(),
-                );
-                arg.write(IOINFO.lock().winsize.as_bytes());
-                return 0;
-            }
-            IoctlCommand::TIOCSWINSZ => {
-                let arg = translated_ref(token, arg as *const WinSize);
-                IOINFO.lock().winsize.update(arg);
-                return 0;
-            }
-            _ => {
-                return -1;
-            }
-        };
-    }
-}
+//         match cmd {
+//             IoctlCommand::TCGETS | IoctlCommand::TCGETA => {
+//                 let mut arg = UserBuffer::new(
+//                     translated_byte_buffer(token, arg as *const u8, size_of::<Termios>()),
+//                 );
+//                 arg.write(IOINFO.lock().termios.as_bytes());
+//                 return 0;
+//             }
+//             IoctlCommand::TCSETS | IoctlCommand::TCSETSW | IoctlCommand::TCSETSF => {
+//                 let arg = translated_ref(token, arg as *const Termios);
+//                 IOINFO.lock().termios.update(arg);
+//                 return 0;
+//             }
+//             IoctlCommand::TIOCGPGRP => {
+//                 *translated_refmut(token, arg as *mut u32) = IOINFO.lock().foreground_pgid;
+//                 return 0;
+//             }
+//             IoctlCommand::TIOCSPGRP => {
+//                 let arg = translated_ref(token, arg as *const u32);
+//                 IOINFO.lock().foreground_pgid = *arg;
+//                 return 0;
+//             }
+//             IoctlCommand::TIOCGWINSZ => {
+//                 let mut arg = UserBuffer::new(
+//                     translated_byte_buffer(token, arg as *const u8, size_of::<WinSize>()),
+//                 );
+//                 arg.write(IOINFO.lock().winsize.as_bytes());
+//                 return 0;
+//             }
+//             IoctlCommand::TIOCSWINSZ => {
+//                 let arg = translated_ref(token, arg as *const WinSize);
+//                 IOINFO.lock().winsize.update(arg);
+//                 return 0;
+//             }
+//             _ => {
+//                 return -1;
+//             }
+//         };
+//     }
+// }
 
 impl File for Stdout {
     fn readable(&self) -> bool {
@@ -154,73 +154,78 @@ impl File for Stdout {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, _user_buf: UserBuffer) -> SyscallRet {
+    fn read(&self, _user_buf: UserBuffer) -> usize {
         panic!("Cannot read from stdout!");
     }
-    fn write(&self, user_buf: UserBuffer) -> SyscallRet {
+    fn write(&self, user_buf: UserBuffer) -> usize {
         for buffer in user_buf.buffers.iter() {
             print!("{}", core::str::from_utf8(*buffer).unwrap());
         }
-        Ok(user_buf.len())
+        user_buf.len()
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::OUT) {
-            revents |= PollEvents::OUT;
-        }
-        revents
+    
+    fn get_name(&self) -> alloc::string::String {
+        todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::OUT) {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     revents
+    // }
 }
 
-impl Ioctl for Stdout {
-    fn ioctl(&self, cmd: usize, arg: usize) -> isize {
-        let cmd = IoctlCommand::from(cmd);
-        let task = current_task().unwrap();
-        let mut inner = task.inner_lock();
-        let token = inner.user_token();
+// impl Ioctl for Stdout {
+//     fn ioctl(&self, cmd: usize, arg: usize) -> isize {
+//         let cmd = IoctlCommand::from(cmd);
+//         let task = current_task().unwrap();
+//         let mut inner = task.inner_lock();
+//         let token = inner.get_user_token();
 
-        match cmd {
-            IoctlCommand::TCGETS | IoctlCommand::TCGETA => {
-                let mut arg = UserBuffer::new(
-                    translated_byte_buffer(token, arg as *const u8, size_of::<Termios>()).unwrap(),
-                );
-                arg.write(IOINFO.lock().termios.as_bytes());
-                return 0;
-            }
-            IoctlCommand::TCSETS | IoctlCommand::TCSETSW | IoctlCommand::TCSETSF => {
-                let arg = translated_ref(token, arg as *const Termios);
-                IOINFO.lock().termios.update(arg);
-                return 0;
-            }
-            IoctlCommand::TIOCGPGRP => {
-                *translated_refmut(token, arg as *mut u32) = IOINFO.lock().foreground_pgid;
-                return 0;
-            }
-            IoctlCommand::TIOCSPGRP => {
-                let arg = translated_ref(token, arg as *const u32);
-                IOINFO.lock().foreground_pgid = *arg;
-                return 0;
-            }
-            IoctlCommand::TIOCGWINSZ => {
-                let mut arg = UserBuffer::new(
-                    translated_byte_buffer(token, arg as *const u8, size_of::<WinSize>()).unwrap(),
-                );
-                arg.write(IOINFO.lock().winsize.as_bytes());
-                return 0;
-            }
-            IoctlCommand::TIOCSWINSZ => {
-                let arg = translated_ref(token, arg as *const WinSize);
-                IOINFO.lock().winsize.update(arg);
-                return 0;
-            }
-            _ => {
-                return -1;
-            }
-        };
-    }
-}
+//         match cmd {
+//             IoctlCommand::TCGETS | IoctlCommand::TCGETA => {
+//                 let mut arg = UserBuffer::new(
+//                     translated_byte_buffer(token, arg as *const u8, size_of::<Termios>()),
+//                 );
+//                 arg.write(IOINFO.lock().termios.as_bytes());
+//                 return 0;
+//             }
+//             IoctlCommand::TCSETS | IoctlCommand::TCSETSW | IoctlCommand::TCSETSF => {
+//                 let arg = translated_ref(token, arg as *const Termios);
+//                 IOINFO.lock().termios.update(arg);
+//                 return 0;
+//             }
+//             IoctlCommand::TIOCGPGRP => {
+//                 *translated_refmut(token, arg as *mut u32) = IOINFO.lock().foreground_pgid;
+//                 return 0;
+//             }
+//             IoctlCommand::TIOCSPGRP => {
+//                 let arg = translated_ref(token, arg as *const u32);
+//                 IOINFO.lock().foreground_pgid = *arg;
+//                 return 0;
+//             }
+//             IoctlCommand::TIOCGWINSZ => {
+//                 let mut arg = UserBuffer::new(
+//                     translated_byte_buffer(token, arg as *const u8, size_of::<WinSize>()),
+//                 );
+//                 arg.write(IOINFO.lock().winsize.as_bytes());
+//                 return 0;
+//             }
+//             IoctlCommand::TIOCSWINSZ => {
+//                 let arg = translated_ref(token, arg as *const WinSize);
+//                 IOINFO.lock().winsize.update(arg);
+//                 return 0;
+//             }
+//             _ => {
+//                 return -1;
+//             }
+//         };
+//     }
+// }
 
 #[derive(Debug)]
+#[allow(unused)]
 pub struct IOInfo {
     foreground_pgid: u32,
     winsize: WinSize,
@@ -228,6 +233,7 @@ pub struct IOInfo {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(unused)]
 /// The termios functions describe a general terminal interface that
 /// is provided to control asynchronous communications ports.
 pub struct Termios {
@@ -282,6 +288,7 @@ impl Termios {
             ospeed: 0,
         }
     }
+    #[allow(unused)]
     pub fn update(&mut self, termios: &Self) {
         self.iflag = termios.iflag;
         self.oflag = termios.oflag;
@@ -292,6 +299,7 @@ impl Termios {
         self.ispeed = termios.ispeed;
         self.ospeed = termios.ospeed;
     }
+    #[allow(unused)]
     pub fn as_bytes(&self) -> &[u8] {
         let size = core::mem::size_of::<Self>();
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, size) }
@@ -299,6 +307,7 @@ impl Termios {
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(unused)]
 pub struct WinSize {
     ws_row: u16,
     ws_col: u16,
@@ -315,12 +324,14 @@ impl WinSize {
             ypixel: 0,
         }
     }
+    #[allow(unused)]
     pub fn update(&mut self, winsize: &Self) {
         self.ws_row = winsize.ws_row;
         self.ws_col = winsize.ws_col;
         self.xpixel = winsize.xpixel;
         self.ypixel = winsize.ypixel;
     }
+    #[allow(unused)]
     pub fn as_bytes(&self) -> &[u8] {
         let size = core::mem::size_of::<Self>();
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, size) }

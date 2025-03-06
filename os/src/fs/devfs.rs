@@ -1,10 +1,4 @@
-use crate::{
-    fs::FileClass,
-    mm::{translated_byte_buffer, UserBuffer},
-    syscall::{IoctlCommand, PollEvents},
-    task::{current_task, INITPROC},
-    utils::SyscallRet,
-};
+use crate::{mm::UserBuffer, task::INITPROC};
 use alloc::{
     collections::BTreeSet,
     fmt::{Debug, Formatter},
@@ -12,11 +6,11 @@ use alloc::{
     string::{String, ToString},
     sync::Arc,
 };
-use core::{cmp::min, mem::size_of};
+use core::cmp::min;
 use lazy_static::lazy_static;
 use spin::Mutex;
 
-use super::{File, Ioctl, Stdout};
+use super::File;
 
 pub struct DevZero;
 pub struct DevNull;
@@ -71,23 +65,27 @@ impl File for DevZero {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, mut user_buf: UserBuffer) -> SyscallRet {
-        Ok(user_buf.fill0())
+    fn read(&self, mut user_buf: UserBuffer) -> usize {
+        user_buf.clear()
     }
-    fn write(&self, user_buf: UserBuffer) -> SyscallRet {
+    fn write(&self, user_buf: UserBuffer) -> usize {
         // do nothing
-        Ok(user_buf.len())
+        user_buf.len()
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::IN) {
-            revents |= PollEvents::IN;
-        }
-        if events.contains(PollEvents::OUT) {
-            revents |= PollEvents::OUT;
-        }
-        revents
+    
+    fn get_name(&self) -> String {
+        todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     if events.contains(PollEvents::OUT) {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     revents
+    // }
 }
 
 impl DevNull {
@@ -103,24 +101,28 @@ impl File for DevNull {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, mut _user_buf: UserBuffer) -> SyscallRet {
+    fn read(&self, mut _user_buf: UserBuffer) -> usize {
         // do nothing
-        Ok(0)
+        0
     }
-    fn write(&self, user_buf: UserBuffer) -> SyscallRet {
+    fn write(&self, user_buf: UserBuffer) -> usize {
         // do nothing
-        Ok(user_buf.len())
+        user_buf.len()
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::IN) {
-            revents |= PollEvents::IN;
-        }
-        if events.contains(PollEvents::OUT) {
-            revents |= PollEvents::OUT;
-        }
-        revents
+    
+    fn get_name(&self) -> String {
+        todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     if events.contains(PollEvents::OUT) {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     revents
+    // }
 }
 
 pub struct RtcTime {
@@ -172,50 +174,54 @@ impl File for DevRtc {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, mut user_buf: UserBuffer) -> SyscallRet {
+    fn read(&self, mut user_buf: UserBuffer) -> usize {
         let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
         let str = format!("{:?}", time);
         let bytes = str.as_bytes();
         let len = min(user_buf.len(), bytes.len());
         user_buf.write(bytes);
-        Ok(len)
+        len
     }
-    fn write(&self, user_buf: UserBuffer) -> SyscallRet {
+    fn write(&self, user_buf: UserBuffer) -> usize {
         // do nothing
-        Ok(user_buf.len())
+        user_buf.len()
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::IN) {
-            revents |= PollEvents::IN;
-        }
-        if events.contains(PollEvents::OUT) {
-            revents |= PollEvents::OUT;
-        }
-        revents
+    
+    fn get_name(&self) -> String {
+        todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     if events.contains(PollEvents::OUT) {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     revents
+    // }
 }
 
-impl Ioctl for DevRtc {
-    fn ioctl(&self, cmd: usize, arg: usize) -> isize {
-        let cmd = IoctlCommand::from(cmd);
-        let task = current_task().unwrap();
-        let mut inner = task.inner_lock();
-        let token = inner.user_token();
+// impl Ioctl for DevRtc {
+//     fn ioctl(&self, cmd: usize, arg: usize) -> isize {
+//         let cmd = IoctlCommand::from(cmd);
+//         let task = current_task().unwrap();
+//         let mut inner = task.inner_lock();
+//         let token = inner.get_user_token();
 
-        match cmd {
-            IoctlCommand::RTC_RD_TIME => {
-                let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
-                let mut arg = UserBuffer::new(
-                    translated_byte_buffer(token, arg as *const u8, size_of::<RtcTime>()).unwrap(),
-                );
-                arg.write(time.as_bytes());
-            }
-            _ => return -1,
-        }
-        0
-    }
-}
+//         match cmd {
+//             IoctlCommand::RTC_RD_TIME => {
+//                 let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
+//                 let mut arg = UserBuffer::new(
+//                     translated_byte_buffer(token, arg as *const u8, size_of::<RtcTime>()),
+//                 );
+//                 arg.write(time.as_bytes());
+//             }
+//             _ => return -1,
+//         }
+//         0
+//     }
+// }
 
 impl DevRandom {
     pub fn new() -> Self {
@@ -230,23 +236,27 @@ impl File for DevRandom {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, mut user_buf: UserBuffer) -> SyscallRet {
-        Ok(user_buf.fillrandom())
+    fn read(&self, mut user_buf: UserBuffer) -> usize {
+        user_buf.fillrandom()
     }
-    fn write(&self, user_buf: UserBuffer) -> SyscallRet {
+    fn write(&self, user_buf: UserBuffer) -> usize {
         // do nothing
-        Ok(user_buf.len())
+        user_buf.len()
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::IN) {
-            revents |= PollEvents::IN;
-        }
-        if events.contains(PollEvents::OUT) {
-            revents |= PollEvents::OUT;
-        }
-        revents
+    
+    fn get_name(&self) -> String {
+        todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     if events.contains(PollEvents::OUT) {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     revents
+    // }
 }
 
 impl DevTty {
@@ -262,40 +272,44 @@ impl File for DevTty {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, mut user_buf: UserBuffer) -> SyscallRet {
-        if let Some(FileClass::Abs(tty_device)) = INITPROC.inner_lock().fd_table.try_get_file(0) {
+    fn read(&self, user_buf: UserBuffer) -> usize {
+        if let Ok(Some(tty_device)) = INITPROC.inner_lock().fd_table.get_file_by_fd(0) {
             tty_device.read(user_buf)
         } else {
             panic!("get Stdin error!");
         }
     }
-    fn write(&self, user_buf: UserBuffer) -> SyscallRet {
-        if let Some(FileClass::Abs(tty_device)) = INITPROC.inner_lock().fd_table.try_get_file(1) {
+    fn write(&self, user_buf: UserBuffer) -> usize {
+        if let Ok(Some(tty_device)) = INITPROC.inner_lock().fd_table.get_file_by_fd(1) {
             tty_device.write(user_buf)
         } else {
             panic!("get Stdout error!");
         }
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::IN) {
-            revents |= PollEvents::IN;
-        }
-        if events.contains(PollEvents::OUT) {
-            revents |= PollEvents::OUT;
-        }
-        revents
+    
+    fn get_name(&self) -> String {
+        todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     if events.contains(PollEvents::OUT) {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     revents
+    // }
 }
 
-impl Ioctl for DevTty {
-    fn ioctl(&self, cmd: usize, arg: usize) -> isize {
-        if let Some(FileClass::Abs(tty_device)) = INITPROC.inner_lock().fd_table.try_get_file(1) {
-            // tty_device.ioctl(cmd, arg)
-            let tty_device = unsafe { Arc::from_raw(Arc::into_raw(tty_device) as *const Stdout) };
-            tty_device.ioctl(cmd, arg)
-        } else {
-            panic!("get Stdout error!");
-        }
-    }
-}
+// impl Ioctl for DevTty {
+//     fn ioctl(&self, cmd: usize, arg: usize) -> isize {
+//         if let Some(FileClass::Abs(tty_device)) = INITPROC.inner_lock().fd_table.try_get_file(1) {
+//             // tty_device.ioctl(cmd, arg)
+//             let tty_device = unsafe { Arc::from_raw(Arc::into_raw(tty_device) as *const Stdout) };
+//             tty_device.ioctl(cmd, arg)
+//         } else {
+//             panic!("get Stdout error!");
+//         }
+//     }
+// }

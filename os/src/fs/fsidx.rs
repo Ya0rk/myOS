@@ -9,7 +9,7 @@ use spin::RwLock;
 use super::Inode;
 
 lazy_static! {
-    pub static ref FSIDX: RwLock<HashMap<String, Arc<dyn Inode>>> = { RwLock::new(HashMap::new()) };
+    pub static ref FSIDX: RwLock<HashMap<String, Arc<dyn Inode>>> = RwLock::new(HashMap::new());
 }
 
 pub fn has_inode(path: &str) -> bool {

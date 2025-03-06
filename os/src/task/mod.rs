@@ -19,6 +19,7 @@ pub use manager::fetch_task;
 pub use processor::{init_processors, current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task, get_current_hart_id};
 
 use crate::arch::shutdown;
+use crate::fs::FileClass;
 use crate::fs::OpenFlags;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -102,9 +103,16 @@ pub fn exit_current_and_run_next(exit_code: i32) {
 lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = Arc::new({
-        let inode = open_file("initproc", OpenFlags::O_RDONLY).unwrap();
-        let v = inode.read_all();
-        TaskControlBlock::new(v.as_slice())
+        // let inode = open_file("initproc", OpenFlags::O_RDONLY).unwrap();
+        // let v = inode.read_all();
+        // TaskControlBlock::new(v.as_slice())
+        if let Some(FileClass::File(inode)) = open_file("initproc", OpenFlags::O_RDONLY) {
+            let elf_data = inode.inode.read_all().unwrap();
+            let res=TaskControlBlock::new(&elf_data);
+            res
+        } else {
+            panic!("error: initproc from Abs File!");
+        }
     });
 }
 ///Add init process to the manager

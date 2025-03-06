@@ -8,12 +8,9 @@
 /// pub fn make_pipe()
 /// ```
 //
-use super::{Dirent, File, Kstat};
+use super::File;
 use crate::mm::UserBuffer;
-use alloc::{
-    string::String,
-    sync::{Arc, Weak},
-};
+use alloc::sync::{Arc, Weak};
 use spin::Mutex;
 
 use crate::task::suspend_current_and_run_next;
@@ -208,21 +205,25 @@ impl File for Pipe {
             }
         }
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::IN) && self.readable {
-            revents |= PollEvents::IN;
-        }
-        if events.contains(PollEvents::OUT) && self.writable {
-            revents |= PollEvents::OUT;
-        }
-        let ring_buffer = self.inner_lock();
-        if self.readable && ring_buffer.all_write_ends_closed() {
-            revents |= PollEvents::HUP;
-        }
-        if self.writable && ring_buffer.all_read_ends_closed() {
-            revents |= PollEvents::ERR;
-        }
-        revents
+    
+    fn get_name(&self) -> alloc::string::String {
+        todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) && self.readable {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     if events.contains(PollEvents::OUT) && self.writable {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     let ring_buffer = self.inner_lock();
+    //     if self.readable && ring_buffer.all_write_ends_closed() {
+    //         revents |= PollEvents::HUP;
+    //     }
+    //     if self.writable && ring_buffer.all_read_ends_closed() {
+    //         revents |= PollEvents::ERR;
+    //     }
+    //     revents
+    // }
 }

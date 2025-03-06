@@ -1,8 +1,7 @@
 use crate::{
     fs::{SEEK_CUR, SEEK_END, SEEK_SET},
     mm::UserBuffer,
-    syscall::PollEvents,
-    utils::{SysErrNo, SyscallRet},
+    utils::Errno,
 };
 
 use super::{File, Inode};
@@ -53,51 +52,41 @@ impl File for OSInode {
         self.writable
     }
 
-    fn read(&self, mut buf: UserBuffer) -> SyscallRet {
+    fn read(&self, mut buf: UserBuffer) -> usize {
         let mut inner = self.inner.lock();
         let mut total_read_size = 0usize;
 
         if self.inode.size() <= inner.offset {
             //读取位置超过文件大小，返回结果为EOF
-            return Ok(0);
+            return 0;
         }
 
         // 这边要使用 iter_mut()，因为要将数据写入
         for slice in buf.buffers.iter_mut() {
-            let read_size = self.inode.read_at(inner.offset, *slice)?;
+            let read_size = self.inode.read_at(inner.offset, *slice);
             if read_size == 0 {
                 break;
             }
             inner.offset += read_size;
             total_read_size += read_size;
         }
-        Ok(total_read_size)
+        total_read_size
     }
 
-    fn write(&self, buf: UserBuffer) -> SyscallRet {
+    fn write(&self, buf: UserBuffer) -> usize {
         let mut inner = self.inner.lock();
         let mut total_write_size = 0usize;
         for slice in buf.buffers.iter() {
-            let write_size = self.inode.write_at(inner.offset, *slice)?;
+            let write_size = self.inode.write_at(inner.offset, *slice);
             assert_eq!(write_size, slice.len());
             inner.offset += write_size;
             total_write_size += write_size;
         }
-        Ok(total_write_size)
+        total_write_size
     }
-    fn poll(&self, events: PollEvents) -> PollEvents {
-        let mut revents = PollEvents::empty();
-        if events.contains(PollEvents::IN) && self.readable {
-            revents |= PollEvents::IN;
-        }
-        if events.contains(PollEvents::OUT) && self.writable {
-            revents |= PollEvents::OUT;
-        }
-        revents
-    }
-    fn lseek(&self, offset: isize, whence: usize) -> SyscallRet {
+    fn lseek(&self, offset: isize, whence: usize) -> usize {
         if offset < 0 || whence > 2 {
-            return Err(SysErrNo::EINVAL);
+            return Errno::EINVAL.into();
         }
         let offset: usize = offset as usize;
         let mut inner = self.inner.lock();
@@ -108,6 +97,10 @@ impl File for OSInode {
         } else if whence == SEEK_END {
             inner.offset = self.inode.size() + offset;
         }
-        Ok(inner.offset)
+        inner.offset
+    }
+    
+    fn get_name(&self) -> String {
+        self.path.clone()
     }
 }

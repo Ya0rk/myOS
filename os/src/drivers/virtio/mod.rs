@@ -10,8 +10,7 @@ use crate::{
     mm::{
         frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PageTable, PhysAddr, PhysPageNum,
         StepByOne, VirtAddr,
-    },
-    task::current_token,
+    }, task::current_user_token,
 };
 use alloc::{sync::Arc, vec::Vec};
 use lazy_static::*;
@@ -32,7 +31,7 @@ impl Hal for VirtIoHalImpl {
                 ppn_base = frame.ppn;
             }
             assert_eq!(frame.ppn.0, ppn_base.0 + i);
-            QUEUE_FRAMES.lock().push(frame);
+            QUEUE_FRAMES.lock().push(Arc::new(frame));
         }
         let pa: PhysAddr = ppn_base.into();
         pa.0
@@ -53,7 +52,7 @@ impl Hal for VirtIoHalImpl {
     }
 
     fn virt_to_phys(vaddr: usize) -> usize {
-        PageTable::from_token(current_token())
+        PageTable::from_token(current_user_token())
             .translate_va(VirtAddr::from(vaddr))
             .unwrap()
             .0

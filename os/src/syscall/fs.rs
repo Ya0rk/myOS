@@ -1,7 +1,7 @@
 use alloc::string::String;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{open_file, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
@@ -66,28 +66,29 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
     if kst.is_null() {
         return Err(Errno::EFAULT);
     }
+    Ok(0)
 
-    let token = inner.get_user_token();
-    let mut buffer = UserBuffer::new(
-        translated_byte_buffer(
-            token, 
-            kst, 
-            core::mem::size_of::<Kstat>()
-    ));
+    // let token = inner.get_user_token();
+    // let mut buffer = UserBuffer::new(
+    //     translated_byte_buffer(
+    //         token, 
+    //         kst, 
+    //         core::mem::size_of::<Kstat>()
+    // ));
 
-    let mut stat = Kstat::new();
-    match inner.fd_table.get_file_by_fd(fd) {
-        Ok(Some(file)) => {
-            drop(inner);
-            file.get_fstat(&mut stat);
-            buffer.write(stat.as_bytes());
-            info!("fstat finished");
-            return Ok(0);
-        }
-        _ => {
-            return Err(Errno::EBADCALL);
-        }
-    }
+    // let mut stat = Kstat::new();
+    // match inner.fd_table.get_file_by_fd(fd) {
+    //     Ok(Some(file)) => {
+    //         drop(inner);
+    //         file.fstat(&mut stat);
+    //         buffer.write(stat.as_bytes());
+    //         info!("fstat finished");
+    //         return Ok(0);
+    //     }
+    //     _ => {
+    //         return Err(Errno::EBADCALL);
+    //     }
+    // }
 }
 
 /// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
@@ -177,7 +178,7 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     // 检查路径是否有效并打开文件
     let result = if let Some(inode) = open_file(target_path.as_str(), flags) {
         let mut inner = task.inner_lock();
-        let fd = inner.fd_table.alloc_fd(Fd::new(inode, flags))? as usize;
+        let fd = inner.fd_table.alloc_fd(Fd::new(inode.file()?, flags))? as usize;
         if fd > RLIMIT_NOFILE {
             Err(Errno::EMFILE)
         } else {
@@ -248,7 +249,7 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// len：buf的大小。
 /// 
 /// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
-pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
+pub fn sys_getdents64(fd: usize, buf: *const u8, _len: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let inner = task.inner_lock();
     if fd >= inner.fd_table_len() || fd > RLIMIT_NOFILE {

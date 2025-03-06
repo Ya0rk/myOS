@@ -8,23 +8,24 @@ mod stdio;
 mod vfs;
 mod ffi;
 mod ext4;
-pub use ext4::{sync,fs_stat,root_inode,ls};
+mod path;
 
-
+pub use ext4::{root_inode,ls};
+pub use ffi::{OpenFlags, UmountFlags, MountFlags};
 use crate::mm::UserBuffer;
-use crate::utils::{get_abs_path, rsplit_once, GeneralRet, SysErrNo};
-use alloc::string::String;
+use crate::utils::{Errno, SysResult};
+use alloc::string::{String, ToString};
 use alloc::{sync::Arc, vec::Vec};
 pub use devfs::*;
+pub use path::{Path, path_test};
 pub use dirent::Dirent;
 pub use fsidx::*;
-pub use fstruct::{FdTable, FdTableInner, FsInfo};
-use log::{debug, info};
+use log::info;
 pub use mount::MNT_TABLE;
-pub use pipe::{make_pipe, Pipe};
-pub use stat::{Kstat, Statfs};
-pub use stdio::{Stdin, Stdout};
+pub use pipe::Pipe;
+pub use stat::Kstat;
 pub use vfs::*;
+pub use stdio::{Stdin, Stdout};
 
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
@@ -40,21 +41,21 @@ pub enum FileClass {
 }
 
 impl FileClass {
-    pub fn file(&self) -> Result<Arc<OSInode>, SysErrNo> {
+    pub fn file(&self) -> Result<Arc<OSInode>, Errno> {
         match self {
             FileClass::File(f) => Ok(f.clone()),
-            FileClass::Abs(f) => Err(SysErrNo::EINVAL),
+            FileClass::Abs(_) => Err(Errno::EINVAL),
         }
     }
-    pub fn abs(&self) -> Result<Arc<dyn File>, SysErrNo> {
+    pub fn abs(&self) -> Result<Arc<dyn File>, Errno> {
         match self {
-            FileClass::File(f) => Err(SysErrNo::EINVAL),
+            FileClass::File(_) => Err(Errno::EINVAL),
             FileClass::Abs(f) => Ok(f.clone()),
         }
     }
 }
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum InodeType {
     Unknown = 0o0,
     /// FIFO (named pipe)
@@ -112,11 +113,11 @@ pub fn flush_preload() {
     extern "C" {
         fn initproc_start();
         fn initproc_end();
-        fn shell_start();
-        fn shell_end();
+        // fn shell_start();
+        // fn shell_end();
     }
 
-    if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREATE) {
+    if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
         let mut v = Vec::new();
         v.push(unsafe {
             core::slice::from_raw_parts_mut(
@@ -142,16 +143,11 @@ pub fn flush_preload() {
 pub fn init() {
     insert_inode_idx("/", root_inode());
     flush_preload();
-    create_init_files();
+    let _ = create_init_files();
 }
 
 pub fn list_apps() {
     println!("/**** APPS ****");
-    #[cfg(feature = "fat32")]
-    for app in root_inode().ls() {
-        println!("{}", app);
-    }
-    #[cfg(feature = "ext4_lw")]
     ls();
     println!("**************/");
 }
@@ -206,49 +202,49 @@ const ADJTIME: &str = "0.000000 0.000000 UTC\n";
 const LOCALTIME: &str =
     "lrwxrwxrwx 1 root root 33 11月 18  2023 /etc/localtime -> /usr/share/zoneinfo/Asia/Shanghai\n";
 
-pub fn create_init_files() -> GeneralRet {
+pub fn create_init_files() -> SysResult {
     //创建/proc文件夹
     open(
         "/",
         "proc",
-        OpenFlags::O_CREATE | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
     );
     //创建/proc/mounts文件系统使用情况
     if let Some(FileClass::File(mountsfile)) =
-        open("/proc", "mounts", OpenFlags::O_CREATE | OpenFlags::O_RDWR)
+        open("/proc", "mounts", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
     {
         let mut mountsinfo = String::from(MOUNTS);
         let mut mountsvec = Vec::new();
         unsafe {
-            let mut mounts = mountsinfo.as_bytes_mut();
+            let mounts = mountsinfo.as_bytes_mut();
             mountsvec.push(core::slice::from_raw_parts_mut(
                 mounts.as_mut_ptr(),
                 mounts.len(),
             ));
         }
         let mountbuf = UserBuffer::new(mountsvec);
-        let mountssize = mountsfile.write(mountbuf)?;
-        debug!("create /proc/mounts with {} sizes", mountssize);
+        let mountssize = mountsfile.write(mountbuf);
+        info!("create /proc/mounts with {} sizes", mountssize);
     }
     //创建/proc/meminfo系统内存使用情况
     if let Some(FileClass::File(memfile)) =
-        open("/proc", "meminfo", OpenFlags::O_CREATE | OpenFlags::O_RDWR)
+        open("/proc", "meminfo", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
     {
         let mut meminfo = String::from(MEMINFO);
         let mut memvec = Vec::new();
         unsafe {
-            let mut mem = meminfo.as_bytes_mut();
+            let mem = meminfo.as_bytes_mut();
             memvec.push(core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()));
         }
         let membuf = UserBuffer::new(memvec);
-        let memsize = memfile.write(membuf)?;
-        debug!("create /proc/meminfo with {} sizes", memsize);
+        let memsize = memfile.write(membuf);
+        info!("create /proc/meminfo with {} sizes", memsize);
     }
     //创建/dev文件夹
     open(
         "/",
         "dev",
-        OpenFlags::O_CREATE | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
     );
     //注册设备/dev/rtc和/dev/rtc0
     register_device("/dev/rtc");
@@ -263,7 +259,7 @@ pub fn create_init_files() -> GeneralRet {
     open(
         "/dev",
         "misc",
-        OpenFlags::O_CREATE | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
     );
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
@@ -271,38 +267,38 @@ pub fn create_init_files() -> GeneralRet {
     open(
         "/",
         "etc",
-        OpenFlags::O_CREATE | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
     );
     //创建/etc/adjtime记录时间偏差
     if let Some(FileClass::File(adjtimefile)) =
-        open("/etc", "adjtime", OpenFlags::O_CREATE | OpenFlags::O_RDWR)
+        open("/etc", "adjtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
     {
         let mut adjtime = String::from(ADJTIME);
         let mut adjtimevec = Vec::new();
         unsafe {
-            let mut adj = adjtime.as_bytes_mut();
+            let adj = adjtime.as_bytes_mut();
             adjtimevec.push(core::slice::from_raw_parts_mut(adj.as_mut_ptr(), adj.len()));
         }
         let adjtimebuf = UserBuffer::new(adjtimevec);
-        let adjtimesize = adjtimefile.write(adjtimebuf)?;
-        debug!("create /etc/adjtime with {} sizes", adjtimesize);
+        let adjtimesize = adjtimefile.write(adjtimebuf);
+        info!("create /etc/adjtime with {} sizes", adjtimesize);
     }
     //创建./etc/localtime记录时区
     if let Some(FileClass::File(localtimefile)) =
-        open("/etc", "localtime", OpenFlags::O_CREATE | OpenFlags::O_RDWR)
+        open("/etc", "localtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
     {
         let mut localtime = String::from(LOCALTIME);
         let mut localtimevec = Vec::new();
         unsafe {
-            let mut local = localtime.as_bytes_mut();
+            let local = localtime.as_bytes_mut();
             localtimevec.push(core::slice::from_raw_parts_mut(
                 local.as_mut_ptr(),
                 local.len(),
             ));
         }
         let localtimebuf = UserBuffer::new(localtimevec);
-        let localtimesize = localtimefile.write(localtimebuf)?;
-        debug!("create /etc/localtime with {} sizes", localtimesize);
+        let localtimesize = localtimefile.write(localtimebuf);
+        info!("create /etc/localtime with {} sizes", localtimesize);
     }
     println!("create_init_files success!");
     Ok(())
@@ -314,7 +310,7 @@ fn create_file(
     child_name: &str,
     flags: OpenFlags,
 ) -> Option<FileClass> {
-    debug!(
+    info!(
         "[create_file],flags={:?},abs_path={},parent_path={},child_name={}",
         flags, abs_path, parent_path, child_name
     );
@@ -342,7 +338,9 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
 }
 
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
-    let abs_path = get_abs_path(cwd, path);
+    let kpath = Path::string2path(path.to_string());
+    let new_path = kpath.join_path_2_absolute(cwd.to_string());
+    let abs_path = new_path.get();
     //判断是否是设备文件
     if find_device(&abs_path) {
         if let Some(device) = open_device_file(&abs_path) {
@@ -352,14 +350,15 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     }
 
     // !必须要知道父结点
-    let (parent_path, child_name) = rsplit_once(&abs_path, "/");
+    let (parent_path, child_name) = new_path.split_with("/");
+    let (parent_path, child_name) = (parent_path.as_str(), child_name.as_str());
 
-    debug!(
+    info!(
         "[open] cwd={},path={},parent={},child={},abs={}",
         cwd, path, parent_path, child_name, &abs_path
     );
 
-    let (parent_inode, child) = if has_inode(parent_path) {
+    let (parent_inode, _) = if has_inode(parent_path) {
         (find_inode_idx(parent_path).unwrap(), child_name)
     } else {
         if cwd == "/" {
@@ -397,7 +396,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     }
 
     // 节点不存在
-    if flags.contains(OpenFlags::O_CREATE) {
+    if flags.contains(OpenFlags::O_CREAT) {
         return create_file(abs_path.clone(), parent_path, child_name, flags);
     }
     None

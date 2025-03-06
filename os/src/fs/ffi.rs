@@ -1,7 +1,9 @@
 use bitflags::*;
 
+use super::InodeType;
+
 bitflags! {
-    #[derive(Clone, Copy, PartialEq, Eq)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     ///Open file flags
     pub struct OpenFlags: i32 {
         // reserve 3 bits for the access mode

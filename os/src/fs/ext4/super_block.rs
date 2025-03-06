@@ -23,9 +23,9 @@ impl SuperBlock for Ext4SuperBlock {
     fn root_inode(&self) -> Arc<dyn Inode> {
         self.root.clone()
     }
-    fn fs_stat(&self) -> crate::fs::Statfs {
-        todo!()
-    }
+    // fn fs_stat(&self) -> crate::fs::Statfs {
+    //     todo!()
+    // }
     fn sync(&self) {
         todo!()
     }
