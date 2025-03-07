@@ -20,7 +20,7 @@ pub use devfs::*;
 pub use path::{Path, path_test};
 pub use dirent::Dirent;
 pub use fsidx::*;
-use log::info;
+use log::debug;
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
 pub use stat::Kstat;
@@ -146,10 +146,11 @@ pub fn init() {
     let _ = create_init_files();
 }
 
-pub fn list_apps() {
+pub fn list_apps() -> bool{
     println!("/**** APPS ****");
     ls();
     println!("**************/");
+    true
 }
 
 //
@@ -224,7 +225,7 @@ pub fn create_init_files() -> SysResult {
         }
         let mountbuf = UserBuffer::new(mountsvec);
         let mountssize = mountsfile.write(mountbuf);
-        info!("create /proc/mounts with {} sizes", mountssize);
+        debug!("create /proc/mounts with {} sizes", mountssize);
     }
     //创建/proc/meminfo系统内存使用情况
     if let Some(FileClass::File(memfile)) =
@@ -238,7 +239,7 @@ pub fn create_init_files() -> SysResult {
         }
         let membuf = UserBuffer::new(memvec);
         let memsize = memfile.write(membuf);
-        info!("create /proc/meminfo with {} sizes", memsize);
+        debug!("create /proc/meminfo with {} sizes", memsize);
     }
     //创建/dev文件夹
     open(
@@ -281,7 +282,7 @@ pub fn create_init_files() -> SysResult {
         }
         let adjtimebuf = UserBuffer::new(adjtimevec);
         let adjtimesize = adjtimefile.write(adjtimebuf);
-        info!("create /etc/adjtime with {} sizes", adjtimesize);
+        debug!("create /etc/adjtime with {} sizes", adjtimesize);
     }
     //创建./etc/localtime记录时区
     if let Some(FileClass::File(localtimefile)) =
@@ -298,9 +299,8 @@ pub fn create_init_files() -> SysResult {
         }
         let localtimebuf = UserBuffer::new(localtimevec);
         let localtimesize = localtimefile.write(localtimebuf);
-        info!("create /etc/localtime with {} sizes", localtimesize);
+        debug!("create /etc/localtime with {} sizes", localtimesize);
     }
-    println!("create_init_files success!");
     Ok(())
 }
 
@@ -310,7 +310,7 @@ fn create_file(
     child_name: &str,
     flags: OpenFlags,
 ) -> Option<FileClass> {
-    info!(
+    debug!(
         "[create_file],flags={:?},abs_path={},parent_path={},child_name={}",
         flags, abs_path, parent_path, child_name
     );
@@ -353,7 +353,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     let (parent_path, child_name) = new_path.split_with("/");
     let (parent_path, child_name) = (parent_path.as_str(), child_name.as_str());
 
-    info!(
+    debug!(
         "[open] cwd={},path={},parent={},child={},abs={}",
         cwd, path, parent_path, child_name, &abs_path
     );

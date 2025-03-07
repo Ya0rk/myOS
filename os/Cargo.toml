@@ -23,7 +23,7 @@ hashbrown = "0.15.2"
 
 [features]
 board_qemu = []
-default = ["info", "mul_hart", "test"]
+default = ["info", "test", "mul_hart"]
 error = []
 warn = []
 info = []

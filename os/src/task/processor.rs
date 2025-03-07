@@ -1,5 +1,4 @@
 use core::cell::UnsafeCell;
-
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
@@ -46,13 +45,13 @@ impl Processor {
 }
 
 pub struct SyncProcessors(UnsafeCell<[Processor; HART_NUM]>);
-
 unsafe impl Sync for SyncProcessors {}
 
 /// 多核管理器 TODO
 /// 每个核只会访对应id的Processor，所以不需要加锁
 const PROCESSOR: Processor = Processor::new();
 pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSOR; HART_NUM]));
+
 
 ///Init PROCESSORS
 pub fn init_processors() {
@@ -115,9 +114,7 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 }
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {
-    let task = current_task().unwrap();
-    let token = task.inner_lock().get_user_token();
-    token
+    riscv::register::satp::read().bits()
 }
 ///Get the mutable reference to trap context of current task
 pub fn current_trap_cx() -> &'static mut TrapContext {

@@ -6,7 +6,7 @@ use crate::trap::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use log::info;
+use log::debug;
 use spin::{Mutex, MutexGuard};
 
 pub struct TaskControlBlock {
@@ -117,12 +117,12 @@ impl TaskControlBlock {
             kernel_stack_top,
             trap_loop as usize,
         );
-        println!("initproc successfully created, pid: {}", task_control_block.getpid());
-        println!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
+        debug!("initproc successfully created, pid: {}", task_control_block.getpid());
+        debug!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
         task_control_block
     }
     pub fn exec(&self, elf_data: &[u8]) {
-        info!("exec start");
+        debug!("exec start");
         let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx_ppn = memory_set
             .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
@@ -136,14 +136,14 @@ impl TaskControlBlock {
             kernel_stack_top.into(),
             MapPermission::R | MapPermission::W,
         );
-        info!("exec memory_set created");
+        debug!("exec memory_set created");
         
         // **** access inner exclusively
         let mut inner = self.inner_lock();
-        info!("satp before : {:#x}", inner.memory_set.token());
+        debug!("satp before : {:#x}", inner.memory_set.token());
         // substitute memory_set
         inner.memory_set = memory_set;
-        info!("satp after : {:#x}", inner.memory_set.token());
+        debug!("satp after : {:#x}", inner.memory_set.token());
         // update trap_cx ppn
         inner.trap_cx_ppn = trap_cx_ppn;
 
@@ -155,7 +155,7 @@ impl TaskControlBlock {
             trap_loop as usize,
         );
         *inner.get_trap_cx() = trap_cx;
-        info!("task.exec.pid={}", self.pid.0);
+        debug!("task.exec.pid={}", self.pid.0);
         // **** release inner automatically
     }
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {

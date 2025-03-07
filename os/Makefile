@@ -76,11 +76,11 @@ PHONY += env
 $(KERNEL_BIN): kernel
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-fs-img: $(APPS)
-	@cd ../user && make build TEST=$(TEST)
-	@rm -f $(FS_IMG)
-	@cd ../easy-fs-fuse && cargo run $(MODE_ARG) -- -s ../user/src/bin/ -t ../user/target/$(TARGET)/$(MODE)/
-PHONY += fs-img
+# fs-img: $(APPS)
+# 	@cd ../user && make build TEST=$(TEST)
+# 	@rm -f ../$(FS)/fs
+# 	@cd ../easy-fs-fuse && cargo run $(MODE_ARG) -- -s ../user/src/bin/ -t ../user/target/$(TARGET)/$(MODE)/
+# PHONY += fs-img
 
 copy_to_fs: 
 	cd ../$(FS) && sh create_img.sh 

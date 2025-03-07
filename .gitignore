@@ -7,6 +7,9 @@
 **/Cargo.lock
 **/target/
 
+*.img
+*.diff
+
 os/src/link_app.S
 os/src/linker.ld
 os/last-*
@@ -22,4 +25,3 @@ easy-fs-fuse/Cargo.lock
 easy-fs-fuse/target/*
 tools/
 pushall.sh
-*.img

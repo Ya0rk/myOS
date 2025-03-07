@@ -2,6 +2,7 @@ mod blk;
 
 pub use blk::*;
 
+// use log::info;
 use spin::Mutex;
 use virtio_drivers::Hal;
 
@@ -52,6 +53,7 @@ impl Hal for VirtIoHalImpl {
     }
 
     fn virt_to_phys(vaddr: usize) -> usize {
+        // info!("kkkkkk");
         PageTable::from_token(current_user_token())
             .translate_va(VirtAddr::from(vaddr))
             .unwrap()
