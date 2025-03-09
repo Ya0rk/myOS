@@ -154,7 +154,7 @@ pub fn list_apps() -> bool{
 }
 
 //
-const MOUNTS: &str = " fat32 / fat rw 0 0\n";
+const MOUNTS: &str = " ext4 / ext4 rw 0 0\n";
 const MEMINFO: &str = r"
 MemTotal:         944564 kB
 MemFree:          835248 kB
