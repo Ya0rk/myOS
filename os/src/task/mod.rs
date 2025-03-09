@@ -23,7 +23,6 @@ use crate::fs::FileClass;
 use crate::fs::OpenFlags;
 use alloc::sync::Arc;
 use lazy_static::*;
-use task::TaskStatus;
 use crate::fs::open_file;
 use switch::__switch;
 
@@ -31,11 +30,9 @@ use switch::__switch;
 pub fn suspend_current_and_run_next() {
     if let Some(task) = take_current_task(){
         // ---- access current TCB exclusively
-        let mut task_inner = task.inner_lock();
-        let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
+        let task_cx_ptr = task.get_task_cx_mut() as *mut TaskContext;
         // Change status to Ready
-        task_inner.task_status = TaskStatus::Ready;
-        drop(task_inner);
+        task.set_ready();
         // ---- release current PCB
 
         // push back to ready queue.
@@ -69,29 +66,26 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     }
 
     // **** access current TCB exclusively
-    let mut inner = task.inner_lock();
     // Change status to Zombie
-    inner.task_status = TaskStatus::Zombie;
+    task.set_zombie();
     // Record exit code
-    inner.exit_code = exit_code;
+    task.set_exit_code(exit_code);
     // do not move to its parent but under initproc
 
     // 将当前进程的子进程移动到initproc下
     // ++++++ access initproc TCB exclusively
     {
-        let mut initproc_inner = INITPROC.inner_lock();
-        for child in inner.children.iter() {
-            child.inner_lock().parent = Some(Arc::downgrade(&INITPROC));
-            initproc_inner.children.push(child.clone());
+        for child in task.children.lock().iter() {
+            child.set_parent(Some(Arc::downgrade(&INITPROC)));
+            INITPROC.add_children(child.clone());
         }
     }
     // ++++++ release parent PCB
 
     // 删除当前进程的所有子进程
-    inner.children.clear();
+    task.clear_children();
     // deallocate user space
-    inner.memory_set.recycle_data_pages();
-    drop(inner);
+    task.recycle_data_pages();
     // **** release current PCB
     // drop task manually to maintain rc correctly
     drop(task);

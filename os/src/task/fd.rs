@@ -100,6 +100,7 @@ impl FdTable {
         self.table.len()
     }
 
+    /// 通过fd获取文件
     pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn File + Send + Sync>>> {
         if idx >= self.table_len() {
             return  Err(Errno::EBADF);

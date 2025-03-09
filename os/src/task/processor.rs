@@ -1,6 +1,6 @@
 use core::cell::UnsafeCell;
 use super::__switch;
-use super::{fetch_task, TaskStatus};
+use super::fetch_task;
 use super::{TaskContext, TaskControlBlock};
 use crate::config::HART_NUM;
 use crate::mm::KERNEL_SPACE;
@@ -90,11 +90,10 @@ pub fn run_tasks() {
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr(); // 内核线程负责分发用户线程
             // access coming task TCB exclusively
-            let mut task_inner = task.inner_lock();
-            let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
-            task_inner.task_status = TaskStatus::Running;
-            unsafe { task_inner.memory_set.activate() }; // 更新stap寄存器和刷新TLB
-            drop(task_inner);
+            let next_task_cx_ptr = task.get_task_cx() as *const TaskContext;
+            task.set_running();
+            task.fresh_tlb(); // 更新stap寄存器和刷新TLB
+            
             // release coming task TCB manually
             processor.current = Some(task);
             unsafe {
@@ -123,8 +122,7 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
     }
     current_task()
         .unwrap()
-        .inner_lock()
-        .get_trap_cx()
+        .get_trap_cx_mut()
 }
 ///Return to idle control flow for new scheduling
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {

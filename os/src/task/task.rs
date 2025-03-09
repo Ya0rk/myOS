@@ -1,72 +1,49 @@
+use core::cell::SyncUnsafeCell;
+use core::sync::atomic::AtomicI32;
+
 use super::{Fd, FdTable, TaskContext};
 use super::{pid_alloc, KernelStack, PidHandle};
-use crate::config::USER_TRAP_CONTEXT;
-use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr};
+use crate::fs::File;
+use crate::mm::{MapPermission, MemorySet};
+use crate::sync::{new_shared, Shared};
 use crate::trap::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use log::debug;
-use spin::{Mutex, MutexGuard};
+
+#[derive(Copy, Clone, PartialEq)]
+pub enum TaskStatus {
+    Ready,
+    Running,
+    Zombie,
+}
 
 pub struct TaskControlBlock {
-    // immutable
-    pub pid: PidHandle,
-    pub kernel_stack: KernelStack,
-    // mutable
-    inner: Mutex<TaskControlBlockInner>,
-}
+    // 不可变
+    pid:            PidHandle,
+    kernel_stack:   KernelStack,
 
-pub struct TaskControlBlockInner {
-    pub trap_cx_ppn: PhysPageNum,
-    pub base_size: usize,
-    pub task_cx: TaskContext,
-    pub task_status: TaskStatus,
-    pub memory_set: MemorySet,
-    pub parent: Option<Weak<TaskControlBlock>>,
-    pub children: Vec<Arc<TaskControlBlock>>,
-    pub exit_code: i32,
-    // pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
-    pub fd_table: FdTable,
-    pub current_path: String,
-}
-
-impl TaskControlBlockInner {
-    pub fn get_trap_cx(&self) -> &'static mut TrapContext {
-        self.trap_cx_ppn.get_mut()
-    }
-    pub fn get_user_token(&self) -> usize {
-        self.memory_set.token()
-    }
-    fn get_status(&self) -> TaskStatus {
-        self.task_status
-    }
-    pub fn is_zombie(&self) -> bool {
-        self.get_status() == TaskStatus::Zombie
-    }
-    pub fn get_current_path(&self) -> String {
-        self.current_path.clone()
-    }
-    pub fn fd_table_len(&self) -> usize {
-        self.fd_table.table_len()
-    }
-    /// 判断是否打开文件描述符fd
-    pub fn fd_is_none(&self, fd: usize) -> bool {
-        self.fd_table.table[fd].is_none()
-    }
-    /// 将fd作为index获取文件描述符
-    pub fn get_fd(&self, fd: usize) -> Fd {
-        self.fd_table.get_fd(fd).unwrap()
-    }
+    // 可变
+    // inner: SpinNoIrqLock<TaskControlBlockInner>,
     
+    base_size:      Shared<usize>,
+    task_status:    Shared<TaskStatus>,
+    memory_set:     Shared<MemorySet>,
+    parent:         Shared<Option<Weak<TaskControlBlock>>>,
+    pub children:   Shared<Vec<Arc<TaskControlBlock>>>,
+    fd_table:       Shared<FdTable>,
+    current_path:   Shared<String>,
+
+    trap_cx:        SyncUnsafeCell<TrapContext>,
+    task_cx:        SyncUnsafeCell<TaskContext>,
+
+    exit_code:      AtomicI32,
 }
 
 impl TaskControlBlock {
-    pub fn inner_lock(&self) -> MutexGuard<'_, TaskControlBlockInner> {
-        self.inner.lock()
-    }
     pub fn get_ppid(&self) -> usize {
-        self.inner_lock().parent.as_ref().map(|p| p.upgrade().unwrap().pid.0).unwrap_or(0)
+        self.parent.lock().as_ref().map(|p| p.upgrade().unwrap().pid.0).unwrap_or(0)
     }
     pub fn get_pid(&self) -> usize {
         self.pid.0
@@ -75,10 +52,12 @@ impl TaskControlBlock {
     pub fn new(elf_data: &[u8]) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
+        let trap_cx = TrapContext::app_init_context(
+            entry_point,
+            user_sp,
+            0,
+            trap_loop as usize,
+        );
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
@@ -95,28 +74,23 @@ impl TaskControlBlock {
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
-            inner: 
-                Mutex::new(TaskControlBlockInner {
-                    trap_cx_ppn,
-                    base_size: user_sp,
-                    task_cx: TaskContext::goto_trap_loop(kernel_stack_top),
-                    task_status: TaskStatus::Ready,
-                    memory_set,
-                    parent: None,
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: FdTable::new(),
-                    current_path: String::from("/"), // root directory
-                }),
+            
+            // Shared
+            base_size: new_shared(user_sp),
+            task_status: new_shared(TaskStatus::Ready),
+            memory_set: new_shared(memory_set),
+            parent: new_shared(None),
+            children: new_shared(Vec::new()),
+            fd_table: new_shared(FdTable::new()),
+            current_path: new_shared(String::from("/")), // root directory
+            
+            // SyncUnsafeCell
+            trap_cx: SyncUnsafeCell::new(trap_cx),
+            task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
+
+            exit_code: AtomicI32::new(0),
         };
-        // prepare TrapContext in user space
-        let trap_cx = task_control_block.inner_lock().get_trap_cx();
-        *trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            kernel_stack_top,
-            trap_loop as usize,
-        );
+
         debug!("initproc successfully created, pid: {}", task_control_block.getpid());
         debug!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
         task_control_block
@@ -124,10 +98,6 @@ impl TaskControlBlock {
     pub fn exec(&self, elf_data: &[u8]) {
         debug!("exec start");
         let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
-        let trap_cx_ppn = memory_set
-            .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
         
         // 建立该进程的kernel stack
         let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
@@ -139,13 +109,9 @@ impl TaskControlBlock {
         debug!("exec memory_set created");
         
         // **** access inner exclusively
-        let mut inner = self.inner_lock();
-        debug!("satp before : {:#x}", inner.memory_set.token());
         // substitute memory_set
-        inner.memory_set = memory_set;
-        debug!("satp after : {:#x}", inner.memory_set.token());
-        // update trap_cx ppn
-        inner.trap_cx_ppn = trap_cx_ppn;
+        let mut mem = self.memory_set.lock();
+        *mem = memory_set;
 
         // initialize trap_cx
         let trap_cx = TrapContext::app_init_context(
@@ -154,24 +120,26 @@ impl TaskControlBlock {
             self.kernel_stack.get_top(),
             trap_loop as usize,
         );
-        *inner.get_trap_cx() = trap_cx;
+        let old_trap_cx = self.get_trap_cx_mut();
+        *old_trap_cx = trap_cx;
         debug!("task.exec.pid={}", self.pid.0);
         // **** release inner automatically
     }
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
         // ---- access parent PCB exclusively
-        let mut parent_inner = self.inner_lock();
+        let parent = self;
         // copy user space(include trap context)
-        let mut child_memory_set = MemorySet::clone_from_existed_proc(&parent_inner.memory_set);
-        let child_trap_cx_ppn = child_memory_set
-            .translate(VirtAddr::from(USER_TRAP_CONTEXT).into())
-            .unwrap()
-            .ppn();
+        let mut child_memory_set = MemorySet::clone_from_existed_proc(&parent.memory_set.lock());
+
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let kernel_stack = KernelStack::new(&pid_handle);
-
         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
+
+        // modify kernel_sp in trap_cx
+        let trap_cx = parent.get_trap_cx_mut();
+        trap_cx.set_kernel_sp(kernel_stack_top);
+
         child_memory_set.insert_framed_area(
             kernel_stack_bottom.into(),
             kernel_stack_top.into(),
@@ -181,39 +149,133 @@ impl TaskControlBlock {
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
-            inner:
-                Mutex::new(TaskControlBlockInner {
-                    trap_cx_ppn: child_trap_cx_ppn,
-                    base_size: parent_inner.base_size,
-                    task_cx: TaskContext::goto_trap_loop(kernel_stack_top),
-                    task_status: TaskStatus::Ready,
-                    memory_set: child_memory_set,
-                    parent: Some(Arc::downgrade(self)),
-                    children: Vec::new(),
-                    exit_code: 0,
-                    fd_table: parent_inner.fd_table.clone(),    // copy fd table
-                    current_path: parent_inner.current_path.clone(),
-                }),
+
+            // Shared
+            base_size: parent.base_size.clone(),
+            task_status: new_shared(TaskStatus::Ready),
+            memory_set: new_shared(child_memory_set),
+            parent: new_shared(Some(Arc::downgrade(self))),
+            children: new_shared(Vec::new()),
+            fd_table: parent.fd_table.clone(),    // copy fd table
+            current_path: parent.current_path.clone(),
+
+            // SyncUnsafeCell
+            trap_cx: SyncUnsafeCell::new(*trap_cx),
+            task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
+
+            exit_code: AtomicI32::new(0),
         });
         // add child
-        parent_inner.children.push(task_control_block.clone());
-        // modify kernel_sp in trap_cx
-        // **** access children PCB exclusively
-        let trap_cx = task_control_block.inner_lock().get_trap_cx();
-        trap_cx.set_kernel_sp(kernel_stack_top);
-        // return
+        parent.children.lock().push(task_control_block.clone());
+        
         task_control_block
-        // ---- release parent PCB automatically
-        // **** release children PCB automatically
     }
+    /// 获取当前进程的pid
     pub fn getpid(&self) -> usize {
         self.pid.0
     }
+
+    pub fn get_user_token(&self) -> usize {
+        self.memory_set.lock().token()
+    }
 }
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum TaskStatus {
-    Ready,
-    Running,
-    Zombie,
+impl TaskControlBlock {
+    fn get_status(&self) -> TaskStatus {
+        *self.task_status.lock()
+    }
+    pub fn set_ready(&self) {
+        *self.task_status.lock() = TaskStatus::Ready;
+    }
+    pub fn set_running(&self) {
+        *self.task_status.lock() = TaskStatus::Running;
+    }
+    pub fn set_zombie(&self) {
+        *self.task_status.lock() = TaskStatus::Zombie;
+    }
+    pub fn is_zombie(&self) -> bool {
+        self.get_status() == TaskStatus::Zombie
+    }
+    pub fn get_task_cx(&self) -> &TaskContext {
+        unsafe { &*self.task_cx.get() }
+    }
+    pub fn get_task_cx_mut(&self) -> &'static mut TaskContext {
+        unsafe { &mut *(self.task_cx.get() as *mut TaskContext) }
+    }
+    pub fn get_trap_cx(&self) -> &TrapContext {
+        unsafe { &*self.trap_cx.get() }
+    }
+    pub fn get_trap_cx_mut(&self) -> &'static mut TrapContext {
+        unsafe { &mut *(self.trap_cx.get() as *mut TrapContext) }
+    }
+
+    /// 刷新TLB
+    pub fn fresh_tlb(&self) {
+        unsafe { self.memory_set.lock().activate() };
+    }
+
+    // exit code
+    /// 获取进程的exit code
+    pub fn get_exit_code(&self) -> i32 {
+        self.exit_code.load(core::sync::atomic::Ordering::Relaxed)
+    }
+    /// 修改进程exit code
+    pub fn set_exit_code(&self, exit_code: i32) {
+        self.exit_code.store(exit_code, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    // children
+    // /// 获取所有子进程： Vec
+    // pub fn children(&self) -> Vec<Arc<TaskControlBlock>> {
+    //     self.children.lock().clone()
+    // }
+    /// 添加子进程
+    pub fn add_children(&self, child: Arc<TaskControlBlock>) {
+        self.children.lock().push(child);
+    }
+    /// 移除所有子进程
+    pub fn clear_children(&self) {
+        self.children.lock().clear();
+    }
+
+    pub fn set_parent(&self, parent: Option<Weak<TaskControlBlock>>) {
+        *self.parent.lock() = parent;
+    }
+
+    /// 移除所有的 `MapArea`
+    pub fn recycle_data_pages(&self) {
+        self.memory_set.lock().recycle_data_pages();
+    }
+    
+    // fd
+    /// 通过fd获取文件
+    pub fn get_file_by_fd(&self, fd: usize) -> Option<Arc<dyn File + Send + Sync>> {
+        self.fd_table.lock().get_file_by_fd(fd).unwrap_or(None)
+    }
+    /// 获取当前进程的文件描述符表长度
+    pub fn fd_table_len(&self) -> usize {
+        self.fd_table.lock().table_len()
+    }
+    /// 判断是否打开文件描述符fd
+    pub fn fd_is_none(&self, fd: usize) -> bool {
+        self.fd_table.lock().table[fd].is_none()
+    }
+    /// 将fd作为index获取文件描述符
+    pub fn get_fd(&self, fd: usize) -> Fd {
+        self.fd_table.lock().get_fd(fd).unwrap()
+    }
+    /// 获取fd_table
+    pub fn get_fd_table(&self) -> FdTable {
+        self.fd_table.lock().clone()
+    }
+
+    /// cwd
+    /// 获取当前进程的当前工作目录
+    pub fn get_current_path(&self) -> String {
+        self.current_path.lock().clone()
+    }
+    /// 设置当前进程的当前工作目录
+    pub fn set_current_path(&self, path: String) {
+        *self.current_path.lock() = path;
+    }
 }

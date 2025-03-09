@@ -4,6 +4,7 @@
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+#![feature(negative_impls)]
 
 extern crate alloc;
 

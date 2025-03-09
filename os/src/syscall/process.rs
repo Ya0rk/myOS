@@ -101,9 +101,9 @@ pub fn sys_clone() -> SysResult<usize> {
     debug!("start sys_fork");
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
-    let new_pid = new_task.pid.0;
+    let new_pid = new_task.get_pid();
     // modify trap context of new_task, because it returns immediately after switching
-    let child_trap_cx = new_task.inner_lock().get_trap_cx();
+    let mut child_trap_cx = *new_task.get_trap_cx_mut();
     // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
     // 只需要修改子进程返回值为0即可
     child_trap_cx.user_x[10] = 0;
@@ -135,12 +135,10 @@ pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: u
     let task = current_task().unwrap();
     
     loop {
-        // 获取当前任务的内部锁
-        let mut inner = task.inner_lock();
+        let mut locked_child = task.children.lock();
 
         // 快速查看是否存在符合条件的子进程
-        if !inner
-            .children
+        if !locked_child
             .iter()
             .any(|p| pid == -1 || pid as usize == p.getpid())
         {
@@ -148,9 +146,9 @@ pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: u
         }
 
         // 查找僵尸子进程
-        let zombie_child = inner.children.iter().enumerate().find_map(|(idx, p)| {
+        let zombie_child = locked_child.iter().enumerate().find_map(|(idx, p)| {
             //检查是否为僵尸进程且符合 PID 条件
-            if p.inner_lock().is_zombie() && (pid == -1 || pid as usize == p.getpid()) {
+            if p.is_zombie() && (pid == -1 || pid as usize == p.getpid()) {
                 Some(idx)
             } else {
                 None
@@ -159,22 +157,22 @@ pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: u
 
         if let Some(idx) = zombie_child {
             // 移除子进程
-            let removed_child = inner.children.remove(idx);
+            let removed_child = locked_child.remove(idx);
             // 确认子进程的引用计数为 1
             assert_eq!(Arc::strong_count(&removed_child), 1);
 
             // 获取子进程的 PID 和退出状态
             let found_pid = removed_child.getpid();
-            let exit_code = removed_child.inner_lock().exit_code;
+            let exit_code = removed_child.get_exit_code();
 
             // 将退出状态写入用户提供的指针
             if !exit_code_ptr.is_null() {
-                *translated_refmut(inner.memory_set.token(), exit_code_ptr) = (exit_code & 0xff) << 8;
+                *translated_refmut(task.get_user_token(), exit_code_ptr) = (exit_code & 0xff) << 8;
             }
             return Ok(found_pid as usize);
         } else {
             // 未找到僵尸子进程，释放锁并挂起当前任务
-            drop(inner); // 避免死锁
+            // drop(inner); // 避免死锁
             suspend_current_and_run_next();
         }
     }

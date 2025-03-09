@@ -273,14 +273,14 @@ impl File for DevTty {
         true
     }
     fn read(&self, user_buf: UserBuffer) -> usize {
-        if let Ok(Some(tty_device)) = INITPROC.inner_lock().fd_table.get_file_by_fd(0) {
+        if let Some(tty_device) = INITPROC.get_file_by_fd(0) {
             tty_device.read(user_buf)
         } else {
             panic!("get Stdin error!");
         }
     }
     fn write(&self, user_buf: UserBuffer) -> usize {
-        if let Ok(Some(tty_device)) = INITPROC.inner_lock().fd_table.get_file_by_fd(1) {
+        if let Some(tty_device) = INITPROC.get_file_by_fd(1) {
             tty_device.write(user_buf)
         } else {
             panic!("get Stdout error!");
@@ -290,26 +290,5 @@ impl File for DevTty {
     fn get_name(&self) -> String {
         todo!()
     }
-    // fn poll(&self, events: PollEvents) -> PollEvents {
-    //     let mut revents = PollEvents::empty();
-    //     if events.contains(PollEvents::IN) {
-    //         revents |= PollEvents::IN;
-    //     }
-    //     if events.contains(PollEvents::OUT) {
-    //         revents |= PollEvents::OUT;
-    //     }
-    //     revents
-    // }
 }
 
-// impl Ioctl for DevTty {
-//     fn ioctl(&self, cmd: usize, arg: usize) -> isize {
-//         if let Some(FileClass::Abs(tty_device)) = INITPROC.inner_lock().fd_table.try_get_file(1) {
-//             // tty_device.ioctl(cmd, arg)
-//             let tty_device = unsafe { Arc::from_raw(Arc::into_raw(tty_device) as *const Stdout) };
-//             tty_device.ioctl(cmd, arg)
-//         } else {
-//             panic!("get Stdout error!");
-//         }
-//     }
-// }

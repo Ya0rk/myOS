@@ -16,6 +16,7 @@ impl Into<Sstatus> for SstatusWrapper {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct TrapContext {
     /* 0-31 */ pub user_x: [usize; 32], 
     /*  32  */ pub sstatus: Sstatus,
