@@ -192,3 +192,9 @@ impl Errno {
         }
     }
 }
+
+impl From<Errno> for usize {
+    fn from(err: Errno) -> Self {
+        err as usize
+    }
+}

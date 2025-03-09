@@ -4,7 +4,7 @@ use super::{VirtAddr, VirtPageNum};
 use crate::config::{KERNEL_ADDR_OFFSET, MEMORY_END, MMIO, PAGE_SIZE, USER_SPACE_TOP, USER_STACK_SIZE, USER_TRAP_CONTEXT};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use log::info;
+use log::debug;
 use spin::Mutex;
 use core::arch::asm;
 use lazy_static::*;
@@ -96,7 +96,7 @@ impl MemorySet {
     /// Without kernel stacks.
     pub fn new_kernel() -> Self {
         let mut memory_set = Self::new_bare();
-        info!("kernel satp : {:#x}", memory_set.page_table.token());
+        debug!("kernel satp : {:#x}", memory_set.page_table.token());
         // map trampoline
         // memory_set.map_trampoline();
         // map kernel sections
@@ -176,7 +176,6 @@ impl MemorySet {
     /// also returns user_sp and entry point.
     pub fn from_elf(elf_data: &[u8]) -> (Self, usize, usize) {
         let mut memory_set = Self::new_with_kernel_pagetable();
-        info!("from_elf new stap={:#x}", memory_set.page_table.token());
         // map program headers of elf, with U flag
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
@@ -214,7 +213,7 @@ impl MemorySet {
         // guard page
         user_stack_bottom += PAGE_SIZE;
         let user_stack_top = user_stack_bottom + USER_STACK_SIZE;
-        info!("user_stack_bottom={:#x}, user_stack_top={:#x}", user_stack_bottom, user_stack_top);
+        debug!("user_stack_bottom={:#x}, user_stack_top={:#x}", user_stack_bottom, user_stack_top);
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),

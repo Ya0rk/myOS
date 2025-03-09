@@ -3,5 +3,5 @@ target remote localhost:1234
 source ./debug.gdb
 # add-symbol-file /mnt/f/wsldir/ru/todOS/user/target/riscv64gc-unknown-none-elf/release/initproc
 # add-symbol-file /mnt/f/wsldir/ru/todOS/user/target/riscv64gc-unknown-none-elf/release/user_shell
-b os::task::task::TaskControlBlock::exec
-c
+# b os::task::task::TaskControlBlock::exec
+# c

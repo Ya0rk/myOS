@@ -8,12 +8,9 @@
 /// pub fn make_pipe()
 /// ```
 //
-use super::{Dirent, File, Kstat};
+use super::File;
 use crate::mm::UserBuffer;
-use alloc::{
-    string::String,
-    sync::{Arc, Weak},
-};
+use alloc::sync::{Arc, Weak};
 use spin::Mutex;
 
 use crate::task::suspend_current_and_run_next;
@@ -208,26 +205,25 @@ impl File for Pipe {
             }
         }
     }
-
-    #[allow(unused_variables)]
-    fn get_fstat(&self, kstat: &mut Kstat) {
-        panic!("pipe not implement get_fstat");
-    }
-
-    #[allow(unused_variables)]
-    fn get_dirent(&self, dirent: &mut Dirent) -> isize {
-        panic!("pipe not implement get_dirent");
-    }
-
-    fn get_name(&self) -> String {
-        panic!("pipe not implement get_name");
-    }
-
-    fn set_offset(&self, offset: usize) {
-        panic!("pipe not implement set_offset: {}", offset);
-    }
     
-    fn is_dir(&self) -> bool {
+    fn get_name(&self) -> alloc::string::String {
         todo!()
     }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) && self.readable {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     if events.contains(PollEvents::OUT) && self.writable {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     let ring_buffer = self.inner_lock();
+    //     if self.readable && ring_buffer.all_write_ends_closed() {
+    //         revents |= PollEvents::HUP;
+    //     }
+    //     if self.writable && ring_buffer.all_read_ends_closed() {
+    //         revents |= PollEvents::ERR;
+    //     }
+    //     revents
+    // }
 }

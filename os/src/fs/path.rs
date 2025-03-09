@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use alloc::{format, string::String};
+use alloc::{format, string::{String, ToString}};
 
 #[derive(Debug)]
 pub struct Path {
@@ -7,6 +7,16 @@ pub struct Path {
 }
 
 impl Path{
+    // TODO :优化
+    pub fn split_with(self, delima: &str) -> (String, String) {
+        let binding = self.get();
+        let s = binding.as_str();
+        let (mut parent_path, child_name) = s.rsplit_once(delima).unwrap();
+        if parent_path.is_empty() {
+            parent_path = "/";
+        }
+        (parent_path.to_string(), child_name.to_string())
+    }
     pub fn string2path(path: String) -> Self{
         Self {
             content: path

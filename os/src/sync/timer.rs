@@ -1,7 +1,7 @@
-use crate::{arch::set_timer, config::CLOCK_FREQ, utils::Errno};
+use crate::{arch::set_timer, config::CLOCK_FREQ, task::suspend_current_and_run_next, utils::Errno};
 use riscv::register::time;
 use zerocopy::{IntoBytes, Immutable};
-use core::{hint::spin_loop, time::Duration};
+use core::time::Duration;
 
 const TICKS_PER_SEC: usize = 100;
 const MSEC_PER_SEC: usize = 1000;
@@ -116,6 +116,6 @@ pub fn sleep_for(ts: TimeSepc) {
     let start = get_time_ms();
     let span = ts.tv_sec * 1_000 + ts.tv_nsec / 1_000_000;
     while get_time_ns() - start < span {
-        spin_loop();
+        suspend_current_and_run_next();
     }
 }

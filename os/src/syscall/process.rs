@@ -9,7 +9,7 @@ use crate::task::{
 };
 use crate::utils::{Errno, SysResult};
 use alloc::sync::Arc;
-use log::info;
+use log::debug;
 use zerocopy::IntoBytes;
 
 // use super::ffi::Utsname;
@@ -72,7 +72,7 @@ pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
 /// 
 /// 返回值：成功返回0，失败返回-1;
 pub fn sys_uname(buf: *const u8) -> SysResult<usize> {
-    info!("sys_name start");
+    debug!("sys_name start");
     if buf.is_null() {
         return Err(Errno::EBADCALL);
     }
@@ -98,7 +98,7 @@ pub fn sys_getppid() -> SysResult<usize> {
 }
 
 pub fn sys_clone() -> SysResult<usize> {
-    info!("start sys_fork");
+    debug!("start sys_fork");
     let current_task = current_task().unwrap();
     let new_task = current_task.fork();
     let new_pid = new_task.pid.0;
@@ -109,7 +109,7 @@ pub fn sys_clone() -> SysResult<usize> {
     child_trap_cx.user_x[10] = 0;
     // 将子进程加入调度器，等待被调度
     add_task(new_task);
-    info!("new pid is : {}", new_pid);
+    debug!("new pid is : {}", new_pid);
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
 }
@@ -117,9 +117,9 @@ pub fn sys_clone() -> SysResult<usize> {
 pub fn sys_exec(path: *const u8) -> SysResult<usize> {
     let token = current_user_token();
     let path = translated_str(token, path);
-    println!("sys_exec: path = {:?}", path);
+    debug!("sys_exec: path = {:?}", path);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
-        let all_data = app_inode.read_all();
+        let all_data = app_inode.file()?.inode.read_all()?;
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
         Ok(0)
@@ -131,7 +131,7 @@ pub fn sys_exec(path: *const u8) -> SysResult<usize> {
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
 pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: usize) -> SysResult<usize> {
-    info!("sys_wait4 start, pid = {}, options = {}", pid, options);
+    debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
     let task = current_task().unwrap();
     
     loop {

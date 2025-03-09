@@ -1,6 +1,7 @@
 #![deny(warnings)]
 #![no_std]
 #![no_main]
+#![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 
@@ -63,6 +64,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         );
         trap::init();
         task::init_processors();
+        fs::init();
         task::add_initproc();
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
@@ -78,10 +80,11 @@ pub fn rust_main(hart_id: usize) -> ! {
     timer::set_next_trigger();
 
     // 列出目前的应用
+    let mut finish = false;
     if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
-        fs::list_apps();
+        finish = fs::list_apps();
     }
-
+    while !finish {}
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }

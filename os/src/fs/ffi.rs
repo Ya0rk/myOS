@@ -1,7 +1,9 @@
 use bitflags::*;
 
+use super::InodeType;
+
 bitflags! {
-    #[derive(Clone, Copy, PartialEq, Eq)]
+    #[derive(Clone, Copy, PartialEq, Eq, Debug)]
     ///Open file flags
     pub struct OpenFlags: i32 {
         // reserve 3 bits for the access mode
@@ -45,6 +47,14 @@ impl OpenFlags {
             (false, true)
         } else {
             (true, true)
+        }
+    }
+
+    pub fn node_type(&self) -> InodeType {
+        if self.contains(OpenFlags::O_DIRECTORY) {
+            InodeType::Dir
+        } else {
+            InodeType::File
         }
     }
 }
