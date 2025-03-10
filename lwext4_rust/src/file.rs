@@ -2,15 +2,17 @@ use crate::bindings::*;
 use alloc::{ffi::CString, vec::Vec};
 
 // Ext4File文件操作与block device设备解耦了
+/// 存在着file_path到ext4_file的映射
 pub struct Ext4File {
     //file_desc_map: BTreeMap<CString, ext4_file>,
-    file_desc: ext4_file,
+    file_desc: ext4_file, // 在ext4库中的file文件
     file_path: CString,
 
     this_type: InodeTypes,
 }
 
 impl Ext4File {
+    /// 根据路径和类型创建一个Ext4File对象
     pub fn new(path: &str, types: InodeTypes) -> Self {
         Self {
             file_desc: ext4_file {
@@ -25,29 +27,26 @@ impl Ext4File {
         }
     }
 
+    /// 获取文件路径
     pub fn get_path(&self) -> CString {
         self.file_path.clone()
     }
 
+    /// 获取文件类型
     pub fn get_type(&self) -> InodeTypes {
         self.this_type.clone()
     }
 
     /// File open function.
-    ///
-    /// |---------------------------------------------------------------|
-    /// |   r or rb                 O_RDONLY                            |
-    /// |---------------------------------------------------------------|
-    /// |   w or wb                 O_WRONLY|O_CREAT|O_TRUNC            |
-    /// |---------------------------------------------------------------|
-    /// |   a or ab                 O_WRONLY|O_CREAT|O_APPEND           |
-    /// |---------------------------------------------------------------|
-    /// |   r+ or rb+ or r+b        O_RDWR                              |
-    /// |---------------------------------------------------------------|
-    /// |   w+ or wb+ or w+b        O_RDWR|O_CREAT|O_TRUNC              |
-    /// |---------------------------------------------------------------|
-    /// |   a+ or ab+ or a+b        O_RDWR|O_CREAT|O_APPEND             |
-    /// |---------------------------------------------------------------|
+    /// 
+    /// | Mode          | Flags                         |
+    /// |--------------|-------------------------------|
+    /// | r or rb      | O_RDONLY                     |
+    /// | w or wb      | O_WRONLY|O_CREAT|O_TRUNC    |
+    /// | a or ab      | O_WRONLY|O_CREAT|O_APPEND   |
+    /// | r+ or rb+    | O_RDWR                      |
+    /// | w+ or wb+    | O_RDWR|O_CREAT|O_TRUNC     |
+    /// | a+ or ab+    | O_RDWR|O_CREAT|O_APPEND    |
     pub fn file_open(&mut self, path: &str, flags: u32) -> Result<usize, i32> {
         let c_path = CString::new(path).expect("CString::new failed");
         if c_path != self.get_path() {
@@ -77,6 +76,7 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
+    /// 关闭文件
     pub fn file_close(&mut self) -> Result<usize, i32> {
         if self.file_desc.mp != core::ptr::null_mut() {
             debug!("file_close {:?}", self.get_path());
@@ -87,7 +87,7 @@ impl Ext4File {
         }
         Ok(0)
     }
-
+    /// 将flags转换为cstring
     pub fn flags_to_cstring(flags: u32) -> CString {
         let cstr = match flags {
             O_RDONLY => "rb",
@@ -169,6 +169,7 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
+    /// 设置文件偏移量
     pub fn file_seek(&mut self, offset: i64, seek_type: u32) -> Result<usize, i32> {
         let mut offset = offset;
         let size = self.file_size() as i64;
@@ -186,6 +187,7 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
+    /// 读取文件
     pub fn file_read(&mut self, buff: &mut [u8]) -> Result<usize, i32> {
         let mut rw_count = 0;
         let r = unsafe {
@@ -250,12 +252,12 @@ impl Ext4File {
         }
         Ok(EOK as usize)
     }
-
+    /// 获取文件大小
     pub fn file_size(&mut self) -> u64 {
         //注，记得先 O_RDONLY 打开文件
         unsafe { ext4_fsize(&mut self.file_desc) }
     }
-
+    /// 刷新文件缓存
     pub fn file_cache_flush(&mut self) -> Result<usize, i32> {
         let c_path = self.file_path.clone();
         let c_path = c_path.into_raw();
@@ -269,7 +271,7 @@ impl Ext4File {
         }
         Ok(0)
     }
-
+    /// 获取文件模式
     pub fn file_mode_get(&mut self) -> Result<u32, i32> {
         // 0o777 (octal) == rwxrwxrwx
         let mut mode: u32 = 0o777;
@@ -286,7 +288,7 @@ impl Ext4File {
         debug!("Got file mode={:#x}", mode);
         Ok(mode)
     }
-
+    /// 设置文件模式
     pub fn file_mode_set(&mut self, mode: u32) -> Result<usize, i32> {
         debug!("file_mode_set to {:#x}", mode);
 
@@ -302,7 +304,7 @@ impl Ext4File {
         }
         Ok(EOK as usize)
     }
-
+    /// 获取文件类型
     pub fn file_type_get(&mut self) -> InodeTypes {
         let mode = self.file_mode_get().unwrap();
         // 0o777 (octal) == rwxrwxrwx
@@ -332,7 +334,7 @@ impl Ext4File {
 
     /********* DIRECTORY OPERATION *********/
 
-    /// Create new directory
+    /// 创建新目录
     pub fn dir_mk(&mut self, path: &str) -> Result<usize, i32> {
         debug!("directory create: {}", path);
         let c_path = CString::new(path).expect("CString::new failed");
@@ -349,7 +351,7 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
-    /// Rename/move directory
+    /// 重命名/移动目录
     pub fn dir_mv(&mut self, path: &str, new_path: &str) -> Result<usize, i32> {
         debug!("directory move from {} to {}", path, new_path);
 
@@ -370,7 +372,7 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
-    /// Recursive directory remove
+    /// 递归删除目录
     pub fn dir_rm(&mut self, path: &str) -> Result<usize, i32> {
         debug!("directory recursive remove: {}", path);
 
@@ -388,6 +390,7 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
+    /// 获取目录项  
     pub fn lwext4_dir_entries(&self) -> Result<(Vec<Vec<u8>>, Vec<InodeTypes>), i32> {
         if self.this_type != InodeTypes::EXT4_DE_DIR {
             return Err(-1);

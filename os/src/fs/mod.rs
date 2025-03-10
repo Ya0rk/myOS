@@ -337,67 +337,92 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
     open(&"/", path, flags)
 }
 
+/// Opens a file or device at the specified path with the given flags.
+///
+/// # Arguments
+///
+/// * `cwd` - The current working directory.
+/// * `path` - The path to the file to open.
+/// * `flags` - The flags that determine how the file should be opened.
+///
+/// # Returns
+///
+/// An `Option<FileClass>` which is `Some(FileClass::File(vfile))` if the file is opened successfully,
+/// or `Some(FileClass::Abs(device))` if a device file is opened, or `None` if the file cannot be opened.
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
+    // Convert the provided path string into a Path object
     let kpath = Path::string2path(path.to_string());
+    
+    // Join the current working directory with the provided path to create an absolute path
     let new_path = kpath.join_path_2_absolute(cwd.to_string());
     let abs_path = new_path.get();
-    //判断是否是设备文件
+    
+    // Check if the absolute path corresponds to a device file
     if find_device(&abs_path) {
+        // Attempt to open the device file
         if let Some(device) = open_device_file(&abs_path) {
-            return Some(FileClass::Abs(device));
+            return Some(FileClass::Abs(device)); // Return the opened device file
         }
-        return None;
+        return None; // Return None if the device file cannot be opened
     }
 
-    // !必须要知道父结点
+    // Split the new path into parent directory and child file name
     let (parent_path, child_name) = new_path.split_with("/");
     let (parent_path, child_name) = (parent_path.as_str(), child_name.as_str());
 
     debug!(
-        "[open] cwd={},path={},parent={},child={},abs={}",
+        "[open] cwd={}, path={}, parent={}, child={}, abs={}",
         cwd, path, parent_path, child_name, &abs_path
     );
 
+    // Check if the parent directory inode exists
     let (parent_inode, _) = if has_inode(parent_path) {
-        (find_inode_idx(parent_path).unwrap(), child_name)
+        (find_inode_idx(parent_path).unwrap(), child_name) // Get the parent inode if it exists
     } else {
+        // If the parent inode does not exist, use the root inode
         if cwd == "/" {
             (root_inode(), path)
         } else {
             (root_inode().find_by_path(cwd).unwrap(), path)
         }
     };
-    // println!("find by parent!");
+
+    // Attempt to find the inode for the specified absolute path
     if let Some(inode) = parent_inode.find_by_path(&abs_path) {
-        // println!("find");
-        // if flags.contains(OpenFlags::O_TRUNC) {
-        //     remove_inode_idx(&abs_path);
-        //     let abs_path_clone = abs_path.clone();
-        //     let (_, name) = abs_path.rsplit_once("/").unwrap();
-        //     inode.unlink(name);
-        //     return create_file(abs_path_clone, parent_path, child, flags);
-        // }
+        // Insert the inode into the index for future reference
         insert_inode_idx(&abs_path, inode.clone());
+        
+        // Determine if the file should be opened for reading or writing
         let (readable, writable) = flags.read_write();
+        
+        // Create a new OSInode instance for the file
         let vfile = OSInode::new(
             readable,
             writable,
             inode,
-            Some(Arc::downgrade(&parent_inode)),
+            Some(Arc::downgrade(&parent_inode)), // Keep a weak reference to the parent inode
             abs_path,
         );
+
+        // If the O_APPEND flag is set, move the file pointer to the end
         if flags.contains(OpenFlags::O_APPEND) {
             vfile.lseek(0, SEEK_END);
         }
+        
+        // If the O_TRUNC flag is set, truncate the file to zero length
         if flags.contains(OpenFlags::O_TRUNC) {
             vfile.inode.truncate(0);
         }
+        
+        // Return the opened file as a FileClass::File
         return Some(FileClass::File(Arc::new(vfile)));
     }
 
-    // 节点不存在
+    // If the inode does not exist and the O_CREAT flag is set, create a new file
     if flags.contains(OpenFlags::O_CREAT) {
         return create_file(abs_path.clone(), parent_path, child_name, flags);
     }
+    
+    // Return None if the file cannot be opened or created
     None
 }

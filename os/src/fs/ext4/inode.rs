@@ -24,6 +24,7 @@ impl Ext4Inode {
 }
 
 impl Inode for Ext4Inode {
+    /// 获取文件大小
     fn size(&self) -> usize {
         let file = self.0.get_unchecked_mut();
         let types = as_inode_type(file.file_type_get());
@@ -39,6 +40,7 @@ impl Inode for Ext4Inode {
         }
     }
 
+    /// 创建文件
     fn create(&self, path: &str, ty: InodeType) -> Option<Arc<dyn Inode>> {
         let types = as_ext4_de_type(ty);
         let file = self.0.get_unchecked_mut();
@@ -58,11 +60,11 @@ impl Inode for Ext4Inode {
         }
         Some(Arc::new(nf))
     }
-
+    /// 获取文件类型
     fn node_type(&self) -> InodeType {
         as_inode_type(self.0.get_unchecked_mut().file_type_get())
     }
-
+    /// 读取文件
     fn read_at(&self, off: usize, buf: &mut [u8]) -> usize {
         let file = self.0.get_unchecked_mut();
         let path = file.get_path();
@@ -74,7 +76,7 @@ impl Inode for Ext4Inode {
         let _ = file.file_close();
         r.map_err(|_| Errno::EIO).unwrap()
     }
-
+    /// 写入文件
     fn write_at(&self, off: usize, buf: &[u8]) -> usize {
         let file = self.0.get_unchecked_mut();
         let path = file.get_path();
@@ -86,7 +88,7 @@ impl Inode for Ext4Inode {
         let _ = file.file_close();
         r.map_err(|_| Errno::EIO).unwrap()
     }
-
+    /// 截断文件
     fn truncate(&self, size: usize) -> usize {
         let file = self.0.get_unchecked_mut();
         let path = file.get_path();
@@ -103,19 +105,19 @@ impl Inode for Ext4Inode {
             0
         }
     }
-
+    /// 重命名文件
     fn rename(&self, _file: Arc<dyn Inode>) -> SysResult<usize> {
         todo!()
     }
-
+    /// 设置文件时间戳
     fn set_timestamps(&self, _atime_sec: Option<u64>, _mtime_sec: Option<u64>) -> SysResult<usize> {
         todo!()
     }
-
+    /// 同步文件
     fn sync(&self) {
         todo!()
     }
-
+    /// 读取文件所有内容
     fn read_all(&self) -> Result<Vec<u8>, Errno> {
         let file = self.0.get_unchecked_mut();
         let path = file.get_path();
@@ -131,7 +133,7 @@ impl Inode for Ext4Inode {
             Ok(buf)
         }
     }
-
+    /// 根据路径查找文件
     fn find_by_path(&self, path: &str) -> Option<Arc<dyn Inode>> {
         let file = self.0.get_unchecked_mut();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
@@ -144,15 +146,15 @@ impl Inode for Ext4Inode {
             None
         }
     }
-
+    /// 获取文件状态
     fn fstat(&self) -> Kstat {
         todo!()
     }
-
+    /// 读取目录项
     fn read_dentry(&self, _off: usize, _len: usize) -> Option<(Vec<u8>, isize)> {
         todo!()
     }
-
+    /// 删除文件
     fn unlink(&self, _child_name: &str) -> SysResult<usize> {
         todo!()
     }
