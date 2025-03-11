@@ -2,12 +2,16 @@ mod context;
 mod user_trap;
 mod kernel_trap;
 
-pub use context::TrapContext;
+use alloc::sync::Arc;
+use log::info;
 use user_trap::{user_trap_handler, user_trap_return};
 use core::arch::global_asm;
 use core::fmt::Display;
 use riscv::register::mtvec::TrapMode;
 use riscv::register::stvec;
+use crate::sync::get_waker;
+use crate::task::{TaskControlBlock, TaskStatus};
+pub use context::TrapContext;
 
 global_asm!(include_str!("trap.S"));
 
@@ -23,12 +27,37 @@ pub fn init() {
     set_trap_handler(IndertifyMode::Kernel);
 }
 
-pub fn trap_loop() {
+
+/// 用户态陷入内核态后，执行完内核态代码后，返回用户态
+pub async fn trap_loop(task: Arc<TaskControlBlock>) {
+    // 设置task的waker TODO：将这个放入 UserTaskFuture中
+    task.set_task_waker(get_waker().await);
     loop {
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            _ => {},
+        }
+
         user_trap_return();
-        user_trap_handler(); 
+
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            _ => {},
+        }
+
+        user_trap_handler().await;
+
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            _ => {},
+        }
     }
+
+    info!("Task {} exit with code {}", task.getpid(), task.get_exit_code());
+    task.exit();
 }
+
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(unused)]

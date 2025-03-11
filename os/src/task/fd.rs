@@ -114,4 +114,10 @@ impl FdTable {
         }
         Ok(self.table[idx].clone())
     }
+
+    pub fn clear(&mut self) {
+        for fd in self.table.iter_mut() {
+            fd.clear();
+        }
+    }
 }

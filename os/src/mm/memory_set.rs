@@ -32,6 +32,10 @@ pub fn kernel_token() -> usize {
     KERNEL_SPACE.lock().token()
 }
 
+pub fn switch_to_kernel_pgtable() {
+    unsafe { KERNEL_SPACE.lock().activate() };
+}
+
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
     pub page_table: PageTable,

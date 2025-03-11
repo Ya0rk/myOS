@@ -20,6 +20,7 @@ num_enum = { version = "0.7.2", default-features = false }
 zerocopy = { version = "0.8.21", features = ["derive"]}
 lwext4_rust= {path = "../lwext4_rust"}
 hashbrown = "0.15.2"
+async-task = { version = "4.7.1", default-features = false }
 
 [features]
 board_qemu = []

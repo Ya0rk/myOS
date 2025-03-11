@@ -1,14 +1,14 @@
 use riscv::register::{sie, sstatus};
 
 #[inline(always)]
-pub unsafe fn enable_interrupt() {
+pub fn enable_interrupt() {
     unsafe {
         sstatus::set_sie();
     }
 }
 
 #[inline(always)]
-pub unsafe fn disable_interrupt() {
+pub fn disable_interrupt() {
     unsafe {
         sstatus::clear_sie();
     }
@@ -35,7 +35,7 @@ pub struct InterruptGuard {
 impl InterruptGuard {
     pub fn new() -> Self {
         let interrupt_before = interrupt_is_enabled();
-        unsafe { disable_interrupt() };
+        disable_interrupt();
         Self { interrupt_before }
     }
 }
@@ -43,7 +43,7 @@ impl InterruptGuard {
 impl Drop for InterruptGuard {
     fn drop(&mut self) {
         if self.interrupt_before {
-            unsafe { enable_interrupt() };
+            enable_interrupt();
         }
     }
 }

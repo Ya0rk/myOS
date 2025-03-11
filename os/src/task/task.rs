@@ -1,16 +1,19 @@
 use core::cell::SyncUnsafeCell;
 use core::sync::atomic::AtomicI32;
+use core::task::Waker;
 
 use super::{Fd, FdTable, TaskContext};
 use super::{pid_alloc, KernelStack, PidHandle};
+use crate::arch::shutdown;
 use crate::fs::File;
 use crate::mm::{MapPermission, MemorySet};
 use crate::sync::{new_shared, Shared};
+use crate::task::spawn_user_task;
 use crate::trap::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use log::debug;
+use log::{debug, info};
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {
@@ -28,6 +31,7 @@ pub struct TaskControlBlock {
     // inner: SpinNoIrqLock<TaskControlBlockInner>,
     
     base_size:      Shared<usize>,
+    /// 进程状态: Ready, Running, Zombie
     task_status:    Shared<TaskStatus>,
     memory_set:     Shared<MemorySet>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
@@ -35,8 +39,9 @@ pub struct TaskControlBlock {
     fd_table:       Shared<FdTable>,
     current_path:   Shared<String>,
 
+    waker:          SyncUnsafeCell<Option<Waker>>,
     trap_cx:        SyncUnsafeCell<TrapContext>,
-    task_cx:        SyncUnsafeCell<TaskContext>,
+    task_cx:        SyncUnsafeCell<TaskContext>, // 会删除
 
     exit_code:      AtomicI32,
 }
@@ -49,7 +54,7 @@ impl TaskControlBlock {
         self.pid.0
     }
     /// 创建新task,只有initproc会调用
-    pub fn new(elf_data: &[u8]) -> Self {
+    pub fn new(elf_data: &[u8]) {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx = TrapContext::app_init_context(
@@ -71,7 +76,7 @@ impl TaskControlBlock {
         );
         
         // push a task context which goes to trap_return to the top of kernel stack
-        let task_control_block = Self {
+        let task_control_block = Arc::new(Self {
             pid: pid_handle,
             kernel_stack,
             
@@ -85,15 +90,16 @@ impl TaskControlBlock {
             current_path: new_shared(String::from("/")), // root directory
             
             // SyncUnsafeCell
+            waker:   SyncUnsafeCell::new(None),
             trap_cx: SyncUnsafeCell::new(trap_cx),
             task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
 
             exit_code: AtomicI32::new(0),
-        };
+        });
 
         debug!("initproc successfully created, pid: {}", task_control_block.getpid());
         debug!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
-        task_control_block
+        spawn_user_task(task_control_block);
     }
     pub fn exec(&self, elf_data: &[u8]) {
         debug!("exec start");
@@ -160,6 +166,7 @@ impl TaskControlBlock {
             current_path: parent.current_path.clone(),
 
             // SyncUnsafeCell
+            waker  : SyncUnsafeCell::new(None),
             trap_cx: SyncUnsafeCell::new(*trap_cx),
             task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
 
@@ -170,6 +177,33 @@ impl TaskControlBlock {
         
         task_control_block
     }
+    
+    pub fn exit(&self) {
+        info!("Task {} exit;", self.getpid());
+        let pid = self.getpid();
+
+        // 如果是idle进程
+        if pid == 0 {
+            info!("Idle process exit with exit_code {} ...", self.get_exit_code());
+            shutdown(false);
+        }
+
+        // 将当前进程的子进程移动到initproc下
+        {
+            for child in self.children.lock().iter() {
+                child.set_parent(Some(Arc::downgrade(&INITPROC)));
+                INITPROC.add_children(child.clone());
+            }
+        }
+
+        self.clear_children();
+        self.clear_fd_table();
+        self.recycle_data_pages();
+        self.set_zombie();
+    }
+}
+
+impl TaskControlBlock {
     /// 获取当前进程的pid
     pub fn getpid(&self) -> usize {
         self.pid.0
@@ -178,10 +212,9 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         self.memory_set.lock().token()
     }
-}
 
-impl TaskControlBlock {
-    fn get_status(&self) -> TaskStatus {
+    /// 进程状态
+    pub fn get_status(&self) -> TaskStatus {
         *self.task_status.lock()
     }
     pub fn set_ready(&self) {
@@ -196,6 +229,8 @@ impl TaskControlBlock {
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
+
+    /// task context
     pub fn get_task_cx(&self) -> &TaskContext {
         unsafe { &*self.task_cx.get() }
     }
@@ -210,7 +245,7 @@ impl TaskControlBlock {
     }
 
     /// 刷新TLB
-    pub fn fresh_tlb(&self) {
+    pub fn switch_pgtable(&self) {
         unsafe { self.memory_set.lock().activate() };
     }
 
@@ -237,7 +272,7 @@ impl TaskControlBlock {
     pub fn clear_children(&self) {
         self.children.lock().clear();
     }
-
+    /// 设置父进程
     pub fn set_parent(&self, parent: Option<Weak<TaskControlBlock>>) {
         *self.parent.lock() = parent;
     }
@@ -268,6 +303,10 @@ impl TaskControlBlock {
     pub fn get_fd_table(&self) -> FdTable {
         self.fd_table.lock().clone()
     }
+    /// 清空fd_table
+    pub fn clear_fd_table(&self) {
+        self.fd_table.lock().clear();
+    }
 
     /// cwd
     /// 获取当前进程的当前工作目录
@@ -277,5 +316,19 @@ impl TaskControlBlock {
     /// 设置当前进程的当前工作目录
     pub fn set_current_path(&self, path: String) {
         *self.current_path.lock() = path;
+    }
+
+    /// waker
+    /// 获取当前进程的waker
+    pub fn task_waker(&self) -> Option<Waker> {
+        unsafe { (*self.waker.get()).clone() }
+    }
+    /// 判断当前进程是否有waker
+    pub fn has_waker(&self) -> bool {
+        unsafe { (*self.waker.get()).is_some() }
+    }
+    /// 设置当前进程的waker
+    pub fn set_task_waker(&self, waker: Waker) {
+        unsafe { *self.waker.get() = Some(waker) }
     }
 }

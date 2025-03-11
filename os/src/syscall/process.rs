@@ -2,6 +2,7 @@ use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::sync::timer::{sleep_for, TimeSepc, TimeVal, Tms};
+use crate::sync::yield_now;
 use crate::syscall::ffi::Utsname;
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
@@ -29,8 +30,8 @@ pub fn sys_nanosleep(req: *const u8, _rem: *const u8) -> SysResult<usize> {
     Ok(0)
 }
 
-pub fn sys_yield() -> SysResult<usize> {
-    suspend_current_and_run_next();
+pub async  fn sys_yield() -> SysResult<usize> {
+    yield_now().await;
     Ok(0)
 }
 

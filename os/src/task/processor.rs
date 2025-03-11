@@ -3,7 +3,10 @@ use super::__switch;
 use super::fetch_task;
 use super::{TaskContext, TaskControlBlock};
 use crate::config::HART_NUM;
+use crate::mm::switch_to_kernel_pgtable;
 use crate::mm::KERNEL_SPACE;
+use crate::sync::disable_interrupt;
+use crate::sync::enable_interrupt;
 use crate::trap::TrapContext;
 use crate::utils::backtrace;
 use alloc::sync::Arc;
@@ -36,11 +39,36 @@ impl Processor {
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
     }
-    pub fn get_hart_id(&self) -> usize {
-        self.hart_id
+
+    /// 将当前任务设置为None
+    pub fn clear_processor_task(&mut self) {
+        self.current = None;
     }
-    pub fn set_hart_id(&mut self, hart_id: usize) {
-        self.hart_id = hart_id;
+    /// 设置当前任务
+    pub fn set_processor_task(&mut self, task: Arc<TaskControlBlock>) {
+        self.current = Some(task);
+    }
+
+}
+
+impl Processor {
+    /// 将task装载进处理器
+    pub fn user_task_checkin(&mut self, task: &mut Arc<TaskControlBlock>) {
+        disable_interrupt();
+        //TODO:完善TIME_STAT
+        self.set_processor_task(task.clone());
+        task.switch_pgtable();
+        enable_interrupt();
+    }
+
+    /// 将当前任务从处理器中取出，为下一个task让出处理器
+    pub fn user_task_checkout(&mut self) {
+        disable_interrupt();
+        // TODO:完善TIME_STAT
+        // 实现float reg的保存
+        switch_to_kernel_pgtable();
+        self.clear_processor_task();
+        enable_interrupt();
     }
 }
 
@@ -64,11 +92,19 @@ pub fn init_processors() {
     println!("procs init successfully!");
 }
 
-pub fn get_proc_by_hartid(hartid: usize) -> &'static mut Processor {
-    unsafe { &mut (*PROCESSORS.0.get())[hartid] }
+/// 获取当前运行的 Processor
+pub fn get_current_processor() -> &'static mut Processor {
+    let id = get_current_hart_id();
+    unsafe { &mut (*PROCESSORS.0.get())[id] }
 }
 
-/// 获取当前运行的 CPU 核
+#[allow(unused)]
+/// 根据 hart_id 获取对应的 Processor
+pub fn get_processor(hart_id: usize) -> &'static mut Processor {
+    unsafe { &mut (*PROCESSORS.0.get())[hart_id] }
+}
+
+/// 获取当前运行的 Processor id
 pub fn get_current_hart_id() -> usize {
     use core::arch::asm;
     let hartid;
@@ -85,14 +121,13 @@ pub fn get_current_hart_id() -> usize {
 ///Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
 pub fn run_tasks() {
     loop {
-        let hart_id = get_current_hart_id();
-        let processor = get_proc_by_hartid(hart_id);
+        let processor = get_current_processor();
         if let Some(task) = fetch_task() {
             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr(); // 内核线程负责分发用户线程
             // access coming task TCB exclusively
             let next_task_cx_ptr = task.get_task_cx() as *const TaskContext;
             task.set_running();
-            task.fresh_tlb(); // 更新stap寄存器和刷新TLB
+            task.switch_pgtable(); // 更新stap寄存器和刷新TLB
             
             // release coming task TCB manually
             processor.current = Some(task);
@@ -103,18 +138,22 @@ pub fn run_tasks() {
         }
     }
 }
+
 ///Take the current task,leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    get_proc_by_hartid(get_current_hart_id()).take_current()
+    get_current_processor().take_current()
 }
-///Get running task
+
+/// 获取当前正在运行的任务
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    get_proc_by_hartid(get_current_hart_id()).current()
+    get_current_processor().current()
 }
+
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {
     riscv::register::satp::read().bits()
 }
+
 ///Get the mutable reference to trap context of current task
 pub fn current_trap_cx() -> &'static mut TrapContext {
     if current_task().is_none() {
@@ -124,9 +163,10 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
         .unwrap()
         .get_trap_cx_mut()
 }
+
 ///Return to idle control flow for new scheduling
 pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-    let processor = get_proc_by_hartid(get_current_hart_id());
+    let processor = get_current_processor();
     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
