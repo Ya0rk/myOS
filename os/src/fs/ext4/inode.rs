@@ -133,7 +133,7 @@ impl Inode for Ext4Inode {
             Ok(buf)
         }
     }
-    /// 根据路径查找文件
+    /// 在当前路径下查询是否存在这个path的文件
     fn find_by_path(&self, path: &str) -> Option<Arc<dyn Inode>> {
         let file = self.0.get_unchecked_mut();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {

@@ -386,6 +386,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
             (root_inode().find_by_path(cwd).unwrap(), path)
         }
     };
+    // 以上这里好像存在问题，这个所谓的find_by_path到底是什么含义
 
     // Attempt to find the inode for the specified absolute path
     if let Some(inode) = parent_inode.find_by_path(&abs_path) {
