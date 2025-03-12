@@ -128,8 +128,8 @@ impl TaskControlBlock {
         );
         let old_trap_cx = self.get_trap_cx_mut();
         *old_trap_cx = trap_cx;
+        
         debug!("task.exec.pid={}", self.pid.0);
-        // **** release inner automatically
     }
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
         // ---- access parent PCB exclusively

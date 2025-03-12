@@ -24,7 +24,7 @@ async-task = { version = "4.7.1", default-features = false }
 
 [features]
 board_qemu = []
-default = ["info", "test", "mul_hart"]
+default = ["info", "test", "mul_hart", "qemu_riscv"]
 error = []
 warn = []
 info = []
@@ -32,6 +32,7 @@ debug = []
 trace = []
 mul_hart = []
 test = []
+qemu_riscv = []
 
 [profile.release]
 debug = true
