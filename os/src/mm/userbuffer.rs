@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 
-use crate::sync::timer::get_time;
+use crate::sync::get_time;
 
 pub struct UserBuffer {
     ///U8 vec
@@ -29,7 +29,7 @@ impl UserBuffer {
         }
         self.len()
     }
-    // TODO
+    // TODO:优化随机数生成算法
     pub fn fillrandom(&mut self) -> usize {
         let mut random: u8 = (get_time() % 256) as u8; // 初始化随机数
         let time_seed = get_time(); // 只调用一次 get_time()

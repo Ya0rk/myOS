@@ -2,10 +2,13 @@ mod interrupt;
 mod up;
 mod mutex;
 mod misc;
-pub mod timer;
+mod time;
+mod timer;
 
 pub use interrupt::{enable_interrupt, disable_interrupt, interrupt_is_enabled, enable_timer_interrupt};
 pub use mutex::new_shared;
+pub use timer::{get_time, sleep_for};
 pub use misc::{get_waker, yield_now, suspend_now};
 pub use up::SyncUnsafeCell;
+pub use time::{TimeVal, TimeSepc, Tms};
 pub use mutex::{SpinLock, SpinNoIrqLock, MutexGuard, MutexOperations, NoIrqLock, NoopLock, Shared};

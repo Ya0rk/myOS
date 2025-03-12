@@ -1,8 +1,7 @@
 use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::sync::timer::{sleep_for, TimeSepc, TimeVal, Tms};
-use crate::sync::yield_now;
+use crate::sync::{sleep_for, yield_now, TimeSepc, TimeVal, Tms};
 use crate::syscall::ffi::Utsname;
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
