@@ -7,7 +7,7 @@ use super::{pid_alloc, KernelStack, PidHandle};
 use crate::arch::shutdown;
 use crate::fs::File;
 use crate::mm::{MapPermission, MemorySet};
-use crate::sync::{new_shared, Shared};
+use crate::sync::{new_shared, Shared, TimeData};
 use crate::task::spawn_user_task;
 use crate::trap::{trap_loop, TrapContext};
 use alloc::string::String;
@@ -42,6 +42,7 @@ pub struct TaskControlBlock {
     waker:          SyncUnsafeCell<Option<Waker>>,
     trap_cx:        SyncUnsafeCell<TrapContext>,
     task_cx:        SyncUnsafeCell<TaskContext>, // 会删除
+    time_data:      SyncUnsafeCell<TimeData>,
 
     exit_code:      AtomicI32,
 }
@@ -93,6 +94,7 @@ impl TaskControlBlock {
             waker:   SyncUnsafeCell::new(None),
             trap_cx: SyncUnsafeCell::new(trap_cx),
             task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
+            time_data: SyncUnsafeCell::new(TimeData::new()),
 
             exit_code: AtomicI32::new(0),
         });
@@ -169,6 +171,7 @@ impl TaskControlBlock {
             waker  : SyncUnsafeCell::new(None),
             trap_cx: SyncUnsafeCell::new(*trap_cx),
             task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
+            time_data: SyncUnsafeCell::new(TimeData::new()),
 
             exit_code: AtomicI32::new(0),
         });
@@ -204,6 +207,14 @@ impl TaskControlBlock {
 }
 
 impl TaskControlBlock {
+    /// 获取time_data
+    pub fn get_time_data(&self) -> &TimeData {
+        unsafe { &*self.time_data.get() }
+    }
+    pub fn get_time_data_mut(&self) -> &mut TimeData {
+        unsafe { &mut *(self.time_data.get() as *mut TimeData) }
+    }
+
     /// 获取当前进程的pid
     pub fn getpid(&self) -> usize {
         self.pid.0

@@ -56,19 +56,21 @@ impl Processor {
     pub fn user_task_checkin(&mut self, task: &mut Arc<TaskControlBlock>) {
         disable_interrupt();
         //TODO:完善TIME_STAT
+        task.get_time_data_mut().set_sched_in_time();
         self.set_processor_task(task.clone());
         task.switch_pgtable();
         enable_interrupt();
     }
 
     /// 将当前任务从处理器中取出，为下一个task让出处理器
-    pub fn user_task_checkout(&mut self) {
+    pub fn user_task_checkout(&mut self, task: &mut Arc<TaskControlBlock>) {
         disable_interrupt();
         // TODO:完善TIME_STAT
         // 实现float reg的保存
         switch_to_kernel_pgtable();
         current_trap_cx().float_regs.sched_out_do_with_freg();
         self.clear_processor_task();
+        task.get_time_data_mut().set_sched_out_time();
         enable_interrupt();
     }
 }

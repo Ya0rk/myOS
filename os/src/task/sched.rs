@@ -28,7 +28,7 @@ impl<F: Future + Send + 'static> Future for UserTaskFuture<F> {
         let processor = get_current_processor();
         processor.user_task_checkin(&mut this.task); // 将任务装载进处理器
         let ret = unsafe { Pin::new_unchecked(&mut this.future).poll(cx) };
-        processor.user_task_checkout(); // 将任务从处理器中取出
+        processor.user_task_checkout(&mut this.task); // 将任务从处理器中取出
         ret
     }
 }
