@@ -1,6 +1,7 @@
 use core::arch::asm;
+use riscv::register::sstatus::FS;
 
-use riscv::register::sstatus::{self, Sstatus, SPP};
+use crate::arch::sstatus::{self, Sstatus, SPP};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -9,7 +10,7 @@ struct UserFloatRegs {
     fcsr: u32,
     need_save: u8,
     need_restore: u8,
-    signal_dirty: u8,
+    dirty: u8,
 }
 
 #[repr(C)]
@@ -35,7 +36,6 @@ impl TrapContext {
         trap_loop: usize,
     ) -> Self {
         let mut sstatus = sstatus::read();
-        // set CPU privilege to User after trapping back
         sstatus.set_spp(SPP::User);
         let mut cx = Self {
             user_x: [0; 32],
@@ -75,9 +75,33 @@ impl UserFloatRegs {
             fcsr: 0,
             need_save: 0,
             need_restore: 0,
-            signal_dirty: 0,
+            dirty: 0,
         }
     }
+
+    /// 在任务切换到内核态时，判断是否需要保存浮点寄存器的内容
+    pub fn trap_in_do_with_freg(&mut self, sstatus: Sstatus) {
+        if sstatus.fs() == FS::Dirty {
+            self.need_save = 1;
+        }
+    }
+
+    /// 在内核态切换到任务时，恢复浮点寄存器的内容
+    pub fn trap_out_do_with_freg(&mut self) {
+        self.restore();
+
+    }
+
+    /// 在任务调度时，将浮点寄存器的内容保存到内存中
+    pub fn sched_out_do_with_freg(&mut self) {
+        if self.need_save == 0 {
+            return;
+        }
+        self.save();
+        self.need_restore = 1;
+    }
+
+    // TODO: 完善信号处理时 是否需要保存浮点寄存器的内容
 
     pub fn save(&mut self) {
         if self.need_save == 0 {

@@ -95,7 +95,9 @@ pub fn user_trap_return() {
     set_trap_handler(IndertifyMode::User);
 
     let trap_cx = current_trap_cx();
+    trap_cx.float_regs.trap_out_do_with_freg();
     unsafe {
         __return_to_user(trap_cx);
     }
+    trap_cx.float_regs.trap_in_do_with_freg(trap_cx.sstatus);
 }

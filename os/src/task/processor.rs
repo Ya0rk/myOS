@@ -67,6 +67,7 @@ impl Processor {
         // TODO:完善TIME_STAT
         // 实现float reg的保存
         switch_to_kernel_pgtable();
+        current_trap_cx().float_regs.sched_out_do_with_freg();
         self.clear_processor_task();
         enable_interrupt();
     }

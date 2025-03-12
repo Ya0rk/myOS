@@ -51,6 +51,7 @@ impl<F: Future + Send + 'static> Future for KernelTaskFuture<F> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut core::task::Context) -> core::task::Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
+        // TODO: 实现kernel中断时完善 checkin checkout
         let ret = unsafe { Pin::new_unchecked(&mut this.future).poll(cx) };
         ret
     }
