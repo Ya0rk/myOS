@@ -1,8 +1,8 @@
 use log::info;
 use riscv::register::stval;
 use riscv::register::scause::{self, Exception, Interrupt, Trap};
+use crate::sync::set_next_trigger;
 use crate::syscall::syscall;
-use crate::timer::set_next_trigger;
 use crate::task::{current_task, current_trap_cx, exit_current_and_run_next, get_current_hart_id, suspend_current_and_run_next};
 use super::{__return_to_user, set_trap_handler, IndertifyMode};
 
@@ -98,7 +98,7 @@ pub fn user_trap_return() {
     trap_cx.float_regs.trap_out_do_with_freg();
 
     let task = current_task().unwrap();
-    
+
     task.get_time_data_mut().set_trap_out_time();
     unsafe { __return_to_user(trap_cx); }
     task.get_time_data_mut().set_trap_in_time();
