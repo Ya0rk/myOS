@@ -202,6 +202,8 @@ pub trait File: Send + Sync {
     }
 
     fn get_name(&self) -> String;
+
+    fn fstat(&self, stat: &mut Kstat) -> ();
 }
 
 // pub trait Ioctl: File {

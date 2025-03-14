@@ -180,6 +180,7 @@ impl Ext4File {
         let c_path = c_path.into_raw();
         let mtype = types.clone();
         let r = unsafe { ext4_inode_exist(c_path, types as i32) }; //eg: types: EXT4_DE_REG_FILE
+
         unsafe {
             drop(CString::from_raw(c_path));
         }
@@ -378,6 +379,78 @@ impl Ext4File {
         //注，记得先 O_RDONLY 打开文件
         unsafe { ext4_fsize(&mut self.file_desc) }
     }
+
+
+    /// 获取文件的状态信息。
+    ///
+    /// 返回一个包含文件元数据的 `ext4_inode_stat` 结构体,包括:
+    /// - 文件大小
+    /// - 所有者 ID
+    /// - 组 ID 
+    /// - 访问权限
+    /// - 时间戳等
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(ext4_inode_stat)` - 成功获取文件状态
+    /// * `Err(i32)` - 错误代码
+    pub fn fstat(&mut self) -> Result<ext4_inode_stat, i32> {
+        let c_path = self.file_path.clone();
+        let c_path = c_path.into_raw();
+        let mut stat = ext4_inode_stat::default();
+        let r = unsafe { ext4_stat_get(c_path, &mut stat) };
+
+        unsafe {
+            drop(CString::from_raw(c_path));
+        }
+        if r != EOK as i32 {
+            error!("ext4_stat_get: rc = {}", r);
+            return Err(r);
+        }
+        Ok(stat)
+    }
+
+    /// 设置文件的时间戳。
+    ///
+    /// # 参数
+    ///
+    /// * `atime` - 可选的访问时间戳
+    /// * `mtime` - 可选的修改时间戳  
+    /// * `ctime` - 可选的创建时间戳
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功设置时间戳(返回 EOK)
+    /// * `Err(i32)` - 错误代码
+    pub fn set_time(
+        &mut self,
+        atime: Option<u64>,
+        mtime: Option<u64>,
+        ctime: Option<u64>,
+    ) -> Result<usize, i32> {
+        let c_path = self.file_path.clone();
+        let c_path = c_path.into_raw();
+        let mut r = 0;
+        if let Some(atime) = atime {
+            r = unsafe { ext4_atime_set(c_path, atime) }
+        }
+        if let Some(mtime) = mtime {
+            r = unsafe { ext4_mtime_set(c_path, mtime) }
+        }
+        if let Some(ctime) = ctime {
+            r = unsafe { ext4_ctime_set(c_path, ctime) }
+        }
+        // unsafe { ext4_mode_set(c_path, mode) };
+        unsafe {
+            drop(CString::from_raw(c_path));
+        }
+        if r != EOK as i32 {
+            error!("ext4_time_set: rc = {}", r);
+            return Err(r);
+        }
+        Ok(EOK as usize)
+    }
+
     /// 刷新文件缓存。
     ///
     /// # 返回
@@ -597,60 +670,55 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
-    /// 获取目录项。
+    /// 从指定偏移量开始读取目录内容。
+    ///
+    /// # 参数
+    ///
+    /// * `off` - 目录偏移量,用于指定从哪个位置开始读取
     ///
     /// # 返回
     ///
-    /// * `Ok((Vec<Vec<u8>>, Vec<InodeTypes>))` - 目录项名称和类型的向量
-    /// * `Err(i32)` - 错误代码
+    /// * `Ok(Vec<OsDirent>)` - 成功,返回目录项列表
+    /// * `Err(i32)` - 错误代码,如果不是目录则返回 22 (EINVAL)
     ///
-    /// # 错误
+    /// # 安全性
     ///
-    /// 如果当前文件不是目录，则返回 Err(-1)
-    pub fn lwext4_dir_entries(&self) -> Result<(Vec<Vec<u8>>, Vec<InodeTypes>), i32> {
+    /// 该函数包含不安全代码块,用于调用底层 ext4 文件系统接口
+    pub fn read_dir_from(&self, off: u64) -> Result<Vec<OsDirent>, i32> {
         if self.this_type != InodeTypes::EXT4_DE_DIR {
-            return Err(-1);
+            return Err(22);
         }
-
         let c_path = self.file_path.clone();
         let c_path = c_path.into_raw();
         let mut d: ext4_dir = unsafe { core::mem::zeroed() };
+        let mut entries: Vec<_> = Vec::new();
 
-        let mut name: Vec<Vec<u8>> = Vec::new();
-        let mut inode_type: Vec<InodeTypes> = Vec::new();
-
-        //info!("ls {}", str::from_utf8(path).unwrap());
         unsafe {
             ext4_dir_open(&mut d, c_path);
             drop(CString::from_raw(c_path));
-
+            d.next_off = off;
             let mut de = ext4_dir_entry_next(&mut d);
             while !de.is_null() {
                 let dentry = &(*de);
-                let len = dentry.name_length as usize;
-
-                let mut sss: [u8; 255] = [0; 255];
-                sss[..len].copy_from_slice(&dentry.name[..len]);
-                sss[len] = 0;
-
-                debug!(
-                    "  {} {}",
-                    dentry.inode_type,
-                    core::str::from_utf8(&sss).unwrap()
-                );
-                /*   let mut dname: Vec<u8> =
-                    Vec::from_raw_parts(&mut dentry.name as *mut u8, len, len + 1);
-                dname.push(0);
-                */
-                name.push(sss[..(len + 1)].to_vec());
-                inode_type.push((dentry.inode_type as usize).into());
-
+                // 创建 8 字节对齐的目录项
+                let mut name = [0u8; 256];
+                let name_len = dentry.name_length as usize;
+                name[0..name_len].copy_from_slice(&dentry.name[0..name_len]);
+                let mut len = name_len + 19;
+                let align = 8 - len % 8;
+                len += align;
+                entries.push(OsDirent {
+                    d_ino: dentry.inode as u64,
+                    d_off: d.next_off as i64,
+                    d_reclen: len as u16,
+                    d_type: dentry.inode_type,
+                    d_name: name,
+                });
                 de = ext4_dir_entry_next(&mut d);
             }
             ext4_dir_close(&mut d);
         }
-
-        Ok((name, inode_type))
+        Ok(entries)
     }
 }
 
@@ -732,4 +800,14 @@ impl From<usize> for InodeTypes {
             }
         }
     }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct OsDirent {
+    pub d_ino: u64,        // 索引节点号
+    pub d_off: i64,        // 从 0 开始到下一个 dirent 的偏移
+    pub d_reclen: u16,     // 当前 dirent 的长度
+    pub d_type: u8,        // 文件类型
+    pub d_name: [u8; 256], // 文件名
 }

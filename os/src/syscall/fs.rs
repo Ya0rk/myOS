@@ -1,7 +1,7 @@
 use alloc::string::String;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open_file, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{Kstat, open_file, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
@@ -66,29 +66,30 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
     if kst.is_null() {
         return Err(Errno::EFAULT);
     }
-    Ok(0)
+    
 
-    // let token = inner.get_user_token();
-    // let mut buffer = UserBuffer::new(
-    //     translated_byte_buffer(
-    //         token, 
-    //         kst, 
-    //         core::mem::size_of::<Kstat>()
-    // ));
+    let token = inner.get_user_token();
+    let mut buffer = UserBuffer::new(
+        translated_byte_buffer(
+            token, 
+            kst, 
+            core::mem::size_of::<Kstat>()
+    ));
 
-    // let mut stat = Kstat::new();
-    // match inner.fd_table.get_file_by_fd(fd) {
-    //     Ok(Some(file)) => {
-    //         drop(inner);
-    //         file.fstat(&mut stat);
-    //         buffer.write(stat.as_bytes());
-    //         info!("fstat finished");
-    //         return Ok(0);
-    //     }
-    //     _ => {
-    //         return Err(Errno::EBADCALL);
-    //     }
-    // }
+    let mut stat = Kstat::new();
+    match inner.fd_table.get_file_by_fd(fd) {
+        Ok(Some(file)) => {
+            drop(inner);
+            file.fstat(&mut stat);
+            buffer.write(stat.as_bytes());
+            info!("fstat finished");
+            return Ok(0);
+        }
+        _ => {
+            return Err(Errno::EBADCALL);
+        }
+    }
+
 }
 
 /// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
