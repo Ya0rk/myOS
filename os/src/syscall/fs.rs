@@ -348,7 +348,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
 
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.clear_close_on_exec(true);
+    let new_temp_fd = old_temp_fd.set_close_on_exec(true);
     let new_fd = FdTable::alloc_fd(&mut task.get_fd_table(), new_temp_fd)?;
     // drop(inner);
     if new_fd > RLIMIT_NOFILE {
@@ -389,7 +389,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.clear_close_on_exec(cloexec);
+    let new_temp_fd = old_temp_fd.set_close_on_exec(cloexec);
     // 将newfd 放到指定位置
     task.get_fd_table().put_in(new_temp_fd, newfd)?;
 

@@ -37,8 +37,8 @@ impl Fd {
         self.file.is_none() && self.flags.is_empty()
     }
 
-    pub fn clear_close_on_exec(mut self, oparation: bool) -> Self {
-        if oparation {
+    pub fn set_close_on_exec(mut self, enable: bool) -> Self {
+        if enable {
             self.flags.remove(OpenFlags::O_CLOEXEC);
         } else {
             self.flags.insert(OpenFlags::O_CLOEXEC);
@@ -116,7 +116,7 @@ impl FdTable {
     }
 
     pub fn clear(&mut self) {
-        for fd in self.table.iter_mut() {
+        for fd in &mut self.table {
             fd.clear();
         }
     }

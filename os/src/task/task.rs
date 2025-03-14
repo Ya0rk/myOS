@@ -8,7 +8,7 @@ use crate::arch::shutdown;
 use crate::fs::File;
 use crate::mm::{MapPermission, MemorySet};
 use crate::sync::{new_shared, Shared, TimeData};
-use crate::task::spawn_user_task;
+use crate::task::{spawn_user_task, INITPROC};
 use crate::trap::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -55,7 +55,7 @@ impl TaskControlBlock {
         self.pid.0
     }
     /// 创建新task,只有initproc会调用
-    pub fn new(elf_data: &[u8]) {
+    pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let trap_cx = TrapContext::app_init_context(
@@ -101,7 +101,10 @@ impl TaskControlBlock {
 
         debug!("initproc successfully created, pid: {}", task_control_block.getpid());
         debug!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
-        spawn_user_task(task_control_block);
+
+        spawn_user_task(task_control_block.clone());
+
+        task_control_block
     }
     pub fn exec(&self, elf_data: &[u8]) {
         debug!("exec start");

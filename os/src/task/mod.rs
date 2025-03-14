@@ -15,10 +15,9 @@ pub use context::TaskContext;
 pub use pid::{KernelStack, PidHandle, PidAllocator};
 pub use task::{TaskControlBlock, TaskStatus};
 pub use processor::Processor;
-pub use sched::{UserTaskFuture, KernelTaskFuture};
+pub use sched::TaskFuture;
 pub use pid::pid_alloc;
-pub use manager::add_task;
-pub use manager::fetch_task;
+pub use manager::{add_task, remove_task_by_pid, get_task_by_pid};
 pub use sched::{spawn_user_task, spawn_kernel_task};
 pub use processor::{init_processors, current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task, get_current_hart_id};
 
@@ -40,7 +39,7 @@ pub fn suspend_current_and_run_next() {
         // ---- release current PCB
 
         // push back to ready queue.
-        add_task(task);
+        add_task(&task);
         // jump to scheduling cycle
         schedule(task_cx_ptr);
     }

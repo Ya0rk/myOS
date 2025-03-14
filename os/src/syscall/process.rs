@@ -107,8 +107,8 @@ pub fn sys_clone() -> SysResult<usize> {
     // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
     // 只需要修改子进程返回值为0即可
     child_trap_cx.user_x[10] = 0;
-    // 将子进程加入调度器，等待被调度
-    add_task(new_task);
+    // 将子进程加入任务管理器，这里可以快速找到进程
+    add_task(&new_task);
     debug!("new pid is : {}", new_pid);
     // 父进程返回子进程的pid
     Ok(new_pid as usize)

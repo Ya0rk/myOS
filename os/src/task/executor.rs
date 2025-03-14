@@ -74,10 +74,8 @@ where
     // 在runnable.schedule()时，底层会调用这个schedule闭包，将runnable加入到任务队列中
     let schedule = move |runnable: Runnable, info: ScheduleInfo| {
         if info.woken_while_running {
-            // i.e `yield_now()`
             TASK_QUEUE.push_normal(runnable);
         } else {
-            // i.e. woken up by some signal
             TASK_QUEUE.push_prior(runnable);
         }
     };

@@ -1,6 +1,5 @@
 use core::cell::UnsafeCell;
 use super::__switch;
-use super::fetch_task;
 use super::{TaskContext, TaskControlBlock};
 use crate::config::HART_NUM;
 use crate::mm::switch_to_kernel_pgtable;

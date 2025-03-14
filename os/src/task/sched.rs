@@ -1,8 +1,6 @@
 use core::{future::Future, pin::Pin};
 use alloc::sync::Arc;
-
 use crate::trap::trap_loop;
-
 use super::{executor, processor::get_current_processor, TaskControlBlock};
 
 pub enum TaskFuture<F: Future + Send + 'static> {

@@ -27,7 +27,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_WRITE => sys_write(args[0], args[1] as *const u8, args[2]).await,
         SysCode::SYSCALL_FSTAT => sys_fstat(args[0] as usize, args[1] as *const u8),
         SysCode::SYSCALL_EXIT => sys_exit(args[0] as i32),
-        SysCode::SYSCALL_NANOSLEEP => sys_nanosleep(args[0] as *const u8, args[1] as *const u8).await,
+        // SysCode::SYSCALL_NANOSLEEP => sys_nanosleep(args[0] as *const u8, args[1] as *const u8).await,
         SysCode::SYSCALL_YIELD => sys_yield().await,
         SysCode::SYSCALL_TIMES => sys_times(args[0] as *const u8),
         SysCode::SYSCALL_UNAME => sys_uname(args[0] as *mut u8),
@@ -35,7 +35,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_GETPID => sys_getpid(),
         SysCode::SYSCALL_GETPPID => sys_getppid(),
         SysCode::SYSCALL_CLONE => sys_clone(),
-        SysCode::SYSCALL_EXEC => sys_exec(args[0] as *const u8).await,
+        // SysCode::SYSCALL_EXEC => sys_exec(args[0] as *const u8).await,
         // TODO: 把wait4改为async
         SysCode::SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1] as *mut i32, args[2] as usize, args[3] as usize).await,
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
