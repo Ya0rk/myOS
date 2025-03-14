@@ -1,14 +1,14 @@
 use core::cell::SyncUnsafeCell;
-use core::sync::atomic::AtomicI32;
+use core::sync::atomic::{AtomicI32, AtomicUsize};
 use core::task::Waker;
 
 use super::{Fd, FdTable, TaskContext};
-use super::{pid_alloc, KernelStack, PidHandle};
+use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
 use crate::fs::File;
 use crate::mm::{MapPermission, MemorySet};
 use crate::sync::{new_shared, Shared, TimeData};
-use crate::task::{spawn_user_task, INITPROC};
+use crate::task::{add_task, spawn_user_task, INITPROC};
 use crate::trap::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -24,12 +24,12 @@ pub enum TaskStatus {
 
 pub struct TaskControlBlock {
     // 不可变
-    pid:            PidHandle,
+    pid:            Pid,
     kernel_stack:   KernelStack,
 
     // 可变
-    // inner: SpinNoIrqLock<TaskControlBlockInner>,
-    
+    pgid:           AtomicUsize,
+
     base_size:      Shared<usize>,
     /// 进程状态: Ready, Running, Zombie
     task_status:    Shared<TaskStatus>,
@@ -77,11 +77,12 @@ impl TaskControlBlock {
         );
         
         // push a task context which goes to trap_return to the top of kernel stack
-        let task_control_block = Arc::new(Self {
+        let new_task = Arc::new(Self {
             pid: pid_handle,
             kernel_stack,
             
             // Shared
+            pgid: AtomicUsize::new(0),
             base_size: new_shared(user_sp),
             task_status: new_shared(TaskStatus::Ready),
             memory_set: new_shared(memory_set),
@@ -99,12 +100,13 @@ impl TaskControlBlock {
             exit_code: AtomicI32::new(0),
         });
 
-        debug!("initproc successfully created, pid: {}", task_control_block.getpid());
+        debug!("initproc successfully created, pid: {}", new_task.getpid());
         debug!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
 
-        spawn_user_task(task_control_block.clone());
+        add_task(&new_task);
+        spawn_user_task(new_task.clone());
 
-        task_control_block
+        new_task
     }
     pub fn exec(&self, elf_data: &[u8]) {
         debug!("exec start");
@@ -139,8 +141,8 @@ impl TaskControlBlock {
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
         // ---- access parent PCB exclusively
         let parent = self;
-        // copy user space(include trap context)
-        let mut child_memory_set = MemorySet::clone_from_existed_proc(&parent.memory_set.lock());
+        let parent_pgid = self.getpgid();
+        let mut child_memory_set = MemorySet::clone_from_existed_memset(&parent.memory_set.lock());
 
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
@@ -162,6 +164,7 @@ impl TaskControlBlock {
             kernel_stack,
 
             // Shared
+            pgid: AtomicUsize::new(parent_pgid),
             base_size: parent.base_size.clone(),
             task_status: new_shared(TaskStatus::Ready),
             memory_set: new_shared(child_memory_set),
@@ -221,6 +224,15 @@ impl TaskControlBlock {
     /// 获取当前进程的pid
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+
+    /// 获取当前进程的pgid：组id
+    pub fn getpgid(&self) -> usize {
+        self.pgid.load(core::sync::atomic::Ordering::Relaxed)
+    }
+    /// 设置当前进程的pgid
+    pub fn setpgid(&mut self, pgid: usize) {
+        self.pgid.store(pgid, core::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn get_user_token(&self) -> usize {

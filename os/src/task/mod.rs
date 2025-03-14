@@ -12,9 +12,9 @@ mod task;
 pub use fd::{FdTable, Fd};
 pub use manager::TaskManager;
 pub use context::TaskContext;
-pub use pid::{KernelStack, PidHandle, PidAllocator};
+pub use pid::{KernelStack, Pid, PidAllocator};
 pub use task::{TaskControlBlock, TaskStatus};
-pub use processor::Processor;
+pub use processor::CPU;
 pub use sched::TaskFuture;
 pub use pid::pid_alloc;
 pub use manager::{add_task, remove_task_by_pid, get_task_by_pid};
@@ -22,6 +22,7 @@ pub use sched::{spawn_user_task, spawn_kernel_task};
 pub use processor::{init_processors, current_task, current_trap_cx, current_user_token, take_current_task, get_current_hart_id};
 
 use crate::arch::shutdown;
+use crate::config::IDLE_PID;
 use crate::fs::FileClass;
 use crate::fs::OpenFlags;
 use alloc::sync::Arc;
@@ -45,7 +46,7 @@ pub fn suspend_current_and_run_next() {
 }
 
 /// pid of usertests app in make run TEST=1
-pub const IDLE_PID: usize = 0;
+
 
 /// Exit the current 'Running' task and run the next task in task list.
 pub fn exit_current_and_run_next(exit_code: i32) {

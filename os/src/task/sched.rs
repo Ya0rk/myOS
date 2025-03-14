@@ -1,7 +1,7 @@
 use core::{future::Future, pin::Pin};
 use alloc::sync::Arc;
 use crate::trap::trap_loop;
-use super::{executor, processor::get_current_processor, TaskControlBlock};
+use super::{executor, processor::get_current_cpu, TaskControlBlock};
 
 pub enum TaskFuture<F: Future + Send + 'static> {
     UserTaskFuture {
@@ -34,7 +34,7 @@ impl<F: Future + Send + 'static> Future for TaskFuture<F> {
 
         match this {
             TaskFuture::UserTaskFuture { task, future } => {
-                let processor = get_current_processor();
+                let processor = get_current_cpu();
                 processor.user_task_checkin(task); // 用户任务 checkin
                 let ret = unsafe { Pin::new_unchecked(future).poll(cx) };
                 processor.user_task_checkout(task); // 用户任务 checkout

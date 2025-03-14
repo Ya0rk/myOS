@@ -40,18 +40,10 @@ lazy_static! {
     pub static ref TASK_MANAGER: Mutex<TaskManager> = Mutex::new(TaskManager::new());
 }
 
-/// 外露接口
-
-///Interface offered to add task
+/// 添加任务
 pub fn add_task(task: &Arc<TaskControlBlock>) {
     TASK_MANAGER.lock().add(task);
 }
-
-///Interface offered to pop the first task
-// pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
-//     TASK_MANAGER.lock().fetch()
-// }
-
 /// 根据pid获取任务
 pub fn get_task_by_pid(pid: usize) -> Option<Arc<TaskControlBlock>> {
     TASK_MANAGER.lock().get(pid)

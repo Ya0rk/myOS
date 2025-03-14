@@ -1,5 +1,5 @@
 use core::cell::UnsafeCell;
-use super::{TaskContext, TaskControlBlock};
+use super::TaskControlBlock;
 use crate::config::HART_NUM;
 use crate::mm::switch_to_kernel_pgtable;
 use crate::sync::disable_interrupt;
@@ -7,26 +7,19 @@ use crate::sync::enable_interrupt;
 use crate::trap::TrapContext;
 use crate::utils::backtrace;
 use alloc::sync::Arc;
-use alloc::boxed::Box;
 
 ///CPU 结构体，包含当前正在运行的任务和内核线程的上下文
-pub struct Processor {
+pub struct CPU {
     current: Option<Arc<TaskControlBlock>>,
-    idle_task_cx: Option<Box<TaskContext>>,
     hart_id: usize,
 }
 
-impl Processor {
+impl CPU {
     pub const fn new() -> Self {
         Self {
             current: None,
-            idle_task_cx: None,
             hart_id: 0,
         }
-    }
-    ///Get mutable reference to `idle_task_cx`
-    fn get_idle_task_cx_ptr(&mut self) -> *mut TaskContext {
-        self.idle_task_cx.as_mut().unwrap().as_mut() as *mut _
     }
     ///Get current task in moving semanteme
     pub fn take_current(&mut self) -> Option<Arc<TaskControlBlock>> {
@@ -38,23 +31,23 @@ impl Processor {
     }
 
     /// 将当前任务设置为None
-    pub fn clear_processor_task(&mut self) {
+    pub fn clear_cpu_task(&mut self) {
         self.current = None;
     }
     /// 设置当前任务
-    pub fn set_processor_task(&mut self, task: Arc<TaskControlBlock>) {
+    pub fn set_cpu_task(&mut self, task: Arc<TaskControlBlock>) {
         self.current = Some(task);
     }
 
 }
 
-impl Processor {
+impl CPU {
     /// 将task装载进处理器
     pub fn user_task_checkin(&mut self, task: &mut Arc<TaskControlBlock>) {
         disable_interrupt();
         //TODO:完善TIME_STAT
         task.get_time_data_mut().set_sched_in_time();
-        self.set_processor_task(task.clone());
+        self.set_cpu_task(task.clone());
         task.switch_pgtable();
         enable_interrupt();
     }
@@ -66,18 +59,18 @@ impl Processor {
         // 实现float reg的保存
         switch_to_kernel_pgtable();
         current_trap_cx().float_regs.sched_out_do_with_freg();
-        self.clear_processor_task();
+        self.clear_cpu_task();
         task.get_time_data_mut().set_sched_out_time();
         enable_interrupt();
     }
 }
 
-pub struct SyncProcessors(UnsafeCell<[Processor; HART_NUM]>);
+pub struct SyncProcessors(UnsafeCell<[CPU; HART_NUM]>);
 unsafe impl Sync for SyncProcessors {}
 
 /// 多核管理器 TODO
 /// 每个核只会访对应id的Processor，所以不需要加锁
-const PROCESSOR: Processor = Processor::new();
+const PROCESSOR: CPU = CPU::new();
 pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSOR; HART_NUM]));
 
 
@@ -85,7 +78,6 @@ pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSO
 pub fn init_processors() {
     unsafe {
         for (id, p) in (&mut *PROCESSORS.0.get()).iter_mut().enumerate() {
-            p.idle_task_cx = Some(Box::new(TaskContext::zero_init()));
             p.hart_id = id;
         }
     }
@@ -93,14 +85,14 @@ pub fn init_processors() {
 }
 
 /// 获取当前运行的 Processor
-pub fn get_current_processor() -> &'static mut Processor {
+pub fn get_current_cpu() -> &'static mut CPU {
     let id = get_current_hart_id();
     unsafe { &mut (*PROCESSORS.0.get())[id] }
 }
 
 #[allow(unused)]
 /// 根据 hart_id 获取对应的 Processor
-pub fn get_processor(hart_id: usize) -> &'static mut Processor {
+pub fn get_cpu(hart_id: usize) -> &'static mut CPU {
     unsafe { &mut (*PROCESSORS.0.get())[hart_id] }
 }
 
@@ -141,12 +133,12 @@ pub fn get_current_hart_id() -> usize {
 
 ///Take the current task,leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
-    get_current_processor().take_current()
+    get_current_cpu().take_current()
 }
 
 /// 获取当前正在运行的任务
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
-    get_current_processor().current()
+    get_current_cpu().current()
 }
 
 ///Get token of the address space of current task

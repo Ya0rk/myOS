@@ -242,8 +242,8 @@ impl MemorySet {
             elf.header.pt2.entry_point() as usize,
         )
     }
-    ///Clone a same `MemorySet`
-    pub fn clone_from_existed_proc(user_space: &Self) -> Self {
+    /// 从已有的memory set复制
+    pub fn clone_from_existed_memset(user_space: &Self) -> Self {
         let mut memory_set = Self::new_with_kernel_pagetable();
         // map trampoline
         // memory_set.map_trampoline();
