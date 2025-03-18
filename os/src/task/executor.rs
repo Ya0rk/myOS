@@ -1,4 +1,3 @@
-//! Adapted from Titanix
 #![allow(unused)]
 
 extern crate alloc;
@@ -23,35 +22,27 @@ struct TaskQueue {
 }
 
 impl TaskQueue {
-    pub const fn new() -> Self {
+    const fn new() -> Self {
         Self {
             normal: SpinNoIrqLock::new(VecDeque::new()),
             prior: SpinNoIrqLock::new(VecDeque::new()),
         }
     }
 
-    pub fn push_n_normal(&self, mut runnables: VecDeque<Runnable>) {
+    fn push_n_normal(&self, mut runnables: VecDeque<Runnable>) {
         self.normal.lock().append(&mut runnables);
     }
 
-    pub fn push_normal(&self, runnable: Runnable) {
+    fn push_normal(&self, runnable: Runnable) {
         self.normal.lock().push_back(runnable);
     }
 
-    pub fn push_prior(&self, runnable: Runnable) {
+    fn push_prior(&self, runnable: Runnable) {
         self.prior.lock().push_back(runnable);
     }
 
-    pub fn fetch_normal(&self) -> Option<Runnable> {
-        self.normal.lock().pop_front()
-    }
-
-    pub fn fetch_prior(&self) -> Option<Runnable> {
-        self.prior.lock().pop_front()
-    }
-
     /// 取出优先级高的任务，如果没有则取出普通任务
-    pub fn fetch(&self) -> Option<Runnable> {
+    fn fetch(&self) -> Option<Runnable> {
         self.prior
             .lock()
             .pop_front()
@@ -59,7 +50,7 @@ impl TaskQueue {
     }
 
     /// 从任务队列窃取一半的normal task，可以减少窃取次数
-    pub fn steal(&self) -> Option<VecDeque<Runnable>> {
+    fn steal(&self) -> Option<VecDeque<Runnable>> {
         let len = self.normal_len();
         if len == 0 {
             return None;
@@ -70,19 +61,19 @@ impl TaskQueue {
         Some(stealen_tasks)
     }
 
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.prior_len() + self.normal_len()
     }
 
-    pub fn prior_len(&self) -> usize {
+    fn prior_len(&self) -> usize {
         self.prior.lock().len()
     }
 
-    pub fn normal_len(&self) -> usize {
+    fn normal_len(&self) -> usize {
         self.normal.lock().len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.prior_len() == 0 && self.normal_len() == 0
     }
 }

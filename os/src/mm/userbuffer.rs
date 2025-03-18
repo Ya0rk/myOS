@@ -1,3 +1,5 @@
+use core::ops::{Index, IndexMut};
+
 /// u8数组切片，使内核可以访问用户空间
 
 use alloc::vec::Vec;
@@ -136,5 +138,22 @@ impl Iterator for UserBufferIterator {
             }
             Some(r)
         }
+    }
+}
+
+
+// 实现 Index trait，允许不可变索引访问
+impl Index<usize> for UserBuffer {
+    type Output = [u8];
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.buffers[index]
+    }
+}
+
+// 实现 IndexMut trait，允许可变索引访问
+impl IndexMut<usize> for UserBuffer {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.buffers[index]
     }
 }

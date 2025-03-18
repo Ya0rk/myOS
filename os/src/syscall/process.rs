@@ -7,7 +7,7 @@ use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next,
 };
-use crate::utils::{Errno, SysResult};
+use crate::utils::{Errno, SysResult, RNG};
 use alloc::sync::Arc;
 use log::debug;
 use zerocopy::IntoBytes;
@@ -177,4 +177,21 @@ pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: u
         }
     }
     // ---- release current PCB lock automatically
+}
+
+
+pub fn sys_getrandom(
+    buf: *const u8,
+    buflen: usize,
+    _flags: usize,
+) -> SysResult<usize> {
+    let token = current_user_token();
+    let buffer = UserBuffer::new(
+        translated_byte_buffer(
+            token,
+            buf,
+            buflen
+    ));
+    unsafe { RNG.fill_buf(buffer) };
+    Ok(buflen)
 }

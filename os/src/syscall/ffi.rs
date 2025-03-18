@@ -73,6 +73,7 @@ pub enum SysCode {
     SYSCALL_CLONE     = 220,
     SYSCALL_EXEC      = 221,
     SYSCALL_WAIT4     = 260,
+    GETRANDOM         = 278,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -114,6 +115,7 @@ impl SysCode {
             Self::SYSCALL_EXEC => "exec",
             Self::SYSCALL_WAIT4 => "wait4",
             Self::SYSCALL_UNKNOWN => "unknown",
+            Self::GETRANDOM => "getrandom",
         }
     }
 }
