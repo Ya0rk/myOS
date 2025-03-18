@@ -6,6 +6,7 @@ mod switch;
 mod fd;
 pub mod executor;
 mod sched;
+mod thread_group;
 #[allow(clippy::module_inception)]
 mod task;
 
@@ -21,9 +22,8 @@ pub use manager::{add_task, remove_task_by_pid, get_task_by_pid};
 pub use sched::{spawn_user_task, spawn_kernel_task};
 pub use processor::{init_processors, current_task, current_trap_cx, current_user_token, take_current_task, get_current_hart_id};
 
-use crate::arch::shutdown;
-use crate::config::IDLE_PID;
 use crate::fs::FileClass;
+use thread_group::ThreadGroup;
 use crate::fs::OpenFlags;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -45,57 +45,55 @@ pub fn suspend_current_and_run_next() {
     }
 }
 
-/// pid of usertests app in make run TEST=1
+// / pid of usertests app in make run TEST=1
+// / Exit the current 'Running' task and run the next task in task list.
+// pub fn exit_current_and_run_next(exit_code: i32) {
+//     // take from Processor
+//     let task = take_current_task().unwrap();
 
+//     let pid = task.getpid();
+//     if pid == IDLE_PID {
+//         println!(
+//             "[kernel] Idle process exit with exit_code {} ...",
+//             exit_code
+//         );
+//         if exit_code != 0 {
+//             //crate::sbi::shutdown(255); //255 == -1 for err hint
+//             shutdown(true)
+//         } else {
+//             //crate::sbi::shutdown(0); //0 for success hint
+//             shutdown(false)
+//         }
+//     }
 
-/// Exit the current 'Running' task and run the next task in task list.
-pub fn exit_current_and_run_next(exit_code: i32) {
-    // take from Processor
-    let task = take_current_task().unwrap();
+//     // **** access current TCB exclusively
+//     // Change status to Zombie
+//     task.set_zombie();
+//     // Record exit code
+//     task.set_exit_code(exit_code);
+//     // do not move to its parent but under initproc
 
-    let pid = task.getpid();
-    if pid == IDLE_PID {
-        println!(
-            "[kernel] Idle process exit with exit_code {} ...",
-            exit_code
-        );
-        if exit_code != 0 {
-            //crate::sbi::shutdown(255); //255 == -1 for err hint
-            shutdown(true)
-        } else {
-            //crate::sbi::shutdown(0); //0 for success hint
-            shutdown(false)
-        }
-    }
+//     // 将当前进程的子进程移动到initproc下
+//     // ++++++ access initproc TCB exclusively
+//     {
+//         for child in task.children.lock().iter() {
+//             child.set_parent(Some(Arc::downgrade(&INITPROC)));
+//             INITPROC.add_children(child.clone());
+//         }
+//     }
+//     // ++++++ release parent PCB
 
-    // **** access current TCB exclusively
-    // Change status to Zombie
-    task.set_zombie();
-    // Record exit code
-    task.set_exit_code(exit_code);
-    // do not move to its parent but under initproc
-
-    // 将当前进程的子进程移动到initproc下
-    // ++++++ access initproc TCB exclusively
-    {
-        for child in task.children.lock().iter() {
-            child.set_parent(Some(Arc::downgrade(&INITPROC)));
-            INITPROC.add_children(child.clone());
-        }
-    }
-    // ++++++ release parent PCB
-
-    // 删除当前进程的所有子进程
-    task.clear_children();
-    // deallocate user space
-    task.recycle_data_pages();
-    // **** release current PCB
-    // drop task manually to maintain rc correctly
-    drop(task);
-    // we do not have to save task context
-    let mut _unused = TaskContext::zero_init();
-    schedule(&mut _unused as *mut _);
-}
+//     // 删除当前进程的所有子进程
+//     task.clear_children();
+//     // deallocate user space
+//     task.recycle_data_pages();
+//     // **** release current PCB
+//     // drop task manually to maintain rc correctly
+//     drop(task);
+//     // we do not have to save task context
+//     let mut _unused = TaskContext::zero_init();
+//     schedule(&mut _unused as *mut _);
+// }
 
 lazy_static! {
     ///Globle process that init user shell

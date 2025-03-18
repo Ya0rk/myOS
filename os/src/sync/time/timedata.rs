@@ -1,5 +1,5 @@
 use core::time::Duration;
-use crate::sync::timer::time_duration;
+use crate::sync::timer::{time_duration, TIME_SLICE_DUATION};
 
 pub struct TimeData {
     /// 开机时间
@@ -70,5 +70,10 @@ impl TimeData {
     #[inline(always)]
     pub fn get_system_time(&self) -> Duration {
         self.system_time
+    }
+
+    /// 判断任务在executor中的时间片是否用完
+    pub fn usedout_timeslice(&self) -> bool {
+        time_duration() - self.sched_in_time >= TIME_SLICE_DUATION
     }
 }

@@ -1,10 +1,6 @@
 use core::ops::{Index, IndexMut};
-
-/// u8数组切片，使内核可以访问用户空间
-
 use alloc::vec::Vec;
-
-use crate::sync::get_time;
+/// u8数组切片，使内核可以访问用户空间
 
 pub struct UserBuffer {
     ///U8 vec
@@ -30,24 +26,6 @@ impl UserBuffer {
             buffer.fill(0); // 使用 fill 方法快速填充 0
         }
         self.len()
-    }
-    // TODO:优化随机数生成算法
-    pub fn fillrandom(&mut self) -> usize {
-        let mut random: u8 = (get_time() % 256) as u8; // 初始化随机数
-        let time_seed = get_time(); // 只调用一次 get_time()
-
-        for sub_buff in self.buffers.iter_mut() {
-            let sblen = sub_buff.len();
-            for j in 0..sblen {
-                if random == 0 {
-                    random = (time_seed % 256) as u8; // 使用预计算的 time_seed
-                }
-                random = (((random as usize) * (time_seed / 3 % 256) + 37) % 256) as u8; // 生成随机数
-                sub_buff[j] = random;
-            }
-        }
-
-        self.len() // 返回长度
     }
     // 将一个buffer的数据写入UserBuffer，返回写入长度
     pub fn write(&mut self, buff: &[u8]) -> usize {

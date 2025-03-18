@@ -7,6 +7,7 @@ const TICKS_PER_SEC: usize = 100; // 设置每秒中断次数，可以计算出�
 pub const MSEC_PER_SEC: usize = 1000;
 pub const USEC_PER_SEC: usize = 1_000_000;
 pub const NSEC_PER_SEC: usize = 1_000_000_000;
+pub const TIME_SLICE_DUATION: Duration = Duration::new(0, (NSEC_PER_SEC / TICKS_PER_SEC) as u32);
 
 #[inline(always)]
 /// 获取开机以来，晶振片过了几个时钟周期

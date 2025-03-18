@@ -1,9 +1,9 @@
 use log::info;
 use riscv::register::stval;
 use riscv::register::scause::{self, Exception, Interrupt, Trap};
-use crate::sync::set_next_trigger;
+use crate::sync::{set_next_trigger, yield_now};
 use crate::syscall::syscall;
-use crate::task::{current_task, current_trap_cx, exit_current_and_run_next, get_current_hart_id, suspend_current_and_run_next};
+use crate::task::{current_task, current_trap_cx, executor, exit_current_and_run_next, get_current_hart_id};
 use super::{__return_to_user, set_trap_handler, IndertifyMode};
 
 #[no_mangle]
@@ -13,6 +13,13 @@ pub async fn user_trap_handler() {
     set_trap_handler(IndertifyMode::Kernel);
     let scause = scause::read();
     let stval = stval::read();
+    let task = current_task().unwrap();
+
+    if task.get_time_data().usedout_timeslice() && executor::has_task() {
+        // log::info!("time slice used up, yield now");
+        yield_now().await;
+    }
+
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => { // 7
             let mut cx = current_trap_cx();
@@ -76,7 +83,7 @@ pub async fn user_trap_handler() {
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
             set_next_trigger();
-            suspend_current_and_run_next();
+            yield_now().await;
         }
         _ => {
             panic!(

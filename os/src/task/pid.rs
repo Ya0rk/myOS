@@ -54,6 +54,12 @@ impl fmt::Display for Pid {
     }
 }
 
+impl From<Pid> for usize {
+    fn from(value: Pid) -> Self {
+        value.0
+    }
+}
+
 impl Drop for Pid {
     fn drop(&mut self) {
         PID_ALLOCATOR.lock().dealloc(self.0);

@@ -2,13 +2,13 @@ use core::cell::SyncUnsafeCell;
 use core::sync::atomic::{AtomicI32, AtomicUsize};
 use core::task::Waker;
 
-use super::{Fd, FdTable, TaskContext};
+use super::{Fd, FdTable, TaskContext, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
 use crate::fs::File;
 use crate::mm::{MapPermission, MemorySet};
 use crate::sync::{new_shared, Shared, TimeData};
-use crate::task::{add_task, spawn_user_task, INITPROC};
+use crate::task::{add_task, spawn_user_task};
 use crate::trap::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -31,6 +31,7 @@ pub struct TaskControlBlock {
     pgid:           AtomicUsize,
 
     base_size:      Shared<usize>,
+    thread_group:   Shared<ThreadGroup>,
     /// 进程状态: Ready, Running, Zombie
     task_status:    Shared<TaskStatus>,
     memory_set:     Shared<MemorySet>,
@@ -84,6 +85,7 @@ impl TaskControlBlock {
             // Shared
             pgid: AtomicUsize::new(0),
             base_size: new_shared(user_sp),
+            thread_group: new_shared(ThreadGroup::new()),
             task_status: new_shared(TaskStatus::Ready),
             memory_set: new_shared(memory_set),
             parent: new_shared(None),
@@ -103,6 +105,7 @@ impl TaskControlBlock {
         debug!("initproc successfully created, pid: {}", new_task.getpid());
         debug!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
 
+        new_task.thread_group_add(new_task.clone());
         add_task(&new_task);
         spawn_user_task(new_task.clone());
 
@@ -138,6 +141,8 @@ impl TaskControlBlock {
         
         debug!("task.exec.pid={}", self.pid.0);
     }
+
+    /// TODO:差分为thread 和 process new
     pub fn fork(self: &Arc<Self>) -> Arc<Self> {
         // ---- access parent PCB exclusively
         let parent = self;
@@ -166,6 +171,7 @@ impl TaskControlBlock {
             // Shared
             pgid: AtomicUsize::new(parent_pgid),
             base_size: parent.base_size.clone(),
+            thread_group: parent.thread_group.clone(),
             task_status: new_shared(TaskStatus::Ready),
             memory_set: new_shared(child_memory_set),
             parent: new_shared(Some(Arc::downgrade(self))),
@@ -224,6 +230,16 @@ impl TaskControlBlock {
     /// 获取当前进程的pid
     pub fn getpid(&self) -> usize {
         self.pid.0
+    }
+
+    /// 向线程组增加成员
+    pub fn thread_group_add(&self, task: Arc<TaskControlBlock>) {
+        self.thread_group.lock().add(task);
+    }
+
+    /// 删除线程组中的一个成员
+    pub fn thread_group_remove(&self, taskpid: Pid) {
+        self.thread_group.lock().remove(taskpid.into());
     }
 
     /// 获取当前进程的pgid：组id

@@ -1,4 +1,4 @@
-use crate::{mm::UserBuffer, task::INITPROC};
+use crate::{mm::UserBuffer, task::INITPROC, utils::RNG};
 use alloc::{
     collections::BTreeSet,
     fmt::{Debug, Formatter},
@@ -236,8 +236,8 @@ impl File for DevRandom {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, mut user_buf: UserBuffer) -> usize {
-        user_buf.fillrandom()
+    fn read(&self, user_buf: UserBuffer) -> usize {
+        unsafe { RNG.fill_buf(user_buf) }
     }
     fn write(&self, user_buf: UserBuffer) -> usize {
         // do nothing

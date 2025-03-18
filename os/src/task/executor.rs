@@ -2,16 +2,16 @@
 
 extern crate alloc;
 
-use alloc::collections::VecDeque;
+use alloc::{collections::VecDeque, task};
 use core::{future::Future, sync::atomic::{AtomicU32, AtomicUsize}};
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use crate::{config::HART_NUM, sync::SpinNoIrqLock};
 
 use super::get_current_hart_id;
 
-const NUM_QUEUES: usize = HART_NUM;
+const QUEUE_NUM: usize = HART_NUM;
 const INDEX: AtomicUsize = AtomicUsize::new(0);
-static TASK_QUEUES: [TaskQueue; NUM_QUEUES] = [
+static TASK_QUEUES: [TaskQueue; QUEUE_NUM] = [
     TaskQueue::new(),
     TaskQueue::new(),
 ];
@@ -99,6 +99,18 @@ where
     task.detach();
 }
 
+pub fn tasks_len() -> usize {
+    let mut len = 0;
+    for i in 0..QUEUE_NUM {
+        len += TASK_QUEUES[i].len()
+    }
+    len
+}
+
+pub fn has_task() -> bool {
+    tasks_len() > 0
+}
+
 /// Run all tasks in the task queue
 pub fn run() {
     let mut steal_counter = 0;
@@ -111,11 +123,11 @@ pub fn run() {
         } else {
             // 如果自己的队列为空，尝试从其他队列中窃取任务
             steal_counter += 1;
-            if steal_counter > NUM_QUEUES * 2 {
+            if steal_counter > QUEUE_NUM * 2 {
                 // 如果多次窃取失败，可能没有任务了，退出循环
                 break;
             }
-            for i in 0..NUM_QUEUES {
+            for i in 0..QUEUE_NUM {
                 if i == worker_id {
                     continue; // 跳过自己的队列
                 }

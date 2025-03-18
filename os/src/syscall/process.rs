@@ -4,8 +4,7 @@ use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, trans
 use crate::sync::{sleep_for, yield_now, TimeSepc, TimeVal, Tms};
 use crate::syscall::ffi::Utsname;
 use crate::task::{
-    add_task, current_task, current_user_token, exit_current_and_run_next,
-    suspend_current_and_run_next,
+    add_task, current_task, current_user_token, spawn_user_task, suspend_current_and_run_next
 };
 use crate::utils::{Errno, SysResult, RNG};
 use alloc::sync::Arc;
@@ -15,7 +14,10 @@ use zerocopy::IntoBytes;
 // use super::ffi::Utsname;
 
 pub fn sys_exit(exit_code: i32) -> ! {
-    exit_current_and_run_next(exit_code);
+    let task = current_task().unwrap();
+    task.set_zombie();
+    // TODO(YJJ):考虑线程组
+    task.set_exit_code((exit_code & 0xFF) << 8);
     panic!("Unreachable in sys_exit!");
 }
 
@@ -109,6 +111,7 @@ pub fn sys_clone() -> SysResult<usize> {
     child_trap_cx.user_x[10] = 0;
     // 将子进程加入任务管理器，这里可以快速找到进程
     add_task(&new_task);
+    spawn_user_task(new_task);
     debug!("new pid is : {}", new_pid);
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
@@ -192,6 +195,5 @@ pub fn sys_getrandom(
             buf,
             buflen
     ));
-    unsafe { RNG.fill_buf(buffer) };
-    Ok(buflen)
+    unsafe { Ok(RNG.fill_buf(buffer)) }
 }
