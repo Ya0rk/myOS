@@ -118,6 +118,30 @@ impl Path {
             content: new_path,
         }
     }
+    /// 通过一个路径获得文件名
+    /// 
+    /// 使用/对目录进行分割
+    /// 
+    /// 然后获得的最后一个条目就是文件名
+    /// 
+    /// 注意到如果’/‘是最后一个字符返回的是空字符串
+    pub fn get_filename(&self) -> String {
+        let path = self.content.trim_end_matches('/');
+        match path.rfind('/') {
+            Some(pos) => {
+                if pos + 1 < path.len() {
+                    path[pos + 1..].to_string()
+                } else {
+                    // 如果'/'是最后一个字符，返回空字符串
+                    String::new()
+                }
+            }
+            None => {
+                // 如果没有'/'，整个路径就是文件名
+                path.to_string()
+            }
+        }
+    }
 }
 
 /// Unit tests for the Path implementation.

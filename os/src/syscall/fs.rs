@@ -1,7 +1,7 @@
 use alloc::string::String;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{Kstat, open_file, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{ mkdir, open_file, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
@@ -455,6 +455,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
     info!("sys_mkdirat: path = {}, mode = {}", path.get(), mode);
 
     let inner = task.inner_lock();
+    info!("sys_mkdirat cwd is {}", inner.get_current_path());
 
     // 计算目标路径
     let target_path = if path.is_absolute() {
@@ -473,11 +474,12 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
         let other_cwd = inode.get_name();
         path.join_path_2_absolute(other_cwd).get()
     };
+    info!("sys_mkdirat target_path is {}", target_path);
 
     drop(inner);
 
     // 检查路径是否有效并创建目录
-    let result = if let Some(_) = open_file(target_path.as_str(), OpenFlags::O_DIRECTORY) {
+    let result = if let Some(_) = mkdir(target_path.as_str(), mode) {
         Ok(0) // 成功
     } else {
         Err(Errno::EBADCALL) // 失败

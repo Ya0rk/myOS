@@ -7,7 +7,7 @@ mod stat;
 mod stdio;
 mod vfs;
 mod ffi;
-mod ext4;
+pub mod ext4;
 mod path;
 
 pub use ext4::{root_inode,ls};
@@ -20,7 +20,7 @@ pub use devfs::*;
 pub use path::{Path, path_test};
 pub use dirent::Dirent;
 pub use fsidx::*;
-use log::debug;
+use log::{debug, info};
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
 pub use stat::Kstat;
@@ -337,6 +337,10 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
     open(&"/", path, flags)
 }
 
+// pub fn open_dir(path: &str, flags: OpenFlags, mode: usize) -> Option<FileClass>{
+//     unimplemented!()
+// }
+
 /// Opens a file or device at the specified path with the given flags.
 ///
 /// # Arguments
@@ -356,7 +360,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     // Join the current working directory with the provided path to create an absolute path
     let new_path = kpath.join_path_2_absolute(cwd.to_string());
     let abs_path = new_path.get();
-    
+    info!("open() abs_path is {}", abs_path);
     // Check if the absolute path corresponds to a device file
     if find_device(&abs_path) {
         // Attempt to open the device file
@@ -426,4 +430,50 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     
     // Return None if the file cannot be opened or created
     None
+}
+
+/// 创建一个新的文件夹
+/// 
+/// - path: 文件夹目录（绝对路径）
+/// - mode: 创建模式
+pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
+    info!("open() abs_path is {}", path);
+
+    // 查看当前路径是否是设备
+    if find_device(path) {
+        return None;
+    }
+
+    // 查看当前路径是否已经存在
+    if has_inode(path) {
+        return None;
+    }
+
+    // 搜索上级文件夹
+    // 获得上级文件夹文件路径
+    let (parent_path, child_name) = Path::string2path(path.to_string()).split_with("/");
+    // 获取上级文件夹的inode，等到创建inode的时候需要，如果上级文件夹的inode不存在就报错
+    let (parent_inode, _) = if has_inode(&parent_path) {
+        (find_inode_idx(&parent_path).unwrap(), "") // Get the parent inode if it exists
+    } else {
+        // If the parent inode does not exist, use the root inode
+        if parent_path == "/" {
+            (root_inode(), path)
+        } else {
+            (root_inode().find_by_path(&parent_path).unwrap(), path)
+        }
+    };
+    // 查看当前上级文件夹下是否有该文件，如果有该文件就返回错误
+    if let Some(_) = parent_inode.find_by_path(path) {
+        return None;
+    }
+    // 利用parent_inode在根据绝对路径去创造新文件
+    
+    debug!(
+        "[mkdir] path {}, mode {}",
+        path, mode
+    );
+    
+    return create_file(path.to_string(), &parent_path, &child_name, OpenFlags::O_DIRECTORY);
+
 }
