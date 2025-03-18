@@ -2,6 +2,7 @@
 mod boot;
 mod logger;
 mod errtype;
+mod random;
 
 use core::arch::asm;
 use log::warn;

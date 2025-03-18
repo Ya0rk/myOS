@@ -4,12 +4,18 @@
 extern crate alloc;
 
 use alloc::collections::VecDeque;
-use core::future::Future;
+use core::{future::Future, sync::atomic::{AtomicU32, AtomicUsize}};
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
-use crate::sync::SpinNoIrqLock;
+use crate::{config::HART_NUM, sync::SpinNoIrqLock};
 
+use super::get_current_hart_id;
 
-static TASK_QUEUE: TaskQueue = TaskQueue::new();
+const NUM_QUEUES: usize = HART_NUM;
+const INDEX: AtomicUsize = AtomicUsize::new(0);
+static TASK_QUEUES: [TaskQueue; NUM_QUEUES] = [
+    TaskQueue::new(),
+    TaskQueue::new(),
+];
 
 struct TaskQueue {
     normal: SpinNoIrqLock<VecDeque<Runnable>>,
@@ -22,6 +28,10 @@ impl TaskQueue {
             normal: SpinNoIrqLock::new(VecDeque::new()),
             prior: SpinNoIrqLock::new(VecDeque::new()),
         }
+    }
+
+    pub fn push_n_normal(&self, mut runnables: VecDeque<Runnable>) {
+        self.normal.lock().append(&mut runnables);
     }
 
     pub fn push_normal(&self, runnable: Runnable) {
@@ -46,6 +56,18 @@ impl TaskQueue {
             .lock()
             .pop_front()
             .or_else(|| self.normal.lock().pop_front())
+    }
+
+    /// 从任务队列窃取一半的normal task，可以减少窃取次数
+    pub fn steal(&self) -> Option<VecDeque<Runnable>> {
+        let len = self.normal_len();
+        if len == 0 {
+            return None;
+        }
+        let mut normal_lock = self.normal.lock();
+        let steal_cont = len / 2;
+        let stealen_tasks = normal_lock.split_off(steal_cont);
+        Some(stealen_tasks)
     }
 
     pub fn len(&self) -> usize {
@@ -73,10 +95,12 @@ where
 {
     // 在runnable.schedule()时，底层会调用这个schedule闭包，将runnable加入到任务队列中
     let schedule = move |runnable: Runnable, info: ScheduleInfo| {
+        let queue_idx = get_current_hart_id();
+        let queue = &TASK_QUEUES[queue_idx];
         if info.woken_while_running {
-            TASK_QUEUE.push_normal(runnable);
+            queue.push_normal(runnable);
         } else {
-            TASK_QUEUE.push_prior(runnable);
+            queue.push_prior(runnable);
         }
     };
     let (runnable, task) = async_task::spawn(future, WithInfo(schedule));
@@ -86,8 +110,30 @@ where
 
 /// Run all tasks in the task queue
 pub fn run() {
-    while let Some(task) = TASK_QUEUE.fetch() {
-        /// TODO:拆分TASK_QUEUE，实现steal机制
-        task.run();
+    let mut steal_counter = 0;
+    loop {
+        // 首先尝试从自己的队列中获取任务
+        let worker_id = get_current_hart_id();
+        if let Some(task) = TASK_QUEUES[worker_id].fetch() {
+            task.run();
+            steal_counter = 0; // 重置窃取计数器
+        } else {
+            // 如果自己的队列为空，尝试从其他队列中窃取任务
+            steal_counter += 1;
+            if steal_counter > NUM_QUEUES * 2 {
+                // 如果多次窃取失败，可能没有任务了，退出循环
+                break;
+            }
+            for i in 0..NUM_QUEUES {
+                if i == worker_id {
+                    continue; // 跳过自己的队列
+                }
+                if let Some(tasks) = TASK_QUEUES[i].steal() {
+                    TASK_QUEUES[worker_id].push_n_normal(tasks); // 将偷取的任务加入自己队列
+                    steal_counter = 0; // 重置窃取计数器
+                    break;
+                }
+            }
+        }
     }
 }
