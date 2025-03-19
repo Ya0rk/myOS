@@ -2,7 +2,7 @@ use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::sync::{sleep_for, yield_now, TimeSepc, TimeVal, Tms};
-use crate::syscall::ffi::Utsname;
+use crate::syscall::ffi::{CloneFlags, Utsname};
 use crate::task::{
     add_task, current_task, current_user_token, spawn_user_task, suspend_current_and_run_next
 };
@@ -13,21 +13,23 @@ use zerocopy::IntoBytes;
 
 // use super::ffi::Utsname;
 
-pub fn sys_exit(exit_code: i32) -> ! {
+pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
     let task = current_task().unwrap();
     task.set_zombie();
-    // TODO(YJJ):考虑线程组
-    task.set_exit_code((exit_code & 0xFF) << 8);
-    panic!("Unreachable in sys_exit!");
+
+    if task.is_leader(){
+        task.set_exit_code((exit_code & 0xFF) << 8);
+    }
+    Ok(0)
 }
 
-pub fn sys_nanosleep(req: *const u8, _rem: *const u8) -> SysResult<usize> {
+pub async fn sys_nanosleep(req: *const u8, _rem: *const u8) -> SysResult<usize> {
     let req = *translated_ref(current_user_token(), req as *const TimeSepc);
     if !req.check_valid() {
         return Err(Errno::EINVAL);
     }
 
-    sleep_for(req);
+    sleep_for(req).await;
     Ok(0)
 }
 
@@ -99,20 +101,53 @@ pub fn sys_getppid() -> SysResult<usize> {
     Ok(current_task().unwrap().get_ppid() as usize)
 }
 
-pub fn sys_clone() -> SysResult<usize> {
+pub fn sys_clone(
+    flags: usize,
+    child_stack: usize,
+    ptid: usize,
+    tls: usize,
+    ctid: usize,
+    ) -> SysResult<usize> {
     debug!("start sys_fork");
+    let flag = CloneFlags::from_bits(flags as u32).unwrap();
     let current_task = current_task().unwrap();
-    let new_task = current_task.fork();
+    let token = current_task.get_user_token();
+    let new_task = match flag.contains(CloneFlags::CLONE_THREAD) {
+        true  => current_task.thread_fork(flag),
+        false => current_task.process_fork(flag),
+    };
+    drop(current_task);
+
     let new_pid = new_task.get_pid();
-    // modify trap context of new_task, because it returns immediately after switching
     let mut child_trap_cx = *new_task.get_trap_cx_mut();
+
+    // 子进程不能使用父进程的栈，所以需要手动指定
+    if child_stack != 0 {
+        child_trap_cx.set_sp(child_stack);
+    }
+    if flag.contains(CloneFlags::CLONE_SETTLS) {
+        child_trap_cx.set_tp(tls);
+    }
+    // 检查是否需要设置 parent_tid
+    if flag.contains(CloneFlags::CLONE_PARENT_SETTID) {
+        *translated_refmut(token, ptid as *mut u32) = new_pid as u32;
+    }
+    // 检查是否需要设置子进程的 set_child_tid,clear_child_tid
+    if flag.contains(CloneFlags::CLONE_CHILD_SETTID) {
+        *translated_refmut(token, ctid as *mut u32) = new_pid as u32;
+    }
+    // 检查是否需要设置child_cleartid,在线程退出时会将指向的地址清零
+    if flag.contains(CloneFlags::CLONE_CHILD_CLEARTID) {
+        new_task.set_child_cleartid(ctid);
+    }
+
     // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
     // 只需要修改子进程返回值为0即可
     child_trap_cx.user_x[10] = 0;
     // 将子进程加入任务管理器，这里可以快速找到进程
     add_task(&new_task);
     spawn_user_task(new_task);
-    debug!("new pid is : {}", new_pid);
+
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
 }
@@ -143,7 +178,7 @@ pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: u
         // 快速查看是否存在符合条件的子进程
         if !locked_child
             .iter()
-            .any(|p| pid == -1 || pid as usize == p.getpid())
+            .any(|p| pid == -1 || pid as usize == p.get_pid())
         {
             return Err(Errno::NOPID);
         }
@@ -151,7 +186,7 @@ pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: u
         // 查找僵尸子进程
         let zombie_child = locked_child.iter().enumerate().find_map(|(idx, p)| {
             //检查是否为僵尸进程且符合 PID 条件
-            if p.is_zombie() && (pid == -1 || pid as usize == p.getpid()) {
+            if p.is_zombie() && (pid == -1 || pid as usize == p.get_pid()) {
                 Some(idx)
             } else {
                 None
@@ -165,7 +200,7 @@ pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: u
             assert_eq!(Arc::strong_count(&removed_child), 1);
 
             // 获取子进程的 PID 和退出状态
-            let found_pid = removed_child.getpid();
+            let found_pid = removed_child.get_pid();
             let exit_code = removed_child.get_exit_code();
 
             // 将退出状态写入用户提供的指针

@@ -53,7 +53,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
         }
     }
 
-    info!("Task {} exit with code {}", task.getpid(), task.get_exit_code());
+    info!("Task {} exit with code {}", task.get_pid(), task.get_exit_code());
     task.exit();
 }
 
