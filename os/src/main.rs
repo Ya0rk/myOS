@@ -4,6 +4,7 @@
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
+#![feature(negative_impls)]
 
 extern crate alloc;
 
@@ -30,7 +31,7 @@ pub mod arch;
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::timer;
-use task::get_current_hart_id;
+use task::{executor, get_current_hart_id};
 
 global_asm!(include_str!("entry.asm"));
 
@@ -85,6 +86,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         finish = fs::list_apps();
     }
     while !finish {}
-    task::run_tasks();
+    // task::run_tasks();
+    executor::run();
     panic!("Unreachable in rust_main!");
 }

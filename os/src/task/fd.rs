@@ -37,8 +37,8 @@ impl Fd {
         self.file.is_none() && self.flags.is_empty()
     }
 
-    pub fn clear_close_on_exec(mut self, oparation: bool) -> Self {
-        if oparation {
+    pub fn set_close_on_exec(mut self, enable: bool) -> Self {
+        if enable {
             self.flags.remove(OpenFlags::O_CLOEXEC);
         } else {
             self.flags.insert(OpenFlags::O_CLOEXEC);
@@ -100,6 +100,7 @@ impl FdTable {
         self.table.len()
     }
 
+    /// 通过fd获取文件
     pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn File + Send + Sync>>> {
         if idx >= self.table_len() {
             return  Err(Errno::EBADF);
@@ -112,5 +113,11 @@ impl FdTable {
             return Err(Errno::EBADF);
         }
         Ok(self.table[idx].clone())
+    }
+
+    pub fn clear(&mut self) {
+        for fd in &mut self.table {
+            fd.clear();
+        }
     }
 }

@@ -15,7 +15,7 @@ pub use userbuffer::UserBuffer;
 pub use map_area::MapArea;
 pub use page_table::{PageTableEntry, PageTable};
 pub use frame_allocator::{frame_alloc, frame_dealloc};
-pub use memory_set::{remap_test, kernel_token};
+pub use memory_set::{remap_test, kernel_token, switch_to_kernel_pgtable};
 pub use page_table::{translated_byte_buffer, translated_refmut, translated_ref, translated_str};
 
 /// initiate heap allocator, frame allocator and kernel space
@@ -24,5 +24,5 @@ pub fn init(first: bool) {
         heap_allocator::init_heap();
         frame_allocator::init_frame_allocator();
     }
-    unsafe { KERNEL_SPACE.lock().activate() }; // 切换到kernel page table
+    switch_to_kernel_pgtable(); // 切换到kernel page table
 }

@@ -32,6 +32,10 @@ pub fn kernel_token() -> usize {
     KERNEL_SPACE.lock().token()
 }
 
+pub fn switch_to_kernel_pgtable() {
+    unsafe { KERNEL_SPACE.lock().activate() };
+}
+
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
     pub page_table: PageTable,
@@ -238,8 +242,8 @@ impl MemorySet {
             elf.header.pt2.entry_point() as usize,
         )
     }
-    ///Clone a same `MemorySet`
-    pub fn clone_from_existed_proc(user_space: &Self) -> Self {
+    /// 从已有的memory set复制
+    pub fn clone_from_existed_memset(user_space: &Self) -> Self {
         let mut memory_set = Self::new_with_kernel_pagetable();
         // map trampoline
         // memory_set.map_trampoline();
