@@ -12,9 +12,9 @@ const CR: u8 = 0x0du8;
 const DL: u8 = 0x7fu8;
 const BS: u8 = 0x08u8;
 
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 use user_lib::console::getchar;
-use user_lib::{exec, fork, waitpid};
+use user_lib::{chdir, exec, fork, getcwd, waitpid};
 
 #[no_mangle]
 pub fn main() -> i32 {
@@ -27,24 +27,46 @@ pub fn main() -> i32 {
             LF | CR => {
                 println!("");
                 if !line.is_empty() {
-                    line.push('\0');
-                    let pid = fork();
-                    if pid == 0 {
-                        // child process
-                        if exec(line.as_str()) == -1 {
-                            println!("Error when executing!");
-                            return -4;
+                    let parts: Vec<&str> = line.split_whitespace().collect();
+                    match parts[0] {
+                        "cd" => {
+                            if parts.len() > 1 {
+                                println!("chdir to {}", parts[1]);
+                                let byte_slice: &[u8] = &conert_str2byte(parts[1]);
+                                chdir(byte_slice);
+                            } else {
+                                println!("cd command error! no enough arguments");
+                            }
+                            line.clear();
                         }
-                        unreachable!();
-                    } else {
-                        let mut exit_code: i32 = 0;
-                        let exit_pid = waitpid(pid as usize, &mut exit_code, 0);
-                        assert_eq!(pid, exit_pid);
-                        println!("Shell: Process {} exited with code {}", pid, exit_code);
+                        _ => {
+                            line.push('\0');
+                            let pid = fork();
+                            if pid == 0 {
+                                // child process
+                                if exec(line.as_str()) == -1 {
+                                    println!("Error when executing!");
+                                    return -4;
+                                }
+                                unreachable!();
+                            } else {
+                                let mut exit_code: i32 = 0;
+                                let exit_pid = waitpid(pid as usize, &mut exit_code, 0);
+                                assert_eq!(pid, exit_pid);
+                                println!("Shell: Process {} exited with code {}", pid, exit_code);
+                            }
+                            line.clear();
+                        }
                     }
-                    line.clear();
                 }
-                print!(">> ");
+                let mut buffer: [u8; 256] = [0; 256];
+                let result = getcwd(&mut buffer, 256);
+                if result >= 0 {
+                    let cwd = String::from_utf8_lossy(&buffer[..result as usize]);
+                    print!("{} >> ", cwd);
+                } else {
+                    print!("get cwd error >>");
+                }
             }
             BS | DL => {
                 if !line.is_empty() {
@@ -60,4 +82,11 @@ pub fn main() -> i32 {
             }
         }
     }
+}
+
+/// 传入str引用转换为C风格字符串，使其可以被用作系统调用
+pub fn conert_str2byte(input: &str) -> Vec<u8> {
+    let mut bytes: Vec<u8> = input.as_bytes().to_vec();
+    bytes.push(0);
+    bytes
 }

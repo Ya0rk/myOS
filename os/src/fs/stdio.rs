@@ -1,4 +1,5 @@
 use super::File;
+use super::Kstat;
 use crate::arch::console_getchar;
 use crate::utils::Errno;
 use crate::{
@@ -97,6 +98,9 @@ impl File for Stdin {
     //     }
     //     revents
     // }
+    fn fstat(&self, _stat: &mut Kstat) -> () {
+        todo!()
+    }
 }
 
 // impl Ioctl for Stdin {
@@ -174,6 +178,9 @@ impl File for Stdout {
     //     }
     //     revents
     // }
+    fn fstat(&self, _stat: &mut Kstat) -> () {
+        todo!()
+    }
 }
 
 // impl Ioctl for Stdout {

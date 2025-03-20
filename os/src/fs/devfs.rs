@@ -1,4 +1,4 @@
-use crate::{mm::UserBuffer, task::INITPROC, utils::RNG};
+use crate::{fs::Kstat, mm::UserBuffer, task::INITPROC};
 use alloc::{
     collections::BTreeSet,
     fmt::{Debug, Formatter},
@@ -86,6 +86,9 @@ impl File for DevZero {
     //     }
     //     revents
     // }
+    fn fstat(&self, _stat: &mut Kstat) -> () {
+        todo!()
+    }
 }
 
 impl DevNull {
@@ -123,6 +126,11 @@ impl File for DevNull {
     //     }
     //     revents
     // }
+
+    /// 这里并没有实现
+    fn fstat(&self, _stat: &mut Kstat) -> () {
+        todo!()
+    }
 }
 
 pub struct RtcTime {
@@ -200,6 +208,9 @@ impl File for DevRtc {
     //     }
     //     revents
     // }
+    fn fstat(&self, _stat: &mut Kstat) -> () {
+        todo!()
+    }
 }
 
 // impl Ioctl for DevRtc {
@@ -257,6 +268,9 @@ impl File for DevRandom {
     //     }
     //     revents
     // }
+    fn fstat(&self, _stat: &mut Kstat) -> () {
+        todo!()
+    }
 }
 
 impl DevTty {
@@ -288,6 +302,19 @@ impl File for DevTty {
     }
     
     fn get_name(&self) -> String {
+        todo!()
+    }
+    // fn poll(&self, events: PollEvents) -> PollEvents {
+    //     let mut revents = PollEvents::empty();
+    //     if events.contains(PollEvents::IN) {
+    //         revents |= PollEvents::IN;
+    //     }
+    //     if events.contains(PollEvents::OUT) {
+    //         revents |= PollEvents::OUT;
+    //     }
+    //     revents
+    // }
+    fn fstat(&self, _stat: &mut Kstat) -> () {
         todo!()
     }
 }
