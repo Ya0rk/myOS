@@ -1,7 +1,7 @@
 use alloc::string::String;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open_file, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{ mkdir, open_file, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
@@ -66,29 +66,30 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
     if kst.is_null() {
         return Err(Errno::EFAULT);
     }
-    Ok(0)
+    
 
-    // let token = inner.get_user_token();
-    // let mut buffer = UserBuffer::new(
-    //     translated_byte_buffer(
-    //         token, 
-    //         kst, 
-    //         core::mem::size_of::<Kstat>()
-    // ));
+    let token = inner.get_user_token();
+    let mut buffer = UserBuffer::new(
+        translated_byte_buffer(
+            token, 
+            kst, 
+            core::mem::size_of::<Kstat>()
+    ));
 
-    // let mut stat = Kstat::new();
-    // match inner.fd_table.get_file_by_fd(fd) {
-    //     Ok(Some(file)) => {
-    //         drop(inner);
-    //         file.fstat(&mut stat);
-    //         buffer.write(stat.as_bytes());
-    //         info!("fstat finished");
-    //         return Ok(0);
-    //     }
-    //     _ => {
-    //         return Err(Errno::EBADCALL);
-    //     }
-    // }
+    let mut stat = Kstat::new();
+    match inner.fd_table.get_file_by_fd(fd) {
+        Ok(Some(file)) => {
+            drop(inner);
+            file.fstat(&mut stat);
+            buffer.write(stat.as_bytes());
+            info!("fstat finished");
+            return Ok(0);
+        }
+        _ => {
+            return Err(Errno::EBADCALL);
+        }
+    }
+
 }
 
 /// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
@@ -453,7 +454,8 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
     let path = Path::string2path(translated_str(token, path));
     info!("sys_mkdirat: path = {}, mode = {}", path.get(), mode);
 
-    // let inner = task.inner_lock();
+    let inner = task.inner_lock();
+    info!("sys_mkdirat cwd is {}", inner.get_current_path());
 
     // 计算目标路径
     let target_path = if path.is_absolute() {
@@ -472,11 +474,12 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
         let other_cwd = inode.get_name();
         path.join_path_2_absolute(other_cwd).get()
     };
+    info!("sys_mkdirat target_path is {}", target_path);
 
     // drop(inner);
 
     // 检查路径是否有效并创建目录
-    let result = if let Some(_) = open_file(target_path.as_str(), OpenFlags::O_DIRECTORY) {
+    let result = if let Some(_) = mkdir(target_path.as_str(), mode) {
         Ok(0) // 成功
     } else {
         Err(Errno::EBADCALL) // 失败

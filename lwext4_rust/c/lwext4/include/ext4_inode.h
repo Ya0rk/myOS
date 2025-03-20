@@ -95,37 +95,37 @@ void ext4_inode_set_size(struct ext4_inode *inode, uint64_t size);
  * @param inode I-node
  * @return Time of the last access (POSIX)
  */
-uint32_t ext4_inode_get_access_time(struct ext4_inode *inode);
+uint64_t ext4_inode_get_access_time(struct ext4_inode *inode);
 
 /**@brief Set time, when i-node was last accessed.
  * @param inode I-node
  * @param time  Time of the last access (POSIX)
  */
-void ext4_inode_set_access_time(struct ext4_inode *inode, uint32_t time);
+void ext4_inode_set_access_time(struct ext4_inode *inode, uint64_t time);
 
 /**@brief Get time, when i-node was last changed.
  * @param inode I-node
  * @return Time of the last change (POSIX)
  */
-uint32_t ext4_inode_get_change_inode_time(struct ext4_inode *inode);
+uint64_t ext4_inode_get_change_inode_time(struct ext4_inode *inode);
 
 /**@brief Set time, when i-node was last changed.
  * @param inode I-node
  * @param time  Time of the last change (POSIX)
  */
-void ext4_inode_set_change_inode_time(struct ext4_inode *inode, uint32_t time);
+void ext4_inode_set_change_inode_time(struct ext4_inode *inode, uint64_t time);
 
 /**@brief Get time, when i-node content was last modified.
  * @param inode I-node
  * @return Time of the last content modification (POSIX)
  */
-uint32_t ext4_inode_get_modif_time(struct ext4_inode *inode);
+uint64_t ext4_inode_get_modif_time(struct ext4_inode *inode);
 
 /**@brief Set time, when i-node content was last modified.
  * @param inode I-node
  * @param time  Time of the last content modification (POSIX)
  */
-void ext4_inode_set_modif_time(struct ext4_inode *inode, uint32_t time);
+void ext4_inode_set_modif_time(struct ext4_inode *inode, uint64_t time);
 
 /**@brief Get time, when i-node was deleted.
  * @param inode I-node
