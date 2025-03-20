@@ -1,5 +1,5 @@
 mod inode;
-mod super_block;
+pub mod super_block;
 
 pub use inode::*;
 pub use super_block::*;

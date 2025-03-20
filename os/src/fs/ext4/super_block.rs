@@ -49,7 +49,7 @@ impl Ext4SuperBlock {
 impl KernelDevOp for Disk {
     //type DevType = Box<Disk>;
     type DevType = Disk;
-
+    /// 读取硬盘数据到指定buf
     fn read(dev: &mut Disk, mut buf: &mut [u8]) -> Result<usize, i32> {
         debug!("READ block device buf={}", buf.len());
         let mut read_len = 0;
@@ -67,6 +67,7 @@ impl KernelDevOp for Disk {
         debug!("READ rt len={}", read_len);
         Ok(read_len)
     }
+    /// 写入数据到硬盘
     fn write(dev: &mut Self::DevType, mut buf: &[u8]) -> Result<usize, i32> {
         debug!("WRITE block device buf={}", buf.len());
         let mut write_len = 0;

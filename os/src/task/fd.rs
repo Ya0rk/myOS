@@ -62,7 +62,7 @@ impl FdTable {
         }
     }
 
-    // 找到一个空位分配fd，返回fd的下标就是新fd
+    /// 找到一个空位分配fd，返回fd的下标就是新fd
     pub fn alloc_fd(&mut self, fd: Fd) -> SysResult<usize> {
         // 先判断是否有没有使用的空闲fd， 用idx作为数组下标
         if let Some(valid_idx) = (0..self.table_len()).find(|idx| self.table[*idx].is_none()) {
