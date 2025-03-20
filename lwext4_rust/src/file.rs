@@ -1,16 +1,35 @@
+//! EXT4 文件系统实现
+//! 
+//! 本模块提供了 EXT4 文件操作的实现，包括文件操作、目录操作和 inode 管理。
+//! 它为 Rust 接口与底层 EXT4 C 实现之间提供了桥接。
+
 use crate::bindings::*;
 use alloc::{ffi::CString, vec::Vec};
 
-// Ext4File文件操作与block device设备解耦了
+/// 表示 EXT4 文件系统中的一个文件。
+///
+/// 该结构体维护文件描述符和与 EXT4 文件系统中文件相关的元数据。
+/// 它提供了一个 Rust 友好的接口来访问底层 C 实现。
 pub struct Ext4File {
-    //file_desc_map: BTreeMap<CString, ext4_file>,
+    /// EXT4 C 实现中的文件描述符
     file_desc: ext4_file,
+    /// 文件在文件系统中的路径
     file_path: CString,
-
+    /// inode 的类型（文件、目录等）
     this_type: InodeTypes,
 }
 
 impl Ext4File {
+    /// 根据路径和类型创建一个新的 EXT4 文件实例。
+    ///
+    /// # 参数
+    ///
+    /// * `path` - 文件在文件系统中的路径
+    /// * `types` - 要创建的 inode 类型
+    ///
+    /// # 返回
+    ///
+    /// 返回一个新的 `Ext4File` 实例
     pub fn new(path: &str, types: InodeTypes) -> Self {
         Self {
             file_desc: ext4_file {
@@ -25,29 +44,46 @@ impl Ext4File {
         }
     }
 
+    /// 获取文件路径。
+    ///
+    /// # 返回
+    ///
+    /// 返回文件的路径
     pub fn get_path(&self) -> CString {
         self.file_path.clone()
     }
 
+    /// 获取文件类型。
+    ///
+    /// # 返回
+    ///
+    /// 返回 inode 的类型
     pub fn get_type(&self) -> InodeTypes {
         self.this_type.clone()
     }
 
-    /// File open function.
+    /// 打开文件的函数。
     ///
-    /// |---------------------------------------------------------------|
-    /// |   r or rb                 O_RDONLY                            |
-    /// |---------------------------------------------------------------|
-    /// |   w or wb                 O_WRONLY|O_CREAT|O_TRUNC            |
-    /// |---------------------------------------------------------------|
-    /// |   a or ab                 O_WRONLY|O_CREAT|O_APPEND           |
-    /// |---------------------------------------------------------------|
-    /// |   r+ or rb+ or r+b        O_RDWR                              |
-    /// |---------------------------------------------------------------|
-    /// |   w+ or wb+ or w+b        O_RDWR|O_CREAT|O_TRUNC              |
-    /// |---------------------------------------------------------------|
-    /// |   a+ or ab+ or a+b        O_RDWR|O_CREAT|O_APPEND             |
-    /// |---------------------------------------------------------------|
+    /// # 参数
+    ///
+    /// * `path` - 文件路径
+    /// * `flags` - 打开标志（见下表）
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
+    ///
+    /// # 标志表
+    ///
+    /// | 模式          | 标志                         |
+    /// |--------------|-------------------------------|
+    /// | r 或 rb      | O_RDONLY                     |
+    /// | w 或 wb      | O_WRONLY|O_CREAT|O_TRUNC    |
+    /// | a 或 ab      | O_WRONLY|O_CREAT|O_APPEND   |
+    /// | r+ 或 rb+    | O_RDWR                      |
+    /// | w+ 或 wb+    | O_RDWR|O_CREAT|O_TRUNC     |
+    /// | a+ 或 ab+    | O_RDWR|O_CREAT|O_APPEND    |
     pub fn file_open(&mut self, path: &str, flags: u32) -> Result<usize, i32> {
         let c_path = CString::new(path).expect("CString::new failed");
         if c_path != self.get_path() {
@@ -77,6 +113,12 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
+    /// 关闭文件。
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 0）
+    /// * `Err(i32)` - 错误代码
     pub fn file_close(&mut self) -> Result<usize, i32> {
         if self.file_desc.mp != core::ptr::null_mut() {
             debug!("file_close {:?}", self.get_path());
@@ -87,7 +129,15 @@ impl Ext4File {
         }
         Ok(0)
     }
-
+    /// 将标志转换为 C 字符串。
+    ///
+    /// # 参数
+    ///
+    /// * `flags` - 文件打开标志
+    ///
+    /// # 返回
+    ///
+    /// 返回转换后的 C 字符串
     pub fn flags_to_cstring(flags: u32) -> CString {
         let cstr = match flags {
             O_RDONLY => "rb",
@@ -116,11 +166,21 @@ impl Ext4File {
     /// EXT4_DE_SYMLINK
     ///
     /// Check if inode exists.
+    ///
+    /// # 参数
+    ///
+    /// * `path` - 文件路径
+    /// * `types` - inode 类型
+    ///
+    /// # 返回
+    ///
+    /// 如果 inode 存在，返回 `true`，否则返回 `false`
     pub fn check_inode_exist(&mut self, path: &str, types: InodeTypes) -> bool {
         let c_path = CString::new(path).expect("CString::new failed");
         let c_path = c_path.into_raw();
         let mtype = types.clone();
         let r = unsafe { ext4_inode_exist(c_path, types as i32) }; //eg: types: EXT4_DE_REG_FILE
+
         unsafe {
             drop(CString::from_raw(c_path));
         }
@@ -133,7 +193,17 @@ impl Ext4File {
         }
     }
 
-    /// Rename file and directory
+    /// 重命名文件和目录。
+    ///
+    /// # 参数
+    ///
+    /// * `path` - 当前文件路径
+    /// * `new_path` - 新文件路径
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
     pub fn file_rename(&mut self, path: &str, new_path: &str) -> Result<usize, i32> {
         let c_path = CString::new(path).expect("CString::new failed");
         let c_path = c_path.into_raw();
@@ -151,7 +221,16 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
-    /// Remove file by path.
+    /// 根据路径删除文件。
+    ///
+    /// # 参数
+    ///
+    /// * `path` - 文件路径
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
     pub fn file_remove(&mut self, path: &str) -> Result<usize, i32> {
         debug!("file_remove {}", path);
 
@@ -169,6 +248,17 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
+    /// 设置文件偏移量。
+    ///
+    /// # 参数
+    ///
+    /// * `offset` - 偏移量
+    /// * `seek_type` - 寻址类型
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
     pub fn file_seek(&mut self, offset: i64, seek_type: u32) -> Result<usize, i32> {
         let mut offset = offset;
         let size = self.file_size() as i64;
@@ -186,6 +276,16 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
+    /// 读取文件。
+    ///
+    /// # 参数
+    ///
+    /// * `buff` - 用于存储读取数据的缓冲区
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 读取的字节数
+    /// * `Err(i32)` - 错误代码
     pub fn file_read(&mut self, buff: &mut [u8]) -> Result<usize, i32> {
         let mut rw_count = 0;
         let r = unsafe {
@@ -222,6 +322,16 @@ impl Ext4File {
     }
     */
 
+    /// 写入数据到文件。
+    ///
+    /// # 参数
+    ///
+    /// * `buf` - 包含要写入数据的缓冲区
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 写入的字节数
+    /// * `Err(i32)` - 错误代码
     pub fn file_write(&mut self, buf: &[u8]) -> Result<usize, i32> {
         let mut rw_count = 0;
         let r = unsafe {
@@ -241,6 +351,16 @@ impl Ext4File {
         Ok(rw_count)
     }
 
+    /// 截断文件到指定大小。
+    ///
+    /// # 参数
+    ///
+    /// * `size` - 新的文件大小
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
     pub fn file_truncate(&mut self, size: u64) -> Result<usize, i32> {
         debug!("file_truncate to {}", size);
         let r = unsafe { ext4_ftruncate(&mut self.file_desc, size) };
@@ -250,12 +370,93 @@ impl Ext4File {
         }
         Ok(EOK as usize)
     }
-
+    /// 获取文件大小。
+    ///
+    /// # 返回
+    ///
+    /// 返回文件的大小（字节）
     pub fn file_size(&mut self) -> u64 {
         //注，记得先 O_RDONLY 打开文件
         unsafe { ext4_fsize(&mut self.file_desc) }
     }
 
+
+    /// 获取文件的状态信息。
+    ///
+    /// 返回一个包含文件元数据的 `ext4_inode_stat` 结构体,包括:
+    /// - 文件大小
+    /// - 所有者 ID
+    /// - 组 ID 
+    /// - 访问权限
+    /// - 时间戳等
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(ext4_inode_stat)` - 成功获取文件状态
+    /// * `Err(i32)` - 错误代码
+    pub fn fstat(&mut self) -> Result<ext4_inode_stat, i32> {
+        let c_path = self.file_path.clone();
+        let c_path = c_path.into_raw();
+        let mut stat = ext4_inode_stat::default();
+        let r = unsafe { ext4_stat_get(c_path, &mut stat) };
+
+        unsafe {
+            drop(CString::from_raw(c_path));
+        }
+        if r != EOK as i32 {
+            error!("ext4_stat_get: rc = {}", r);
+            return Err(r);
+        }
+        Ok(stat)
+    }
+
+    /// 设置文件的时间戳。
+    ///
+    /// # 参数
+    ///
+    /// * `atime` - 可选的访问时间戳
+    /// * `mtime` - 可选的修改时间戳  
+    /// * `ctime` - 可选的创建时间戳
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功设置时间戳(返回 EOK)
+    /// * `Err(i32)` - 错误代码
+    pub fn set_time(
+        &mut self,
+        atime: Option<u64>,
+        mtime: Option<u64>,
+        ctime: Option<u64>,
+    ) -> Result<usize, i32> {
+        let c_path = self.file_path.clone();
+        let c_path = c_path.into_raw();
+        let mut r = 0;
+        if let Some(atime) = atime {
+            r = unsafe { ext4_atime_set(c_path, atime) }
+        }
+        if let Some(mtime) = mtime {
+            r = unsafe { ext4_mtime_set(c_path, mtime) }
+        }
+        if let Some(ctime) = ctime {
+            r = unsafe { ext4_ctime_set(c_path, ctime) }
+        }
+        // unsafe { ext4_mode_set(c_path, mode) };
+        unsafe {
+            drop(CString::from_raw(c_path));
+        }
+        if r != EOK as i32 {
+            error!("ext4_time_set: rc = {}", r);
+            return Err(r);
+        }
+        Ok(EOK as usize)
+    }
+
+    /// 刷新文件缓存。
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 0）
+    /// * `Err(i32)` - 错误代码
     pub fn file_cache_flush(&mut self) -> Result<usize, i32> {
         let c_path = self.file_path.clone();
         let c_path = c_path.into_raw();
@@ -269,7 +470,12 @@ impl Ext4File {
         }
         Ok(0)
     }
-
+    /// 获取文件模式。
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(u32)` - 文件模式
+    /// * `Err(i32)` - 错误代码
     pub fn file_mode_get(&mut self) -> Result<u32, i32> {
         // 0o777 (octal) == rwxrwxrwx
         let mut mode: u32 = 0o777;
@@ -286,7 +492,16 @@ impl Ext4File {
         debug!("Got file mode={:#x}", mode);
         Ok(mode)
     }
-
+    /// 设置文件模式。
+    ///
+    /// # 参数
+    ///
+    /// * `mode` - 要设置的文件模式
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
     pub fn file_mode_set(&mut self, mode: u32) -> Result<usize, i32> {
         debug!("file_mode_set to {:#x}", mode);
 
@@ -302,7 +517,11 @@ impl Ext4File {
         }
         Ok(EOK as usize)
     }
-
+    /// 获取文件类型。
+    ///
+    /// # 返回
+    ///
+    /// 返回 inode 的类型
     pub fn file_type_get(&mut self) -> InodeTypes {
         let mode = self.file_mode_get().unwrap();
         // 0o777 (octal) == rwxrwxrwx
@@ -330,9 +549,53 @@ impl Ext4File {
         itypes
     }
 
+    //int ext4_owner_set(const char *path, uint32_t uid, uint32_t gid)
+    pub fn set_owner(&mut self, uid: u32, gid: u32) -> Result<usize, i32> {
+        let c_path = self.file_path.clone();
+        let c_path = c_path.into_raw();
+
+        let r = unsafe { ext4_owner_set(c_path, uid, gid) };
+
+        // unsafe { ext4_mode_set(c_path, mode) };
+        unsafe {
+            drop(CString::from_raw(c_path));
+        }
+        if r != EOK as i32 {
+            error!("ext4_owner_set: rc = {}", r);
+            return Err(r);
+        }
+        Ok(EOK as usize)
+    }
+
+    pub fn links_cnt(&mut self) -> Result<u32, i32> {
+        let mut cnt: u32 = 0;
+        let c_path = self.file_path.clone();
+        let c_path = c_path.into_raw();
+        let r = unsafe { ext4_get_links_cnt(c_path, &mut cnt) };
+        unsafe {
+            drop(CString::from_raw(c_path));
+        }
+        if r != EOK as i32 {
+            // error!("ext4_links_cnt_get: rc = {}", r);
+            return Err(r);
+        }
+        Ok(cnt)
+    }
+
+    
+
     /********* DIRECTORY OPERATION *********/
 
-    /// Create new directory
+    /// 创建新目录。
+    ///
+    /// # 参数
+    ///
+    /// * `path` - 新目录的路径
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
     pub fn dir_mk(&mut self, path: &str) -> Result<usize, i32> {
         debug!("directory create: {}", path);
         let c_path = CString::new(path).expect("CString::new failed");
@@ -349,7 +612,17 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
-    /// Rename/move directory
+    /// 重命名/移动目录。
+    ///
+    /// # 参数
+    ///
+    /// * `path` - 当前目录路径
+    /// * `new_path` - 新目录路径
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
     pub fn dir_mv(&mut self, path: &str, new_path: &str) -> Result<usize, i32> {
         debug!("directory move from {} to {}", path, new_path);
 
@@ -370,7 +643,16 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
-    /// Recursive directory remove
+    /// 递归删除目录。
+    ///
+    /// # 参数
+    ///
+    /// * `path` - 要删除的目录路径
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(usize)` - 成功（返回 EOK）
+    /// * `Err(i32)` - 错误代码
     pub fn dir_rm(&mut self, path: &str) -> Result<usize, i32> {
         debug!("directory recursive remove: {}", path);
 
@@ -388,50 +670,55 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
-    pub fn lwext4_dir_entries(&self) -> Result<(Vec<Vec<u8>>, Vec<InodeTypes>), i32> {
+    /// 从指定偏移量开始读取目录内容。
+    ///
+    /// # 参数
+    ///
+    /// * `off` - 目录偏移量,用于指定从哪个位置开始读取
+    ///
+    /// # 返回
+    ///
+    /// * `Ok(Vec<OsDirent>)` - 成功,返回目录项列表
+    /// * `Err(i32)` - 错误代码,如果不是目录则返回 22 (EINVAL)
+    ///
+    /// # 安全性
+    ///
+    /// 该函数包含不安全代码块,用于调用底层 ext4 文件系统接口
+    pub fn read_dir_from(&self, off: u64) -> Result<Vec<OsDirent>, i32> {
         if self.this_type != InodeTypes::EXT4_DE_DIR {
-            return Err(-1);
+            return Err(22);
         }
-
         let c_path = self.file_path.clone();
         let c_path = c_path.into_raw();
         let mut d: ext4_dir = unsafe { core::mem::zeroed() };
+        let mut entries: Vec<_> = Vec::new();
 
-        let mut name: Vec<Vec<u8>> = Vec::new();
-        let mut inode_type: Vec<InodeTypes> = Vec::new();
-
-        //info!("ls {}", str::from_utf8(path).unwrap());
         unsafe {
             ext4_dir_open(&mut d, c_path);
             drop(CString::from_raw(c_path));
-
+            d.next_off = off;
             let mut de = ext4_dir_entry_next(&mut d);
             while !de.is_null() {
                 let dentry = &(*de);
-                let len = dentry.name_length as usize;
-
-                let mut sss: [u8; 255] = [0; 255];
-                sss[..len].copy_from_slice(&dentry.name[..len]);
-                sss[len] = 0;
-
-                debug!(
-                    "  {} {}",
-                    dentry.inode_type,
-                    core::str::from_utf8(&sss).unwrap()
-                );
-                /*   let mut dname: Vec<u8> =
-                    Vec::from_raw_parts(&mut dentry.name as *mut u8, len, len + 1);
-                dname.push(0);
-                */
-                name.push(sss[..(len + 1)].to_vec());
-                inode_type.push((dentry.inode_type as usize).into());
-
+                // 创建 8 字节对齐的目录项
+                let mut name = [0u8; 256];
+                let name_len = dentry.name_length as usize;
+                name[0..name_len].copy_from_slice(&dentry.name[0..name_len]);
+                let mut len = name_len + 19;
+                let align = 8 - len % 8;
+                len += align;
+                entries.push(OsDirent {
+                    d_ino: dentry.inode as u64,
+                    d_off: d.next_off as i64,
+                    d_reclen: len as u16,
+                    d_type: dentry.inode_type,
+                    d_name: name,
+                });
                 de = ext4_dir_entry_next(&mut d);
             }
             ext4_dir_close(&mut d);
         }
-
-        Ok((name, inode_type))
+        Ok(entries)
     }
 }
 
@@ -446,19 +733,29 @@ O_APPEND = 0x400,
 }
 */
 
+/// 表示 EXT4 文件系统中的各种 inode 类型。
+///
+/// 此枚举包括目录项类型和 inode 模式，为 EXT4 文件系统条目提供了完整的类型系统。
 #[derive(PartialEq, Clone, Debug)]
 pub enum InodeTypes {
-    // Inode type, Directory entry types.
+    /// 未知文件类型
     EXT4_DE_UNKNOWN = 0,
+    /// 常规文件
     EXT4_DE_REG_FILE = 1,
+    /// 目录
     EXT4_DE_DIR = 2,
+    /// 字符设备
     EXT4_DE_CHRDEV = 3,
+    /// 块设备
     EXT4_DE_BLKDEV = 4,
+    /// FIFO
     EXT4_DE_FIFO = 5,
+    /// 套接字
     EXT4_DE_SOCK = 6,
+    /// 符号链接
     EXT4_DE_SYMLINK = 7,
 
-    // Inode mode
+    // inode 模式
     EXT4_INODE_MODE_FIFO = 0x1000,
     EXT4_INODE_MODE_CHARDEV = 0x2000,
     EXT4_INODE_MODE_DIRECTORY = 0x4000,
@@ -470,6 +767,15 @@ pub enum InodeTypes {
 }
 
 impl From<usize> for InodeTypes {
+    /// 将数字值转换为相应的 InodeType。
+    ///
+    /// # 参数
+    ///
+    /// * `num` - 要转换的数字值
+    ///
+    /// # 返回
+    ///
+    /// 返回相应的 InodeType，如果未知则返回 EXT4_DE_UNKNOWN
     fn from(num: usize) -> InodeTypes {
         match num {
             0 => InodeTypes::EXT4_DE_UNKNOWN,
@@ -494,4 +800,14 @@ impl From<usize> for InodeTypes {
             }
         }
     }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct OsDirent {
+    pub d_ino: u64,        // 索引节点号
+    pub d_off: i64,        // 从 0 开始到下一个 dirent 的偏移
+    pub d_reclen: u16,     // 当前 dirent 的长度
+    pub d_type: u8,        // 文件类型
+    pub d_name: [u8; 256], // 文件名
 }

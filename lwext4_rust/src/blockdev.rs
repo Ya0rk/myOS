@@ -1,3 +1,9 @@
+//! EXT4 File System Implementation
+//! 
+//! This module provides the implementation of EXT4 file operations, including file
+//! manipulation, directory operations, and inode management. It serves as a bridge
+//! between the Rust interface and the underlying EXT4 C implementation.
+
 use crate::bindings::*;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
@@ -24,6 +30,11 @@ pub trait KernelDevOp {
         Self: Sized;
 }
 
+/// Represents an EXT4 file in the file system.
+///
+/// This structure maintains the file descriptor and associated metadata for
+/// files in the EXT4 file system. It provides a Rust-friendly interface to
+/// the underlying C implementation.
 pub struct Ext4BlockWrapper<K: KernelDevOp> {
     value: Box<ext4_blockdev>,
     //block_dev: K::DevType,
@@ -33,6 +44,15 @@ pub struct Ext4BlockWrapper<K: KernelDevOp> {
 }
 
 impl<K: KernelDevOp> Ext4BlockWrapper<K> {
+    /// Creates a new EXT4 block device instance.
+    ///
+    /// # Arguments
+    ///
+    /// * `block_dev` - The block device to wrap
+    ///
+    /// # Returns
+    ///
+    /// A new `Ext4BlockWrapper` instance
     pub fn new(block_dev: K::DevType) -> Result<Self, i32> {
         // note this ownership
         let devt_user = Box::into_raw(Box::new(block_dev)) as *mut c_void;

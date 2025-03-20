@@ -4,7 +4,7 @@ use crate::{
     utils::Errno,
 };
 
-use super::{File, Inode};
+use super::{File, Inode, Kstat};
 use alloc::{
     string::String,
     sync::{Arc, Weak},
@@ -14,10 +14,10 @@ use spin::Mutex;
 pub struct OSInode {
     readable: bool, // 该文件是否允许通过 sys_read 进行读
     writable: bool, // 该文件是否允许通过 sys_write 进行写
-    pub inode: Arc<dyn Inode>,
-    pub parent: Option<Weak<dyn Inode>>,
-    pub path: String,
-    pub(crate) inner: Mutex<OSInodeInner>,
+    pub inode: Arc<dyn Inode>, // 文件的inode，在ext4中是Ext4_inode
+    pub parent: Option<Weak<dyn Inode>>, // 父目录的弱引用
+    pub path: String, // 文件的路径
+    pub inner: Mutex<OSInodeInner>, // 文件的内部状态
 }
 pub struct OSInodeInner {
     pub(crate) offset: usize, // 偏移量
@@ -102,5 +102,10 @@ impl File for OSInode {
     
     fn get_name(&self) -> String {
         self.path.clone()
+    }
+    fn fstat(&self, stat: &mut Kstat) -> () {
+        let inode = self.inode.as_ref();
+        *stat = inode.fstat();
+        ()
     }
 }
