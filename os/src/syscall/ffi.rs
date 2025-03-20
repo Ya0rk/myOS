@@ -175,3 +175,16 @@ bitflags! {
         const CLONE_IO = 1 << 31;
     }
 }
+
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    /// Defined in <bits/waitflags.h>.
+    pub struct WaitOptions: i32 {
+        /// 如果pid所指向的子进程状态未改变，则立即返回0，不会阻塞
+        const WNOHANG = 1;
+        /// 除了返回子进程的信息外，还要返回因信号而停止的子进程信息
+        const WUNTRACED = 1 << 1;
+        /// 返回那些因收到SIGCONT信号而恢复执行并且已经停止的子进程信息
+        const WCONTINUED = 1 << 3;
+    }
+}

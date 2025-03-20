@@ -301,6 +301,17 @@ impl TaskControlBlock {
         self.recycle_data_pages();
         self.set_zombie();
     }
+
+    pub fn do_wait4(&self, pid: usize, wstatus: *mut i32) {
+        let zombie_child = self.remove_child(pid);
+        let exit_code = zombie_child.get_exit_code();
+        // 将退出状态写入用户提供的指针
+        if !wstatus.is_null() {
+            *translated_refmut(self.get_user_token(), wstatus) = (exit_code & 0xff) << 8;
+        }
+        self.get_time_data_mut().update_child_time_when_exit();
+        remove_task_by_pid(pid);
+    }
 }
 
 impl TaskControlBlock {
@@ -409,6 +420,9 @@ impl TaskControlBlock {
     /// 移除所有子进程
     pub fn clear_children(&self) {
         self.children.lock().clear();
+    }
+    pub fn remove_child(&self, pid: usize) -> Arc<TaskControlBlock>{
+        self.children.lock().remove(pid)
     }
     /// 设置父进程
     pub fn set_parent(&self, parent: Option<Weak<TaskControlBlock>>) {

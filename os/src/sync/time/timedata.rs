@@ -18,6 +18,9 @@ pub struct TimeData {
     trap_in_time: Duration,
     /// kernel trap return 到 user的时间
     trap_out_time: Duration,
+
+    child_user_time: Duration,
+    child_system_time: Duration,
 }
 
 impl TimeData {
@@ -31,6 +34,8 @@ impl TimeData {
             sched_out_time: Duration::ZERO,
             trap_in_time: Duration::ZERO,
             trap_out_time: Duration::ZERO,
+            child_user_time: Duration::ZERO,
+            child_system_time: Duration::ZERO,
         }
     }
 
@@ -59,6 +64,12 @@ impl TimeData {
         let now = time_duration();
         self.trap_out_time = now;
         self.system_time += now - self.trap_in_time;
+    }
+
+    /// 在现成退出时更新user time和system time
+    pub fn update_child_time_when_exit(&mut self) {
+        self.child_user_time += self.child_user_time;
+        self.child_system_time += self.child_system_time;
     }
 
     /// 获取用户态花费时间

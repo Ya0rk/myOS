@@ -1,14 +1,13 @@
 use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::sync::{sleep_for, yield_now, TimeSepc, TimeVal, Tms};
-use crate::syscall::ffi::{CloneFlags, Utsname};
+use crate::sync::{sleep_for, suspend_now, yield_now, TimeSepc, TimeVal, Tms};
+use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
-    add_task, current_task, current_user_token, spawn_user_task, suspend_current_and_run_next
+    add_task, current_task, current_user_token, spawn_user_task
 };
 use crate::utils::{Errno, SysResult, RNG};
-use alloc::sync::Arc;
-use log::debug;
+use log::{debug, info};
 use zerocopy::IntoBytes;
 
 // use super::ffi::Utsname;
@@ -168,53 +167,55 @@ pub fn sys_exec(path: *const u8) -> SysResult<usize> {
 
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
-pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: usize) -> SysResult<usize> {
+/// pid = -1: 等待任意子进程
+/// pid = 0 : 等待与调用进程（父进程）同一个进程组的所有子进程
+/// pid < -1: 等待进程组标识符与pid绝对值相等的所有子进程
+/// pid > 0 ：等待进程id为pid的子进程
+pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: usize) -> SysResult<usize> {
     debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
     let task = current_task().unwrap();
-    
-    loop {
-        let mut locked_child = task.children.lock();
+    if task.children.lock().is_empty() {
+        info!("task pid = {}, has no child.", pid);
+        return Err(Errno::ECHILD);
+    }
 
-        // 快速查看是否存在符合条件的子进程
-        if !locked_child
-            .iter()
-            .any(|p| pid == -1 || pid as usize == p.get_pid())
-        {
-            return Err(Errno::NOPID);
+    let op = WaitOptions::from_bits(options as i32).unwrap();
+
+    // 缩小 locked_child 的作用域
+    let target_task = {
+        let locked_child = task.children.lock().clone();
+        match pid {
+            -1 => {
+                locked_child.iter().find(|task| task.is_zombie()).cloned()
+            }
+            p if p > 0 => {
+                locked_child.iter().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
+            }
+            _ => unimplemented!(),
         }
+    }; // locked_child 在这里自动释放
 
-        // 查找僵尸子进程
-        let zombie_child = locked_child.iter().enumerate().find_map(|(idx, p)| {
-            //检查是否为僵尸进程且符合 PID 条件
-            if p.is_zombie() && (pid == -1 || pid as usize == p.get_pid()) {
-                Some(idx)
-            } else {
-                None
+    match target_task {
+        Some(zombie_child) => {
+            info!("sys_wait4: find a target zombie child task.");
+            let zombie_pid = zombie_child.get_pid();
+            task.do_wait4(zombie_pid, wstatus);
+            return Ok(zombie_pid);
+        }
+        None => {
+            if op.contains(WaitOptions::WNOHANG) {
+                return Ok(0)
             }
-        });
-
-        if let Some(idx) = zombie_child {
-            // 移除子进程
-            let removed_child = locked_child.remove(idx);
-            // 确认子进程的引用计数为 1
-            assert_eq!(Arc::strong_count(&removed_child), 1);
-
-            // 获取子进程的 PID 和退出状态
-            let found_pid = removed_child.get_pid();
-            let exit_code = removed_child.get_exit_code();
-
-            // 将退出状态写入用户提供的指针
-            if !exit_code_ptr.is_null() {
-                *translated_refmut(task.get_user_token(), exit_code_ptr) = (exit_code & 0xff) << 8;
-            }
-            return Ok(found_pid as usize);
-        } else {
-            // 未找到僵尸子进程，释放锁并挂起当前任务
-            // drop(inner); // 避免死锁
-            suspend_current_and_run_next();
+            // 如果等待的进程还不是zombie，那么本进程进行await，
+            // 直到等待的进程do_exit然后发送SIGCHLD信号唤醒自己
+            let child_pid = loop {
+                // TODO(YJJ): 等待子进程的信号唤醒
+                suspend_now().await;
+            };
+            task.do_wait4(child_pid, wstatus);
+            return Ok(child_pid);
         }
     }
-    // ---- release current PCB lock automatically
 }
 
 
