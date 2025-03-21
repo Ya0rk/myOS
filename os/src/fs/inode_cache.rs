@@ -13,11 +13,12 @@ use hashbrown::HashMap;
 use lazy_static::*;
 use spin::RwLock;
 
-use super::Inode;
+use super::InodeTrait;
 
 // A global, thread-safe file system index using a read-write lock.
 lazy_static! {
-    pub static ref FSIDX: RwLock<HashMap<String, Arc<dyn Inode>>> = RwLock::new(HashMap::new());
+    /// 这个是inode cache，用hashmap结构实现，key是path，value是inode
+    pub static ref INODE_CACHE: RwLock<HashMap<String, Arc<dyn InodeTrait>>> = RwLock::new(HashMap::new());
 }
 
 /// Checks if an inode exists for the given path.
@@ -30,7 +31,7 @@ lazy_static! {
 ///
 /// `true` if the inode exists, `false` otherwise.
 pub fn has_inode(path: &str) -> bool {
-    FSIDX.read().contains_key(path)
+    INODE_CACHE.read().contains_key(path)
 }
 
 /// Finds the inode associated with the given path.
@@ -42,8 +43,8 @@ pub fn has_inode(path: &str) -> bool {
 /// # Returns
 ///
 /// An `Option` containing the inode if it exists, or `None` if it does not.
-pub fn find_inode_idx(path: &str) -> Option<Arc<dyn Inode>> {
-    FSIDX.read().get(path).map(|vfile| Arc::clone(vfile))
+pub fn inode_cache_find(path: &str) -> Option<Arc<dyn InodeTrait>> {
+    INODE_CACHE.read().get(path).map(|vfile| Arc::clone(vfile))
 }
 
 /// Inserts a new inode into the file system index.
@@ -52,8 +53,8 @@ pub fn find_inode_idx(path: &str) -> Option<Arc<dyn Inode>> {
 ///
 /// * `path` - The path associated with the inode.
 /// * `vfile` - The inode to insert, wrapped in an `Arc`.
-pub fn insert_inode_idx(path: &str, vfile: Arc<dyn Inode>) {
-    FSIDX.write().insert(path.to_string(), vfile);
+pub fn inode_cache_insert(path: &str, vfile: Arc<dyn InodeTrait>) {
+    INODE_CACHE.write().insert(path.to_string(), vfile);
 }
 
 /// Removes an inode from the file system index.
@@ -61,11 +62,11 @@ pub fn insert_inode_idx(path: &str, vfile: Arc<dyn Inode>) {
 /// # Arguments
 ///
 /// * `path` - The path associated with the inode to remove.
-pub fn remove_inode_idx(path: &str) {
-    FSIDX.write().remove(path);
+pub fn inode_cache_remove(path: &str) {
+    INODE_CACHE.write().remove(path);
 }
 
 /// Prints the current keys in the file system index to the console.
 pub fn print_inner() {
-    println!("{:#?}", FSIDX.read().keys());
+    println!("{:#?}", INODE_CACHE.read().keys());
 }

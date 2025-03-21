@@ -4,18 +4,18 @@ use crate::{
     utils::Errno,
 };
 
-use super::{File, Inode, Kstat};
+use super::{FileTrait, InodeTrait, Kstat};
 use alloc::{
     string::String,
     sync::{Arc, Weak},
 };
 use spin::Mutex;
 
-pub struct OSInode {
+pub struct Ext4File {
     readable: bool, // 该文件是否允许通过 sys_read 进行读
     writable: bool, // 该文件是否允许通过 sys_write 进行写
-    pub inode: Arc<dyn Inode>, // 文件的inode，在ext4中是Ext4_inode
-    pub parent: Option<Weak<dyn Inode>>, // 父目录的弱引用
+    pub inode: Arc<dyn InodeTrait>, // 文件的inode，在ext4中是Ext4_inode
+    pub parent: Option<Weak<dyn InodeTrait>>, // 父目录的弱引用
     pub path: String, // 文件的路径
     pub inner: Mutex<OSInodeInner>, // 文件的内部状态
 }
@@ -23,12 +23,12 @@ pub struct OSInodeInner {
     pub(crate) offset: usize, // 偏移量
 }
 
-impl OSInode {
+impl Ext4File {
     pub fn new(
         readable: bool,
         writable: bool,
-        inode: Arc<dyn Inode>,
-        parent: Option<Weak<dyn Inode>>,
+        inode: Arc<dyn InodeTrait>,
+        parent: Option<Weak<dyn InodeTrait>>,
         path: String,
     ) -> Self {
         Self {
@@ -43,7 +43,7 @@ impl OSInode {
 }
 
 // 为 OSInode 实现 File Trait
-impl File for OSInode {
+impl FileTrait for Ext4File {
     fn readable(&self) -> bool {
         self.readable
     }

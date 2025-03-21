@@ -7,22 +7,19 @@ pub use super_block::*;
 use alloc::sync::Arc;
 use lazy_static::*;
 
-use crate::{
-    drivers::{BlockDeviceImpl, Disk},
-    fs::SuperBlock,
-};
+use crate::drivers::{BlockDeviceImpl, Disk};
 
-use super::Inode;
+use super::{InodeTrait, SuperBlockTrait};
 
 lazy_static! {
-    static ref SUPER_BLOCK: Arc<dyn SuperBlock> = {
+    static ref SUPER_BLOCK: Arc<dyn SuperBlockTrait> = {
         Arc::new(Ext4SuperBlock::new(
             Disk::new(BlockDeviceImpl::new_device()),
         ))
     };
 }
 
-pub fn root_inode() -> Arc<dyn Inode> {
+pub fn root_inode() -> Arc<dyn InodeTrait> {
     SUPER_BLOCK.root_inode()
 }
 

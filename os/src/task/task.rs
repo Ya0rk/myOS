@@ -5,7 +5,7 @@ use core::task::Waker;
 use super::{add_process_group_member, Fd, FdTable, TaskContext, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
-use crate::fs::File;
+use crate::fs::FileTrait;
 use crate::mm::{translated_refmut, MapPermission, MemorySet};
 use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
@@ -436,7 +436,7 @@ impl TaskControlBlock {
     
     // fd
     /// 通过fd获取文件
-    pub fn get_file_by_fd(&self, fd: usize) -> Option<Arc<dyn File + Send + Sync>> {
+    pub fn get_file_by_fd(&self, fd: usize) -> Option<Arc<dyn FileTrait + Send + Sync>> {
         self.fd_table.lock().get_file_by_fd(fd).unwrap_or(None)
     }
     /// 获取当前进程的文件描述符表长度

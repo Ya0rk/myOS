@@ -1,6 +1,6 @@
 use core::time::Duration;
 use zerocopy::IntoBytes;
-use crate::{sync::timer::{get_time_ns, get_time_s, NSEC_PER_SEC}, utils::Errno};
+use crate::sync::timer::{get_time_ns, get_time_s, NSEC_PER_SEC};
 
 #[derive(Copy, Clone, IntoBytes)]
 #[repr(C)]
@@ -12,11 +12,11 @@ pub struct TimeSepc {
 }
 
 impl TimeSepc {
-    pub fn new() -> Result<Self, Errno> {
+    pub fn new() -> Self {
         let tv_sec = get_time_s();
         let tv_nsec = get_time_ns();
 
-        Ok(TimeSepc { tv_sec, tv_nsec })
+        TimeSepc { tv_sec, tv_nsec }
     }
 
     pub fn check_valid(&self) -> bool {

@@ -35,6 +35,9 @@ use task::{executor, get_current_hart_id};
 
 global_asm!(include_str!("entry.asm"));
 
+#[macro_use]
+extern crate lazy_static;
+
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
