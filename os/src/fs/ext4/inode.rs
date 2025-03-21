@@ -4,7 +4,7 @@ use lwext4_rust::{
 };
 
 use crate::{
-    fs::{Inode, InodeType, Kstat},
+    fs::{InodeTrait, InodeType, Kstat},
     sync::SyncUnsafeCell,
     utils::{Errno, SysResult},
 };
@@ -23,7 +23,7 @@ impl Ext4Inode {
     }
 }
 
-impl Inode for Ext4Inode {
+impl InodeTrait for Ext4Inode {
     /// 获取文件大小
     fn size(&self) -> usize {
         let file = self.0.get_unchecked_mut();
@@ -41,7 +41,7 @@ impl Inode for Ext4Inode {
     }
 
     /// 创建文件
-    fn create(&self, path: &str, ty: InodeType) -> Option<Arc<dyn Inode>> {
+    fn create(&self, path: &str, ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
         let types = as_ext4_de_type(ty);
         let file = self.0.get_unchecked_mut();
         let nf = Ext4Inode::new(path, types.clone());
@@ -106,7 +106,7 @@ impl Inode for Ext4Inode {
         }
     }
     /// 重命名文件
-    fn rename(&self, _file: Arc<dyn Inode>) -> SysResult<usize> {
+    fn rename(&self, _file: Arc<dyn InodeTrait>) -> SysResult<usize> {
         todo!()
     }
     /// 设置文件时间戳
@@ -134,7 +134,7 @@ impl Inode for Ext4Inode {
         }
     }
     /// 在当前路径下查询是否存在这个path的文件
-    fn find_by_path(&self, path: &str) -> Option<Arc<dyn Inode>> {
+    fn find_by_path(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let file = self.0.get_unchecked_mut();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
             // debug!("lookup new DIR FileWrapper");

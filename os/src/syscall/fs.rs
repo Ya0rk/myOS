@@ -68,7 +68,7 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
     }
     
 
-    let token = inner.get_user_token();
+    let token = task.get_user_token();
     let mut buffer = UserBuffer::new(
         translated_byte_buffer(
             token, 
@@ -77,9 +77,8 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
     ));
 
     let mut stat = Kstat::new();
-    match inner.fd_table.get_file_by_fd(fd) {
-        Ok(Some(file)) => {
-            drop(inner);
+    match task.get_file_by_fd(fd) {
+        Some(file) => {
             file.fstat(&mut stat);
             buffer.write(stat.as_bytes());
             info!("fstat finished");
@@ -454,8 +453,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
     let path = Path::string2path(translated_str(token, path));
     info!("sys_mkdirat: path = {}, mode = {}", path.get(), mode);
 
-    let inner = task.inner_lock();
-    info!("sys_mkdirat cwd is {}", inner.get_current_path());
+    info!("sys_mkdirat cwd is {}", task.get_current_path());
 
     // 计算目标路径
     let target_path = if path.is_absolute() {

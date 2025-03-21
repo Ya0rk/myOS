@@ -1,6 +1,6 @@
 // #![allow(unused)]
 use alloc::{sync::Arc, vec::Vec};
-use crate::{config::RLIMIT_NOFILE, fs::{File, OpenFlags, Stdin, Stdout}, utils::{Errno, SysResult}};
+use crate::{config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, utils::{Errno, SysResult}};
 
 #[derive(Clone)]
 pub struct FdTable {
@@ -9,12 +9,12 @@ pub struct FdTable {
 
 #[derive(Clone)]
 pub struct Fd {
-    pub file: Option<Arc<dyn File + Send + Sync>>,
+    pub file: Option<Arc<dyn FileTrait + Send + Sync>>,
     pub flags: OpenFlags,
 }
 
 impl Fd {
-    pub fn new(fd: Arc<dyn File + Send + Sync>, flags: OpenFlags) -> Self {
+    pub fn new(fd: Arc<dyn FileTrait + Send + Sync>, flags: OpenFlags) -> Self {
         Fd {
             file: Some(fd),
             flags,
@@ -101,7 +101,7 @@ impl FdTable {
     }
 
     /// 通过fd获取文件
-    pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn File + Send + Sync>>> {
+    pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn FileTrait + Send + Sync>>> {
         if idx >= self.table_len() {
             return  Err(Errno::EBADF);
         }

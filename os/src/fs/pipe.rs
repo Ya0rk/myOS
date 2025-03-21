@@ -8,7 +8,7 @@
 /// pub fn make_pipe()
 /// ```
 //
-use super::{File, Kstat};
+use super::{FileTrait, Kstat};
 use crate::mm::UserBuffer;
 use alloc::sync::{Arc, Weak};
 use spin::Mutex;
@@ -147,7 +147,7 @@ impl PipeRingBuffer {
 }
 
 
-impl File for Pipe {
+impl FileTrait for Pipe {
     fn readable(&self) -> bool {
         self.readable
     }

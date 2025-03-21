@@ -1,6 +1,6 @@
 mod devfs;
 mod dirent;
-mod fsidx;
+mod inode_cache;
 mod mount;
 mod pipe;
 mod stat;
@@ -10,16 +10,16 @@ mod ffi;
 pub mod ext4;
 mod path;
 
+use devfs::{find_device, open_device_file, register_device};
 pub use ext4::{root_inode,ls};
 pub use ffi::{OpenFlags, UmountFlags, MountFlags};
 use crate::mm::UserBuffer;
 use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
 use alloc::{sync::Arc, vec::Vec};
-pub use devfs::*;
 pub use path::{Path, path_test};
 pub use dirent::Dirent;
-pub use fsidx::*;
+pub use inode_cache::*;
 use log::{debug, info};
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
@@ -36,18 +36,18 @@ pub const SEEK_END: usize = 2;
 /// 抽象文件Abs，抽象文件，只支持File trait的一些操作
 #[derive(Clone)]
 pub enum FileClass {
-    File(Arc<OSInode>),
-    Abs(Arc<dyn File>),
+    File(Arc<Ext4File>),
+    Abs(Arc<dyn FileTrait>),
 }
 
 impl FileClass {
-    pub fn file(&self) -> Result<Arc<OSInode>, Errno> {
+    pub fn file(&self) -> Result<Arc<Ext4File>, Errno> {
         match self {
             FileClass::File(f) => Ok(f.clone()),
             FileClass::Abs(_) => Err(Errno::EINVAL),
         }
     }
-    pub fn abs(&self) -> Result<Arc<dyn File>, Errno> {
+    pub fn abs(&self) -> Result<Arc<dyn FileTrait>, Errno> {
         match self {
             FileClass::File(_) => Err(Errno::EINVAL),
             FileClass::Abs(f) => Ok(f.clone()),
@@ -141,7 +141,7 @@ pub fn flush_preload() {
 }
 
 pub fn init() {
-    insert_inode_idx("/", root_inode());
+    inode_cache_insert("/", root_inode());
     flush_preload();
     let _ = create_init_files();
 }
@@ -316,13 +316,13 @@ fn create_file(
     );
 
     // 一定能找到,因为除了RootInode外都有父结点
-    let parent_dir = find_inode_idx(parent_path).unwrap();
+    let parent_dir = inode_cache_find(parent_path).unwrap();
     let (readable, writable) = flags.read_write();
     return parent_dir
         .create(&abs_path, flags.node_type())
         .map(|vfile| {
-            insert_inode_idx(&abs_path, vfile.clone());
-            let osinode = OSInode::new(
+            inode_cache_insert(&abs_path, vfile.clone());
+            let osinode = Ext4File::new(
                 readable,
                 writable,
                 vfile,
@@ -381,7 +381,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
 
     // Check if the parent directory inode exists
     let (parent_inode, _) = if has_inode(parent_path) {
-        (find_inode_idx(parent_path).unwrap(), child_name) // Get the parent inode if it exists
+        (inode_cache_find(parent_path).unwrap(), child_name) // Get the parent inode if it exists
     } else {
         // If the parent inode does not exist, use the root inode
         if cwd == "/" {
@@ -395,13 +395,13 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     // Attempt to find the inode for the specified absolute path
     if let Some(inode) = parent_inode.find_by_path(&abs_path) {
         // Insert the inode into the index for future reference
-        insert_inode_idx(&abs_path, inode.clone());
+        inode_cache_insert(&abs_path, inode.clone());
         
         // Determine if the file should be opened for reading or writing
         let (readable, writable) = flags.read_write();
         
         // Create a new OSInode instance for the file
-        let vfile = OSInode::new(
+        let vfile = Ext4File::new(
             readable,
             writable,
             inode,
@@ -454,7 +454,7 @@ pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
     let (parent_path, child_name) = Path::string2path(path.to_string()).split_with("/");
     // 获取上级文件夹的inode，等到创建inode的时候需要，如果上级文件夹的inode不存在就报错
     let (parent_inode, _) = if has_inode(&parent_path) {
-        (find_inode_idx(&parent_path).unwrap(), "") // Get the parent inode if it exists
+        (inode_cache_find(&parent_path).unwrap(), "") // Get the parent inode if it exists
     } else {
         // If the parent inode does not exist, use the root inode
         if parent_path == "/" {
