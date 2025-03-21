@@ -4,7 +4,7 @@ use lwext4_rust::{
 };
 
 use crate::{
-    fs::{InodeTrait, InodeType, Kstat},
+    fs::{InodeMeta, InodeTrait, InodeType, Kstat},
     sync::SyncUnsafeCell,
     utils::{Errno, SysResult},
 };
@@ -12,21 +12,27 @@ use crate::{
 use alloc::{sync::Arc, vec::Vec};
 use alloc::vec;
 
-pub struct Ext4Inode(SyncUnsafeCell<Ext4File>);
+pub struct Ext4Inode {
+    metadata: InodeMeta,
+    file    : Arc<SyncUnsafeCell<Ext4File>>,
+}
 
 unsafe impl Send for Ext4Inode {}
 unsafe impl Sync for Ext4Inode {}
 
 impl Ext4Inode {
     pub fn new(path: &str, types: InodeTypes) -> Self {
-        Ext4Inode(SyncUnsafeCell::new(Ext4File::new(path, types)))
+        Self {
+            metadata: InodeMeta::new(2),
+            file    : Arc::new(SyncUnsafeCell::new(Ext4File::new(path, types)))
+        }
     }
 }
 
 impl InodeTrait for Ext4Inode {
     /// 获取文件大小
     fn size(&self) -> usize {
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         let types = as_inode_type(file.file_type_get());
         if types == InodeType::File {
             let path = file.get_path();
@@ -43,11 +49,11 @@ impl InodeTrait for Ext4Inode {
     /// 创建文件
     fn create(&self, path: &str, ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
         let types = as_ext4_de_type(ty);
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         let nf = Ext4Inode::new(path, types.clone());
 
         if !file.check_inode_exist(path, types.clone()) {
-            let nfile = nf.0.get_unchecked_mut();
+            let nfile = nf.file.get_unchecked_mut();
             if types == InodeTypes::EXT4_DE_DIR {
                 if nfile.dir_mk(path).is_err() {
                     return None;
@@ -62,11 +68,11 @@ impl InodeTrait for Ext4Inode {
     }
     /// 获取文件类型
     fn node_type(&self) -> InodeType {
-        as_inode_type(self.0.get_unchecked_mut().file_type_get())
+        as_inode_type(self.file.get_unchecked_mut().file_type_get())
     }
     /// 读取文件
     fn read_at(&self, off: usize, buf: &mut [u8]) -> usize {
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDONLY).map_err(|_| Errno::EIO).unwrap();
@@ -78,7 +84,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 写入文件
     fn write_at(&self, off: usize, buf: &[u8]) -> usize {
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDWR).map_err(|_| Errno::EIO).unwrap();
@@ -90,7 +96,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 截断文件
     fn truncate(&self, size: usize) -> usize {
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDWR | O_CREAT | O_TRUNC)
@@ -119,7 +125,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 读取文件所有内容
     fn read_all(&self) -> Result<Vec<u8>, Errno> {
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDONLY).map_err(|_| Errno::EIO)?;
@@ -135,7 +141,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 在当前路径下查询是否存在这个path的文件
     fn find_by_path(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
             // debug!("lookup new DIR FileWrapper");
             Some(Arc::new(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR)))
@@ -148,7 +154,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 获取文件状态
     fn fstat(&self) -> Kstat {
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         match file.fstat() {
             Ok(stat) => {
                 as_inode_stat(stat)
@@ -168,7 +174,7 @@ impl InodeTrait for Ext4Inode {
 
 impl Drop for Ext4Inode {
     fn drop(&mut self) {
-        let file = self.0.get_unchecked_mut();
+        let file = self.file.get_unchecked_mut();
         // debug!("Drop struct FileWrapper {:?}", file.get_path());
         file.file_close().expect("failed to close fd");
     }

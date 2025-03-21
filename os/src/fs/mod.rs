@@ -9,10 +9,12 @@ mod vfs;
 mod ffi;
 pub mod ext4;
 mod path;
+mod file;
 
 use devfs::{find_device, open_device_file, register_device};
 pub use ext4::{root_inode,ls};
 pub use ffi::{OpenFlags, UmountFlags, MountFlags};
+use file::NormalFile;
 use crate::mm::UserBuffer;
 use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
@@ -36,12 +38,12 @@ pub const SEEK_END: usize = 2;
 /// 抽象文件Abs，抽象文件，只支持File trait的一些操作
 #[derive(Clone)]
 pub enum FileClass {
-    File(Arc<Ext4File>),
+    File(Arc<NormalFile>),
     Abs(Arc<dyn FileTrait>),
 }
 
 impl FileClass {
-    pub fn file(&self) -> Result<Arc<Ext4File>, Errno> {
+    pub fn file(&self) -> Result<Arc<NormalFile>, Errno> {
         match self {
             FileClass::File(f) => Ok(f.clone()),
             FileClass::Abs(_) => Err(Errno::EINVAL),
@@ -322,7 +324,7 @@ fn create_file(
         .create(&abs_path, flags.node_type())
         .map(|vfile| {
             inode_cache_insert(&abs_path, vfile.clone());
-            let osinode = Ext4File::new(
+            let osinode = NormalFile::new(
                 readable,
                 writable,
                 vfile,
@@ -401,7 +403,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         let (readable, writable) = flags.read_write();
         
         // Create a new OSInode instance for the file
-        let vfile = Ext4File::new(
+        let vfile = NormalFile::new(
             readable,
             writable,
             inode,
