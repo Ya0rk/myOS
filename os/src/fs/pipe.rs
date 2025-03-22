@@ -9,10 +9,11 @@
 /// ```
 //
 use super::{FileTrait, Kstat};
-use crate::mm::UserBuffer;
-use alloc::sync::{Arc, Weak};
+use crate::{mm::UserBuffer, utils::SysResult};
+use alloc::{string::String, sync::{Arc, Weak}};
 use spin::Mutex;
-
+use async_trait::async_trait;
+use alloc::boxed::Box;
 use crate::task::suspend_current_and_run_next;
 
 /// ### 管道
@@ -146,16 +147,16 @@ impl PipeRingBuffer {
     }
 }
 
-
+#[async_trait]
 impl FileTrait for Pipe {
-    fn readable(&self) -> bool {
-        self.readable
+    fn readable(&self) -> SysResult<bool> {
+        Ok(self.readable)
     }
-    fn writable(&self) -> bool {
-        self.writable
+    fn writable(&self) -> SysResult<bool> {
+        Ok(self.writable)
     }
-    fn read(&self, buf: UserBuffer) -> usize {
-        assert!(self.readable());
+    async fn read(&self, buf: UserBuffer) -> SysResult<usize> {
+        assert!(self.readable()?);
         let mut buf_iter = buf.into_iter();
         let mut read_size = 0usize;
         loop {
@@ -163,7 +164,7 @@ impl FileTrait for Pipe {
             let loop_read = ring_buffer.available_read();
             if loop_read == 0 {
                 if ring_buffer.all_write_ends_closed() {
-                    return read_size;
+                    return Ok(read_size);
                 }
                 drop(ring_buffer);
                 suspend_current_and_run_next();
@@ -177,13 +178,13 @@ impl FileTrait for Pipe {
                     }
                     read_size += 1;
                 } else {
-                    return read_size;
+                    return Ok(read_size);
                 }
             }
         }
     }
-    fn write(&self, buf: UserBuffer) -> usize {
-        assert!(self.writable());
+    async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
+        assert!(self.writable()?);
         let mut buf_iter = buf.into_iter();
         let mut write_size = 0usize;
         loop {
@@ -200,13 +201,13 @@ impl FileTrait for Pipe {
                     ring_buffer.write_byte(unsafe { *byte_ref });
                     write_size += 1;
                 } else {
-                    return write_size;
+                    return Ok(write_size);
                 }
             }
         }
     }
     
-    fn get_name(&self) -> alloc::string::String {
+    fn get_name(&self) -> SysResult<String> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
@@ -226,7 +227,7 @@ impl FileTrait for Pipe {
     //     }
     //     revents
     // }
-    fn fstat(&self, _stat: &mut Kstat) -> () {
+    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
 }

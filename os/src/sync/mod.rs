@@ -11,4 +11,4 @@ pub use timer::{get_time, sleep_for, set_next_trigger};
 pub use misc::{get_waker, yield_now, suspend_now};
 pub use up::SyncUnsafeCell;
 pub use time::{TimeVal, TimeSepc, Tms, TimeData, TimeStamp};
-pub use mutex::{SpinLock, SpinNoIrqLock, MutexGuard, MutexOperations, NoIrqLock, NoopLock, Shared};
+pub use mutex::{SpinLock, SpinNoIrqLock, SleepLock, MutexGuard, MutexOperations, NoIrqLock, NoopLock, Shared};

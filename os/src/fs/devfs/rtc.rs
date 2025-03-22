@@ -1,8 +1,8 @@
 use core::{cmp::min, fmt::{Formatter, Debug}};
-
 use alloc::{format, string::String};
-
-use crate::{fs::{FileTrait, Kstat}, mm::UserBuffer};
+use async_trait::async_trait;
+use alloc::boxed::Box;
+use crate::{fs::{FileTrait, Kstat}, mm::UserBuffer, utils::SysResult};
 
 pub struct DevRtc;
 
@@ -12,27 +12,28 @@ impl DevRtc {
     }
 }
 
+#[async_trait]
 impl FileTrait for DevRtc {
-    fn readable(&self) -> bool {
-        true
+    fn readable(&self) -> SysResult<bool> {
+        Ok(true)
     }
-    fn writable(&self) -> bool {
-        true
+    fn writable(&self) -> SysResult<bool> {
+        Ok(true)
     }
-    fn read(&self, mut user_buf: UserBuffer) -> usize {
+    async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
         let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
         let str = format!("{:?}", time);
         let bytes = str.as_bytes();
         let len = min(user_buf.len(), bytes.len());
         user_buf.write(bytes);
-        len
+        Ok(len)
     }
-    fn write(&self, user_buf: UserBuffer) -> usize {
+    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
         // do nothing
-        user_buf.len()
+        Ok(user_buf.len())
     }
     
-    fn get_name(&self) -> String {
+    fn get_name(&self) -> SysResult<String> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
@@ -45,7 +46,7 @@ impl FileTrait for DevRtc {
     //     }
     //     revents
     // }
-    fn fstat(&self, _stat: &mut Kstat) -> () {
+    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
 }

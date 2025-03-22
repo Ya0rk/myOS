@@ -1,12 +1,16 @@
 mod ffi;
 mod spin;
+mod sleep;
+
 use alloc::sync::Arc;
 pub use spin::MutexGuard;
 pub use ffi::{NoIrqLock, NoopLock};
 
 pub type SpinLock<T> = spin::SpinMutex<T, ffi::NoopLock>;
 pub type SpinNoIrqLock<T> = spin::SpinMutex<T, ffi::NoIrqLock>;
+pub type SleepLock<T> = sleep::SleepMutex<T, ffi::NoIrqLock>;
 pub type Shared<T> = Arc<SpinNoIrqLock<T>>;
+
 
 pub trait MutexOperations {
     /// Guard data

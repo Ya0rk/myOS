@@ -1,6 +1,7 @@
 mod devfs;
 mod dirent;
 mod inode_cache;
+mod page_cache;
 mod mount;
 mod pipe;
 mod stat;
@@ -226,7 +227,7 @@ pub fn create_init_files() -> SysResult {
             ));
         }
         let mountbuf = UserBuffer::new(mountsvec);
-        let mountssize = mountsfile.write(mountbuf);
+        let mountssize = mountsfile.write(mountbuf)?;
         debug!("create /proc/mounts with {} sizes", mountssize);
     }
     //创建/proc/meminfo系统内存使用情况
@@ -240,7 +241,7 @@ pub fn create_init_files() -> SysResult {
             memvec.push(core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()));
         }
         let membuf = UserBuffer::new(memvec);
-        let memsize = memfile.write(membuf);
+        let memsize = memfile.write(membuf)?;
         debug!("create /proc/meminfo with {} sizes", memsize);
     }
     //创建/dev文件夹
@@ -283,7 +284,7 @@ pub fn create_init_files() -> SysResult {
             adjtimevec.push(core::slice::from_raw_parts_mut(adj.as_mut_ptr(), adj.len()));
         }
         let adjtimebuf = UserBuffer::new(adjtimevec);
-        let adjtimesize = adjtimefile.write(adjtimebuf);
+        let adjtimesize = adjtimefile.write(adjtimebuf).await?;
         debug!("create /etc/adjtime with {} sizes", adjtimesize);
     }
     //创建./etc/localtime记录时区
@@ -300,7 +301,7 @@ pub fn create_init_files() -> SysResult {
             ));
         }
         let localtimebuf = UserBuffer::new(localtimevec);
-        let localtimesize = localtimefile.write(localtimebuf);
+        let localtimesize = localtimefile.write(localtimebuf).await?;
         debug!("create /etc/localtime with {} sizes", localtimesize);
     }
     Ok(())

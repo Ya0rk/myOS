@@ -34,3 +34,5 @@ pub const PATH_MAX: usize = 4096;
 pub const RLIMIT_NOFILE: usize = 1024;
 /// 当 filename 为相对路径的情况下将当前进程的工作目录设置为起始路径
 pub const AT_FDCWD: isize = -100;
+/// 块大小
+pub const BLOCK_SIZE: usize = 512;
