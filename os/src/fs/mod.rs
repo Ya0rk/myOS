@@ -144,7 +144,7 @@ pub fn flush_preload() {
 }
 
 pub fn init() {
-    inode_cache_insert("/", root_inode());
+    INODE_CACHE.insert("/", root_inode());
     flush_preload();
     let _ = create_init_files();
 }
@@ -206,7 +206,7 @@ const ADJTIME: &str = "0.000000 0.000000 UTC\n";
 const LOCALTIME: &str =
     "lrwxrwxrwx 1 root root 33 11月 18  2023 /etc/localtime -> /usr/share/zoneinfo/Asia/Shanghai\n";
 
-pub fn create_init_files() -> SysResult {
+pub async fn create_init_files() -> SysResult {
     //创建/proc文件夹
     open(
         "/",
@@ -227,7 +227,7 @@ pub fn create_init_files() -> SysResult {
             ));
         }
         let mountbuf = UserBuffer::new(mountsvec);
-        let mountssize = mountsfile.write(mountbuf)?;
+        let mountssize = mountsfile.write(mountbuf).await?;
         debug!("create /proc/mounts with {} sizes", mountssize);
     }
     //创建/proc/meminfo系统内存使用情况
@@ -241,7 +241,7 @@ pub fn create_init_files() -> SysResult {
             memvec.push(core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len()));
         }
         let membuf = UserBuffer::new(memvec);
-        let memsize = memfile.write(membuf)?;
+        let memsize = memfile.write(membuf).await?;
         debug!("create /proc/meminfo with {} sizes", memsize);
     }
     //创建/dev文件夹
@@ -319,12 +319,12 @@ fn create_file(
     );
 
     // 一定能找到,因为除了RootInode外都有父结点
-    let parent_dir = inode_cache_find(parent_path).unwrap();
+    let parent_dir = INODE_CACHE.get(parent_path).unwrap();
     let (readable, writable) = flags.read_write();
     return parent_dir
         .create(&abs_path, flags.node_type())
         .map(|vfile| {
-            inode_cache_insert(&abs_path, vfile.clone());
+            INODE_CACHE.insert(&abs_path, vfile.clone());
             let osinode = NormalFile::new(
                 readable,
                 writable,
@@ -383,8 +383,8 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     );
 
     // Check if the parent directory inode exists
-    let (parent_inode, _) = if has_inode(parent_path) {
-        (inode_cache_find(parent_path).unwrap(), child_name) // Get the parent inode if it exists
+    let (parent_inode, _) = if INODE_CACHE.has_inode(parent_path) {
+        (INODE_CACHE.get(parent_path).unwrap(), child_name) // Get the parent inode if it exists
     } else {
         // If the parent inode does not exist, use the root inode
         if cwd == "/" {
@@ -398,7 +398,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     // Attempt to find the inode for the specified absolute path
     if let Some(inode) = parent_inode.find_by_path(&abs_path) {
         // Insert the inode into the index for future reference
-        inode_cache_insert(&abs_path, inode.clone());
+        INODE_CACHE.insert(&abs_path, inode.clone());
         
         // Determine if the file should be opened for reading or writing
         let (readable, writable) = flags.read_write();
@@ -448,7 +448,7 @@ pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
     }
 
     // 查看当前路径是否已经存在
-    if has_inode(path) {
+    if INODE_CACHE.has_inode(path) {
         return None;
     }
 
@@ -456,8 +456,8 @@ pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
     // 获得上级文件夹文件路径
     let (parent_path, child_name) = Path::string2path(path.to_string()).split_with("/");
     // 获取上级文件夹的inode，等到创建inode的时候需要，如果上级文件夹的inode不存在就报错
-    let (parent_inode, _) = if has_inode(&parent_path) {
-        (inode_cache_find(&parent_path).unwrap(), "") // Get the parent inode if it exists
+    let (parent_inode, _) = if INODE_CACHE.has_inode(&parent_path) {
+        (INODE_CACHE.get(&parent_path).unwrap(), "") // Get the parent inode if it exists
     } else {
         // If the parent inode does not exist, use the root inode
         if parent_path == "/" {
