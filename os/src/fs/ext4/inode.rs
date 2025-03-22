@@ -1,34 +1,51 @@
+use async_trait::async_trait;
 use lwext4_rust::{
     bindings::{ext4_inode_stat, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET},
     Ext4File, InodeTypes,
 };
-
+use spin::Mutex;
 use crate::{
-    fs::{InodeMeta, InodeTrait, InodeType, Kstat},
+    fs::{page_cache::PageCache, InodeMeta, InodeTrait, InodeType, Kstat},
     sync::SyncUnsafeCell,
     utils::{Errno, SysResult},
 };
 
 use alloc::{sync::Arc, vec::Vec};
 use alloc::vec;
+use alloc::boxed::Box;
 
 pub struct Ext4Inode {
     metadata: InodeMeta,
     file    : Arc<SyncUnsafeCell<Ext4File>>,
+    /// 页面缓存
+    pub page_cache: Mutex<Option<Arc<PageCache>>>,
 }
 
 unsafe impl Send for Ext4Inode {}
 unsafe impl Sync for Ext4Inode {}
 
 impl Ext4Inode {
-    pub fn new(path: &str, types: InodeTypes) -> Self {
-        Self {
-            metadata: InodeMeta::new(2),
-            file    : Arc::new(SyncUnsafeCell::new(Ext4File::new(path, types)))
+    pub fn new(path: &str, types: InodeTypes) -> Arc<Self> {
+        let inode = Arc::new(Self {
+            metadata: InodeMeta::new(),
+            file    : Arc::new(SyncUnsafeCell::new(Ext4File::new(path, types))),
+            page_cache: Mutex::new(None)
+        });
+        inode.set_page_cache();
+        inode
+    }
+
+    pub fn set_page_cache(self: &Arc<Self>) {
+        let mut cache = self.page_cache.lock();
+        if cache.is_none() {
+            let page_cache = PageCache::new(self.clone());
+            *cache = Some(Arc::new(page_cache));
         }
     }
+
 }
 
+#[async_trait]
 impl InodeTrait for Ext4Inode {
     /// 获取文件大小
     fn size(&self) -> usize {
@@ -64,14 +81,14 @@ impl InodeTrait for Ext4Inode {
                 let _ = nfile.file_close();
             }
         }
-        Some(Arc::new(nf))
+        Some(nf)
     }
     /// 获取文件类型
     fn node_type(&self) -> InodeType {
         as_inode_type(self.file.get_unchecked_mut().file_type_get())
     }
     /// 读取文件
-    fn read_at(&self, off: usize, buf: &mut [u8]) -> usize {
+    async fn read_at(&self, off: usize, buf: &mut [u8]) -> usize {
         let file = self.file.get_unchecked_mut();
         let path = file.get_path();
         let path = path.to_str().unwrap();
@@ -83,7 +100,7 @@ impl InodeTrait for Ext4Inode {
         r.map_err(|_| Errno::EIO).unwrap()
     }
     /// 写入文件
-    fn write_at(&self, off: usize, buf: &[u8]) -> usize {
+    async fn write_at(&self, off: usize, buf: &[u8]) -> usize {
         let file = self.file.get_unchecked_mut();
         let path = file.get_path();
         let path = path.to_str().unwrap();
@@ -144,10 +161,10 @@ impl InodeTrait for Ext4Inode {
         let file = self.file.get_unchecked_mut();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
             // debug!("lookup new DIR FileWrapper");
-            Some(Arc::new(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR)))
+            Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR))
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
             // debug!("lookup new FILE FileWrapper");
-            Some(Arc::new(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE)))
+            Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE))
         } else {
             None
         }

@@ -40,7 +40,7 @@ impl Ext4SuperBlock {
     pub fn new(disk: Disk) -> Self {
         let inner =
             Ext4BlockWrapper::<Disk>::new(disk).expect("failed to initialize EXT4 filesystem");
-        let root = Arc::new(Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR));
+        let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR);
         Self { inner, root }
     }
 }

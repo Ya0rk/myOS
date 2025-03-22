@@ -4,7 +4,10 @@ use crate::{
 use alloc::{
     sync::Arc, vec::Vec,
 };
+use alloc::boxed::Box;
+use async_trait::async_trait;
 use riscv::interrupt::Mutex;
+use super::alloc_ino;
 
 
 /// inode的基础字段
@@ -20,21 +23,21 @@ pub struct InodeMeta {
 }
 
 impl InodeMeta {
-    pub fn new(ino: usize) -> Self {
+    pub fn new() -> Self {
         Self {
-            ino, 
+            ino: alloc_ino(), 
             size: 0, 
-            timestamp: Arc::new(Mutex::new(TimeStamp::new()))
+            timestamp: Arc::new(Mutex::new(TimeStamp::new())),
         }
     }
 }
-
 
 /// Virtual File System (VFS) Inode interface.
 ///
 /// This trait defines the standard operations that can be performed on an inode
 /// in the virtual file system. An inode represents either a file, directory, or
 /// other file system object.
+#[async_trait]
 pub trait InodeTrait: Send + Sync {
     /// Returns the size of the file in bytes.
     ///
@@ -42,7 +45,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// The size of the file in bytes.
     fn size(&self) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     /// Returns the type of the inode (file, directory, etc.).
@@ -51,7 +54,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// An `InodeType` value indicating the type of this inode.
     fn node_type(&self) -> InodeType {
-        unimplemented!()
+        todo!()
     }
 
     /// Returns the file status information.
@@ -60,7 +63,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// A `Kstat` structure containing various metadata about the file.
     fn fstat(&self) -> Kstat {
-        unimplemented!()
+        todo!()
     }
 
     /// Creates a new file or directory in the current directory.
@@ -74,7 +77,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Some(Arc<dyn Inode>) if creation succeeds, None otherwise.
     fn create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
-        unimplemented!()
+        todo!()
     }
 
     /// Finds an inode by its path relative to this inode.
@@ -87,7 +90,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Some(Arc<dyn Inode>) if found, None otherwise.
     fn find_by_path(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
-        unimplemented!()
+        todo!()
     }
 
     /// Reads data from the file at the specified offset.
@@ -100,8 +103,8 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// The number of bytes actually read.
-    fn read_at(&self, _off: usize, _buf: &mut [u8]) -> usize {
-        unimplemented!()
+    async fn read_at(&self, _off: usize, _buf: &mut [u8]) -> usize {
+        todo!()
     }
 
     /// Writes data to the file at the specified offset.
@@ -114,8 +117,8 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// The number of bytes actually written.
-    fn write_at(&self, _off: usize, _buf: &[u8]) -> usize {
-        unimplemented!()
+    async fn write_at(&self, _off: usize, _buf: &[u8]) -> usize {
+        todo!()
     }
 
     /// Reads directory entries.
@@ -130,7 +133,7 @@ pub trait InodeTrait: Send + Sync {
     /// Some((Vec<u8>, isize)) containing the directory entries and the next offset,
     /// or None if no more entries.
     fn read_dentry(&self, _off: usize, _len: usize) -> Option<(Vec<u8>, isize)> {
-        unimplemented!()
+        todo!()
     }
 
     /// Truncates or extends the file to the specified size.
@@ -143,12 +146,12 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// The actual new size of the file.
     fn truncate(&self, _size: usize) -> usize {
-        unimplemented!()
+        todo!()
     }
 
     /// Synchronizes the file's in-memory state with storage.
     fn sync(&self) {
-        unimplemented!()
+        todo!()
     }
 
     /// Sets the access and modification times of the file.
@@ -162,7 +165,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Ok(0) on success, or an error code.
     fn set_timestamps(&self, _atime_sec: Option<u64>, _mtime_sec: Option<u64>) -> SysResult<usize> {
-        unimplemented!()
+        todo!()
     }
 
     /// Removes a child entry from this directory.
@@ -175,7 +178,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Ok(0) on success, or an error code.
     fn unlink(&self, _child_name: &str) -> SysResult<usize> {
-        unimplemented!();
+        todo!();
     }
 
     /// Renames a file to a new location.
@@ -188,7 +191,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Ok(0) on success, or an error code.
     fn rename(&self, _file: Arc<dyn InodeTrait>) -> SysResult<usize> {
-        unimplemented!()
+        todo!()
     }
 
     /// Reads the entire contents of the file.
@@ -197,6 +200,21 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Ok(Vec<u8>) containing the file's contents, or an error code.
     fn read_all(&self) -> Result<Vec<u8>, Errno> {
-        unimplemented!();
+        todo!();
     }
+
+    /// 将数据写回
+    /// 
+    /// offset：数据开始的地址
+    /// 
+    /// len : 长度
+    /// 
+    /// buf: 数据存在的位置
+    fn write_back(self: Arc<Self>, _offset: usize, _len: usize, _buf: &[u8]) -> SysResult {
+        todo!();
+    }
+}
+
+impl dyn InodeTrait {
+    
 }

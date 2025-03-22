@@ -1,5 +1,7 @@
-use crate::{fs::{FileTrait, Kstat}, mm::UserBuffer, utils::RNG};
+use crate::{fs::{FileTrait, Kstat}, mm::UserBuffer, utils::{SysResult, RNG}};
 use alloc::string::String;
+use async_trait::async_trait;
+use alloc::boxed::Box;
 
 pub struct DevRandom;
 
@@ -9,22 +11,23 @@ impl DevRandom {
     }
 }
 
+#[async_trait]
 impl FileTrait for DevRandom {
-    fn readable(&self) -> bool {
-        true
+    fn readable(&self) -> SysResult<bool> {
+        Ok(true)
     }
-    fn writable(&self) -> bool {
-        true
+    fn writable(&self) -> SysResult<bool> {
+        Ok(true)
     }
-    fn read(&self, user_buf: UserBuffer) -> usize {
-        unsafe { RNG.fill_buf(user_buf) }
+    async fn read(&self, user_buf: UserBuffer) -> SysResult<usize> {
+        unsafe { Ok(RNG.fill_buf(user_buf)) }
     }
-    fn write(&self, user_buf: UserBuffer) -> usize {
+    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
         // do nothing
-        user_buf.len()
+        Ok(user_buf.len())
     }
     
-    fn get_name(&self) -> String {
+    fn get_name(&self) -> SysResult<String> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
@@ -37,7 +40,7 @@ impl FileTrait for DevRandom {
     //     }
     //     revents
     // }
-    fn fstat(&self, _stat: &mut Kstat) -> () {
+    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
 }
