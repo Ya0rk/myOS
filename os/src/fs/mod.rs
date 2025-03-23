@@ -8,27 +8,29 @@ mod stat;
 mod stdio;
 mod vfs;
 mod ffi;
-pub mod ext4;
 mod path;
 mod file;
+pub mod ext4;
 
-use devfs::{find_device, open_device_file, register_device};
 pub use ext4::{root_inode,ls};
 pub use ffi::{OpenFlags, UmountFlags, MountFlags};
-use file::NormalFile;
-use crate::mm::UserBuffer;
-use crate::utils::{Errno, SysResult};
-use alloc::string::{String, ToString};
-use alloc::{sync::Arc, vec::Vec};
 pub use path::{Path, path_test};
 pub use dirent::Dirent;
 pub use inode_cache::*;
-use log::{debug, info};
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
 pub use stat::Kstat;
 pub use vfs::*;
 pub use stdio::{Stdin, Stdout};
+
+use devfs::{find_device, open_device_file, register_device};
+use ffi::{MOUNTS, MEMINFO, LOCALTIME, ADJTIME};
+use file::NormalFile;
+use crate::mm::UserBuffer;
+use crate::utils::{Errno, SysResult};
+use alloc::string::{String, ToString};
+use alloc::{sync::Arc, vec::Vec};
+use log::{debug, info};
 
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
@@ -130,17 +132,6 @@ pub fn flush_preload() {
         });
         initproc.write(UserBuffer::new(v));
     }
-
-    // if let Some(FileClass::File(onlinetests)) = open_file("onlinetests", OpenFlags::O_CREATE) {
-    //     let mut v = Vec::new();
-    //     v.push(unsafe {
-    //         core::slice::from_raw_parts_mut(
-    //             shell_start as *mut u8,
-    //             shell_end as usize - shell_start as usize,
-    //         ) as &'static mut [u8]
-    //     });
-    //     onlinetests.write(UserBuffer::new(v));
-    // }
 }
 
 pub fn init() {
@@ -156,55 +147,7 @@ pub fn list_apps() -> bool{
     true
 }
 
-//
-const MOUNTS: &str = " ext4 / ext4 rw 0 0\n";
-const MEMINFO: &str = r"
-MemTotal:         944564 kB
-MemFree:          835248 kB
-MemAvailable:     873464 kB
-Buffers:            6848 kB
-Cached:            36684 kB
-SwapCached:            0 kB
-Active:            19032 kB
-Inactive:          32676 kB
-Active(anon):        128 kB
-Inactive(anon):     8260 kB
-Active(file):      18904 kB
-Inactive(file):    24416 kB
-Unevictable:           0 kB
-Mlocked:               0 kB
-SwapTotal:             0 kB
-SwapFree:              0 kB
-Dirty:                 0 kB
-Writeback:             0 kB
-AnonPages:          8172 kB
-Mapped:            16376 kB
-Shmem:               216 kB
-KReclaimable:       9960 kB
-Slab:              17868 kB
-SReclaimable:       9960 kB
-SUnreclaim:         7908 kB
-KernelStack:        1072 kB
-PageTables:          600 kB
-NFS_Unstable:          0 kB
-Bounce:                0 kB
-WritebackTmp:          0 kB
-CommitLimit:      472280 kB
-Committed_AS:      64684 kB
-VmallocTotal:   67108863 kB
-VmallocUsed:       15740 kB
-VmallocChunk:          0 kB
-Percpu:              496 kB
-HugePages_Total:       0
-HugePages_Free:        0
-HugePages_Rsvd:        0
-HugePages_Surp:        0
-Hugepagesize:       2048 kB
-Hugetlb:               0 kB
-";
-const ADJTIME: &str = "0.000000 0.000000 UTC\n";
-const LOCALTIME: &str =
-    "lrwxrwxrwx 1 root root 33 11月 18  2023 /etc/localtime -> /usr/share/zoneinfo/Asia/Shanghai\n";
+
 
 pub async fn create_init_files() -> SysResult {
     //创建/proc文件夹
