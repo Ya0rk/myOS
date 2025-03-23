@@ -14,11 +14,11 @@ impl DevTty {
 
 #[async_trait]
 impl FileTrait for DevTty {
-    fn readable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn readable(&self) -> bool {
+        true
     }
-    fn writable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn writable(&self) -> bool {
+        true
     }
     async fn read(&self, user_buf: UserBuffer) -> SysResult<usize> {
         if let Some(tty_device) = INITPROC.get_file_by_fd(0) {

@@ -13,11 +13,11 @@ impl DevNull {
 
 #[async_trait]
 impl FileTrait for DevNull {
-    fn readable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn readable(&self) -> bool {
+        true
     }
-    fn writable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn writable(&self) -> bool {
+        true
     }
     async fn read(&self, mut _user_buf: UserBuffer) -> SysResult<usize> {
         // do nothing

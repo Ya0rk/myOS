@@ -30,11 +30,11 @@ pub struct Stdout;
 
 #[async_trait]
 impl FileTrait for Stdin {
-    fn readable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn readable(&self) -> bool {
+        true
     }
-    fn writable(&self) -> SysResult<bool> {
-        Ok(false)
+    fn writable(&self) -> bool {
+        false
     }
     async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
         //一次读取多个字符
@@ -138,11 +138,11 @@ impl FileTrait for Stdin {
 
 #[async_trait]
 impl FileTrait for Stdout {
-    fn readable(&self) -> SysResult<bool> {
-        Ok(false)
+    fn readable(&self) -> bool {
+        false
     }
-    fn writable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn writable(&self) -> bool {
+        true
     }
     async fn read(&self, _user_buf: UserBuffer) -> SysResult<usize> {
         panic!("Cannot read from stdout!");

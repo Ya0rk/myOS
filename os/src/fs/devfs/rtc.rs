@@ -14,11 +14,11 @@ impl DevRtc {
 
 #[async_trait]
 impl FileTrait for DevRtc {
-    fn readable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn readable(&self) -> bool {
+        true
     }
-    fn writable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn writable(&self) -> bool {
+        true
     }
     async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
         let time = RtcTime::new(2000, 1, 1, 0, 0, 0);

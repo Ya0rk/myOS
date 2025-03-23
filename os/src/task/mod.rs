@@ -48,8 +48,8 @@ lazy_static! {
     ///Globle process that init user shell
     pub static ref INITPROC: Arc<TaskControlBlock> = {
         // TODO: 重构为异步
-        if let Some(FileClass::File(inode)) = open_file("initproc", OpenFlags::O_RDONLY) {
-            let elf_data = inode.inode.read_all().unwrap();
+        if let Some(FileClass::File(file)) = open_file("initproc", OpenFlags::O_RDONLY) {
+            let elf_data = file.metadata.inode.read_all().unwrap();
             let res=TaskControlBlock::new(&elf_data);
             res
         } else {
@@ -59,8 +59,8 @@ lazy_static! {
 }
 ///Add init process to the manager
 pub fn add_initproc() {
-    if let Some(FileClass::File(inode)) = open_file("initproc", OpenFlags::O_RDONLY) {
-        let elf_data = inode.inode.read_all().unwrap();
+    if let Some(FileClass::File(file)) = open_file("initproc", OpenFlags::O_RDONLY) {
+        let elf_data = file.metadata.inode.read_all().unwrap();
         TaskControlBlock::new(&elf_data);
     } else {
         panic!("error: initproc from Abs File!");

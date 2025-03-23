@@ -28,12 +28,12 @@ impl NormalFile {
 // 为 OSInode 实现 File Trait
 #[async_trait]
 impl FileTrait for NormalFile {
-    fn readable(&self) -> SysResult<bool> {
-        Ok(self.metadata.flags.read().readable())
+    fn readable(&self) -> bool {
+        self.metadata.flags.read().readable()
     }
 
-    fn writable(&self) -> SysResult<bool> {
-        Ok(self.metadata.flags.read().writable())
+    fn writable(&self) -> bool {
+        self.metadata.flags.read().writable()
     }
 
     async fn read(&self, mut buf: UserBuffer) -> SysResult<usize> {
