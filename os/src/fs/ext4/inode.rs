@@ -1,12 +1,12 @@
 use async_trait::async_trait;
 use lwext4_rust::{
-    bindings::{ext4_inode_stat, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET},
+    bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET},
     Ext4File, InodeTypes,
 };
 use spin::Mutex;
 use crate::{
-    fs::{page_cache::PageCache, InodeMeta, InodeTrait, InodeType, Kstat},
-    sync::SyncUnsafeCell,
+    fs::{page_cache::PageCache, stat::as_inode_stat, InodeMeta, InodeTrait, InodeType, Kstat},
+    sync::{MutexGuard, NoIrqLock, SyncUnsafeCell, TimeStamp},
     utils::{Errno, SysResult},
 };
 
@@ -15,8 +15,8 @@ use alloc::vec;
 use alloc::boxed::Box;
 
 pub struct Ext4Inode {
-    metadata: InodeMeta,
-    file    : Arc<SyncUnsafeCell<Ext4File>>,
+    pub metadata: InodeMeta,
+    pub file    : Arc<SyncUnsafeCell<Ext4File>>,
     /// 页面缓存
     pub page_cache: Mutex<Option<Arc<PageCache>>>,
 }
@@ -132,10 +132,6 @@ impl InodeTrait for Ext4Inode {
     fn rename(&self, _file: Arc<dyn InodeTrait>) -> SysResult<usize> {
         todo!()
     }
-    /// 设置文件时间戳
-    fn set_timestamps(&self, _atime_sec: Option<u64>, _mtime_sec: Option<u64>) -> SysResult<usize> {
-        todo!()
-    }
     /// 同步文件
     fn sync(&self) {
         todo!()
@@ -174,7 +170,8 @@ impl InodeTrait for Ext4Inode {
         let file = self.file.get_unchecked_mut();
         match file.fstat() {
             Ok(stat) => {
-                as_inode_stat(stat)
+                let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+                as_inode_stat(stat, atime, mtime, ctime)
             }
             Err(_) => Kstat::new()
         }
@@ -186,6 +183,9 @@ impl InodeTrait for Ext4Inode {
     /// 删除文件
     fn unlink(&self, _child_name: &str) -> SysResult<usize> {
         todo!()
+    }
+    fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, > {
+        self.metadata.timestamp.lock()
     }
 }
 
@@ -223,30 +223,5 @@ fn as_inode_type(types: InodeTypes) -> InodeType {
             // warn!("unknown file type: {:?}", vtype);
             unreachable!()
         }
-    }
-}
-
-/// 将 ext4_inode_stat 转换为 Kstat
-fn as_inode_stat(stat: ext4_inode_stat) -> Kstat {
-    Kstat {
-        st_dev: stat.st_dev as u32,
-        st_ino: stat.st_ino as u64,
-        st_mode: stat.st_mode,
-        st_nlink: stat.st_nlink,
-        st_uid: stat.st_uid,
-        st_gid: stat.st_gid,
-        st_rdev: 0, // 如果需要，可以根据具体情况设置
-        __pad: 0,   // 填充字段
-        st_size: stat.st_size as i64,
-        st_blksize: stat.st_blksize as i64,
-        __pad2: 0,  // 填充字段
-        st_blocks: stat.st_blocks as u64,
-        st_atime_sec: stat.st_atime as i64,
-        st_atime_nsec: 0, // 如果需要，可以根据具体情况设置
-        st_mtime_sec: stat.st_mtime as i64,
-        st_mtime_nsec: 0, // 如果需要，可以根据具体情况设置
-        st_ctime_sec: stat.st_ctime as i64,
-        st_ctime_nsec: 0, // 如果需要，可以根据具体情况设置
-        __unused: [0; 2], // 填充字段
     }
 }

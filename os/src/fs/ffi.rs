@@ -78,3 +78,54 @@ bitflags! {
         const MS_BIND = 4096;
     }
 }
+
+
+//
+pub const MOUNTS: &str = " ext4 / ext4 rw 0 0\n";
+pub const MEMINFO: &str = r"
+MemTotal:         944564 kB
+MemFree:          835248 kB
+MemAvailable:     873464 kB
+Buffers:            6848 kB
+Cached:            36684 kB
+SwapCached:            0 kB
+Active:            19032 kB
+Inactive:          32676 kB
+Active(anon):        128 kB
+Inactive(anon):     8260 kB
+Active(file):      18904 kB
+Inactive(file):    24416 kB
+Unevictable:           0 kB
+Mlocked:               0 kB
+SwapTotal:             0 kB
+SwapFree:              0 kB
+Dirty:                 0 kB
+Writeback:             0 kB
+AnonPages:          8172 kB
+Mapped:            16376 kB
+Shmem:               216 kB
+KReclaimable:       9960 kB
+Slab:              17868 kB
+SReclaimable:       9960 kB
+SUnreclaim:         7908 kB
+KernelStack:        1072 kB
+PageTables:          600 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:      472280 kB
+Committed_AS:      64684 kB
+VmallocTotal:   67108863 kB
+VmallocUsed:       15740 kB
+VmallocChunk:          0 kB
+Percpu:              496 kB
+HugePages_Total:       0
+HugePages_Free:        0
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:       2048 kB
+Hugetlb:               0 kB
+";
+pub const ADJTIME: &str = "0.000000 0.000000 UTC\n";
+pub const LOCALTIME: &str =
+    "lrwxrwxrwx 1 root root 33 11月 18  2023 /etc/localtime -> /usr/share/zoneinfo/Asia/Shanghai\n";

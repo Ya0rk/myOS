@@ -1,12 +1,11 @@
 use crate::{
-    fs::{InodeType, Kstat}, sync::TimeStamp, utils::{Errno, SysResult}
+    fs::{InodeType, Kstat}, sync::{MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp}, utils::{Errno, SysResult}
 };
 use alloc::{
     sync::Arc, vec::Vec,
 };
 use alloc::boxed::Box;
 use async_trait::async_trait;
-use riscv::interrupt::Mutex;
 use super::alloc_ino;
 
 
@@ -19,7 +18,7 @@ pub struct InodeMeta {
     /// 文件大小
     pub size: usize,
     /// 时间戳
-    pub timestamp: Arc<Mutex<TimeStamp>>,
+    pub timestamp: SpinNoIrqLock<TimeStamp>,
 }
 
 impl InodeMeta {
@@ -27,7 +26,7 @@ impl InodeMeta {
         Self {
             ino: alloc_ino(), 
             size: 0, 
-            timestamp: Arc::new(Mutex::new(TimeStamp::new())),
+            timestamp: SpinNoIrqLock::new(TimeStamp::new()),
         }
     }
 }
@@ -154,20 +153,6 @@ pub trait InodeTrait: Send + Sync {
         todo!()
     }
 
-    /// Sets the access and modification times of the file.
-    ///
-    /// # Arguments
-    ///
-    /// * `atime_sec` - Optional new access time in seconds
-    /// * `mtime_sec` - Optional new modification time in seconds
-    ///
-    /// # Returns
-    ///
-    /// Ok(0) on success, or an error code.
-    fn set_timestamps(&self, _atime_sec: Option<u64>, _mtime_sec: Option<u64>) -> SysResult<usize> {
-        todo!()
-    }
-
     /// Removes a child entry from this directory.
     ///
     /// # Arguments
@@ -213,8 +198,25 @@ pub trait InodeTrait: Send + Sync {
     fn write_back(self: Arc<Self>, _offset: usize, _len: usize, _buf: &[u8]) -> SysResult {
         todo!();
     }
+
+    /// 获取时间戳，用于修改或访问
+    fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, >;
 }
 
 impl dyn InodeTrait {
-    
+    /// Sets the access and modification times of the file.
+    ///
+    /// # Arguments
+    ///
+    /// * `atime_sec` - Optional new access time in seconds
+    /// * `mtime_sec` - Optional new modification time in seconds
+    ///
+    /// # Returns
+    ///
+    /// Ok(0) on success, or an error code.
+    fn set_timestamps(&self, timestamp: TimeStamp) -> SysResult<usize> {
+        let mut mytime = self.get_timestamp();
+        mytime.set(timestamp);
+        Ok(0)
+    }
 }

@@ -18,4 +18,14 @@ impl TimeStamp {
             ctime: TimeSepc::new() 
         }
     }
+
+    pub fn get(&self) -> (TimeSepc, TimeSepc, TimeSepc) {
+        (self.atime, self.mtime, self.ctime)
+    }
+
+    pub fn set(&mut self, timestamp: TimeStamp) {
+        self.atime = timestamp.atime;
+        self.mtime = timestamp.mtime;
+        self.ctime = timestamp.ctime;
+    }
 }
