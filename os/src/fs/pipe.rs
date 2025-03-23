@@ -149,14 +149,14 @@ impl PipeRingBuffer {
 
 #[async_trait]
 impl FileTrait for Pipe {
-    fn readable(&self) -> SysResult<bool> {
-        Ok(self.readable)
+    fn readable(&self) -> bool {
+        self.readable
     }
-    fn writable(&self) -> SysResult<bool> {
-        Ok(self.writable)
+    fn writable(&self) -> bool {
+        self.writable
     }
     async fn read(&self, buf: UserBuffer) -> SysResult<usize> {
-        assert!(self.readable()?);
+        assert!(self.readable());
         let mut buf_iter = buf.into_iter();
         let mut read_size = 0usize;
         loop {
@@ -184,7 +184,7 @@ impl FileTrait for Pipe {
         }
     }
     async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
-        assert!(self.writable()?);
+        assert!(self.writable());
         let mut buf_iter = buf.into_iter();
         let mut write_size = 0usize;
         loop {

@@ -156,7 +156,7 @@ pub fn sys_exec(path: *const u8) -> SysResult<usize> {
     let path = translated_str(token, path);
     debug!("sys_exec: path = {:?}", path);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
-        let all_data = app_inode.file()?.inode.read_all()?;
+        let all_data = app_inode.file()?.metadata.inode.read_all()?;
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
         Ok(0)

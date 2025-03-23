@@ -45,14 +45,14 @@ pub trait FileTrait: Send + Sync {
     /// # 返回
     ///
     /// 如果文件可读返回 `true`，否则返回 `false`
-    fn readable(&self) -> SysResult<bool>;
+    fn readable(&self) -> bool;
 
     /// 检查文件是否可写
     ///
     /// # 返回
     ///
     /// 如果文件可写返回 `true`，否则返回 `false`
-    fn writable(&self) -> SysResult<bool>;
+    fn writable(&self) -> bool;
 
     /// 从文件中读取数据到用户缓冲区
     ///

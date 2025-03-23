@@ -13,11 +13,11 @@ impl DevRandom {
 
 #[async_trait]
 impl FileTrait for DevRandom {
-    fn readable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn readable(&self) -> bool {
+        true
     }
-    fn writable(&self) -> SysResult<bool> {
-        Ok(true)
+    fn writable(&self) -> bool {
+        true
     }
     async fn read(&self, user_buf: UserBuffer) -> SysResult<usize> {
         unsafe { Ok(RNG.fill_buf(user_buf)) }
