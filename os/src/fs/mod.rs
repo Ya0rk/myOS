@@ -263,14 +263,12 @@ fn create_file(
 
     // 一定能找到,因为除了RootInode外都有父结点
     let parent_dir = INODE_CACHE.get(parent_path).unwrap();
-    let (readable, writable) = flags.read_write();
     return parent_dir
         .create(&abs_path, flags.node_type())
         .map(|vfile| {
             INODE_CACHE.insert(&abs_path, vfile.clone());
             let osinode = NormalFile::new(
-                readable,
-                writable,
+                flags,
                 vfile,
                 Some(Arc::downgrade(&parent_dir)),
                 abs_path,
@@ -343,13 +341,9 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         // Insert the inode into the index for future reference
         INODE_CACHE.insert(&abs_path, inode.clone());
         
-        // Determine if the file should be opened for reading or writing
-        let (readable, writable) = flags.read_write();
-        
         // Create a new OSInode instance for the file
         let vfile = NormalFile::new(
-            readable,
-            writable,
+            flags,
             inode,
             Some(Arc::downgrade(&parent_inode)), // Keep a weak reference to the parent inode
             abs_path,
@@ -362,7 +356,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         
         // If the O_TRUNC flag is set, truncate the file to zero length
         if flags.contains(OpenFlags::O_TRUNC) {
-            vfile.inode.truncate(0);
+            vfile.metadata.inode.truncate(0);
         }
         
         // Return the opened file as a FileClass::File

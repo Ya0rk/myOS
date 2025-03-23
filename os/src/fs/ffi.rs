@@ -10,15 +10,19 @@ bitflags! {
         // NOTE: bitflags do not encourage zero bit flag, we should not directly check `O_RDONLY`
         const O_RDONLY      = 0;
         const O_WRONLY      = 1;
+        /// 读取和写入
         const O_RDWR        = 2;
         const O_ACCMODE     = 3;
-        /// If pathname does not exist, create it as a regular file.
+        /// 如果文件不存在，则创建文件。需要指定文件权限（如 0644）
         const O_CREAT       = 0o100;
+        /// 与 O_CREAT 一起使用，确保文件是新建的（如果文件已存在则失败）
         const O_EXCL        = 0o200;
         const O_NOCTTY      = 0o400;
-        ///Clear file and return an empty one
+        /// 如果文件已存在，将其长度截断为 0（清空文件内容）
         const O_TRUNC       = 0o1000;
+        /// 在写入时追加到文件末尾，而不是覆盖文件内容
         const O_APPEND      = 0o2000;
+        /// 以非阻塞模式打开文件（通常用于设备文件或管道）
         const O_NONBLOCK    = 0o4000;
         const O_DSYNC       = 0o10000;
         const O_SYNC        = 0o4010000;
@@ -43,11 +47,17 @@ impl OpenFlags {
     pub fn read_write(&self) -> (bool, bool) {
         if self.is_empty() {
             (true, false)
-        } else if self.contains(Self::O_WRONLY) {
-            (false, true)
         } else {
-            (true, true)
+            (self.readable(), self.writable())
         }
+    }
+
+    pub fn readable(&self) -> bool {
+        self.contains(OpenFlags::O_RDONLY) || self.contains(OpenFlags::O_RDWR)
+    }
+
+    pub fn writable(&self) -> bool {
+        self.contains(OpenFlags::O_WRONLY) || self.contains(OpenFlags::O_RDWR)
     }
 
     pub fn node_type(&self) -> InodeType {
