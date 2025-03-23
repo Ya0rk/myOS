@@ -1,7 +1,38 @@
-use crate::{fs::Kstat, mm::UserBuffer, utils::SysResult};
-use alloc::string::String;
+use core::sync::atomic::{AtomicUsize, Ordering};
+use crate::{fs::{Kstat, OpenFlags}, mm::UserBuffer, utils::SysResult};
+use alloc::{string::String, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
+use spin::RwLock;
+
+use super::InodeTrait;
+
+pub struct FileMeta {
+    /// 文件偏移量
+    pub offset: AtomicUsize,
+    /// 打开文件时的权限
+    pub flags: RwLock<OpenFlags>,
+    /// 维护文件的inode，这里是Ext4Inode
+    pub inode: Arc<dyn InodeTrait>,
+}
+
+impl FileMeta {
+    pub fn new(flags: OpenFlags, inode: Arc<dyn InodeTrait>) -> Self {
+        Self {
+            offset: AtomicUsize::new(0),
+            flags: RwLock::new(flags),
+            inode
+        }
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset.load(Ordering::Relaxed)
+    }
+
+    pub fn set_offset(&self, new_offset: usize) {
+        self.offset.store(new_offset, Ordering::Relaxed);
+    }
+}
 
 /// 文件接口
 ///
