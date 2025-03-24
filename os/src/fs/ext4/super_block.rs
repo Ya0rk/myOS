@@ -3,37 +3,19 @@ use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
 
 use crate::{
     drivers::Disk,
-    fs::{page_cache::PageCache, InodeTrait, SuperBlockTrait},
+    fs::{page_cache::PageCache, stat::as_inode_stat, InodeTrait, Kstat, SuperBlockTrait},
 };
 
 use alloc::sync::Arc;
 
 use super::Ext4Inode;
 
-pub struct Ext4SuperBlock {
-    inner: Ext4BlockWrapper<Disk>,
-    root: Arc<dyn InodeTrait>,
-}
-
 unsafe impl Send for Ext4SuperBlock {}
 unsafe impl Sync for Ext4SuperBlock {}
 
-impl SuperBlockTrait for Ext4SuperBlock {
-    fn root_inode(&self) -> Arc<dyn InodeTrait> {
-        self.root.clone()
-    }
-    // fn fs_stat(&self) -> crate::fs::Statfs {
-    //     todo!()
-    // }
-    fn sync(&self) {
-        todo!()
-    }
-    fn ls(&self) {
-        self.inner
-            .lwext4_dir_ls()
-            .into_iter()
-            .for_each(|s| println!("{}", s));
-    }
+pub struct Ext4SuperBlock {
+    inner: Ext4BlockWrapper<Disk>,
+    root: Arc<Ext4Inode>,
 }
 
 impl Ext4SuperBlock {
@@ -45,3 +27,29 @@ impl Ext4SuperBlock {
         Self { inner, root }
     }
 }
+
+impl SuperBlockTrait for Ext4SuperBlock {
+    fn root_inode(&self) -> Arc<dyn InodeTrait> {
+        self.root.clone()
+    }
+    fn fs_stat(&self) -> Kstat {
+        let mut file = self.root.file.lock();
+        match file.fstat() {
+            Ok(stat) => {
+                let (atime, mtime, ctime) = self.root.metadata.timestamp.lock().get();
+                as_inode_stat(stat, atime, mtime, ctime)
+            }
+            Err(_) => Kstat::new()
+        }
+    }
+    fn sync(&self) {
+        todo!()
+    }
+    fn ls(&self) {
+        self.inner
+            .lwext4_dir_ls()
+            .into_iter()
+            .for_each(|s| println!("{}", s));
+    }
+}
+

@@ -9,7 +9,7 @@ use lazy_static::*;
 
 use crate::drivers::{BlockDeviceImpl, Disk};
 
-use super::{InodeTrait, SuperBlockTrait};
+use super::{InodeTrait, Kstat, SuperBlockTrait};
 
 lazy_static! {
     static ref SUPER_BLOCK: Arc<dyn SuperBlockTrait> = {
@@ -28,9 +28,9 @@ pub fn sync() {
     SUPER_BLOCK.sync()
 }
 
-// pub fn fs_stat() -> Statfs {
-//     SUPER_BLOCK.fs_stat()
-// }
+pub fn fs_stat() -> Kstat {
+    SUPER_BLOCK.fs_stat()
+}
 
 pub fn ls() {
     SUPER_BLOCK.ls()
