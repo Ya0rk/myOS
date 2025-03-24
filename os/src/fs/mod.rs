@@ -1,26 +1,26 @@
 mod devfs;
 mod dirent;
-mod fsidx;
+mod inode_cache;
 mod mount;
 mod pipe;
 mod stat;
 mod stdio;
 mod vfs;
 mod ffi;
-mod ext4;
+pub mod ext4;
 mod path;
 
+use devfs::{find_device, open_device_file, register_device};
 pub use ext4::{root_inode,ls};
 pub use ffi::{OpenFlags, UmountFlags, MountFlags};
 use crate::mm::UserBuffer;
 use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
 use alloc::{sync::Arc, vec::Vec};
-pub use devfs::*;
 pub use path::{Path, path_test};
 pub use dirent::Dirent;
-pub use fsidx::*;
-use log::debug;
+pub use inode_cache::*;
+use log::{debug, info};
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
 pub use stat::Kstat;
@@ -36,18 +36,18 @@ pub const SEEK_END: usize = 2;
 /// 抽象文件Abs，抽象文件，只支持File trait的一些操作
 #[derive(Clone)]
 pub enum FileClass {
-    File(Arc<OSInode>),
-    Abs(Arc<dyn File>),
+    File(Arc<Ext4File>),
+    Abs(Arc<dyn FileTrait>),
 }
 
 impl FileClass {
-    pub fn file(&self) -> Result<Arc<OSInode>, Errno> {
+    pub fn file(&self) -> Result<Arc<Ext4File>, Errno> {
         match self {
             FileClass::File(f) => Ok(f.clone()),
             FileClass::Abs(_) => Err(Errno::EINVAL),
         }
     }
-    pub fn abs(&self) -> Result<Arc<dyn File>, Errno> {
+    pub fn abs(&self) -> Result<Arc<dyn FileTrait>, Errno> {
         match self {
             FileClass::File(_) => Err(Errno::EINVAL),
             FileClass::Abs(f) => Ok(f.clone()),
@@ -141,7 +141,7 @@ pub fn flush_preload() {
 }
 
 pub fn init() {
-    insert_inode_idx("/", root_inode());
+    inode_cache_insert("/", root_inode());
     flush_preload();
     let _ = create_init_files();
 }
@@ -316,13 +316,13 @@ fn create_file(
     );
 
     // 一定能找到,因为除了RootInode外都有父结点
-    let parent_dir = find_inode_idx(parent_path).unwrap();
+    let parent_dir = inode_cache_find(parent_path).unwrap();
     let (readable, writable) = flags.read_write();
     return parent_dir
         .create(&abs_path, flags.node_type())
         .map(|vfile| {
-            insert_inode_idx(&abs_path, vfile.clone());
-            let osinode = OSInode::new(
+            inode_cache_insert(&abs_path, vfile.clone());
+            let osinode = Ext4File::new(
                 readable,
                 writable,
                 vfile,
@@ -337,67 +337,143 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
     open(&"/", path, flags)
 }
 
+// pub fn open_dir(path: &str, flags: OpenFlags, mode: usize) -> Option<FileClass>{
+//     unimplemented!()
+// }
+
+/// Opens a file or device at the specified path with the given flags.
+///
+/// # Arguments
+///
+/// * `cwd` - The current working directory.
+/// * `path` - The path to the file to open.
+/// * `flags` - The flags that determine how the file should be opened.
+///
+/// # Returns
+///
+/// An `Option<FileClass>` which is `Some(FileClass::File(vfile))` if the file is opened successfully,
+/// or `Some(FileClass::Abs(device))` if a device file is opened, or `None` if the file cannot be opened.
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
+    // Convert the provided path string into a Path object
     let kpath = Path::string2path(path.to_string());
+    
+    // Join the current working directory with the provided path to create an absolute path
     let new_path = kpath.join_path_2_absolute(cwd.to_string());
     let abs_path = new_path.get();
-    //判断是否是设备文件
+    info!("open() abs_path is {}", abs_path);
+    // Check if the absolute path corresponds to a device file
     if find_device(&abs_path) {
+        // Attempt to open the device file
         if let Some(device) = open_device_file(&abs_path) {
-            return Some(FileClass::Abs(device));
+            return Some(FileClass::Abs(device)); // Return the opened device file
         }
-        return None;
+        return None; // Return None if the device file cannot be opened
     }
 
-    // !必须要知道父结点
+    // Split the new path into parent directory and child file name
     let (parent_path, child_name) = new_path.split_with("/");
     let (parent_path, child_name) = (parent_path.as_str(), child_name.as_str());
 
     debug!(
-        "[open] cwd={},path={},parent={},child={},abs={}",
+        "[open] cwd={}, path={}, parent={}, child={}, abs={}",
         cwd, path, parent_path, child_name, &abs_path
     );
 
+    // Check if the parent directory inode exists
     let (parent_inode, _) = if has_inode(parent_path) {
-        (find_inode_idx(parent_path).unwrap(), child_name)
+        (inode_cache_find(parent_path).unwrap(), child_name) // Get the parent inode if it exists
     } else {
+        // If the parent inode does not exist, use the root inode
         if cwd == "/" {
             (root_inode(), path)
         } else {
             (root_inode().find_by_path(cwd).unwrap(), path)
         }
     };
-    // println!("find by parent!");
+    // 以上这里好像存在问题，这个所谓的find_by_path到底是什么含义
+
+    // Attempt to find the inode for the specified absolute path
     if let Some(inode) = parent_inode.find_by_path(&abs_path) {
-        // println!("find");
-        // if flags.contains(OpenFlags::O_TRUNC) {
-        //     remove_inode_idx(&abs_path);
-        //     let abs_path_clone = abs_path.clone();
-        //     let (_, name) = abs_path.rsplit_once("/").unwrap();
-        //     inode.unlink(name);
-        //     return create_file(abs_path_clone, parent_path, child, flags);
-        // }
-        insert_inode_idx(&abs_path, inode.clone());
+        // Insert the inode into the index for future reference
+        inode_cache_insert(&abs_path, inode.clone());
+        
+        // Determine if the file should be opened for reading or writing
         let (readable, writable) = flags.read_write();
-        let vfile = OSInode::new(
+        
+        // Create a new OSInode instance for the file
+        let vfile = Ext4File::new(
             readable,
             writable,
             inode,
-            Some(Arc::downgrade(&parent_inode)),
+            Some(Arc::downgrade(&parent_inode)), // Keep a weak reference to the parent inode
             abs_path,
         );
+
+        // If the O_APPEND flag is set, move the file pointer to the end
         if flags.contains(OpenFlags::O_APPEND) {
             vfile.lseek(0, SEEK_END);
         }
+        
+        // If the O_TRUNC flag is set, truncate the file to zero length
         if flags.contains(OpenFlags::O_TRUNC) {
             vfile.inode.truncate(0);
         }
+        
+        // Return the opened file as a FileClass::File
         return Some(FileClass::File(Arc::new(vfile)));
     }
 
-    // 节点不存在
+    // If the inode does not exist and the O_CREAT flag is set, create a new file
     if flags.contains(OpenFlags::O_CREAT) {
         return create_file(abs_path.clone(), parent_path, child_name, flags);
     }
+    
+    // Return None if the file cannot be opened or created
     None
+}
+
+/// 创建一个新的文件夹
+/// 
+/// - path: 文件夹目录（绝对路径）
+/// - mode: 创建模式
+pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
+    info!("open() abs_path is {}", path);
+
+    // 查看当前路径是否是设备
+    if find_device(path) {
+        return None;
+    }
+
+    // 查看当前路径是否已经存在
+    if has_inode(path) {
+        return None;
+    }
+
+    // 搜索上级文件夹
+    // 获得上级文件夹文件路径
+    let (parent_path, child_name) = Path::string2path(path.to_string()).split_with("/");
+    // 获取上级文件夹的inode，等到创建inode的时候需要，如果上级文件夹的inode不存在就报错
+    let (parent_inode, _) = if has_inode(&parent_path) {
+        (inode_cache_find(&parent_path).unwrap(), "") // Get the parent inode if it exists
+    } else {
+        // If the parent inode does not exist, use the root inode
+        if parent_path == "/" {
+            (root_inode(), path)
+        } else {
+            (root_inode().find_by_path(&parent_path).unwrap(), path)
+        }
+    };
+    // 查看当前上级文件夹下是否有该文件，如果有该文件就返回错误
+    if let Some(_) = parent_inode.find_by_path(path) {
+        return None;
+    }
+    // 利用parent_inode在根据绝对路径去创造新文件
+    
+    debug!(
+        "[mkdir] path {}, mode {}",
+        path, mode
+    );
+    
+    return create_file(path.to_string(), &parent_path, &child_name, OpenFlags::O_DIRECTORY);
+
 }

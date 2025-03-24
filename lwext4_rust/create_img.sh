@@ -32,12 +32,12 @@ chmod 777 ext4.img
 
 mkdir ../${DIR}/fs 
 mount ../${DIR}/ext4.img ../${DIR}/fs 
-
+# 复制所有用户态程序
+find ../user/target/riscv64gc-unknown-none-elf/release -type f ! -name "*.*" -exec cp {} ../lwext4_rust/fs/ \;
 # 复制基本的用户程序
 cp ../user/target/riscv64gc-unknown-none-elf/release/initproc ../lwext4_rust/fs/
 cp ../user/target/riscv64gc-unknown-none-elf/release/user_shell ../lwext4_rust/fs/
 # sudo cp ../user/target/riscv64gc-unknown-none-elf/release/cat_filea ../lwext4_rust/fs/
-
 # 复制测试用例
 cp -r ../testcase/24/* ../lwext4_rust/fs/
 

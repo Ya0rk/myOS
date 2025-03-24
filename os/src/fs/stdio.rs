@@ -1,4 +1,5 @@
-use super::File;
+use super::FileTrait;
+use super::Kstat;
 use crate::arch::console_getchar;
 use crate::utils::Errno;
 use crate::{
@@ -23,7 +24,7 @@ pub struct Stdin;
 
 pub struct Stdout;
 
-impl File for Stdin {
+impl FileTrait for Stdin {
     fn readable(&self) -> bool {
         true
     }
@@ -31,26 +32,6 @@ impl File for Stdin {
         false
     }
     fn read(&self, mut user_buf: UserBuffer) -> usize {
-        /*
-        //一次读取单个字符
-        assert_eq!(user_buf.len(), 1);
-        // busy loop
-        let mut c: usize;
-        loop {
-            c = console_getchar();
-            if c == 0 {
-                suspend_current_and_run_next();
-                continue;
-            } else {
-                break;
-            }
-        }
-        let ch = c as u8;
-        unsafe {
-            user_buf.buffers[0].as_mut_ptr().write_volatile(ch);
-        }
-        1
-        */
         //一次读取多个字符
         let mut c: usize;
         let mut count: usize = 0;
@@ -97,6 +78,9 @@ impl File for Stdin {
     //     }
     //     revents
     // }
+    fn fstat(&self, _stat: &mut Kstat) -> () {
+        todo!()
+    }
 }
 
 // impl Ioctl for Stdin {
@@ -147,7 +131,7 @@ impl File for Stdin {
 //     }
 // }
 
-impl File for Stdout {
+impl FileTrait for Stdout {
     fn readable(&self) -> bool {
         false
     }
@@ -174,6 +158,9 @@ impl File for Stdout {
     //     }
     //     revents
     // }
+    fn fstat(&self, _stat: &mut Kstat) -> () {
+        todo!()
+    }
 }
 
 // impl Ioctl for Stdout {
