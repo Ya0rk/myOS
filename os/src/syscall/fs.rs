@@ -1,7 +1,7 @@
 use alloc::string::String;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{open_file, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{ mkdir, open_file, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
@@ -9,18 +9,18 @@ use crate::utils::{Errno, SysResult};
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
     let token = current_user_token();
     let task = current_task().unwrap();
-    let inner = task.inner_lock();
-    if fd >= inner.fd_table_len() {
+    // let inner = task.inner_lock();
+    if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
-    match inner.fd_table.get_file_by_fd(fd) {
-        Ok(Some(file)) => {
+    match task.get_file_by_fd(fd) {
+        Some(file) => {
             if !file.writable() {
                 return Err(Errno::EPERM);
             }
             let file = file.clone();
             // release current task TCB manually to avoid multi-borrow
-            drop(inner);
+            // drop(inner);
             Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf, len))) as usize)
         }
         _ => Err(Errno::EBADCALL),
@@ -30,18 +30,18 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
 pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
     let token = current_user_token();
     let task = current_task().unwrap();
-    let inner = task.inner_lock();
-    if fd >= inner.fd_table_len() {
+    // let inner = task.inner_lock();
+    if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
-    match inner.fd_table.get_file_by_fd(fd) {
-        Ok(Some(file)) => {
+    match task.get_file_by_fd(fd) {
+        Some(file) => {
             if !file.readable() {
                 return Err(Errno::EPERM);
             }
             let file = file.clone();
             // release current task TCB manually to avoid multi-borrow
-            drop(inner);
+            // drop(inner);
             Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf, len))) as usize)
         }
         _ => Err(Errno::EBADCALL),
@@ -58,37 +58,37 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
 /// 返回值：成功返回0，失败返回-1；
 pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let inner = task.inner_lock();
-    if fd >= inner.fd_table_len() || fd > RLIMIT_NOFILE {
+    // let inner = task.inner_lock();
+    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
     }
 
     if kst.is_null() {
         return Err(Errno::EFAULT);
     }
-    Ok(0)
+    
 
-    // let token = inner.get_user_token();
-    // let mut buffer = UserBuffer::new(
-    //     translated_byte_buffer(
-    //         token, 
-    //         kst, 
-    //         core::mem::size_of::<Kstat>()
-    // ));
+    let token = task.get_user_token();
+    let mut buffer = UserBuffer::new(
+        translated_byte_buffer(
+            token, 
+            kst, 
+            core::mem::size_of::<Kstat>()
+    ));
 
-    // let mut stat = Kstat::new();
-    // match inner.fd_table.get_file_by_fd(fd) {
-    //     Ok(Some(file)) => {
-    //         drop(inner);
-    //         file.fstat(&mut stat);
-    //         buffer.write(stat.as_bytes());
-    //         info!("fstat finished");
-    //         return Ok(0);
-    //     }
-    //     _ => {
-    //         return Err(Errno::EBADCALL);
-    //     }
-    // }
+    let mut stat = Kstat::new();
+    match task.get_file_by_fd(fd) {
+        Some(file) => {
+            file.fstat(&mut stat);
+            buffer.write(stat.as_bytes());
+            info!("fstat finished");
+            return Ok(0);
+        }
+        _ => {
+            return Err(Errno::EBADCALL);
+        }
+    }
+
 }
 
 /// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
@@ -154,7 +154,7 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     let path = Path::string2path(translated_str(token, path));
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
 
-    let inner = task.inner_lock();
+    // let inner = task.inner_lock();
 
     // 计算目标路径
     let target_path = if path.is_absolute() {
@@ -162,23 +162,23 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
         path.get()
     } else if fd == AT_FDCWD {
         // 相对路径，以当前目录为起点
-        let current_path = inner.get_current_path();
+        let current_path = task.get_current_path();
         path.join_path_2_absolute(current_path).get()
     } else {
         // 相对路径，以 fd 对应的目录为起点
         if fd < 0 || fd as usize > RLIMIT_NOFILE {
             return Err(Errno::EBADF);
         }
-        let inode = inner.fd_table.get_file_by_fd(fd as usize)?.unwrap();
+        let inode = task.get_file_by_fd(fd as usize).unwrap();
         let other_cwd = inode.get_name();
         path.join_path_2_absolute(other_cwd).get()
     };
 
-    drop(inner);
+    // drop(inner);
     // 检查路径是否有效并打开文件
     let result = if let Some(inode) = open_file(target_path.as_str(), flags) {
-        let mut inner = task.inner_lock();
-        let fd = inner.fd_table.alloc_fd(Fd::new(inode.file()?, flags))? as usize;
+        // let mut inner = task.inner_lock();
+        let fd = task.get_fd_table().alloc_fd(Fd::new(inode.file()?, flags))? as usize;
         if fd > RLIMIT_NOFILE {
             Err(Errno::EMFILE)
         } else {
@@ -194,13 +194,13 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
 pub fn sys_close(fd: usize) -> SysResult<usize> {
     info!("start sys_close");
     let task = current_task().unwrap();
-    let mut inner = task.inner_lock();
-    if fd >= inner.fd_table_len() {
+    // let mut inner = task.inner_lock();
+    if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
     
     // 删除对应的fd
-    inner.fd_table.remove(fd)?;
+    task.get_fd_table().remove(fd)?;
     Ok(0)
 }
 
@@ -214,15 +214,15 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
     let task = current_task().unwrap();
     let (read_fd, write_fd) = {
-        let mut inner = task.inner_lock();
+        // let mut inner = task.inner_lock();
         let (read, write) = Pipe::new();
         (
-            inner.fd_table.alloc_fd(Fd::new(read, flags))?,
-            inner.fd_table.alloc_fd(Fd::new(write, flags))?,
+            task.get_fd_table().alloc_fd(Fd::new(read, flags))?,
+            task.get_fd_table().alloc_fd(Fd::new(write, flags))?,
         )
     };
 
-    let token = task.inner_lock().get_user_token();
+    let token = task.get_user_token();
     *translated_refmut(token, pipefd) = read_fd as u32;
     *translated_refmut(token, unsafe { pipefd.add(1) }) = write_fd as u32;
     Ok(0)
@@ -251,8 +251,8 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
 pub fn sys_getdents64(fd: usize, buf: *const u8, _len: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let inner = task.inner_lock();
-    if fd >= inner.fd_table_len() || fd > RLIMIT_NOFILE {
+    // let inner = task.inner_lock();
+    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
     }
 
@@ -314,9 +314,9 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
     }
 
     let task =  current_task().unwrap();
-    let task_inner = task.inner_lock();
-    let token = task_inner.get_user_token();
-    let cwd: String = task_inner.get_current_path();
+    // let task_inner = task.inner_lock();
+    let token = task.get_user_token();
+    let cwd: String = task.get_current_path();
     let length: usize = cwd.len();
 
     if length > PATH_MAX {
@@ -326,7 +326,7 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
         return Err(Errno::ERANGE);
     }
 
-    drop(task_inner);
+    // drop(task_inner);
     // TODO: 检测当前cwd是不是被unlinked： ENOENT The current working directory has been unlinked.
     // end
 
@@ -341,16 +341,16 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
 /// Success: 返回新的文件描述符; Fail: 返回-1
 pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let mut inner = task.inner_lock();
-    if oldfd >= inner.fd_table_len() {
+    // let mut inner = task.inner_lock();
+    if oldfd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
 
-    let old_temp_fd = inner.get_fd(oldfd);
+    let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.clear_close_on_exec(true);
-    let new_fd = FdTable::alloc_fd(&mut inner.fd_table, new_temp_fd)?;
-    drop(inner);
+    let new_temp_fd = old_temp_fd.set_close_on_exec(true);
+    let new_fd = FdTable::alloc_fd(&mut task.get_fd_table(), new_temp_fd)?;
+    // drop(inner);
     if new_fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
     }
@@ -378,20 +378,20 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     }.ok_or(Errno::EINVAL)?;
 
     let task = current_task().unwrap();
-    let mut inner = task.inner_lock();
+    // let mut inner = task.inner_lock();
     
     if newfd > RLIMIT_NOFILE ||
-        oldfd >= inner.fd_table_len() ||
-        inner.fd_is_none(oldfd) 
+        oldfd >= task.fd_table_len() ||
+        task.fd_is_none(oldfd) 
     {
         return Err(Errno::EBADF);
     }
 
-    let old_temp_fd = inner.get_fd(oldfd);
+    let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.clear_close_on_exec(cloexec);
+    let new_temp_fd = old_temp_fd.set_close_on_exec(cloexec);
     // 将newfd 放到指定位置
-    inner.fd_table.put_in(new_temp_fd, newfd)?;
+    task.get_fd_table().put_in(new_temp_fd, newfd)?;
 
     Ok(newfd)
 }
@@ -453,7 +453,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
     let path = Path::string2path(translated_str(token, path));
     info!("sys_mkdirat: path = {}, mode = {}", path.get(), mode);
 
-    let inner = task.inner_lock();
+    info!("sys_mkdirat cwd is {}", task.get_current_path());
 
     // 计算目标路径
     let target_path = if path.is_absolute() {
@@ -461,22 +461,23 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
         path.get()
     } else if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
-        let current_path = inner.get_current_path();
+        let current_path = task.get_current_path();
         path.join_path_2_absolute(current_path).get()
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= inner.fd_table_len() as isize {
+        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
             return Err(Errno::EBADF);
         }
-        let inode = inner.fd_table.get_file_by_fd(dirfd as usize)?.unwrap();
+        let inode = task.get_file_by_fd(dirfd as usize).unwrap();
         let other_cwd = inode.get_name();
         path.join_path_2_absolute(other_cwd).get()
     };
+    info!("sys_mkdirat target_path is {}", target_path);
 
-    drop(inner);
+    // drop(inner);
 
     // 检查路径是否有效并创建目录
-    let result = if let Some(_) = open_file(target_path.as_str(), OpenFlags::O_DIRECTORY) {
+    let result = if let Some(_) = mkdir(target_path.as_str(), mode) {
         Ok(0) // 成功
     } else {
         Err(Errno::EBADCALL) // 失败
@@ -570,8 +571,8 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     let task = current_task().unwrap();
     let path = Path::string2path(translated_str(token, path));
 
-    let mut inner = task.inner_lock();
-    let current_path = inner.current_path.clone();
+    // let mut inner = task.inner_lock();
+    let current_path = task.get_current_path();
 
     // 计算新路径
     let new_path = if path.is_absolute() {
@@ -582,7 +583,7 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
 
     // 检查路径是否有效
     let result = if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
-        inner.current_path = new_path; // 更新当前路径
+        task.set_current_path(new_path); // 更新当前路径
         Ok(0) // 成功
     } else {
         Err(Errno::EBADCALL) // 失败

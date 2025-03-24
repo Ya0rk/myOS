@@ -1,24 +1,24 @@
 #[repr(C)]
 pub struct Kstat {
-    st_dev: u32,   // 包含文件的设备 ID
-    st_ino: u64,   // 索引节点号
-    st_mode: u32,  // 文件类型和模式
-    st_nlink: u32, // 硬链接数
-    st_uid: u32,   // 所有者的用户 ID
-    st_gid: u32,   // 所有者的组 ID
-    st_rdev: u32,  // 设备 ID（如果是特殊文件）
-    __pad: u64,
-    st_size: i64,    // 总大小，以字节为单位
-    st_blksize: i64, // 文件系统 I/O 的块大小
-    __pad2: i32,
-    st_blocks: u64,     // 分配的 512B 块数
-    st_atime_sec: i64,  // 上次访问时间
-    st_atime_nsec: i64, // 上次访问时间（纳秒精度）
-    st_mtime_sec: i64,  // 上次修改时间
-    st_mtime_nsec: i64, // 上次修改时间（纳秒精度）
-    st_ctime_sec: i64,  // 上次状态变化的时间
-    st_ctime_nsec: i64, // 上次状态变化的时间（纳秒精度）
-    __unused: [u32; 2],
+    pub st_dev: u32,   // 包含文件的设备 ID
+    pub st_ino: u64,   // 索引节点号
+    pub st_mode: u32,  // 文件类型和模式
+    pub st_nlink: u32, // 硬链接数
+    pub st_uid: u32,   // 所有者的用户 ID
+    pub st_gid: u32,   // 所有者的组 ID
+    pub st_rdev: u32,  // 设备 ID（如果是特殊文件）
+    pub __pad: u64,
+    pub st_size: i64,    // 总大小，以字节为单位
+    pub st_blksize: i64, // 文件系统 I/O 的块大小
+    pub __pad2: i32,
+    pub st_blocks: u64,     // 分配的 512B 块数
+    pub st_atime_sec: i64,  // 上次访问时间
+    pub st_atime_nsec: i64, // 上次访问时间（纳秒精度）
+    pub st_mtime_sec: i64,  // 上次修改时间
+    pub st_mtime_nsec: i64, // 上次修改时间（纳秒精度）
+    pub st_ctime_sec: i64,  // 上次状态变化的时间
+    pub st_ctime_nsec: i64, // 上次状态变化的时间（纳秒精度）
+    pub __unused: [u32; 2],
 }
 
 impl Kstat {

@@ -5,6 +5,7 @@
 // #![feature(panic_info_message)]
 #![feature(riscv_ext_intrinsics)]
 #![feature(alloc_error_handler)]
+#![feature(negative_impls)]
 #![feature(step_trait)]
 #![feature(const_ops)]
 #![feature(const_trait_impl)]
@@ -35,9 +36,12 @@ pub mod arch;
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::timer;
-use task::get_current_hart_id;
+use task::{executor, get_current_hart_id};
 
 global_asm!(include_str!("entry.asm"));
+
+#[macro_use]
+extern crate lazy_static;
 
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
@@ -90,6 +94,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         finish = fs::list_apps();
     }
     while !finish {}
-    task::run_tasks();
+    // task::run_tasks();
+    executor::run();
     panic!("Unreachable in rust_main!");
 }

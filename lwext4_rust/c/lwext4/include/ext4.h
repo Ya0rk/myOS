@@ -107,6 +107,22 @@ typedef struct ext4_dir {
 	uint64_t next_off;
 } ext4_dir;
 
+// 用于 rust fstat
+typedef struct ext4_inode_stat{
+    uint64_t st_dev;
+    uint64_t st_ino;
+    uint32_t st_mode;
+    uint32_t st_nlinks;
+    uint32_t st_uid;
+    uint32_t st_gid;
+    int64_t st_size;
+    int32_t st_blksize;
+    int64_t st_blocks;
+    int64_t st_atime;
+    int64_t st_mtime;
+    int64_t st_ctime;
+} ext4_inode_stat;
+
 /********************************MOUNT OPERATIONS****************************/
 
 /**@brief   Register block device.
@@ -452,7 +468,7 @@ int ext4_owner_get(const char *path, uint32_t *uid, uint32_t *gid);
  * @param atime Access timestamp.
  *
  * @return  Standard error code.*/
-int ext4_atime_set(const char *path, uint32_t atime);
+int ext4_atime_set(const char *path, uint64_t atime);
 
 /**@brief Set file/directory/link modify time.
  *
@@ -460,7 +476,7 @@ int ext4_atime_set(const char *path, uint32_t atime);
  * @param mtime Modify timestamp.
  *
  * @return  Standard error code.*/
-int ext4_mtime_set(const char *path, uint32_t mtime);
+int ext4_mtime_set(const char *path, uint64_t mtime);
 
 /**@brief Set file/directory/link change time.
  *
@@ -468,7 +484,7 @@ int ext4_mtime_set(const char *path, uint32_t mtime);
  * @param ctime Change timestamp.
  *
  * @return  Standard error code.*/
-int ext4_ctime_set(const char *path, uint32_t ctime);
+int ext4_ctime_set(const char *path, uint64_t ctime);
 
 /**@brief Get file/directory/link access time.
  *
@@ -476,7 +492,7 @@ int ext4_ctime_set(const char *path, uint32_t ctime);
  * @param atime Access timestamp.
  *
  * @return  Standard error code.*/
-int ext4_atime_get(const char *path, uint32_t *atime);
+int ext4_atime_get(const char *path, uint64_t *atime);
 
 /**@brief Get file/directory/link modify time.
  *
@@ -484,7 +500,7 @@ int ext4_atime_get(const char *path, uint32_t *atime);
  * @param mtime Modify timestamp.
  *
  * @return  Standard error code.*/
-int ext4_mtime_get(const char *path, uint32_t *mtime);
+int ext4_mtime_get(const char *path, uint64_t *mtime);
 
 /**@brief Get file/directory/link change time.
  *
@@ -492,7 +508,7 @@ int ext4_mtime_get(const char *path, uint32_t *mtime);
  * @param ctime Change timestamp.
  *
  * @return  standard error code*/
-int ext4_ctime_get(const char *path, uint32_t *ctime);
+int ext4_ctime_get(const char *path, uint64_t *ctime);
 
 /**@brief Create symbolic link.
  *

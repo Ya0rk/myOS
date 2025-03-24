@@ -1,59 +1,78 @@
+use core::fmt;
+
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
 use crate::mm::{VirtAddr, KERNEL_SPACE};
-use alloc::vec::Vec;
+use alloc::collections::BTreeSet;
 use lazy_static::*;
 use log::debug;
 use spin::Mutex;
-///分配和管理pid号，避免重复
-pub struct PidAllocator {
-    current: usize,
-    recycled: Vec<usize>,
-}
-
-impl PidAllocator {
-    ///Create an empty `PidAllocator`
-    pub fn new() -> Self {
-        PidAllocator {
-            current: 0,
-            recycled: Vec::new(),
-        }
-    }
-    ///Allocate a pid
-    pub fn alloc(&mut self) -> PidHandle {
-        if let Some(pid) = self.recycled.pop() {
-            PidHandle(pid)
-        } else {
-            self.current += 1;
-            PidHandle(self.current - 1)
-        }
-    }
-    ///Recycle a pid
-    pub fn dealloc(&mut self, pid: usize) {
-        assert!(pid < self.current);
-        assert!(
-            !self.recycled.iter().any(|ppid| *ppid == pid),
-            "pid {} has been deallocated!",
-            pid
-        );
-        self.recycled.push(pid);
-    }
-}
 
 lazy_static! {
     pub static ref PID_ALLOCATOR: Mutex<PidAllocator> = Mutex::new(PidAllocator::new());
 }
-///Bind pid lifetime to `PidHandle`
-pub struct PidHandle(pub usize);
+///分配和管理pid号，避免重复
+pub struct PidAllocator {
+    current: usize,
+    recycled: BTreeSet<usize>,
+}
 
-impl Drop for PidHandle {
+impl PidAllocator {
+    fn new() -> Self {
+        PidAllocator {
+            current: 0,
+            recycled: BTreeSet::new(),
+        }
+    }
+    /// 分配一个pid
+    fn alloc(&mut self) -> Pid {
+        if let Some(pid) = self.recycled.pop_first() {
+            Pid(pid)
+        } else {
+            let pid = self.current;
+            self.current += 1;
+            Pid(pid)
+        }
+    }
+    /// 删除一个pid，放入recycled中
+    fn dealloc(&mut self, pid: usize) {
+        assert!(pid < self.current, "pid {} is out of range", pid);
+        assert!(
+            self.recycled.insert(pid), // 插入，如果失败说明 PID 已经回收过
+            "pid {} has been deallocated!",
+            pid
+        );
+    }
+}
+
+///Bind pid lifetime to `PidHandle`
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Pid(pub usize);
+
+impl fmt::Display for Pid {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<Pid> for usize {
+    fn from(value: Pid) -> Self {
+        value.0
+    }
+}
+
+impl Drop for Pid {
     fn drop(&mut self) {
         PID_ALLOCATOR.lock().dealloc(self.0);
     }
 }
 ///Allocate a pid from PID_ALLOCATOR
-pub fn pid_alloc() -> PidHandle {
+pub fn pid_alloc() -> Pid {
     PID_ALLOCATOR.lock().alloc()
 }
+
+
+
+// TODO:实现了无栈协程后就不需要内核栈了，后面要删除
 
 /// Return (bottom, top) of a kernel stack in kernel space.
 pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
@@ -61,6 +80,7 @@ pub fn kernel_stack_position(app_id: usize) -> (usize, usize) {
     let bottom = top - KERNEL_STACK_SIZE;
     (bottom, top)
 }
+
 ///Kernelstack for app
 pub struct KernelStack {
     pid: usize,
@@ -68,7 +88,7 @@ pub struct KernelStack {
 
 impl KernelStack {
     ///每个进程有不同的pid，根据pid来分配的kernel stack位置也不同
-    pub fn new(pid_handle: &PidHandle) -> Self {
+    pub fn new(pid_handle: &Pid) -> Self {
         let pid = pid_handle.0;
         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack_position(pid);
         debug!("kernel stack bottom: {:#x}, top: {:#x}", 
