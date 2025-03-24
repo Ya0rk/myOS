@@ -1,5 +1,5 @@
 use alloc::string::String;
-use crate::{fs::{FileTrait, Kstat}, mm::UserBuffer, task::INITPROC, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, FileTrait, Kstat}, mm::UserBuffer, task::INITPROC, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -36,6 +36,9 @@ impl FileTrait for DevTty {
     }
     
     fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {

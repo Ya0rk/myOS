@@ -1,11 +1,15 @@
 use crate::{
-    fs::{InodeType, Kstat}, sync::{MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp}, utils::{Errno, SysResult}
+    fs::{ffi::InodeType, file::NormalFile, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
+        sync::{MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
+        utils::{Errno, SysResult}
 };
 use alloc::{
-    sync::Arc, vec::Vec,
+    string::String, sync::{Arc, Weak},
+    vec::Vec
 };
 use alloc::boxed::Box;
 use async_trait::async_trait;
+use lwext4_rust::Ext4File;
 use super::alloc_ino;
 
 
@@ -75,7 +79,7 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// Some(Arc<dyn Inode>) if creation succeeds, None otherwise.
-    fn create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
+    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
         todo!()
     }
 
@@ -88,7 +92,7 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// Some(Arc<dyn Inode>) if found, None otherwise.
-    fn find_by_path(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         todo!()
     }
 
@@ -135,7 +139,7 @@ pub trait InodeTrait: Send + Sync {
         todo!()
     }
 
-    /// Truncates or extends the file to the specified size.
+    /// 将文件设置新的size，这里用于将文件size为0
     ///
     /// # Arguments
     ///
@@ -166,19 +170,6 @@ pub trait InodeTrait: Send + Sync {
         todo!();
     }
 
-    /// Renames a file to a new location.
-    ///
-    /// # Arguments
-    ///
-    /// * `file` - The inode to be renamed
-    ///
-    /// # Returns
-    ///
-    /// Ok(0) on success, or an error code.
-    fn rename(&self, _file: Arc<dyn InodeTrait>) -> SysResult<usize> {
-        todo!()
-    }
-
     /// Reads the entire contents of the file.
     ///
     /// # Returns
@@ -201,6 +192,9 @@ pub trait InodeTrait: Send + Sync {
 
     /// 获取时间戳，用于修改或访问
     fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, >;
+
+    /// 获取lwext4的ext4file
+    fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
 }
 
 impl dyn InodeTrait {
@@ -214,9 +208,29 @@ impl dyn InodeTrait {
     /// # Returns
     ///
     /// Ok(0) on success, or an error code.
-    fn set_timestamps(&self, timestamp: TimeStamp) -> SysResult<usize> {
+    pub fn set_timestamps(&self, timestamp: TimeStamp) -> SysResult<usize> {
         let mut mytime = self.get_timestamp();
         mytime.set(timestamp);
         Ok(0)
+    }
+
+    /// 打开一个inode，创建一个管理该inode的对应的file返回
+    pub fn do_open(self: Arc<Self>, parent: Option<Weak<dyn InodeTrait>>, flags: OpenFlags, path: String) -> Option<FileClass> {
+        let new_file = NormalFile::new(
+            flags, 
+            parent,
+            self,
+            path
+        );
+        // 将指针移到文件末尾
+        if flags.contains(OpenFlags::O_APPEND) {
+            new_file.lseek(0, SEEK_END);
+        }
+        // 截断文件长度为0
+        if flags.contains(OpenFlags::O_TRUNC) {
+            new_file.metadata.inode.truncate(0);
+        }
+        
+        Some(FileClass::File(Arc::new(new_file)))
     }
 }

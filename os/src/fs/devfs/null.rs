@@ -1,4 +1,4 @@
-use crate::{fs::{FileTrait, Kstat}, mm::UserBuffer, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, FileTrait, Kstat}, mm::UserBuffer, utils::SysResult};
 use alloc::string::String;
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -31,7 +31,11 @@ impl FileTrait for DevNull {
     fn get_name(&self) -> SysResult<String> {
         todo!()
     }
-    // fn poll(&self, events: PollEvents) -> PollEvents {
+
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
+        todo!()
+    }
+    // fn poll(&self , events: PollEvents) -> PollEvents {
     //     let mut revents = PollEvents::empty();
     //     if events.contains(PollEvents::IN) {
     //         revents |= PollEvents::IN;

@@ -94,7 +94,7 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
 /// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
 /// 
 /// Success: 返回文件描述符; Fail: 返回-1
-pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
+pub async fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
 
     // Err(Errno::EBADCALL)
     info!("sys_openat start");

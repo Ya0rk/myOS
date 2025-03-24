@@ -2,7 +2,7 @@ use core::{cmp::min, fmt::{Formatter, Debug}};
 use alloc::{format, string::String};
 use async_trait::async_trait;
 use alloc::boxed::Box;
-use crate::{fs::{FileTrait, Kstat}, mm::UserBuffer, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, FileTrait, Kstat}, mm::UserBuffer, utils::SysResult};
 
 pub struct DevRtc;
 
@@ -34,6 +34,9 @@ impl FileTrait for DevRtc {
     }
     
     fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {

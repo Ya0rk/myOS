@@ -1,3 +1,4 @@
+use super::ffi::RenameFlags;
 use super::FileTrait;
 use super::Kstat;
 use crate::arch::console_getchar;
@@ -74,6 +75,9 @@ impl FileTrait for Stdin {
     }
     
     fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
@@ -155,6 +159,9 @@ impl FileTrait for Stdout {
     }
     
     fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {

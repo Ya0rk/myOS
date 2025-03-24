@@ -1,27 +1,38 @@
 use alloc::{string::String, sync::{Arc, Weak}};
 use async_trait::async_trait;
-use crate::{mm::UserBuffer, utils::{Errno, SysResult}};
-use super::{FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::{config::PATH_MAX, mm::UserBuffer, utils::{Errno, SysResult}};
+use super::{ffi::RenameFlags, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET};
 use alloc::boxed::Box;
 
 pub struct NormalFile {
-    pub parent: Option<Weak<dyn InodeTrait>>, // 父目录的弱引用
     pub path: String, // 文件的路径
+    pub parent: Option<Weak<dyn InodeTrait>>, // 对父目录的弱引用
     pub metadata: FileMeta,
 }
 
 impl NormalFile {
     pub fn new(
         flags: OpenFlags,
-        inode: Arc<dyn InodeTrait>,
         parent: Option<Weak<dyn InodeTrait>>,
+        inode: Arc<dyn InodeTrait>,
         path: String,
     ) -> Self {
         Self {
-            parent,
             path,
+            parent,
             metadata: FileMeta::new(flags, inode),
         }
+    }
+
+    // 判断是否存在同名文件
+    pub fn is_child(&self, path: &str) -> bool {
+        self.parent
+        .as_ref()
+        .expect("no parent, plz check!")
+        .upgrade()
+        .unwrap()
+        .walk(&path)
+        .is_none()
     }
 }
 
@@ -87,6 +98,35 @@ impl FileTrait for NormalFile {
     fn get_name(&self) -> SysResult<String> {
         Ok(self.path.clone())
     }
+
+    fn rename(&mut self, new_path: String, flags: RenameFlags) -> SysResult<usize> {
+        if flags.contains(RenameFlags::RENAME_EXCHANGE)
+            && (flags.contains(RenameFlags::RENAME_NOREPLACE)
+                || flags.contains(RenameFlags::RENAME_WHITEOUT))
+        {
+            return Err(Errno::EINVAL);
+        }
+
+        let newpath_exist = self.is_child(&new_path);
+        if newpath_exist && flags.contains(RenameFlags::RENAME_NOREPLACE) {
+            return Err(Errno::EEXIST);
+        }
+        if flags.contains(RenameFlags::RENAME_EXCHANGE) && !newpath_exist {
+            return Err(Errno::ENOENT);
+        }
+
+        let old_path = self.path.clone();
+        if new_path.len() > PATH_MAX || old_path.len() > PATH_MAX {
+            return Err(Errno::ENAMETOOLONG);
+        }
+
+        let mut ext4file = self.metadata.inode.get_ext4file();
+        ext4file.file_rename(&old_path, &new_path);
+        self.path = new_path;
+        
+        Ok(0)
+    }
+
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
         let inode = self.metadata.inode.as_ref();
         *stat = inode.fstat();
