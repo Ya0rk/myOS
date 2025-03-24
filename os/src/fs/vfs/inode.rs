@@ -10,6 +10,7 @@ use alloc::{
 use alloc::boxed::Box;
 use async_trait::async_trait;
 use lwext4_rust::Ext4File;
+use spin::Mutex;
 use super::alloc_ino;
 
 
@@ -20,16 +21,16 @@ pub struct InodeMeta {
     /// 节点的编号
     pub ino: usize,
     /// 文件大小
-    pub size: usize,
+    pub size: Mutex<usize>,
     /// 时间戳
     pub timestamp: SpinNoIrqLock<TimeStamp>,
 }
 
 impl InodeMeta {
-    pub fn new() -> Self {
+    pub fn new(size: usize) -> Self {
         Self {
-            ino: alloc_ino(), 
-            size: 0, 
+            ino:  alloc_ino(), 
+            size: Mutex::new(size), 
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
         }
     }
@@ -50,6 +51,9 @@ pub trait InodeTrait: Send + Sync {
     fn size(&self) -> usize {
         todo!()
     }
+
+    /// 设置大小
+    fn set_size(&self, new_size: usize) -> SysResult;
 
     /// Returns the type of the inode (file, directory, etc.).
     ///
@@ -110,6 +114,9 @@ pub trait InodeTrait: Send + Sync {
         todo!()
     }
 
+    /// 绕过cache，直接从磁盘读
+    async fn read_dirctly(&self, _offset: usize, _buf: &mut [u8]) -> usize;
+
     /// Writes data to the file at the specified offset.
     ///
     /// # Arguments
@@ -123,6 +130,9 @@ pub trait InodeTrait: Send + Sync {
     async fn write_at(&self, _off: usize, _buf: &[u8]) -> usize {
         todo!()
     }
+
+    /// 直接写
+    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize;
 
     /// Reads directory entries.
     ///
