@@ -3,7 +3,7 @@ use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
 
 use crate::{
     drivers::Disk,
-    fs::{InodeTrait, SuperBlockTrait},
+    fs::{page_cache::PageCache, InodeTrait, SuperBlockTrait},
 };
 
 use alloc::sync::Arc;
@@ -40,7 +40,8 @@ impl Ext4SuperBlock {
     pub fn new(disk: Disk) -> Self {
         let inner =
             Ext4BlockWrapper::<Disk>::new(disk).expect("failed to initialize EXT4 filesystem");
-        let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR);
+        let page_cache = Some(PageCache::new_bare());
+        let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR, page_cache.clone());
         Self { inner, root }
     }
 }

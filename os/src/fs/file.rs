@@ -55,16 +55,19 @@ impl FileTrait for NormalFile {
             return Ok(0);
         }
 
+        let mut new_offset = self.metadata.offset();
         // 这边要使用 iter_mut()，因为要将数据写入
         for slice in buf.buffers.iter_mut() {
-            let old_offset = self.metadata.offset();
-            let read_size = self.metadata.inode.read_at(old_offset, *slice).await;
+            // TODO(YJJ):设置一定的时钟中断次数后yield
+            // yield_now();
+            let read_size = self.metadata.inode.read_at(new_offset, *slice).await;
             if read_size == 0 {
                 break;
             }
-            self.metadata.set_offset(old_offset+read_size);
+            new_offset += read_size;
             total_read_size += read_size;
         }
+        self.metadata.set_offset(new_offset);
         Ok(total_read_size)
     }
 
