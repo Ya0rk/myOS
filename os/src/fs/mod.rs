@@ -59,56 +59,6 @@ impl FileClass {
         }
     }
 }
-#[repr(u8)]
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum InodeType {
-    Unknown = 0o0,
-    /// FIFO (named pipe)
-    Fifo = 0o1,
-    /// Character device
-    CharDevice = 0o2,
-    /// Directory
-    Dir = 0o4,
-    /// Block device
-    BlockDevice = 0o6,
-    /// Regular file
-    File = 0o10,
-    /// Symbolic link
-    SymLink = 0o12,
-    /// Socket
-    Socket = 0o14,
-}
-
-impl InodeType {
-    /// Tests whether this node type represents a regular file.
-    pub const fn is_file(self) -> bool {
-        matches!(self, Self::File)
-    }
-    /// Tests whether this node type represents a directory.
-    pub const fn is_dir(self) -> bool {
-        matches!(self, Self::Dir)
-    }
-    /// Tests whether this node type represents a symbolic link.
-    pub const fn is_symlink(self) -> bool {
-        matches!(self, Self::SymLink)
-    }
-    /// Returns `true` if this node type is a block device.
-    pub const fn is_block_device(self) -> bool {
-        matches!(self, Self::BlockDevice)
-    }
-    /// Returns `true` if this node type is a char device.
-    pub const fn is_char_device(self) -> bool {
-        matches!(self, Self::CharDevice)
-    }
-    /// Returns `true` if this node type is a fifo.
-    pub const fn is_fifo(self) -> bool {
-        matches!(self, Self::Fifo)
-    }
-    /// Returns `true` if this node type is a socket.
-    pub const fn is_socket(self) -> bool {
-        matches!(self, Self::Socket)
-    }
-}
 
 core::arch::global_asm!(include_str!("preload.S"));
 
@@ -118,8 +68,6 @@ pub fn flush_preload() {
     extern "C" {
         fn initproc_start();
         fn initproc_end();
-        // fn shell_start();
-        // fn shell_end();
     }
 
     if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
@@ -135,7 +83,6 @@ pub fn flush_preload() {
 }
 
 pub fn init() {
-    INODE_CACHE.insert("/", root_inode());
     flush_preload();
     let _ = create_init_files();
 }
@@ -264,13 +211,12 @@ fn create_file(
     // 一定能找到,因为除了RootInode外都有父结点
     let parent_dir = INODE_CACHE.get(parent_path).unwrap();
     return parent_dir
-        .create(&abs_path, flags.node_type())
+        .do_create(&abs_path, flags.node_type())
         .map(|vfile| {
-            INODE_CACHE.insert(&abs_path, vfile.clone());
             let osinode = NormalFile::new(
                 flags,
-                vfile,
                 Some(Arc::downgrade(&parent_dir)),
+                vfile,
                 abs_path,
             );
             FileClass::File(Arc::new(osinode))
@@ -303,6 +249,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     
     // Join the current working directory with the provided path to create an absolute path
     let new_path = kpath.join_path_2_absolute(cwd.to_string());
+    // 目标文件的路径
     let abs_path = new_path.get();
     info!("open() abs_path is {}", abs_path);
     // Check if the absolute path corresponds to a device file
@@ -331,44 +278,24 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         if cwd == "/" {
             (root_inode(), path)
         } else {
-            (root_inode().find_by_path(cwd).unwrap(), path)
+            (root_inode().walk(cwd).unwrap(), path)
         }
     };
-    // 以上这里好像存在问题，这个所谓的find_by_path到底是什么含义
 
     // Attempt to find the inode for the specified absolute path
-    if let Some(inode) = parent_inode.find_by_path(&abs_path) {
-        // Insert the inode into the index for future reference
-        INODE_CACHE.insert(&abs_path, inode.clone());
-        
-        // Create a new OSInode instance for the file
-        let vfile = NormalFile::new(
+    if let Some(inode) = parent_inode.walk(&abs_path) {    
+        return inode.do_open(
+            Some(Arc::downgrade(&parent_inode)),
             flags,
-            inode,
-            Some(Arc::downgrade(&parent_inode)), // Keep a weak reference to the parent inode
-            abs_path,
+            abs_path
         );
-
-        // If the O_APPEND flag is set, move the file pointer to the end
-        if flags.contains(OpenFlags::O_APPEND) {
-            vfile.lseek(0, SEEK_END);
-        }
-        
-        // If the O_TRUNC flag is set, truncate the file to zero length
-        if flags.contains(OpenFlags::O_TRUNC) {
-            vfile.metadata.inode.truncate(0);
-        }
-        
-        // Return the opened file as a FileClass::File
-        return Some(FileClass::File(Arc::new(vfile)));
     }
 
     // If the inode does not exist and the O_CREAT flag is set, create a new file
     if flags.contains(OpenFlags::O_CREAT) {
         return create_file(abs_path.clone(), parent_path, child_name, flags);
     }
-    
-    // Return None if the file cannot be opened or created
+
     None
 }
 
@@ -400,11 +327,11 @@ pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
         if parent_path == "/" {
             (root_inode(), path)
         } else {
-            (root_inode().find_by_path(&parent_path).unwrap(), path)
+            (root_inode().walk(&parent_path).unwrap(), path)
         }
     };
     // 查看当前上级文件夹下是否有该文件，如果有该文件就返回错误
-    if let Some(_) = parent_inode.find_by_path(path) {
+    if let Some(_) = parent_inode.walk(path) {
         return None;
     }
     // 利用parent_inode在根据绝对路径去创造新文件

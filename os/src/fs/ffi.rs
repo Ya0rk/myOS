@@ -1,6 +1,5 @@
 use bitflags::*;
-
-use super::InodeType;
+use lwext4_rust::InodeTypes;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -39,6 +38,30 @@ bitflags! {
         const O_PATH        = 0o10000000;
         const O_TMPFILE     = 0o20200000;
     }
+
+    pub struct UmountFlags: u32 {
+        const MNT_FORCE = 0x0001;
+        const MNT_DETACH = 0x0002;
+        const MNT_EXPIRE = 0x0004;
+        const UMOUNT_NOFOLLOW = 0x0008;
+    }
+
+    pub struct MountFlags: u32 {
+        const MS_RDONLY = 1;
+        const MS_NOSUID = 2;
+        const MS_NODEV = 4;
+        const MS_NOEXEC = 8;
+        const MS_SYNCHRONOUS = 16;
+        const MS_REMOUNT = 32;
+        const MS_MOVE = 8192;
+        const MS_BIND = 4096;
+    }
+
+    pub struct RenameFlags: u32 {
+        const RENAME_NOREPLACE	=   1 << 0;	// Don't overwrite target
+        const RENAME_EXCHANGE	= 	1 << 1;	// Exchange source and dest
+        const RENAME_WHITEOUT	= 	1 << 2;	// Whiteout source
+    }
 }
 
 impl OpenFlags {
@@ -66,26 +89,6 @@ impl OpenFlags {
         } else {
             InodeType::File
         }
-    }
-}
-
-bitflags! {
-    pub struct UmountFlags: u32 {
-        const MNT_FORCE = 0x0001;
-        const MNT_DETACH = 0x0002;
-        const MNT_EXPIRE = 0x0004;
-        const UMOUNT_NOFOLLOW = 0x0008;
-    }
-
-    pub struct MountFlags: u32 {
-        const MS_RDONLY = 1;
-        const MS_NOSUID = 2;
-        const MS_NODEV = 4;
-        const MS_NOEXEC = 8;
-        const MS_SYNCHRONOUS = 16;
-        const MS_REMOUNT = 32;
-        const MS_MOVE = 8192;
-        const MS_BIND = 4096;
     }
 }
 
@@ -139,3 +142,84 @@ Hugetlb:               0 kB
 pub const ADJTIME: &str = "0.000000 0.000000 UTC\n";
 pub const LOCALTIME: &str =
     "lrwxrwxrwx 1 root root 33 11月 18  2023 /etc/localtime -> /usr/share/zoneinfo/Asia/Shanghai\n";
+
+
+#[repr(u8)]
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub enum InodeType {
+    Unknown = 0o0,
+    /// FIFO (named pipe)
+    Fifo = 0o1,
+    /// Character device
+    CharDevice = 0o2,
+    /// Directory
+    Dir = 0o4,
+    /// Block device
+    BlockDevice = 0o6,
+    /// Regular file
+    File = 0o10,
+    /// Symbolic link
+    SymLink = 0o12,
+    /// Socket
+    Socket = 0o14,
+}
+
+impl InodeType {
+    /// Tests whether this node type represents a regular file.
+    pub const fn is_file(self) -> bool {
+        matches!(self, Self::File)
+    }
+    /// Tests whether this node type represents a directory.
+    pub const fn is_dir(self) -> bool {
+        matches!(self, Self::Dir)
+    }
+    /// Tests whether this node type represents a symbolic link.
+    pub const fn is_symlink(self) -> bool {
+        matches!(self, Self::SymLink)
+    }
+    /// Returns `true` if this node type is a block device.
+    pub const fn is_block_device(self) -> bool {
+        matches!(self, Self::BlockDevice)
+    }
+    /// Returns `true` if this node type is a char device.
+    pub const fn is_char_device(self) -> bool {
+        matches!(self, Self::CharDevice)
+    }
+    /// Returns `true` if this node type is a fifo.
+    pub const fn is_fifo(self) -> bool {
+        matches!(self, Self::Fifo)
+    }
+    /// Returns `true` if this node type is a socket.
+    pub const fn is_socket(self) -> bool {
+        matches!(self, Self::Socket)
+    }
+}
+
+pub fn as_ext4_de_type(types: InodeType) -> InodeTypes {
+    match types {
+        InodeType::BlockDevice => InodeTypes::EXT4_DE_BLKDEV,
+        InodeType::CharDevice => InodeTypes::EXT4_DE_CHRDEV,
+        InodeType::Dir => InodeTypes::EXT4_DE_DIR,
+        InodeType::Fifo => InodeTypes::EXT4_DE_FIFO,
+        InodeType::File => InodeTypes::EXT4_DE_REG_FILE,
+        InodeType::Socket => InodeTypes::EXT4_DE_SOCK,
+        InodeType::SymLink => InodeTypes::EXT4_DE_SYMLINK,
+        InodeType::Unknown => InodeTypes::EXT4_DE_UNKNOWN,
+    }
+}
+
+pub fn as_inode_type(types: InodeTypes) -> InodeType {
+    match types {
+        InodeTypes::EXT4_INODE_MODE_FIFO => InodeType::Fifo,
+        InodeTypes::EXT4_INODE_MODE_CHARDEV => InodeType::CharDevice,
+        InodeTypes::EXT4_INODE_MODE_DIRECTORY => InodeType::Dir,
+        InodeTypes::EXT4_INODE_MODE_BLOCKDEV => InodeType::BlockDevice,
+        InodeTypes::EXT4_INODE_MODE_FILE => InodeType::File,
+        InodeTypes::EXT4_INODE_MODE_SOFTLINK => InodeType::SymLink,
+        InodeTypes::EXT4_INODE_MODE_SOCKET => InodeType::Socket,
+        _ => {
+            // warn!("unknown file type: {:?}", vtype);
+            unreachable!()
+        }
+    }
+}

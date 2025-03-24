@@ -10,6 +10,7 @@ pub type SpinLock<T> = spin::SpinMutex<T, ffi::NoopLock>;
 pub type SpinNoIrqLock<T> = spin::SpinMutex<T, ffi::NoIrqLock>;
 pub type SleepLock<T> = sleep::SleepMutex<T, ffi::NoIrqLock>;
 pub type Shared<T> = Arc<SpinNoIrqLock<T>>;
+pub type SleepShared<T> = Arc<SleepLock<T>>;
 
 
 pub trait MutexOperations {
@@ -23,4 +24,8 @@ pub trait MutexOperations {
 
 pub fn new_shared<T>(data: T) -> Shared<T> {
     Arc::new(SpinNoIrqLock::new(data))
+}
+
+pub fn new_sleep_shared<T>(data: T) -> SleepShared<T> {
+    Arc::new(SleepLock::new(data))
 }

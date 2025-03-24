@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
-use crate::{fs::{Kstat, OpenFlags}, mm::UserBuffer, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Kstat, OpenFlags}, mm::UserBuffer, utils::SysResult};
 use alloc::{string::String, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -106,6 +106,11 @@ pub trait FileTrait: Send + Sync {
     ///
     /// 文件的名称
     fn get_name(&self) -> SysResult<String>;
+
+    /// 重命名
+    /// 
+    /// 成功返回0，否则返回errno
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize>;
 
     /// 获取文件的状态信息
     ///

@@ -8,7 +8,7 @@
 /// pub fn make_pipe()
 /// ```
 //
-use super::{FileTrait, Kstat};
+use super::{ffi::RenameFlags, FileTrait, Kstat};
 use crate::{mm::UserBuffer, utils::SysResult};
 use alloc::{string::String, sync::{Arc, Weak}};
 use spin::Mutex;
@@ -208,6 +208,9 @@ impl FileTrait for Pipe {
     }
     
     fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
