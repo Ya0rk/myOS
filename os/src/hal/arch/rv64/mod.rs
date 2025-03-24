@@ -2,6 +2,8 @@ pub mod sbi;
 pub mod context;
 pub mod kernel_trap;
 pub mod user_trap;
+pub mod interrupt;
+pub mod timer;
 
 pub use context::TrapContext;
 use user_trap::{user_trap_handler, user_trap_return};

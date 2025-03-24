@@ -30,7 +30,8 @@ pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
-use sync::timer;
+// use sync::timer;
+use hal::timer;
 use task::get_current_hart_id;
 
 global_asm!(include_str!("entry.asm"));
@@ -77,7 +78,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         mm::init(false);        
     }
     
-    unsafe { sync::enable_timer_interrupt() };
+    unsafe { hal::interrupt::enable_timer_interrupt() };
     timer::set_next_trigger();
 
     // 列出目前的应用

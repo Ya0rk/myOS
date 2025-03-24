@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 
-use crate::sync::timer::get_time;
+use crate::hal::timer::get_time;
 
 pub struct UserBuffer {
     ///U8 vec
