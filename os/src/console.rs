@@ -1,6 +1,6 @@
 use spin::Mutex;
 use core::fmt::{self, Write};
-use crate::arch::console_putchar;
+use crate::hal::arch::console_putchar;
 use lazy_static::*;
 
 struct Stdout;

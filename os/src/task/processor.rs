@@ -3,8 +3,9 @@ use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::config::HART_NUM;
+use crate::hal;
 use crate::mm::KERNEL_SPACE;
-use crate::trap::TrapContext;
+use crate::hal::arch::TrapContext;
 use crate::utils::backtrace;
 use alloc::sync::Arc;
 use alloc::boxed::Box;
@@ -70,15 +71,16 @@ pub fn get_proc_by_hartid(hartid: usize) -> &'static mut Processor {
 
 /// 获取当前运行的 CPU 核
 pub fn get_current_hart_id() -> usize {
-    use core::arch::asm;
-    let hartid;
-    unsafe {
-        asm! {
-            "mv {}, tp",
-            out(reg) hartid
-        };
-    }
-    hartid
+    // use core::arch::asm;
+    // let hartid;
+    // unsafe {
+    //     asm! {
+    //         "mv {}, tp",
+    //         out(reg) hartid
+    //     };
+    // }
+    // hartid
+    hal::arch::get_current_hart_id()
 }
 
 ///The main part of process execution and scheduling
@@ -114,7 +116,8 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 }
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {
-    riscv::register::satp::read().bits()
+    // riscv::register::satp::read().bits()
+    hal::arch::read_page_table_root()
 }
 ///Get the mutable reference to trap context of current task
 pub fn current_trap_cx() -> &'static mut TrapContext {

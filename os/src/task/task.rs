@@ -2,7 +2,7 @@ use super::{Fd, FdTable, TaskContext};
 use super::{pid_alloc, KernelStack, PidHandle};
 use crate::config::USER_TRAP_CONTEXT;
 use crate::mm::{MapPermission, MemorySet, PhysPageNum, VirtAddr};
-use crate::trap::{trap_loop, TrapContext};
+use crate::hal::arch::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;

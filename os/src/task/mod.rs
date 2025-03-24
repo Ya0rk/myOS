@@ -18,7 +18,7 @@ pub use manager::add_task;
 pub use manager::fetch_task;
 pub use processor::{init_processors, current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task, get_current_hart_id};
 
-use crate::arch::shutdown;
+use crate::hal::arch::shutdown;
 use crate::fs::FileClass;
 use crate::fs::OpenFlags;
 use alloc::sync::Arc;

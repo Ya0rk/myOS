@@ -20,12 +20,13 @@ mod lang_items;
 pub mod mm;
 pub mod fs;
 pub mod task;
-pub mod trap;
+// pub mod trap;
 pub mod sync;
 pub mod utils;
 pub mod syscall;
 pub mod drivers;
-pub mod arch;
+//pub mod arch;
+pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
@@ -62,7 +63,7 @@ pub fn rust_main(hart_id: usize) -> ! {
             "[kernel] ---------- hart {} is starting... ----------",
             hart_id
         );
-        trap::init();
+        hal::arch::trap_init();
         task::init_processors();
         fs::init();
         task::add_initproc();
@@ -72,7 +73,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         utils::boot_all_harts(hart_id);
     } else {
 
-        trap::init();
+        hal::arch::trap_init();
         mm::init(false);        
     }
     

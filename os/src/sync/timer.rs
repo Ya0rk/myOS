@@ -1,4 +1,4 @@
-use crate::{arch::set_timer, config::CLOCK_FREQ, task::suspend_current_and_run_next, utils::Errno};
+use crate::{hal::arch::set_timer, config::CLOCK_FREQ, task::suspend_current_and_run_next, utils::Errno};
 use riscv::register::time;
 use zerocopy::{IntoBytes, Immutable};
 use core::time::Duration;

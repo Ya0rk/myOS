@@ -1,6 +1,6 @@
 use super::File;
 use super::Kstat;
-use crate::arch::console_getchar;
+use crate::hal::arch::console_getchar;
 use crate::utils::Errno;
 use crate::{
     mm::UserBuffer,
