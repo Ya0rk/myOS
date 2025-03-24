@@ -9,10 +9,11 @@ use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
 use riscv::register::satp;
+use crate::utils::flags::{AccessFlags, AccessFlagsMut, UserAccessFlags};
 
 // TODO(COW标志位可以设置在这里)
 bitflags! {
-    pub struct PTEFlags: u8 {
+    pub struct PTEFlags: u16 {
         const V = 1 << 0;
         const R = 1 << 1;
         const W = 1 << 2;
@@ -21,6 +22,7 @@ bitflags! {
         const G = 1 << 5;
         const A = 1 << 6;
         const D = 1 << 7;
+        const LAZY = 1 << 8;
     }
 }
 
@@ -49,7 +51,7 @@ impl PageTableEntry {
     }
     ///Return 10bit flag
     pub fn flags(&self) -> PTEFlags {
-        PTEFlags::from_bits(self.bits as u8).unwrap()
+        PTEFlags::from_bits(self.bits as u16).unwrap()
     }
     ///Check PTE valid
     pub fn is_valid(&self) -> bool {
@@ -66,6 +68,47 @@ impl PageTableEntry {
     ///Check PTE executable
     pub fn executable(&self) -> bool {
         self.flags().contains(PTEFlags::X)
+    }
+}
+
+impl AccessFlags for PTEFlags {
+    fn readable(&self) -> bool {
+        self.contains(PTEFlags::R)
+    }
+    fn writable(&self) -> bool {
+        self.contains(PTEFlags::W)
+    }
+    fn executable(&self) -> bool {
+        self.contains(PTEFlags::X)
+    }
+    fn into<T: AccessFlagsMut + AccessFlagsInit>(&self) -> T {
+        let mut flags = T::new();
+        flags.set_readable(self.readable());
+        flags.set_writable(self.writable());
+        flags.set_executable(self.executable());
+        flags
+    }
+}
+
+impl AccessFlagsMut for PTEFlags {
+    fn set_readable(&mut self, readable: bool) {
+        self.set(PTEFlags::R, readable);
+    }
+    fn set_writable(&mut self, writable: bool) {
+        self.set(PTEFlags::W, writable);
+    }
+    fn set_executable(&mut self, executable: bool) {
+        self.set(PTEFlags::X, executable);
+    }
+    
+}
+
+impl UserAccessFlags for PTEFlags {
+    fn user_accessible(&self) -> bool {
+        self.contains(PTEFlags::U)
+    }
+    fn set_user_accessible(&mut self, user_accessible: bool) {
+        self.set(PTEFlags::U, user_accessible);
     }
 }
 
@@ -126,7 +169,7 @@ impl PageTable {
         }
         result
     }
-    fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
+    pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;

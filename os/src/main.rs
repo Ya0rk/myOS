@@ -1,9 +1,14 @@
-#![deny(warnings)]
+#![allow(warnings)]
 #![no_std]
 #![no_main]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
+#![feature(riscv_ext_intrinsics)]
 #![feature(alloc_error_handler)]
+#![feature(step_trait)]
+#![feature(const_ops)]
+#![feature(const_trait_impl)]
+#![feature(core_intrinsics)]
 
 extern crate alloc;
 

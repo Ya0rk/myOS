@@ -6,7 +6,10 @@ mod page_table;
 mod ffi;
 mod userbuffer;
 mod map_area;
-
+mod memory_space;
+mod page;
+mod user_ptr;
+// mod addr;
 pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernelAddr, StepByOne};
 pub use frame_allocator::FrameTracker;
 pub use memory_set::{MemorySet, KERNEL_SPACE};

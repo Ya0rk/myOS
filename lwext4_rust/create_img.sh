@@ -27,19 +27,19 @@ dd if=/dev/zero of=ext4.img bs=4M count=128
 DIR=lwext4_rust
 
 # 格式化为 ext4
-sudo mkfs.ext4 ext4.img
-sudo chmod 777 ext4.img
+mkfs.ext4 ext4.img
+chmod 777 ext4.img
 
-sudo mkdir ../${DIR}/fs 
-sudo mount ../${DIR}/ext4.img ../${DIR}/fs 
+mkdir ../${DIR}/fs 
+mount ../${DIR}/ext4.img ../${DIR}/fs 
 
 # 复制基本的用户程序
-sudo cp ../user/target/riscv64gc-unknown-none-elf/release/initproc ../lwext4_rust/fs/
-sudo cp ../user/target/riscv64gc-unknown-none-elf/release/user_shell ../lwext4_rust/fs/
+cp ../user/target/riscv64gc-unknown-none-elf/release/initproc ../lwext4_rust/fs/
+cp ../user/target/riscv64gc-unknown-none-elf/release/user_shell ../lwext4_rust/fs/
 # sudo cp ../user/target/riscv64gc-unknown-none-elf/release/cat_filea ../lwext4_rust/fs/
 
 # 复制测试用例
-sudo cp -r ../testcase/24/* ../lwext4_rust/fs/
+cp -r ../testcase/24/* ../lwext4_rust/fs/
 
-sudo umount ../${DIR}/fs 
-sudo rmdir ../${DIR}/fs
+umount ../${DIR}/fs 
+rmdir ../${DIR}/fs

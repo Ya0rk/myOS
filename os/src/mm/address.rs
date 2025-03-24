@@ -1,12 +1,71 @@
 //! Implementation of physical and virtual address and page number.
+use alloc::collections::btree_map::Range;
+
 use super::PageTableEntry;
 use crate::config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
+// use core::iter::Step;
 /// physical address
 const PA_WIDTH_SV39: usize = 56;
 const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
+
+
+macro_rules! impl_step {
+    ($t:ty) => {
+        impl core::iter::Step for $t {
+            fn steps_between(start: &Self, end: &Self) -> (usize, Option<usize>) {
+                usize::steps_between(&start.0, &end.0)
+            }
+
+            fn forward_checked(start: Self, count: usize) -> Option<Self> {
+                usize::forward_checked(start.0, count).map(<$t>::from)
+            }
+
+            fn backward_checked(start: Self, count: usize) -> Option<Self> {
+                usize::forward_checked(start.0, count).map(<$t>::from)
+            }
+        }
+    };
+}
+macro_rules! impl_arithmetic_with_usize {
+    ($t:ty) => {
+        impl const core::ops::Add<usize> for $t {
+            type Output = Self;
+            #[inline]
+            fn add(self, rhs: usize) -> Self {
+                Self(self.0 + rhs)
+            }
+        }
+        impl core::ops::AddAssign<usize> for $t {
+            #[inline]
+            fn add_assign(&mut self, rhs: usize) {
+                *self = *self + rhs;
+            }
+        }
+        impl core::ops::Sub<usize> for $t {
+            type Output = Self;
+            #[inline]
+            fn sub(self, rhs: usize) -> Self {
+                Self(self.0 - rhs)
+            }
+        }
+        impl core::ops::SubAssign<usize> for $t {
+            #[inline]
+            fn sub_assign(&mut self, rhs: usize) {
+                *self = *self - rhs;
+            }
+        }
+        impl core::ops::Sub<$t> for $t {
+            type Output = usize;
+            #[inline]
+            fn sub(self, rhs: $t) -> usize {
+                self.0 - rhs.0
+            }
+        }
+    };
+}
 
 #[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -27,6 +86,10 @@ pub struct PhysPageNum(pub usize);
 #[repr(C)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct VirtPageNum(pub usize);
+
+impl_step!(VirtPageNum);
+impl_arithmetic_with_usize!(VirtPageNum);
+impl_arithmetic_with_usize!(VirtAddr);
 
 /// Debugging
 
@@ -180,6 +243,9 @@ impl VirtAddr {
     pub fn as_ptr(&self) -> *mut u8 {
         self.0 as *mut u8
     }
+    pub fn from_usize_range(range: core::ops::Range<usize>) -> core::ops::Range<Self> {
+        Self(range.start)..Self(range.end)
+    }
 }
 impl From<VirtAddr> for VirtPageNum {
     fn from(v: VirtAddr) -> Self {
@@ -236,6 +302,10 @@ impl VirtPageNum {
             vpn >>= 9;
         }
         idx
+    }
+
+    pub fn to_vaddr(&self) -> VirtAddr {
+        VirtAddr::from(self.0 << PAGE_SIZE_BITS)
     }
 }
 

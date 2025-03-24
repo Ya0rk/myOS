@@ -1,11 +1,12 @@
 mod context;
 mod manager;
 mod pid;
-mod processor;
+pub mod processor;
 mod switch;
 mod fd;
 #[allow(clippy::module_inception)]
 mod task;
+pub mod aux;
 
 pub use fd::{FdTable, Fd};
 pub use manager::TaskManager;
