@@ -1,0 +1,61 @@
+use crate::hal::arch::la64::uart::Uart;
+use core::fmt::{Arguments, Write};
+use spin::{Lazy, Mutex};
+
+pub struct Console {
+    inner: Uart,
+}
+
+impl Console {
+    pub fn new(address: usize) -> Self {
+        let uart = Uart::new(address);
+        Self { inner: uart }
+    }
+    pub fn write_str(&mut self, str: &str) {
+        for ch in str.bytes() {
+            self.inner.put(ch)
+        }
+    }
+    pub fn get_char(&mut self) -> Option<u8> {
+        self.inner.get()
+    }
+}
+impl Write for Console {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.write_str(s);
+        Ok(())
+    }
+}
+
+/// 注意到这里是写死的UART = 0x1FE001E0
+pub static CONSOLE: Lazy< Mutex<Console>> = Lazy::new(||Mutex::new(Console::new(0x1FE001E0)));
+
+pub fn get_char() -> u8 {
+    // todo!根据rcore内部实现推测这里应该是一个阻塞调用
+    loop {
+        let ch = CONSOLE.lock().get_char();
+        if let Some(ch) = ch {
+            return ch;
+        }
+    }
+}
+
+pub fn _print(arg: Arguments) {
+    CONSOLE.lock().write_fmt(arg).unwrap()
+}
+
+#[macro_export]
+macro_rules! la_print {
+    ($($arg:tt)*) => {
+        self::print::_print(format_args!("{}", format_args!($($arg)*)))
+    };
+}
+
+/// 系统启动初期使用的输出函数
+#[macro_export]
+macro_rules! la_println {
+    () => ($crate::print!("\n"));
+    ($fmt:expr) => ($crate::print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => ($crate::print!(
+        concat!($fmt, "\n"), $($arg)*));
+}
