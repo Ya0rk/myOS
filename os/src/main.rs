@@ -27,6 +27,7 @@ pub mod utils;
 pub mod syscall;
 pub mod drivers;
 pub mod arch;
+pub mod signal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
