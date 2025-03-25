@@ -39,7 +39,8 @@ impl From<i32> for SigCode {
 }
 
 bitflags! {
-    pub struct SigNom: i32 {
+    #[derive(PartialEq)]
+    pub struct SigNom: usize {
         // 标准信号常量定义（基于 Linux/x86 架构）
         // 注：信号编号可能因操作系统或架构略有不同，此处以 Linux 常规值为准
         const NOSIG  = 0;       // 没有信号
@@ -87,6 +88,7 @@ bitflags! {
         const EPIPE  = 32; // 管道破裂（SIGPIPE 的典型错误码）
     }
 
+    #[derive(Clone, Copy)]
     pub struct SigMask: u64 {
         const NOSIG     = 1 << 0;
         const SIGHUP    = 1 << 1;
@@ -154,6 +156,51 @@ bitflags! {
         const   SIGRT_30    = 1 << 62;
         const   SIGRT_31    = 1 << 63;
     }
+
+    #[derive(Default, Copy, Clone, Debug)]
+    pub struct SigActionFlag : usize {
+        /// 当子进程停止时（如收到 `SIGSTOP`），不向父进程发送 `SIGCHLD` 信号。
+        /// 通常用于避免不必要的子进程状态通知。
+        const SA_NOCLDSTOP = 1;
+
+        /// 当子进程终止时，不将其转换为僵尸进程（自动回收资源）。
+        /// 相当于隐式调用 `signal(SIGCHLD, SIG_IGN)`。
+        const SA_NOCLDWAIT = 2;
+
+        /// 使用扩展信号处理函数（`sa_sigaction` 而非 `sa_handler`）。
+        /// 允许信号处理函数接收额外的信号信息（`siginfo_t`）和上下文（`ucontext_t`）。
+        const SA_SIGINFO = 4;
+
+        /// 使用由 `sigaltstack` 设置的备用信号栈执行信号处理函数。
+        /// 防止默认栈溢出时无法处理信号（如 `SIGSEGV`）。
+        const SA_ONSTACK = 0x08000000;
+
+        /// 自动重启被信号中断的系统调用（如 `read`、`write`）。
+        /// 避免因信号导致系统调用返回 `EINTR` 错误。
+        const SA_RESTART = 0x10000000;
+
+        /// 在执行信号处理函数期间，不自动阻塞当前信号。
+        /// 允许信号处理函数被同一信号递归中断（慎用）。
+        const SA_NODEFER = 0x40000000;
+
+        /// 信号处理函数执行完毕后，自动恢复为默认行为（`SIG_DFL`）。
+        /// 通常用于一次性信号处理（如清理操作）。
+        const SA_RESETHAND = 0x80000000;
+
+        /// （Linux 特有）指定信号处理完成后的上下文恢复函数。
+        /// 通常由 Glibc 内部使用，用户代码无需手动设置。
+        const SA_RESTORER = 0x04000000;
+    }
+}
+
+impl SigNom {
+    pub fn my_from_bits(value: usize) -> Self {
+        if value > MAX_SIGNUM || value < 0{
+            panic!("signo out of bounds!");
+        }
+
+        SigNom::from_bits_truncate(value)
+    }
 }
 
 impl SigMask {
@@ -167,5 +214,26 @@ impl SigMask {
 
     pub fn have(&self, sig_num: i32) -> bool {
         self.contains(SigMask::from_bits(1 << sig_num).unwrap())
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[repr(usize)]
+#[derive(Clone)]
+pub enum SigHandler {
+    /// 恢复信号的默认行为
+    SIG_DFL,
+    /// 忽略该信号（如防止 SIGCHLD 产生僵尸进程）
+    SIG_IGN,
+    /// 用户自定义的信号处理函数
+    Customized { handler: usize },
+}
+
+impl SigHandler {
+    pub fn default(sig: SigNom) -> Self {
+        match sig {
+            SigNom::SIGCHLD | SigNom::SIGURG | SigNom::SIGWINCH => Self::SIG_IGN,
+            _ => Self::SIG_DFL,
+        }
     }
 }

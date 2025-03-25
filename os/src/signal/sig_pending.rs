@@ -4,7 +4,10 @@ use crate::task::TaskStatus;
 use super::ffi::{SigCode, SigErr, SigMask, SigNom};
 
 pub struct SigPending {
+    /// 等待队列
     pub queue: SignalQueue,
+    /// 如果遇到的信号也在need_wake中，那就唤醒task
+    pub need_wake: SigMask,
 }
 
 /// 使用优先队列和普通队列
@@ -19,6 +22,7 @@ pub struct SignalQueue {
     pub prio: SegQueue<SigInfo>,
 }
 
+/// kill发送信号其实就是生成SigInfo然后加入对应task的SigPending中
 pub struct SigInfo {
     pub signo:   SigNom,  // 信号编号
     pub sigcode: SigCode, // 信号来源码
@@ -40,3 +44,22 @@ pub enum SigDetails {
     }
 }
 
+
+impl SigPending {
+    pub fn new() -> Self {
+        Self {
+            queue: SignalQueue::new(),
+            need_wake: SigMask::empty(),
+        }
+    }
+}
+
+impl SignalQueue {
+    pub fn new() -> Self {
+        Self {
+            mask: SigMask::empty(),
+            fifo: SegQueue::new(),
+            prio: SegQueue::new(),
+        }
+    }
+}

@@ -7,6 +7,7 @@ use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
 use crate::fs::FileTrait;
 use crate::mm::{translated_refmut, MapPermission, MemorySet};
+use crate::signal::{SigMask, SigPending, SigStruct};
 use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::{add_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task, INITPROC};
@@ -31,7 +32,6 @@ pub struct TaskControlBlock {
     // 可变
     tgid:           AtomicUsize, // 线程组group_leader的 pid
     pgid:           AtomicUsize,
-    pending:        AtomicBool, // 表示是否有sig在等待
     task_status:    SpinNoIrqLock<TaskStatus>,
 
     base_size:      Shared<usize>, // 迟早要删
@@ -41,6 +41,14 @@ pub struct TaskControlBlock {
     pub children:   Shared<Vec<Arc<TaskControlBlock>>>,
     fd_table:       Shared<FdTable>,
     current_path:   Shared<String>,
+
+    // signal
+    pending:        AtomicBool, // 表示是否有sig在等待
+    ucontext:       AtomicUsize, // ucontext指针，保存用户数据，在sigreturn需要用到来恢复用户环境
+    sig_pending:    SpinNoIrqLock<SigPending>, // signal 等待队列
+    blocked:        SyncUnsafeCell<SigMask>,   // 信号屏蔽字,表明进程不处理的信号
+    sig:            Shared<SigStruct>, // 表示信号相应的处理方法,一共64个信号
+
 
     waker:          SyncUnsafeCell<Option<Waker>>,
     trap_cx:        SyncUnsafeCell<TrapContext>,
@@ -83,7 +91,6 @@ impl TaskControlBlock {
             // Shared
             pgid: AtomicUsize::new(0),
             tgid: AtomicUsize::new(tgid),
-            pending: AtomicBool::new(false),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             base_size: new_shared(user_sp),
             thread_group: new_shared(ThreadGroup::new()),
@@ -92,6 +99,12 @@ impl TaskControlBlock {
             children: new_shared(Vec::new()),
             fd_table: new_shared(FdTable::new()),
             current_path: new_shared(String::from("/")), // root directory
+
+            pending: AtomicBool::new(false),
+            ucontext: AtomicUsize::new(0),
+            sig_pending: SpinNoIrqLock::new(SigPending::new()),
+            blocked: SyncUnsafeCell::new(SigMask::empty()),
+            sig: new_shared(SigStruct::new()),
             
             // SyncUnsafeCell
             waker:   SyncUnsafeCell::new(None),
@@ -140,7 +153,14 @@ impl TaskControlBlock {
         );
         let old_trap_cx = self.get_trap_cx_mut();
         *old_trap_cx = trap_cx;
-        
+
+        // TODO(YJJ): 重置自定的信号处理
+        //遍历所有信号，检查其当前处理方式：
+        // 如果信号是 默认行为（SIG_DFL） 或 忽略（SIG_IGN）：保持不变。
+        // 如果信号是 自定义处理函数：强制重置为 SIG_DFL。
+        // 避免新的进程信号处理函数被劫持
+
+
         debug!("task.exec.pid={}", self.pid.0);
     }
 
@@ -149,6 +169,9 @@ impl TaskControlBlock {
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(pid.0);
         let pending = AtomicBool::new(false);
+        let ucontext = AtomicUsize::new(0);
+        let sig_pending = SpinNoIrqLock::new(SigPending::new());
+        let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
         let thread_group = new_shared(ThreadGroup::new());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let children = new_shared(Vec::new());
@@ -161,6 +184,10 @@ impl TaskControlBlock {
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().clone())
+        };
+        let sig = match flag.contains(CloneFlags::SIGCHLD) {
+            true  => self.sig.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
+            false => new_shared(self.sig.lock().clone()), // 一个新的副本，子进程可以独立修改
         };
 
         let kernel_stack = KernelStack::new(&pid);
@@ -189,7 +216,6 @@ impl TaskControlBlock {
             // Shared
             pgid,
             tgid,
-            pending,
             base_size: self.base_size.clone(),
             thread_group,
             task_status,
@@ -198,6 +224,12 @@ impl TaskControlBlock {
             children,
             fd_table,
             current_path,
+
+            pending,
+            ucontext,
+            sig_pending,
+            blocked,
+            sig,
 
             // SyncUnsafeCell
             waker,
@@ -220,6 +252,9 @@ impl TaskControlBlock {
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(self.get_tgid());
         let pending= AtomicBool::new(false);
+        let ucontext = AtomicUsize::new(0);
+        let sig_pending = SpinNoIrqLock::new(SigPending::new());
+        let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let thread_group = self.thread_group.clone();
         let memory_set = self.memory_set.clone();
@@ -235,6 +270,10 @@ impl TaskControlBlock {
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().clone())
         };
+        let sig = match flag.contains(CloneFlags::SIGCHLD) {
+            true  => self.sig.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
+            false => new_shared(self.sig.lock().clone()), // 一个新的副本，子进程可以独立修改
+        };
         
         info!(
             "[fork]: child thread tid {}, parent process pid {}",
@@ -247,7 +286,13 @@ impl TaskControlBlock {
 
             pgid,
             tgid,
+
             pending,
+            ucontext,
+            sig_pending,
+            blocked,
+            sig,
+
             task_status,
             base_size: self.base_size.clone(),
             thread_group,
@@ -319,6 +364,26 @@ impl TaskControlBlock {
 }
 
 impl TaskControlBlock {
+    /// 获取信号屏蔽字段
+    pub fn get_blocked(&self) -> &SigMask {
+        unsafe { &*self.blocked.get() }
+    }
+    /// 获取信号屏蔽字段的mut
+    pub fn get_blocked_mut(&self) -> &mut SigMask {
+        unsafe { &mut *self.blocked.get() }
+    }
+
+    /// 设置ucontext
+    pub fn set_ucontext(&self, addr: usize) {
+        self.ucontext.store(addr, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// 获取ucontext
+    pub fn get_ucontext(&self) -> usize {
+        self.ucontext.load(core::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// 获取parent的pid
     pub fn get_ppid(&self) -> usize {
         self.parent.lock().as_ref().map(|p| p.upgrade().unwrap().pid.0).unwrap_or(0)
     }
