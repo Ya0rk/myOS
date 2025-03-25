@@ -1,5 +1,5 @@
 use core::cell::SyncUnsafeCell;
-use core::sync::atomic::{AtomicI32, AtomicUsize};
+use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 
 use super::{add_process_group_member, Fd, FdTable, TaskContext, ThreadGroup};
@@ -31,9 +31,10 @@ pub struct TaskControlBlock {
     // 可变
     tgid:           AtomicUsize, // 线程组group_leader的 pid
     pgid:           AtomicUsize,
+    pending:        AtomicBool, // 表示是否有sig在等待
     task_status:    SpinNoIrqLock<TaskStatus>,
 
-    base_size:      Shared<usize>,
+    base_size:      Shared<usize>, // 迟早要删
     thread_group:   Shared<ThreadGroup>,
     memory_set:     Shared<MemorySet>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
@@ -43,8 +44,7 @@ pub struct TaskControlBlock {
 
     waker:          SyncUnsafeCell<Option<Waker>>,
     trap_cx:        SyncUnsafeCell<TrapContext>,
-    /// 迟早会删
-    task_cx:        SyncUnsafeCell<TaskContext>,
+    task_cx:        SyncUnsafeCell<TaskContext>,// 迟早会删
     time_data:      SyncUnsafeCell<TimeData>,
     child_cleartid: SyncUnsafeCell<Option<usize>>,
 
@@ -83,6 +83,7 @@ impl TaskControlBlock {
             // Shared
             pgid: AtomicUsize::new(0),
             tgid: AtomicUsize::new(tgid),
+            pending: AtomicBool::new(false),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             base_size: new_shared(user_sp),
             thread_group: new_shared(ThreadGroup::new()),
@@ -143,11 +144,11 @@ impl TaskControlBlock {
         debug!("task.exec.pid={}", self.pid.0);
     }
 
-    /// TODO:差分为thread 和 process new
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(pid.0);
+        let pending = AtomicBool::new(false);
         let thread_group = new_shared(ThreadGroup::new());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let children = new_shared(Vec::new());
@@ -188,6 +189,7 @@ impl TaskControlBlock {
             // Shared
             pgid,
             tgid,
+            pending,
             base_size: self.base_size.clone(),
             thread_group,
             task_status,
@@ -217,6 +219,7 @@ impl TaskControlBlock {
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(self.get_tgid());
+        let pending= AtomicBool::new(false);
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let thread_group = self.thread_group.clone();
         let memory_set = self.memory_set.clone();
@@ -244,6 +247,7 @@ impl TaskControlBlock {
 
             pgid,
             tgid,
+            pending,
             task_status,
             base_size: self.base_size.clone(),
             thread_group,
