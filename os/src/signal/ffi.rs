@@ -88,7 +88,7 @@ bitflags! {
         const EPIPE  = 32; // 管道破裂（SIGPIPE 的典型错误码）
     }
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     pub struct SigMask: u64 {
         const NOSIG     = 1 << 0;
         const SIGHUP    = 1 << 1;
