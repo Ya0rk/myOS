@@ -31,6 +31,18 @@ impl SigStruct {
             action: core::array::from_fn(|signo| KSigAction::new(SigNom::my_from_bits(signo + 1))),
         }
     }
+
+    /// 遍历所有信号，检查其当前处理方式：
+    /// - 如果信号是 默认行为（SIG_DFL） 或 忽略（SIG_IGN）：保持不变。
+    /// - 如果信号是 自定义处理函数：强制重置为 SIG_DFL。
+    /// 避免新的进程信号处理函数被劫持
+    pub fn flash_signal_handlers(&mut self) {
+        self.action.iter_mut().enumerate().for_each(|(i, ksa)| {
+            if let SigHandler::Customized { .. } = ksa.sa.sa_handler {
+                ksa.sa.sa_handler = SigHandler::default(SigNom::my_from_bits(i + 1));
+            }
+        });
+    }
 }
 
 impl KSigAction {
