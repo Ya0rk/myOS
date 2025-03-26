@@ -154,11 +154,8 @@ impl TaskControlBlock {
         let old_trap_cx = self.get_trap_cx_mut();
         *old_trap_cx = trap_cx;
 
-        // TODO(YJJ): 重置自定的信号处理
-        //遍历所有信号，检查其当前处理方式：
-        // 如果信号是 默认行为（SIG_DFL） 或 忽略（SIG_IGN）：保持不变。
-        // 如果信号是 自定义处理函数：强制重置为 SIG_DFL。
-        // 避免新的进程信号处理函数被劫持
+        // 重置自定义的信号处理
+        self.sig.lock().flash_signal_handlers();
 
 
         debug!("task.exec.pid={}", self.pid.0);
