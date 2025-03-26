@@ -1,3 +1,5 @@
+use crate::trap::TrapContext;
+
 use super::SigMask;
 
 /// 信号栈是为信号处理程序执行提供的专用栈空间.它通常包含以下内容:
@@ -62,22 +64,24 @@ impl Default for SignalStack {
 }
 
 impl UContext {
-    pub fn new(old_sigmask: SigMask, sigstack: Option<SignalStack>, sepc: usize) -> Self {
+    pub fn new(old_sigmask: &SigMask, sig_stack: Option<SignalStack>, trap_cx: &TrapContext) -> Self {
+        let sepc = trap_cx.sepc;
+        let user_x: [usize; 32] = trap_cx.user_x;
         Self {
             uc_flags: 0,
             uc_link: 0,
-            uc_stack: sigstack.unwrap_or_default(),
-            uc_sigmask: old_sigmask,
+            uc_stack: sig_stack.unwrap_or_default(),
+            uc_sigmask: old_sigmask.clone(),
             uc_sig: [0; 16],
-            uc_mcontext: MContext::new(sepc)
+            uc_mcontext: MContext::new(sepc, user_x)
         }
     }
 }
 
 impl MContext {
-    fn new(old_sepc: usize) -> Self {
+    fn new(old_sepc: usize, user_reg: [usize; 32]) -> Self {
         Self {
-            user_x: [0; 32],
+            user_x: user_reg,
             sepc:   old_sepc,
             fpstate: [0; 65]
         }

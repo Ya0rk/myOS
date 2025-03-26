@@ -69,6 +69,21 @@ impl TrapContext {
     pub fn set_kernel_sp(&mut self, kernel_sp: usize) {
         self.kernel_sp = kernel_sp;
     }
+    /// 在do_signal信号处理中,重新设置trap context
+    /// 返回到用户自定义函数
+    /// 
+    /// handler: 信号处理 函数addr
+    /// 
+    /// new_sp: 信号处理栈的sp
+    /// 
+    /// sigret: 信号处理完后返回到sigreturn系统调用
+    pub fn flash(&mut self, handler: usize, new_sp: usize, sigret: usize, signo: usize) {
+        self.sepc = handler;
+        self.set_sp(new_sp);
+        self.user_x[1] = sigret;
+        self.user_x[10] = signo;
+
+    }
 }
 
 impl UserFloatRegs {
