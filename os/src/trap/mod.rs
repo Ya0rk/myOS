@@ -3,13 +3,13 @@ mod user_trap;
 mod kernel_trap;
 
 use alloc::sync::Arc;
-use log::info;
 use user_trap::{user_trap_handler, user_trap_return};
 use core::arch::global_asm;
 use core::fmt::Display;
 use riscv::register::mtvec::TrapMode;
 use riscv::register::stvec;
-use crate::sync::get_waker;
+use crate::signal::do_signal;
+use crate::sync::{get_waker, suspend_now};
 use crate::task::{TaskControlBlock, TaskStatus};
 pub use context::TrapContext;
 
@@ -19,6 +19,7 @@ global_asm!(include_str!("trap.S"));
 extern "C" {
     fn __trap_from_user();
     fn __trap_from_kernel();
+    pub fn __sigret_helper();
     #[allow(improper_ctypes)]
     fn __return_to_user(ctx: *mut TrapContext);
 }
@@ -35,6 +36,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
     loop {
         match task.get_status() {
             TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
             _ => {},
         }
 
@@ -42,6 +44,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
 
         match task.get_status() {
             TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
             _ => {},
         }
 
@@ -49,11 +52,15 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
 
         match task.get_status() {
             TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
             _ => {},
+        }
+
+        if task.pending() {
+            do_signal(&task);
         }
     }
 
-    info!("Task {} exit with code {}", task.get_pid(), task.get_exit_code());
     task.exit();
 }
 

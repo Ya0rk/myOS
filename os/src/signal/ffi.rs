@@ -39,47 +39,8 @@ impl From<i32> for SigCode {
 }
 
 bitflags! {
-    #[derive(PartialEq)]
-    pub struct SigNom: usize {
-        // 标准信号常量定义（基于 Linux/x86 架构）
-        // 注：信号编号可能因操作系统或架构略有不同，此处以 Linux 常规值为准
-        const NOSIG  = 0;       // 没有信号
-        const SIGHUP = 1;       // 终端挂起/控制进程终止
-        const SIGINT = 2;       // 键盘中断 (Ctrl+C)
-        const SIGQUIT = 3;      // 键盘退出 (Ctrl+\), 产生核心转储
-        const SIGILL = 4;       // 非法指令
-        const SIGTRAP = 5;      // 跟踪/断点陷阱（调试用）
-        const SIGABRT = 6;      // 进程调用 abort() 终止
-        const SIGBUS = 7;       // 总线错误（内存访问对齐错误等）
-        const SIGFPE = 8;       // 算术异常（除零、溢出等）
-        const SIGKILL = 9;      // 强制终止信号（不可捕获或忽略）
-        const SIGUSR1 = 10;     // 用户自定义信号 1
-        const SIGSEGV = 11;     // 段错误（无效内存访问）
-        const SIGUSR2 = 12;     // 用户自定义信号 2
-        const SIGPIPE = 13;     // 管道破裂（写入无读端的管道）
-        const SIGALRM = 14;     // alarm() 定时器超时
-        const SIGTERM = 15;     // 终止信号（可捕获的优雅退出）
-        const SIGSTKFLT = 16;   // 协处理器栈错误（历史遗留，现代系统未使用）
-        const SIGCHLD = 17;     // 子进程状态改变（终止/暂停/恢复）
-        const SIGCONT = 18;     // 恢复已暂停的进程
-        const SIGSTOP = 19;     // 暂停进程（不可捕获或忽略）
-        const SIGTSTP = 20;     // 终端暂停 (Ctrl+Z)
-        const SIGTTIN = 21;     // 后台进程尝试读取终端
-        const SIGTTOU = 22;     // 后台进程尝试写入终端
-        const SIGURG = 23;      // 套接字紧急数据到达
-        const SIGXCPU = 24;     // 超出 CPU 时间限制
-        const SIGXFSZ = 25;     // 超出文件大小限制
-        const SIGVTALRM = 26;   // 虚拟定时器超时
-        const SIGPROF = 27;     // 性能分析定时器超时
-        const SIGWINCH = 28;    // 终端窗口大小改变
-        const SIGIO = 29;       // 异步 I/O 事件（文件描述符就绪）
-        const SIGPWR = 30;      // 电源故障（UPS 电池低电量）
-        const SIGSYS = 31;      // 无效系统调用
-        const SIGTIMER = 32;    // 定时器信号（某些系统如 Solaris 使用）
-        const SIGRTMAX = 64;    // 最大实时信号编号（实际可用信号可能更少）
-    }
-
     /// 信号错误码(部分与 errno 共享)，0表示没有err（例如信号由 kill() 手动发送）
+    #[derive(Clone, Copy)]
     pub struct SigErr: i32 {
         const EIO    = 5;  // I/O 错误（如磁盘读写失败触发的信号）
         const EACCES = 13; // 权限不足（如内存访问权限错误触发的 SIGSEGV）
@@ -89,7 +50,7 @@ bitflags! {
     }
 
     #[derive(Clone, Copy, Debug)]
-    pub struct SigMask: u64 {
+    pub struct SigMask: usize {
         const NOSIG     = 1 << 0;
         const SIGHUP    = 1 << 1;
         const SIGINT    = 1 << 2;
@@ -193,33 +154,65 @@ bitflags! {
     }
 }
 
-impl SigNom {
-    pub fn my_from_bits(value: usize) -> Self {
-        if value > MAX_SIGNUM || value < 0{
-            panic!("signo out of bounds!");
-        }
-
-        SigNom::from_bits_truncate(value)
-    }
+#[derive(PartialEq, Clone, Copy)]
+#[repr(usize)]
+pub enum SigNom {
+    // 标准信号常量定义（基于 Linux/x86 架构）
+    // 注：信号编号可能因操作系统或架构略有不同，此处以 Linux 常规值为准
+    NOSIG  = 0,       // 没有信号
+    SIGHUP = 1,       // 终端挂起/控制进程终止
+    SIGINT = 2,       // 键盘中断 (Ctrl+C)
+    SIGQUIT = 3,      // 键盘退出 (Ctrl+\), 产生核心转储
+    SIGILL = 4,       // 非法指令
+    SIGTRAP = 5,      // 跟踪/断点陷阱（调试用）
+    SIGABRT = 6,      // 进程调用 abort() 终止
+    SIGBUS = 7,       // 总线错误（内存访问对齐错误等）
+    SIGFPE = 8,       // 算术异常（除零、溢出等）
+    SIGKILL = 9,      // 强制终止信号（不可捕获或忽略）
+    SIGUSR1 = 10,     // 用户自定义信号 1
+    SIGSEGV = 11,     // 段错误（无效内存访问）
+    SIGUSR2 = 12,     // 用户自定义信号 2
+    SIGPIPE = 13,     // 管道破裂（写入无读端的管道）
+    SIGALRM = 14,     // alarm() 定时器超时
+    SIGTERM = 15,     // 终止信号（可捕获的优雅退出）
+    SIGSTKFLT = 16,   // 协处理器栈错误（历史遗留，现代系统未使用）
+    SIGCHLD = 17,     // 子进程状态改变（终止/暂停/恢复）
+    SIGCONT = 18,     // 恢复已暂停的进程
+    SIGSTOP = 19,     // 暂停进程（不可捕获或忽略）
+    SIGTSTP = 20,     // 终端暂停 (Ctrl+Z)
+    SIGTTIN = 21,     // 后台进程尝试读取终端
+    SIGTTOU = 22,     // 后台进程尝试写入终端
+    SIGURG = 23,      // 套接字紧急数据到达
+    SIGXCPU = 24,     // 超出 CPU 时间限制
+    SIGXFSZ = 25,     // 超出文件大小限制
+    SIGVTALRM = 26,   // 虚拟定时器超时
+    SIGPROF = 27,     // 性能分析定时器超时
+    SIGWINCH = 28,    // 终端窗口大小改变
+    SIGIO = 29,       // 异步 I/O 事件（文件描述符就绪）
+    SIGPWR = 30,      // 电源故障（UPS 电池低电量）
+    SIGSYS = 31,      // 无效系统调用
+    SIGTIMER = 32,    // 定时器信号（某些系统如 Solaris 使用）
+    SIGRTMAX = 64,    // 最大实时信号编号（实际可用信号可能更少）
 }
 
+
 impl SigMask {
-    pub fn set_sig(&mut self, sig_num: i32) {
+    pub fn set_sig(&mut self, sig_num: usize) {
         *self |= (SigMask::from_bits(1 << sig_num)).unwrap();
     }
 
-    pub fn unset_sig(&mut self, sig_num: i32) {
+    pub fn unset_sig(&mut self, sig_num: usize) {
         *self -= (SigMask::from_bits(1 << sig_num)).unwrap();
     }
 
-    pub fn have(&self, sig_num: i32) -> bool {
+    pub fn have(&self, sig_num: usize) -> bool {
         self.contains(SigMask::from_bits(1 << sig_num).unwrap())
     }
 }
 
 #[allow(non_camel_case_types)]
 #[repr(usize)]
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum SigHandler {
     /// 恢复信号的默认行为
     SIG_DFL,
@@ -234,6 +227,17 @@ impl SigHandler {
         match sig {
             SigNom::SIGCHLD | SigNom::SIGURG | SigNom::SIGWINCH => Self::SIG_IGN,
             _ => Self::SIG_DFL,
+        }
+    }
+}
+
+impl From<usize> for SigNom {
+    fn from(value: usize) -> Self {
+        if value <= MAX_SIGNUM {
+            let ret: SigNom = unsafe { core::mem::transmute(value) };
+            return ret;
+        } else {
+            panic!("signal nomber out of bounds!");
         }
     }
 }

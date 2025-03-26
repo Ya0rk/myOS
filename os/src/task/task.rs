@@ -21,6 +21,7 @@ use log::{debug, info};
 pub enum TaskStatus {
     Ready,
     Running,
+    Stopped,
     Zombie,
 }
 
@@ -43,12 +44,12 @@ pub struct TaskControlBlock {
     current_path:   Shared<String>,
 
     // signal
-    pending:        AtomicBool, // 表示是否有sig在等待
-    ucontext:       AtomicUsize, // ucontext指针，保存用户数据，在sigreturn需要用到来恢复用户环境
-    sig_pending:    SpinNoIrqLock<SigPending>, // signal 等待队列
-    blocked:        SyncUnsafeCell<SigMask>,   // 信号屏蔽字,表明进程不处理的信号
-    sig:            Shared<SigStruct>, // 表示信号相应的处理方法,一共64个信号
-    sig_stack:      SyncUnsafeCell<Option<SignalStack>>, // 信号栈，保存信号栈信息
+    pub pending:        AtomicBool, // 表示是否有sig在等待
+    pub ucontext:       AtomicUsize, // ucontext指针，保存用户数据，在sigreturn需要用到来恢复用户环境
+    pub sig_pending:    SpinNoIrqLock<SigPending>, // signal 等待队列
+    pub blocked:        SyncUnsafeCell<SigMask>,   // 信号屏蔽字,表明进程不处理的信号
+    pub handler:        Shared<SigStruct>, // 表示信号相应的处理方法,一共64个信号
+    pub sig_stack:      SyncUnsafeCell<Option<SignalStack>>, // 信号栈，保存信号栈信息
 
 
     waker:          SyncUnsafeCell<Option<Waker>>,
@@ -105,7 +106,7 @@ impl TaskControlBlock {
             ucontext: AtomicUsize::new(0),
             sig_pending: SpinNoIrqLock::new(SigPending::new()),
             blocked: SyncUnsafeCell::new(SigMask::empty()),
-            sig: new_shared(SigStruct::new()),
+            handler: new_shared(SigStruct::new()),
             sig_stack: SyncUnsafeCell::new(None),
             
             // SyncUnsafeCell
@@ -157,7 +158,7 @@ impl TaskControlBlock {
         *old_trap_cx = trap_cx;
 
         // 重置自定义的信号处理
-        self.sig.lock().flash_signal_handlers();
+        self.handler.lock().flash_signal_handlers();
 
 
         debug!("task.exec.pid={}", self.pid.0);
@@ -186,8 +187,8 @@ impl TaskControlBlock {
             false => new_shared(self.fd_table.lock().clone())
         };
         let sig = match flag.contains(CloneFlags::SIGCHLD) {
-            true  => self.sig.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
-            false => new_shared(self.sig.lock().clone()), // 一个新的副本，子进程可以独立修改
+            true  => self.handler.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
+            false => new_shared(self.handler.lock().clone()), // 一个新的副本，子进程可以独立修改
         };
 
         let kernel_stack = KernelStack::new(&pid);
@@ -229,7 +230,7 @@ impl TaskControlBlock {
             ucontext,
             sig_pending,
             blocked,
-            sig,
+            handler: sig,
             sig_stack,
 
             // SyncUnsafeCell
@@ -273,8 +274,8 @@ impl TaskControlBlock {
             false => new_shared(self.fd_table.lock().clone())
         };
         let sig = match flag.contains(CloneFlags::SIGCHLD) {
-            true  => self.sig.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
-            false => new_shared(self.sig.lock().clone()), // 一个新的副本，子进程可以独立修改
+            true  => self.handler.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
+            false => new_shared(self.handler.lock().clone()), // 一个新的副本，子进程可以独立修改
         };
         
         info!(
@@ -293,7 +294,7 @@ impl TaskControlBlock {
             ucontext,
             sig_pending,
             blocked,
-            sig,
+            handler: sig,
             sig_stack,
 
             task_status,
@@ -367,6 +368,16 @@ impl TaskControlBlock {
 }
 
 impl TaskControlBlock {
+    /// 检测pending字段，判断是否有信号需要处理
+    pub fn pending(&self) -> bool {
+        self.pending.load(core::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// 取出task中的sig stack 留下None
+    pub fn get_sig_stack_mut(&self) -> &mut Option<SignalStack> {
+        unsafe { &mut *self.sig_stack.get() }
+    }
+
     /// 获取信号屏蔽字段
     pub fn get_blocked(&self) -> &SigMask {
         unsafe { &*self.blocked.get() }
@@ -380,7 +391,6 @@ impl TaskControlBlock {
     pub fn set_ucontext(&self, addr: usize) {
         self.ucontext.store(addr, core::sync::atomic::Ordering::Relaxed);
     }
-
     /// 获取ucontext
     pub fn get_ucontext(&self) -> usize {
         self.ucontext.load(core::sync::atomic::Ordering::Relaxed)
@@ -400,7 +410,7 @@ impl TaskControlBlock {
         unsafe { &*self.time_data.get() }
     }
     pub fn get_time_data_mut(&self) -> &mut TimeData {
-        unsafe { &mut *(self.time_data.get() as *mut TimeData) }
+        unsafe { &mut *self.time_data.get() }
     }
 
     /// 向线程组增加成员
@@ -411,6 +421,20 @@ impl TaskControlBlock {
     /// 删除线程组中的一个成员
     pub fn remove_thread_group_member(&self, pid: usize) {
         self.thread_group.lock().remove(pid.into());
+    }
+
+    /// 将所有子线程设置为zombie
+    pub fn kill_all_thread(&self) {
+        for (_, thread) in self.thread_group.lock().tasks.iter() {
+            thread.upgrade().unwrap().set_zombie();
+        }
+    }
+
+    /// 将所有子线程设置为stopped挂起
+    pub fn stop_all_thread(&self) {
+        for (_, thread) in self.thread_group.lock().tasks.iter() {
+            thread.upgrade().unwrap().set_stopped();
+        }
     }
 
     /// 获取当前进程的pgid：组id
@@ -449,6 +473,12 @@ impl TaskControlBlock {
     }
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
+    }
+    pub fn set_stopped(&self) {
+        *self.task_status.lock() = TaskStatus::Stopped;
+    }
+    pub fn is_stopped(&self) -> bool {
+        self.get_status() == TaskStatus::Stopped
     }
 
     /// task context
