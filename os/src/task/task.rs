@@ -7,7 +7,7 @@ use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
 use crate::fs::FileTrait;
 use crate::mm::{translated_refmut, MapPermission, MemorySet};
-use crate::signal::{SigMask, SigPending, SigStruct};
+use crate::signal::{SigMask, SigPending, SigStruct, SignalStack};
 use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::{add_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task, INITPROC};
@@ -48,6 +48,7 @@ pub struct TaskControlBlock {
     sig_pending:    SpinNoIrqLock<SigPending>, // signal 等待队列
     blocked:        SyncUnsafeCell<SigMask>,   // 信号屏蔽字,表明进程不处理的信号
     sig:            Shared<SigStruct>, // 表示信号相应的处理方法,一共64个信号
+    sig_stack:      SyncUnsafeCell<Option<SignalStack>>, // 信号栈，保存信号栈信息
 
 
     waker:          SyncUnsafeCell<Option<Waker>>,
@@ -105,6 +106,7 @@ impl TaskControlBlock {
             sig_pending: SpinNoIrqLock::new(SigPending::new()),
             blocked: SyncUnsafeCell::new(SigMask::empty()),
             sig: new_shared(SigStruct::new()),
+            sig_stack: SyncUnsafeCell::new(None),
             
             // SyncUnsafeCell
             waker:   SyncUnsafeCell::new(None),
@@ -169,6 +171,7 @@ impl TaskControlBlock {
         let ucontext = AtomicUsize::new(0);
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
         let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
+        let sig_stack = SyncUnsafeCell::new(None);
         let thread_group = new_shared(ThreadGroup::new());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let children = new_shared(Vec::new());
@@ -227,6 +230,7 @@ impl TaskControlBlock {
             sig_pending,
             blocked,
             sig,
+            sig_stack,
 
             // SyncUnsafeCell
             waker,
@@ -252,6 +256,7 @@ impl TaskControlBlock {
         let ucontext = AtomicUsize::new(0);
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
         let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
+        let sig_stack = SyncUnsafeCell::new(None);
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let thread_group = self.thread_group.clone();
         let memory_set = self.memory_set.clone();
@@ -289,6 +294,7 @@ impl TaskControlBlock {
             sig_pending,
             blocked,
             sig,
+            sig_stack,
 
             task_status,
             base_size: self.base_size.clone(),
