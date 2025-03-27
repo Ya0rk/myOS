@@ -7,7 +7,7 @@ use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
 use crate::fs::FileTrait;
 use crate::mm::{translated_refmut, MapPermission, MemorySet};
-use crate::signal::{SigMask, SigNom, SigPending, SigStruct, SignalStack};
+use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::{add_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task, INITPROC};
@@ -368,7 +368,37 @@ impl TaskControlBlock {
 
     /// 为task设置可以被唤醒的信号，当task接收到这些信号时，会被唤醒
     pub fn set_wake_up_signal(&self, signal: SigMask) {
-        self.sig_pending.lock().need_wake = signal;
+        let mut sig_pending = self.sig_pending.lock();
+        sig_pending.need_wake = signal;
+    }
+
+    /// 通知父进程
+    pub fn do_notify_parent(self: &Arc<Self>, si_signo: SigNom, si_code: SigCode) {
+        let parent = self.get_parent().expect("this has no parent!");
+        let p_handler = parent
+            .handler
+            .lock()
+            .fetch_signal_handler(SigNom::SIGCHLD as usize);
+
+        if si_signo == SigNom::SIGCHLD
+            && (p_handler.sa.sa_handler == SigHandler::SIG_IGN
+            ||  p_handler.sa.sa_flags.contains(SigActionFlag::SA_NOCLDSTOP) ) 
+        {
+            return ;
+        }
+
+        let sig_info = SigInfo::new(
+            si_signo, 
+            si_code, 
+            SigErr::from_bits(0).unwrap(), 
+            SigDetails::None
+        );
+
+        parent.recv_siginfo(sig_info);
+    }
+
+    pub fn recv_siginfo(&self, sig_info: SigInfo) {
+        
     }
 }
 
@@ -429,27 +459,38 @@ impl TaskControlBlock {
     }
 
     /// 将所有子线程设置为zombie
-    pub fn kill_all_thread(&self) {
+    pub fn kill_all_thread(self: &Arc<Self>) {
         for (_, thread) in self.thread_group.lock().tasks.iter() {
             thread.upgrade().unwrap().set_zombie();
         }
     }
 
+    /// 唤醒当前的进程
+    pub fn wake_up(&self) {
+        self.get_waker()
+            .as_ref()
+            .expect("this task has no waker!")
+            .wake_by_ref();
+    }
+
     /// 将所有子线程设置为stopped挂起
-    pub fn stop_all_thread(&self) {
+    pub fn stop_all_thread(self: &Arc<Self>) {
         for (_, thread) in self.thread_group.lock().tasks.iter() {
             let thread = thread.upgrade().unwrap();
             thread.set_stopped();
             thread.set_wake_up_signal(SigMask::SIGCONT | SigMask::SIGKILL | SigMask::SIGSTOP);
         }
+        self.do_notify_parent(SigNom::SIGCHLD, SigCode::CLD_STOPPED);
     }
 
     /// 当收到SIGCONT时，将stopped的子线程设置为running
-    pub fn cont_all_thread(&self) {
+    pub fn cont_all_thread(self: &Arc<Self>) {
         for (_, thread) in self.thread_group.lock().tasks.iter() {
             let thread = thread.upgrade().unwrap();
             thread.set_running();
+            self.wake_up();
         }
+        self.do_notify_parent(SigNom::SIGCHLD, SigCode::CLD_CONTINUED);
     }
 
     /// 获取当前进程的pgid：组id
@@ -545,6 +586,10 @@ impl TaskControlBlock {
     pub fn set_parent(&self, parent: Option<Weak<TaskControlBlock>>) {
         *self.parent.lock() = parent;
     }
+    /// 获取父进程的Arc引用，不是弱引用
+    pub fn get_parent(&self) -> Option<Arc<TaskControlBlock>> {
+        self.parent.lock().clone().unwrap().upgrade()
+    }
 
     /// 移除所有的 `MapArea`
     pub fn recycle_data_pages(&self) {
@@ -589,8 +634,8 @@ impl TaskControlBlock {
 
     /// waker
     /// 获取当前进程的waker
-    pub fn task_waker(&self) -> Option<Waker> {
-        unsafe { (*self.waker.get()).clone() }
+    pub fn get_waker(&self) -> &Option<Waker> {
+        unsafe { & *self.waker.get() }
     }
     /// 判断当前进程是否有waker
     pub fn has_waker(&self) -> bool {

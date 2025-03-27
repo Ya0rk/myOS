@@ -1,6 +1,7 @@
 
 pub const MAX_SIGNUM: usize = 64;
 
+#[allow(non_camel_case_types)]
 #[derive(Copy, Debug, Clone)]
 #[repr(i32)]
 pub enum SigCode {
@@ -20,6 +21,20 @@ pub enum SigCode {
     SigIO = -5,
     /// 信号由 tkill() 或 tgkill() 发送
     TKILL = -6,
+
+    // 子进程发送给父进程的信号
+    /// 子进程正常退出(调用 exit() 或从 main 返回)
+    CLD_EXITED = 1,
+    /// 子进程被信号杀死(SIGKILL、SIGTERM)
+    CLD_KILLED = 2,
+    /// 子进程被信号杀死并生成核心转储(如 SIGSEGV、SIGABRT)
+    CLD_DUMPED = 3,
+    /// 子进程被调试器捕获（触发断点或单步执行）
+    CLD_TRAPPED = 4,
+    /// 子进程被暂停(SIGSTOP、SIGTSTP)
+    CLD_STOPPED = 5,
+    /// 子进程已继续
+    CLD_CONTINUED = 6,
 }
 
 impl From<i32> for SigCode {
@@ -212,7 +227,7 @@ impl SigMask {
 
 #[allow(non_camel_case_types)]
 #[repr(usize)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SigHandler {
     /// 恢复信号的默认行为
     SIG_DFL,
