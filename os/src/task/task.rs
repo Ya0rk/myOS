@@ -7,7 +7,7 @@ use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
 use crate::fs::FileTrait;
 use crate::mm::{translated_refmut, MapPermission, MemorySet};
-use crate::signal::{SigMask, SigPending, SigStruct, SignalStack};
+use crate::signal::{SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::{add_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task, INITPROC};
@@ -365,6 +365,11 @@ impl TaskControlBlock {
         self.get_time_data_mut().update_child_time_when_exit();
         remove_task_by_pid(pid);
     }
+
+    /// 为task设置可以被唤醒的信号，当task接收到这些信号时，会被唤醒
+    pub fn set_wake_up_signal(&self, signal: SigMask) {
+        self.sig_pending.lock().need_wake = signal;
+    }
 }
 
 impl TaskControlBlock {
@@ -433,7 +438,17 @@ impl TaskControlBlock {
     /// 将所有子线程设置为stopped挂起
     pub fn stop_all_thread(&self) {
         for (_, thread) in self.thread_group.lock().tasks.iter() {
-            thread.upgrade().unwrap().set_stopped();
+            let thread = thread.upgrade().unwrap();
+            thread.set_stopped();
+            thread.set_wake_up_signal(SigMask::SIGCONT | SigMask::SIGKILL | SigMask::SIGSTOP);
+        }
+    }
+
+    /// 当收到SIGCONT时，将stopped的子线程设置为running
+    pub fn cont_all_thread(&self) {
+        for (_, thread) in self.thread_group.lock().tasks.iter() {
+            let thread = thread.upgrade().unwrap();
+            thread.set_running();
         }
     }
 
