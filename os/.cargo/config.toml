@@ -1,5 +1,5 @@
 [build]
-targets = ["riscv64gc-unknown-none-elf", "loongarch64-unknown-none"]
+target = ["riscv64gc-unknown-none-elf"]
 
 [target.riscv64gc-unknown-none-elf]
 rustflags = [
