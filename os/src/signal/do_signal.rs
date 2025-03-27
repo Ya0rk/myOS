@@ -36,7 +36,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
         // }
         match sig_handler.sa_handler {
             SigHandler::SIG_IGN => {}
-            SigHandler::SIG_DFL => {}
+            SigHandler::SIG_DFL => { default_func(task, siginfo.signo); }
             SigHandler::Customized { handler } => {
                 // 如果没有SA_NODEFER，在执行当前信号处理函数期间，自动阻塞当前信号
                 if !sig_handler
@@ -71,8 +71,10 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 /// 根据signo分发处理函数
 fn default_func(task: &Arc<TaskControlBlock>, signo: SigNom) {
     match signo {
-        SigNom::SIGKILL => do_group_exit(task, signo), // no Core Dump
-        SigNom::SIGSTOP => do_signal_stop(task), // no core dump
+        SigNom::SIGCHLD | SigNom::SIGURG  | SigNom::SIGWINCH => {}, // no Core Dump
+        SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => do_signal_stop(task),       // no core dump
+        SigNom::SIGCONT => do_signal_continue(task),   // no core dump
+        _ => do_group_exit(task, signo),
     }
 }
 
@@ -85,6 +87,10 @@ fn do_group_exit(task: &Arc<TaskControlBlock>, signo: SigNom) {
 fn do_signal_stop(task: &Arc<TaskControlBlock>) {
     task.stop_all_thread();
     // todo:通知父进程
+}
+
+fn do_signal_continue(task: &Arc<TaskControlBlock>) {
+    task.cont_all_thread();
 }
 
 /// 从Pantheon借鉴, 不知道可不可以使用UserBuffer
