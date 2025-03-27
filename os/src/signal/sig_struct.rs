@@ -46,7 +46,10 @@ impl SigStruct {
 
     /// 获取信号对应的处理函数
     pub fn fetch_signal_handler(&self, signo: usize) -> KSigAction {
-        self.action[signo]
+        if signo < 0 || signo > MAX_SIGNUM {
+            panic!("fetch_sighandler: signo out of bounds!");
+        }
+        self.action[signo - 1]
     }
 }
 

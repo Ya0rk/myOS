@@ -72,8 +72,8 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 fn default_func(task: &Arc<TaskControlBlock>, signo: SigNom) {
     match signo {
         SigNom::SIGCHLD | SigNom::SIGURG  | SigNom::SIGWINCH => {}, // no Core Dump
-        SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => do_signal_stop(task),       // no core dump
-        SigNom::SIGCONT => do_signal_continue(task),   // no core dump
+        SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => do_signal_stop(task),   // no core dump
+        SigNom::SIGCONT => do_signal_continue(task),         // no core dump
         _ => do_group_exit(task, signo),
     }
 }
@@ -84,12 +84,17 @@ fn do_group_exit(task: &Arc<TaskControlBlock>, signo: SigNom) {
     task.set_exit_code(signo as i32);
 }
 
+/// 在 Linux 中，当子进程状态变化时，内核会向父进程发送 SIGCHLD 信号，
+/// 并通过 siginfo_t 结构体中的 si_code 字段告知具体事件类型。
 fn do_signal_stop(task: &Arc<TaskControlBlock>) {
+    // 挂起子进程并通知父进程
     task.stop_all_thread();
-    // todo:通知父进程
 }
 
+/// 在 Linux 中，当子进程状态变化时，内核会向父进程发送 SIGCHLD 信号，
+/// 并通过 siginfo_t 结构体中的 si_code 字段告知具体事件类型。
 fn do_signal_continue(task: &Arc<TaskControlBlock>) {
+    // 唤醒子进程并通知父进程
     task.cont_all_thread();
 }
 

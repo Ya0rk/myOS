@@ -39,7 +39,9 @@ pub enum SigDetails {
         pid: usize,         // 终止的子进程ID
         status: TaskStatus, // 子进程退出时的状态
         exit_code: usize,   // 退出码
-    }
+    },
+
+    None
 }
 
 lazy_static! {
@@ -80,6 +82,22 @@ impl SigPending {
                 true  => self.prio.push(siginfo),
                 false => self.fifo.push(siginfo),
             }
+        }
+    }
+}
+
+impl SigInfo {
+    pub fn new(
+        si_signo: SigNom, 
+        si_code: SigCode, 
+        si_err: SigErr, 
+        fields: SigDetails
+    ) -> Self {
+        Self {
+            signo: si_signo,
+            sigcode: si_code,
+            sigerr: si_err,
+            sifields: fields
         }
     }
 }
