@@ -381,7 +381,7 @@ impl TaskControlBlock {
             .fetch_signal_handler(SigNom::SIGCHLD as usize);
 
         if si_signo == SigNom::SIGCHLD
-            && (p_handler.sa.sa_handler == SigHandler::SIG_IGN
+            && ( p_handler.sa.sa_handler == SigHandler::SIG_IGN
             ||  p_handler.sa.sa_flags.contains(SigActionFlag::SA_NOCLDSTOP) ) 
         {
             return ;
@@ -394,11 +394,55 @@ impl TaskControlBlock {
             SigDetails::None
         );
 
-        parent.recv_siginfo(sig_info);
+        parent.thread_recv_siginfo(sig_info);
     }
 
-    pub fn recv_siginfo(&self, sig_info: SigInfo) {
-        
+    /// 进程级信号:
+    /// 
+    /// 发送给整个线程组的（例如 kill -INT <pid>），必须保证至少有一个线程能处理它
+    /// 
+    /// 随机选择一个没有阻塞当前信号的线程来接受信号
+    /// 
+    /// 避免信号风暴或信号丢失
+    pub fn proc_recv_siginfo(&self, sig_info: SigInfo) {
+        debug_assert!(self.is_leader());
+        let tg = self.thread_group.lock();
+
+        // 特权信号（SIGKILL/SIGSTOP）：
+        // 应绕过阻塞检查，直接递送给任意线程（需特殊判断）：
+        if sig_info.signo == SigNom::SIGKILL 
+            || sig_info.signo == SigNom::SIGSTOP 
+        {
+            let thread = tg.tasks.values().next().unwrap().upgrade().unwrap();
+            thread.thread_recv_siginfo(sig_info);
+            return;
+        }
+
+        // 尝试寻找未阻塞信号的线程
+        for (_, task) in tg.tasks.iter() {
+            if let Some(thread) = task.upgrade() {
+                if !thread.get_blocked().have(sig_info.signo as usize) {
+                    thread.thread_recv_siginfo(sig_info);
+                    return;
+                }
+            }
+        }
+
+        let thread = tg.tasks.iter().next().unwrap().1.upgrade().unwrap();
+        thread.thread_recv_siginfo(sig_info);
+    }
+
+    /// 线程级信号:
+    /// 
+    /// 通过 pthread_kill(tid, sig) 或 tgkill(pid, tid, sig) 发送给特定线程
+    /// 
+    /// 直接递送给目标线程，无视其他线程
+    pub fn thread_recv_siginfo(&self, sig_info: SigInfo) {
+        let mut sig_pending = self.sig_pending.lock();
+        sig_pending.add(sig_info);
+        if sig_pending.need_wake.have(sig_info.signo as usize) {
+            self.wake_up();
+        }
     }
 }
 

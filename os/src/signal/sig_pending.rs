@@ -75,9 +75,10 @@ impl SigPending {
         }
     }
 
-    pub fn add(&self, siginfo: SigInfo) {
+    pub fn add(&mut self, siginfo: SigInfo) {
         let signo = siginfo.signo as usize;
         if !self.mask.have(signo) {
+            self.mask.set_sig(signo);
             match PRIO_SIG.have(signo) {
                 true  => self.prio.push(siginfo),
                 false => self.fifo.push(siginfo),
