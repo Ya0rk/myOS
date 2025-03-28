@@ -61,7 +61,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
         }
     }
 
-    task.exit();
+    task.do_exit();
 }
 
 

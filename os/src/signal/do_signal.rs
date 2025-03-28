@@ -12,14 +12,22 @@ use crate::{mm::translated_byte_buffer,
 pub fn do_signal(task:&Arc<TaskControlBlock>) {
     let old_sigmask = task.get_blocked();
     let trap_cx = task.get_trap_cx_mut();
+    let all_len = task.sig_pending.lock().len();
+    let mut cur = 0;
 
     while let Some(siginfo) = task.sig_pending.lock().take_one() {
+        cur += 1;
+        // 避免队列中全是被阻塞的信号，造成死循环
+        if cur > all_len {
+            break;
+        }
         // 被阻塞的信号需要跳过，注意SIGKILL和SIGSTOP不能被屏蔽
         let signo = siginfo.signo as usize;
         if old_sigmask.have(signo) 
             && signo != SigNom::SIGKILL as usize
             && signo != SigNom::SIGSTOP as usize 
         {
+            // 再将信号重新放回队列
             task.sig_pending.lock().add(siginfo);
             continue;
         }
@@ -66,6 +74,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
         }
 
     }
+    task.set_pending(task.sig_pending.lock().is_empty());
 }
 
 /// 根据signo分发处理函数
