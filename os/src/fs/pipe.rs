@@ -14,7 +14,6 @@ use alloc::{string::String, sync::{Arc, Weak}};
 use spin::Mutex;
 use async_trait::async_trait;
 use alloc::boxed::Box;
-use crate::task::suspend_current_and_run_next;
 
 /// ### 管道
 /// 由 读 `readable` / 写 `writable` 权限和 缓冲区 `buffer` 组成，用以分别表示管道的写端和读端

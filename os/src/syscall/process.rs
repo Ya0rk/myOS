@@ -23,7 +23,7 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
     Ok(0)
 }
 
-pub async fn sys_nanosleep(req: *const u8, _rem: *const u8) -> SysResult<usize> {
+pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
     let req = *translated_ref(current_user_token(), req as *const TimeSepc);
     if !req.check_valid() {
         return Err(Errno::EINVAL);
@@ -172,7 +172,7 @@ pub fn sys_exec(path: *const u8) -> SysResult<usize> {
 /// pid = 0 : 等待与调用进程（父进程）同一个进程组的所有子进程
 /// pid < -1: 等待进程组标识符与pid绝对值相等的所有子进程
 /// pid > 0 ：等待进程id为pid的子进程
-pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: usize) -> SysResult<usize> {
+pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usize) -> SysResult<usize> {
     debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
     let task = current_task().unwrap();
     if task.children.lock().is_empty() {
@@ -201,7 +201,7 @@ pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: u
             info!("sys_wait4: find a target zombie child task.");
             let zombie_pid = zombie_child.get_pid();
             let exit_code = zombie_child.get_exit_code();
-            task.do_wait4(zombie_pid, wstatus, exit_code);
+            task.do_wait4(zombie_pid, wstatus as *mut i32, exit_code);
             return Ok(zombie_pid);
         }
         None => {
@@ -237,7 +237,7 @@ pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: u
                 }
             };
             info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
-            task.do_wait4(child_pid, wstatus, exit_code);
+            task.do_wait4(child_pid, wstatus as *mut i32, exit_code);
             return Ok(child_pid);
         }
     }

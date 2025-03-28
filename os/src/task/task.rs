@@ -2,7 +2,7 @@ use core::cell::SyncUnsafeCell;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 
-use super::{add_process_group_member, Fd, FdTable, TaskContext, ThreadGroup};
+use super::{add_proc_group_member, Fd, FdTable, TaskContext, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
 use crate::fs::FileTrait;
@@ -243,7 +243,7 @@ impl TaskControlBlock {
         });
         // add child
         self.children.lock().push(new_task.clone());
-        add_process_group_member(new_task.get_pgid(), new_task.get_pid());
+        add_proc_group_member(new_task.get_pgid(), new_task.get_pid());
         new_task.add_thread_group_member(new_task.clone());
         
         new_task
