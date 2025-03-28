@@ -5,17 +5,18 @@ use core::arch::riscv64::sfence_vma_vaddr;
 // use async_utils::block_on;
 use crate::config::{align_down_by_page, PAGE_SIZE};
 // use memory::{pte::PTEFlags, VirtAddr, VirtPageNum};
-use crate::mm::page_table::PTEFlags;
+use crate::mm::page_table::{PTEFlags, PageTable};
 use crate::mm::address::{VirtAddr, VirtPageNum};
 use crate::mm::page::Page;
 use crate::utils::{Errno, SysResult};
 use crate::fs::File;
 
-use crate::{
-    mm::{PageFaultAccessType, PageTable},
-    processor::env::SumGuard,
-    syscall::MmapFlags,
-};
+// use crate::{
+//     mm::{PageFaultAccessType, PageTable},
+//     // processor::env::SumGuard,
+//     syscall::MmapFlags,
+// };
+use super::{PageFaultAccessType, MmapFlags};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VmAreaType {
@@ -238,7 +239,7 @@ impl VmArea {
         // NOTE: should flush pages that already been allocated, page fault handler will
         // handle the permission of those unallocated pages
         for &vpn in self.pages.keys() {
-            let pte = page_table.find_leaf_pte(vpn).unwrap();
+            let pte = page_table.find_pte(vpn).unwrap();
             log::trace!(
                 "[origin pte:{:?}, new_flag:{:?}]",
                 pte.flags(),
@@ -305,7 +306,7 @@ impl VmArea {
         data: &[u8],
     ) {
         // debug_assert_eq!(self.vma_type, VmAreaType::Elf);
-        let _sum_guard = SumGuard::new();
+        // let _sum_guard = SumGuard::new();
 
         let mut offset = offset;
         let mut start: usize = 0;
@@ -314,7 +315,7 @@ impl VmArea {
         while start < len {
             let src = &data[start..len.min(start + PAGE_SIZE - offset)];
             let dst = page_table
-                .find_leaf_pte(current_vpn)
+                .find_pte(current_vpn)
                 .unwrap()
                 .ppn()
                 .bytes_array_range(offset..offset + src.len());
@@ -394,11 +395,11 @@ impl VmArea {
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
-            return Err(SysError::EFAULT);
+            return Err(Errno::EFAULT);
         }
 
         let page: Arc<Page>;
-        let pte = page_table.find_leaf_pte(vpn);
+        let pte = page_table.find_pte(vpn);
         if let Some(pte) = pte {
             // if PTE is valid, then it must be COW
             log::debug!("[VmArea::handle_page_fault] pte flags: {:?}", pte.flags());
@@ -457,7 +458,7 @@ impl VmArea {
                         // file mapping
                         let file = self.backed_file.as_ref().unwrap();
                         let offset = self.offset + (vpn - self.start_vpn()) * PAGE_SIZE;
-                        let offset_aligned = round_down_to_page(offset);
+                        let offset_aligned = align_down_by_page(offset);
                         if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
                             let page = block_on(async { file.get_page_at(offset_aligned).await })?
                                 .unwrap();
