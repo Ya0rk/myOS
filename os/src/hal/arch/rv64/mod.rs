@@ -12,6 +12,17 @@ use core::fmt::Display;
 use riscv::register::mtvec::TrapMode;
 use riscv::register::{satp, sstatus, stvec};
 
+
+global_asm!(include_str!("trap.S"));
+
+// 申明外部函数，这些函数是在汇编代码中实现的，用于从用户态和内核态切换
+extern "C" {
+    fn __trap_from_user();
+    fn __trap_from_kernel();
+    #[allow(improper_ctypes)]
+    fn __return_to_user(ctx: *mut TrapContext);
+}
+
 pub fn console_putchar(c: usize) {
     sbi::console_putchar(c);
 }
@@ -35,15 +46,6 @@ pub fn hart_start_success(hartid: usize, start_addr: usize) -> bool {
 
 
 
-global_asm!(include_str!("trap.S"));
-
-// 申明外部函数，这些函数是在汇编代码中实现的，用于从用户态和内核态切换
-extern "C" {
-    fn __trap_from_user();
-    fn __trap_from_kernel();
-    #[allow(improper_ctypes)]
-    fn __return_to_user(ctx: *mut TrapContext);
-}
 
 pub fn trap_init() {
     set_trap_handler(IndertifyMode::Kernel);

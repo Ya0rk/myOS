@@ -3,6 +3,8 @@
 pub mod context;
 pub mod uart;
 pub mod user_trap;
+pub mod timer;
+pub mod interrupt;
 #[macro_use]
 pub mod print;
 
