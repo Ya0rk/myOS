@@ -128,14 +128,7 @@ pub fn read_page_table_root() -> usize {
 /// unimplemented!
 #[inline]
 pub fn get_current_hart_id() -> usize {
-    let hartid: usize;
-    unsafe {
-        core::arch::asm!(
-            "mv {}, tp",
-            out(reg) hartid
-        );
-    }
-    hartid
+    unimplemented!()
 }
 
 /// 更换页表，刷新TLB，开启内存屏障

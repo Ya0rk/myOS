@@ -4,7 +4,7 @@
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
-
+#![allow(unused)]
 extern crate alloc;
 
 #[macro_use]
@@ -34,7 +34,7 @@ use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use hal::timer;
 use task::get_current_hart_id;
 
-global_asm!(include_str!("entry.asm"));
+// global_asm!(include_str!("entry.asm"));
 
 static FIRST_HART: AtomicBool = AtomicBool::new(true);
 static INIT_FINISHED: AtomicBool = AtomicBool::new(false);

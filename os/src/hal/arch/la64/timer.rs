@@ -1,5 +1,5 @@
 use crate::{hal::arch::set_timer, config::CLOCK_FREQ, task::suspend_current_and_run_next, utils::Errno};
-use riscv::register::time;
+// use riscv::register::time;
 use zerocopy::{IntoBytes, Immutable};
 use core::time::Duration;
 
@@ -83,7 +83,8 @@ impl Tms {
 #[inline(always)]
 ///get current time
 pub fn get_time() -> usize {
-    time::read()
+    // time::read()
+    unimplemented!()
 }
 
 #[inline(always)]

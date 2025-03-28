@@ -5,18 +5,18 @@ use crate::config::{HART_NUM, HART_START_ADDR, KERNEL_ADDR_OFFSET};
 /// 这里是一个简单的启动代码，它将在启动时运行。
 #[no_mangle]
 pub fn jump_helper(hart_id: usize) {
-    unsafe { // 调整栈指针 加上偏移，跳转到 rust_main
-        asm!(
-            "add sp, sp, {offset}",
-            "la t0, rust_main",
-            "add t0, t0, {offset}",
-            "mv a0, {hartid}",
-            "jalr zero, 0(t0)",
-            hartid = in(reg) hart_id,
-            offset = in(reg) KERNEL_ADDR_OFFSET,
-            options(noreturn)
-        );
-    }
+    // unsafe { // 调整栈指针 加上偏移，跳转到 rust_main
+    //     asm!(
+    //         "add sp, sp, {offset}",
+    //         "la t0, rust_main",
+    //         "add t0, t0, {offset}",
+    //         "mv a0, {hartid}",
+    //         "jalr zero, 0(t0)",
+    //         hartid = in(reg) hart_id,
+    //         offset = in(reg) KERNEL_ADDR_OFFSET,
+    //         options(noreturn)
+    //     );
+    // }
 }
 
 pub fn logo() {
