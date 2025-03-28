@@ -6,7 +6,7 @@ use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserB
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
 
-pub async fn sys_write(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
+pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     let token = current_user_token();
     let task = current_task().unwrap();
     // let inner = task.inner_lock();
@@ -21,13 +21,13 @@ pub async fn sys_write(fd: usize, buf: *const u8, len: usize) -> SysResult<usize
             let file = file.clone();
             // release current task TCB manually to avoid multi-borrow
             // drop(inner);
-            Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf, len))).await? as usize)
+            Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
     }
 }
 
-pub async fn sys_read(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
+pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     let token = current_user_token();
     let task = current_task().unwrap();
     // let inner = task.inner_lock();
@@ -42,7 +42,7 @@ pub async fn sys_read(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
             let file = file.clone();
             // release current task TCB manually to avoid multi-borrow
             // drop(inner);
-            Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf, len))).await? as usize)
+            Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
     }
@@ -94,7 +94,7 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
 /// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
 /// 
 /// Success: 返回文件描述符; Fail: 返回-1
-pub async fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
+pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
 
     // Err(Errno::EBADCALL)
     info!("sys_openat start");

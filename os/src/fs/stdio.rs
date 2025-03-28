@@ -4,10 +4,7 @@ use super::Kstat;
 use crate::arch::console_getchar;
 use crate::utils::Errno;
 use crate::utils::SysResult;
-use crate::{
-    mm::UserBuffer,
-    task::suspend_current_and_run_next,
-};
+use crate::mm::UserBuffer;
 use alloc::string::String;
 use alloc::vec::Vec;
 use async_trait::async_trait;
@@ -44,12 +41,13 @@ impl FileTrait for Stdin {
         let mut buf = Vec::new();
         while count < user_buf.len() {
             c = console_getchar();
+            if c > 255 { break; }
             match c {
                 // `c > 255`是为了兼容OPENSBI，OPENSBI未获取字符时会返回-1
-                0 | 256.. => {
-                    suspend_current_and_run_next();
-                    continue;
-                }
+                // 0 | 256.. => {
+                //     suspend_current_and_run_next();
+                //     continue;
+                // }
                 CR => {
                     buf.push(LF as u8);
                     count += 1;

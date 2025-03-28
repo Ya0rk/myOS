@@ -17,7 +17,7 @@ pub use task::{TaskControlBlock, TaskStatus};
 pub use processor::CPU;
 pub use sched::TaskFuture;
 pub use pid::pid_alloc;
-pub use manager::{add_task, remove_task_by_pid, get_task_by_pid, remove_group_member, add_process_group_member, new_process_group};
+pub use manager::{add_task, remove_task_by_pid, get_task_by_pid, remove_proc_group_member, add_proc_group_member, new_process_group};
 pub use sched::{spawn_user_task, spawn_kernel_task};
 pub use processor::{init_processors, current_task, current_trap_cx, current_user_token, take_current_task, get_current_hart_id};
 
@@ -28,21 +28,21 @@ use alloc::sync::Arc;
 use lazy_static::*;
 use crate::fs::open_file;
 
-/// Suspend the current 'Running' task and run the next task in task list.
-pub fn suspend_current_and_run_next() {
-    if let Some(task) = take_current_task(){
-        // ---- access current TCB exclusively
-        let task_cx_ptr = task.get_task_cx_mut() as *mut TaskContext;
-        // Change status to Ready
-        task.set_ready();
-        // ---- release current PCB
+// / Suspend the current 'Running' task and run the next task in task list.
+// pub fn suspend_current_and_run_next() {
+//     if let Some(task) = take_current_task(){
+//         // ---- access current TCB exclusively
+//         let task_cx_ptr = task.get_task_cx_mut() as *mut TaskContext;
+//         // Change status to Ready
+//         task.set_ready();
+//         // ---- release current PCB
 
-        // push back to ready queue.
-        add_task(&task);
-        // jump to scheduling cycle
-        schedule(task_cx_ptr);
-    }
-}
+//         // push back to ready queue.
+//         add_task(&task);
+//         // jump to scheduling cycle
+//         schedule(task_cx_ptr);
+//     }
+// }
 
 lazy_static! {
     ///Globle process that init user shell

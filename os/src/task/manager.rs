@@ -86,10 +86,10 @@ pub fn new_process_group(pgid: PGid) {
     MANAGER.process_group.lock().add_new_group(pgid);
 }
 
-pub fn remove_group_member(pgid: PGid, pid: Pid) {
+pub fn remove_proc_group_member(pgid: PGid, pid: Pid) {
     MANAGER.process_group.lock().remove(pgid, pid);
 }
 
-pub fn add_process_group_member(pgid: PGid, pid: Pid) {
+pub fn add_proc_group_member(pgid: PGid, pid: Pid) {
     MANAGER.process_group.lock().add(pgid, pid);
 }
