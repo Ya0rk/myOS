@@ -1,4 +1,4 @@
-use crossbeam_queue::SegQueue;
+use alloc::collections::VecDeque;
 use crate::task::TaskStatus;
 
 use super::ffi::{SigCode, SigErr, SigMask, SigNom};
@@ -10,9 +10,9 @@ pub struct SigPending {
     /// 检测哪些sig已经在队列中,避免重复加入队列
     mask: SigMask,
     /// 普通队列
-    fifo: SegQueue<SigInfo>,
+    fifo: VecDeque<SigInfo>,
     /// 存放 SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGFPE, SIGSYS
-    prio: SegQueue<SigInfo>,
+    prio: VecDeque<SigInfo>,
     /// 如果遇到的信号也在need_wake中，那就唤醒task
     pub need_wake: SigMask,
 }
@@ -38,7 +38,7 @@ pub enum SigDetails {
     Chld {
         pid: usize,         // 终止的子进程ID
         status: TaskStatus, // 子进程退出时的状态
-        exit_code: usize,   // 退出码
+        exit_code: i32,     // 退出码
     },
 
     None
@@ -54,8 +54,8 @@ impl SigPending {
     pub fn new() -> Self {
         Self {
             mask: SigMask::empty(),
-            fifo: SegQueue::new(),
-            prio: SegQueue::new(),
+            fifo: VecDeque::new(),
+            prio: VecDeque::new(),
             need_wake: SigMask::empty(),
         }
     }
@@ -64,8 +64,8 @@ impl SigPending {
     pub fn take_one(&mut self) -> Option<SigInfo> {
         let sig_info = 
                 self.prio
-                .pop()
-                .or_else(|| self.fifo.pop());
+                .pop_front()
+                .or_else(|| self.fifo.pop_front());
         match sig_info {
             Some(one) => {
                 self.mask.unset_sig(one.signo as usize);
@@ -75,15 +75,39 @@ impl SigPending {
         }
     }
 
+    /// 用于wait4中取出SIGCHLD信号，所以只需要遍历fifo队列
+    pub fn take_expected_one(&mut self, expect: SigMask) -> Option<SigInfo> {
+        let intersection = self.mask & expect;
+        if intersection.is_empty() {
+            return None;
+        }
+        for i in 0..self.fifo.len() {
+            let signo = self.fifo[i].signo as usize;
+            if intersection.have(signo) {
+                self.mask.unset_sig(signo);
+                return self.fifo.remove(i);
+            }
+        }
+        None
+    }
+
     pub fn add(&mut self, siginfo: SigInfo) {
         let signo = siginfo.signo as usize;
         if !self.mask.have(signo) {
             self.mask.set_sig(signo);
             match PRIO_SIG.have(signo) {
-                true  => self.prio.push(siginfo),
-                false => self.fifo.push(siginfo),
+                true  => self.prio.push_back(siginfo),
+                false => self.fifo.push_back(siginfo),
             }
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.fifo.len() + self.prio.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.fifo.len() + self.prio.len() == 0
     }
 }
 

@@ -1,6 +1,7 @@
 use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
+use crate::signal::{SigDetails, SigMask};
 use crate::sync::{sleep_for, suspend_now, yield_now, TimeSepc, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
@@ -199,7 +200,8 @@ pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: u
         Some(zombie_child) => {
             info!("sys_wait4: find a target zombie child task.");
             let zombie_pid = zombie_child.get_pid();
-            task.do_wait4(zombie_pid, wstatus);
+            let exit_code = zombie_child.get_exit_code();
+            task.do_wait4(zombie_pid, wstatus, exit_code);
             return Ok(zombie_pid);
         }
         None => {
@@ -208,11 +210,34 @@ pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: u
             }
             // 如果等待的进程还不是zombie，那么本进程进行await，
             // 直到等待的进程do_exit然后发送SIGCHLD信号唤醒自己
-            let child_pid = loop {
-                // TODO(YJJ): 等待子进程的信号唤醒
+            let (child_pid, _status, exit_code) = loop {
+                task.set_wake_up_signal(!*task.get_blocked() | SigMask::SIGCHLD);
                 suspend_now().await;
+                // 在pending队列中取出希望的信号，也就是子进程结束后发送给父进程的信号
+                match task.sig_pending.lock().take_expected_one(SigMask::SIGCHLD) {
+                    Some(sig_info) => {
+                        if let SigDetails::Chld { 
+                            pid: find_pid, 
+                            status, 
+                            exit_code 
+                        } = sig_info.sifields
+                        {
+                            match pid {
+                                -1 => break (find_pid, status, exit_code),
+                                p if p > 0 => {
+                                    if find_pid == p as usize {
+                                        break (find_pid, status, exit_code);
+                                    }
+                                }
+                                _ => unimplemented!(),
+                            }
+                        }
+                    }
+                    None => return Err(Errno::EINTR),
+                }
             };
-            task.do_wait4(child_pid, wstatus);
+            info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
+            task.do_wait4(child_pid, wstatus, exit_code);
             return Ok(child_pid);
         }
     }

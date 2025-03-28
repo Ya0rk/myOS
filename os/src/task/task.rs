@@ -44,7 +44,7 @@ pub struct TaskControlBlock {
     current_path:   Shared<String>,
 
     // signal
-    pub pending:        AtomicBool, // 表示是否有sig在等待
+    pub pending:        AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
     pub ucontext:       AtomicUsize, // ucontext指针，保存用户数据，在sigreturn需要用到来恢复用户环境
     pub sig_pending:    SpinNoIrqLock<SigPending>, // signal 等待队列
     pub blocked:        SyncUnsafeCell<SigMask>,   // 信号屏蔽字,表明进程不处理的信号
@@ -319,7 +319,7 @@ impl TaskControlBlock {
         new_task
     }
     
-    pub fn exit(&self) {
+    pub fn do_exit(&self) {
         info!("Task {} exit;", self.get_pid());
         let pid = self.get_pid();
 
@@ -336,33 +336,62 @@ impl TaskControlBlock {
             // task.futex_queue.lock().wake(tidaddress as u32, 1);
         }
 
-        // TODO(YJJ):参考Phoneix
         if !self.is_leader() {   
             self.remove_thread_group_member(pid);
             remove_task_by_pid(pid);
         } else {
             // 将当前进程的子进程移动到initproc下
-            for child in self.children.lock().iter() {
-                child.set_parent(Some(Arc::downgrade(&INITPROC)));
-                INITPROC.add_children(child.clone());
+            if !self.children.lock().is_empty(){
+                for child in self.children.lock().iter() {
+                    if child.is_zombie() {
+                        let sig_info = SigInfo::new(
+                            SigNom::SIGCHLD, 
+                            SigCode::CLD_EXITED, 
+                            SigErr::empty(), 
+                            SigDetails::Chld { 
+                                pid: child.get_pid(), 
+                                status: child.get_status(), 
+                                exit_code: child.get_exit_code()
+                            }
+                        );
+                        INITPROC.proc_recv_siginfo(sig_info);
+                    }
+                    child.set_parent(Some(Arc::downgrade(&INITPROC)));
+                    INITPROC.add_children(child.clone());
+                }
+                self.clear_children();
             }
-            // TODO(YJJ):将信号发送给父进程，表示自己已经执行完成
+            // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
+            match self.get_parent() {
+                Some(parent) => {
+                    let sig_info = SigInfo::new(
+               SigNom::SIGCHLD, 
+                SigCode::CLD_EXITED, 
+                 SigErr::empty(), 
+                 SigDetails::Chld { 
+                            pid, 
+                            status: self.get_status(), 
+                            exit_code: self.get_exit_code()
+                        }
+                    );
+                    parent.proc_recv_siginfo(sig_info);
+                }
+                None => panic!("this proc has no parent!"),
+            }
         }
         
-        self.clear_children();
         self.clear_fd_table();
-        self.recycle_data_pages();
-        self.set_zombie();
+        self.recycle_data_pages();        
     }
 
-    pub fn do_wait4(&self, pid: usize, wstatus: *mut i32) {
+    pub fn do_wait4(&self, pid: usize, wstatus: *mut i32, exit_code: i32) {
         let zombie_child = self.remove_child(pid);
-        let exit_code = zombie_child.get_exit_code();
         // 将退出状态写入用户提供的指针
         if !wstatus.is_null() {
             *translated_refmut(self.get_user_token(), wstatus) = (exit_code & 0xff) << 8;
         }
-        self.get_time_data_mut().update_child_time_when_exit();
+        let (utime, stime) = zombie_child.get_time_data().get_ustime();
+        self.get_time_data_mut().update_child_time_when_exit(utime, stime);
         remove_task_by_pid(pid);
     }
 
@@ -440,6 +469,7 @@ impl TaskControlBlock {
     pub fn thread_recv_siginfo(&self, sig_info: SigInfo) {
         let mut sig_pending = self.sig_pending.lock();
         sig_pending.add(sig_info);
+        self.set_pending(true);
         if sig_pending.need_wake.have(sig_info.signo as usize) {
             self.wake_up();
         }
@@ -450,6 +480,10 @@ impl TaskControlBlock {
     /// 检测pending字段，判断是否有信号需要处理
     pub fn pending(&self) -> bool {
         self.pending.load(core::sync::atomic::Ordering::Relaxed)
+    }
+    /// 设置pending，代表 是否 有信号等待被处理
+    pub fn set_pending(&self, value: bool) {
+        self.pending.store(value, core::sync::atomic::Ordering::Relaxed);
     }
 
     /// 取出task中的sig stack 留下None
