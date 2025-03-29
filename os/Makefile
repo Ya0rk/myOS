@@ -21,7 +21,7 @@ SBI ?= rustsbi
 BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
 
 # GDB wrapper to handle virtual path to core lib and types display in Rust
-GDB_PATH := /mnt/f/wsldir/ru/gdb-14.2/build-riscv64/bin/riscv64-unknown-elf-gdb
+GDB_PATH := /home/ya0/comp/gdb-16.2/build-riscv64/bin/riscv64-unknown-elf-gdb
 gdb := RUST_GDB=$(GDB_PATH) rust-gdb
 
 # Building mode argument
@@ -49,7 +49,7 @@ TEST ?=
 QEMU_NAME := qemu-system-riscv64
 
 QEMU_ARGS = -machine virt 
-# QEMU_ARGS += -m 128M 
+QEMU_ARGS += -m 128M
 QEMU_ARGS += -nographic 
 QEMU_ARGS += -bios $(BOOTLOADER) 
 QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)

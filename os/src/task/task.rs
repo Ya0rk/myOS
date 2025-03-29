@@ -2,7 +2,7 @@ use core::cell::SyncUnsafeCell;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 
-use super::{add_proc_group_member, Fd, FdTable, TaskContext, ThreadGroup};
+use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
 use crate::arch::shutdown;
 use crate::fs::FileTrait;
@@ -54,7 +54,7 @@ pub struct TaskControlBlock {
 
     waker:          SyncUnsafeCell<Option<Waker>>,
     trap_cx:        SyncUnsafeCell<TrapContext>,
-    task_cx:        SyncUnsafeCell<TaskContext>,// 迟早会删
+    // task_cx:        SyncUnsafeCell<TaskContext>,// 迟早会删
     time_data:      SyncUnsafeCell<TimeData>,
     child_cleartid: SyncUnsafeCell<Option<usize>>,
 
@@ -66,6 +66,7 @@ impl TaskControlBlock {
     pub fn new(elf_data: &[u8]) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        info!("entry point: {:#x}", entry_point);
         let trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
@@ -112,7 +113,7 @@ impl TaskControlBlock {
             // SyncUnsafeCell
             waker:   SyncUnsafeCell::new(None),
             trap_cx: SyncUnsafeCell::new(trap_cx),
-            task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
+            // task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
             time_data: SyncUnsafeCell::new(TimeData::new()),
             child_cleartid: SyncUnsafeCell::new(None),
 
@@ -126,6 +127,7 @@ impl TaskControlBlock {
         new_process_group(new_task.get_pgid());
         add_task(&new_task);
         spawn_user_task(new_task.clone());
+        info!("spawn init proc");
 
         new_task
     }
@@ -208,7 +210,7 @@ impl TaskControlBlock {
             MapPermission::R | MapPermission::W,
         );
         let memory_set = new_shared(child_memory_set);
-        let task_cx = SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top));
+        // let task_cx = SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top));
 
         let new_task = Arc::new(TaskControlBlock {
             pid,
@@ -236,7 +238,7 @@ impl TaskControlBlock {
             // SyncUnsafeCell
             waker,
             trap_cx,
-            task_cx,
+            // task_cx,
             time_data,
             child_cleartid,
             exit_code,
@@ -311,7 +313,7 @@ impl TaskControlBlock {
             child_cleartid,
             exit_code,
         
-            task_cx: SyncUnsafeCell::new(TaskContext::zero_init()),//
+            // task_cx: SyncUnsafeCell::new(TaskContext::zero_init()),//
         });
 
         new_task.add_thread_group_member(new_task.clone());
@@ -616,12 +618,12 @@ impl TaskControlBlock {
     }
 
     /// task context
-    pub fn get_task_cx(&self) -> &TaskContext {
-        unsafe { &*self.task_cx.get() }
-    }
-    pub fn get_task_cx_mut(&self) -> &'static mut TaskContext {
-        unsafe { &mut *(self.task_cx.get() as *mut TaskContext) }
-    }
+    // pub fn get_task_cx(&self) -> &TaskContext {
+    //     unsafe { &*self.task_cx.get() }
+    // }
+    // pub fn get_task_cx_mut(&self) -> &'static mut TaskContext {
+    //     unsafe { &mut *(self.task_cx.get() as *mut TaskContext) }
+    // }
     pub fn get_trap_cx(&self) -> &TrapContext {
         unsafe { &*self.trap_cx.get() }
     }

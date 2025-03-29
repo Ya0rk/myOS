@@ -3,6 +3,7 @@ mod user_trap;
 mod kernel_trap;
 
 use alloc::sync::Arc;
+use log::info;
 use user_trap::{user_trap_handler, user_trap_return};
 use core::arch::global_asm;
 use core::fmt::Display;
@@ -34,6 +35,7 @@ pub fn init() {
 pub async fn trap_loop(task: Arc<TaskControlBlock>) {
     // 设置task的waker TODO：将这个放入 UserTaskFuture中
     task.set_task_waker(get_waker().await);
+    info!("trap loop!!");
     loop {
         match task.get_status() {
             TaskStatus::Zombie => break,

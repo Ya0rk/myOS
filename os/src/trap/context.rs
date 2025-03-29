@@ -20,7 +20,7 @@ pub struct TrapContext {
     /*  32  */ pub sstatus: Sstatus,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
-    /*  35  */ pub trap_loop: usize,
+    /*  35  */ pub kernal_ra: usize,
     /* 36-47*/ pub kernel_s: [usize; 12],
     /*  48  */ pub kernel_fp: usize,
     /*  49  */ pub kernel_tp: usize,
@@ -33,7 +33,7 @@ impl TrapContext {
         entry: usize,
         sp: usize,
         kernel_sp: usize,
-        trap_loop: usize,
+        _trap_loop: usize,
     ) -> Self {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
@@ -42,7 +42,7 @@ impl TrapContext {
             sstatus,
             sepc: entry,
             kernel_sp,
-            trap_loop,
+            kernal_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,
             kernel_tp: 0,
