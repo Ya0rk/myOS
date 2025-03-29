@@ -61,6 +61,10 @@ pub fn get_task_by_pid(pid: usize) -> Option<Arc<TaskControlBlock>> {
 pub fn remove_task_by_pid(pid: usize) {
     MANAGER.task_manager.lock().remove(pid);
 }
+/// 获取到init proc
+pub fn get_init_proc() -> Arc<TaskControlBlock> {
+    MANAGER.task_manager.lock().get(INITPROC_PID).unwrap()
+}
 
 impl ProcessGroupManager {
     fn add_new_group(&mut self, pgid: PGid) {

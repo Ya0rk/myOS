@@ -10,7 +10,8 @@ use crate::mm::{translated_refmut, MapPermission, MemorySet};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
-use crate::task::{add_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task, INITPROC};
+use crate::task::manager::get_init_proc;
+use crate::task::{add_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task};
 use crate::trap::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -81,7 +82,7 @@ impl TaskControlBlock {
         // 每个task有自己的kernel stack
         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
         memory_set.insert_framed_area(
-            kernel_stack_bottom.into(), 
+            kernel_stack_bottom.into(),
             kernel_stack_top.into(), 
             MapPermission::R | MapPermission::W,
         );
@@ -344,6 +345,7 @@ impl TaskControlBlock {
         } else {
             // 将当前进程的子进程移动到initproc下
             if !self.children.lock().is_empty(){
+                let init_proc = get_init_proc();
                 for child in self.children.lock().iter() {
                     if child.is_zombie() {
                         let sig_info = SigInfo::new(
@@ -356,10 +358,10 @@ impl TaskControlBlock {
                                 exit_code: child.get_exit_code()
                             }
                         );
-                        INITPROC.proc_recv_siginfo(sig_info);
+                        init_proc.proc_recv_siginfo(sig_info);
                     }
-                    child.set_parent(Some(Arc::downgrade(&INITPROC)));
-                    INITPROC.add_children(child.clone());
+                    child.set_parent(Some(Arc::downgrade(&init_proc)));
+                    init_proc.add_children(child.clone());
                 }
                 self.clear_children();
             }

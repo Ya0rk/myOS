@@ -152,12 +152,12 @@ pub fn sys_clone(
     Ok(new_pid as usize)
 }
 
-pub fn sys_exec(path: *const u8) -> SysResult<usize> {
+pub async fn sys_exec(path: usize) -> SysResult<usize> {
     let token = current_user_token();
-    let path = translated_str(token, path);
+    let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
-        let all_data = app_inode.file()?.metadata.inode.read_all()?;
+        let all_data = app_inode.file()?.metadata.inode.read_all().await?;
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
         Ok(0)
