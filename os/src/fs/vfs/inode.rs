@@ -234,7 +234,7 @@ impl dyn InodeTrait {
         );
         // 将指针移到文件末尾
         if flags.contains(OpenFlags::O_APPEND) {
-            new_file.lseek(0, SEEK_END);
+            new_file.lseek(0, SEEK_END).unwrap();
         }
         // 截断文件长度为0
         if flags.contains(OpenFlags::O_TRUNC) {

@@ -1,6 +1,7 @@
 use core::time::Duration;
 use crate::sync::timer::{time_duration, TIME_SLICE_DUATION};
 
+#[allow(unused)]
 pub struct TimeData {
     /// 开机时间
     machine_start_time: Duration,

@@ -5,7 +5,7 @@ use crate::arch::sstatus::{self, Sstatus, SPP};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct UserFloatRegs {
+pub struct UserFloatRegs {
     f: [f64; 32], // 50-81
     fcsr: u32,
     need_save: u8,

@@ -20,7 +20,7 @@ impl FileTrait for DevRandom {
         true
     }
     async fn read(&self, user_buf: UserBuffer) -> SysResult<usize> {
-        unsafe { Ok(RNG.fill_buf(user_buf)) }
+        Ok(RNG.lock().fill_buf(user_buf))
     }
     async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
         // do nothing

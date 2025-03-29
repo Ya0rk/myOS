@@ -1,3 +1,7 @@
+#![allow(unused)]
+
+use spin::Mutex;
+
 use crate::mm::UserBuffer;
 
 const LCG_MULTIPLIER: u64 = 6364136223846793005;
@@ -38,4 +42,4 @@ impl LcgRng {
     }
 }
 
-pub static mut RNG: LcgRng = LcgRng::new();
+pub static RNG: Mutex<LcgRng> = Mutex::new(LcgRng::new());

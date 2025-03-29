@@ -41,7 +41,7 @@ pub struct UContext {
     // don't know why, struct need to be exact the same with musl libc
     pub uc_sig: [usize; 16],
     // 保存具体机器状态的上下文信息，这是一个机器相关的表示，包含了处理器的寄存器状态等信息
-    pub uc_mcontext: MContext,
+    uc_mcontext: MContext,
 }
 
 /// 整个结构体大小为784字节，为了适配musl libc

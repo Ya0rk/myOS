@@ -79,7 +79,7 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
     let mut stat = Kstat::new();
     match task.get_file_by_fd(fd) {
         Some(file) => {
-            file.fstat(&mut stat);
+            file.fstat(&mut stat)?;
             buffer.write(stat.as_bytes());
             info!("fstat finished");
             return Ok(0);

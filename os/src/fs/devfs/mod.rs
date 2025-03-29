@@ -23,7 +23,7 @@ lazy_static!{
 pub fn register_device(abs_path: &str) {
     DEVICES.lock().insert(abs_path.to_string());
 }
-
+#[allow(unused)]
 pub fn unregister_device(abs_path: &str) {
     DEVICES.lock().remove(&abs_path.to_string());
 }

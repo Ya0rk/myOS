@@ -31,7 +31,7 @@ pub mod signal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
-use sync::timer;
+use sync::{block_on, timer};
 use task::{executor, get_current_hart_id};
 
 global_asm!(include_str!("entry.asm"));
@@ -69,7 +69,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         );
         trap::init();
         task::init_processors();
-        fs::init();
+        block_on(fs::init());
         task::add_initproc();
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);

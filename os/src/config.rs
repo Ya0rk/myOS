@@ -23,6 +23,7 @@ pub const HART_START_ADDR: usize = 0x80200000;
 
 // scheudler
 pub const HART_NUM: usize = 2;
+#[allow(unused)]
 pub const IDLE_PID: usize = 0;
 pub const INITPROC_PID: usize = 1;
 
@@ -36,3 +37,5 @@ pub const RLIMIT_NOFILE: usize = 1024;
 pub const AT_FDCWD: isize = -100;
 /// 块大小
 pub const BLOCK_SIZE: usize = 512;
+/// pipe buffer 大小
+pub const PIPE_BUFFER_SIZE: usize = 0x10000;
