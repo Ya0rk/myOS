@@ -64,7 +64,7 @@ core::arch::global_asm!(include_str!("preload.S"));
 
 // os\src\fs\mod.rs
 //将预加载到内存中的程序写入文件根目录
-pub fn flush_preload() {
+pub async fn flush_preload() {
     extern "C" {
         fn initproc_start();
         fn initproc_end();
@@ -78,12 +78,12 @@ pub fn flush_preload() {
                 initproc_end as usize - initproc_start as usize,
             ) as &'static mut [u8]
         });
-        initproc.write(UserBuffer::new(v));
+        initproc.write(UserBuffer::new(v)).await.unwrap();
     }
 }
 
-pub fn init() {
-    flush_preload();
+pub async fn init() {
+    flush_preload().await;
     let _ = create_init_files();
 }
 

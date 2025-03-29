@@ -36,7 +36,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_GETPID => sys_getpid(),
         SysCode::SYSCALL_GETPPID => sys_getppid(),
         SysCode::SYSCALL_CLONE => sys_clone(args[0], args[1], args[2], args[3], args[4]),
-        // SysCode::SYSCALL_EXEC => sys_exec(args[0] as *const u8).await,
+        SysCode::SYSCALL_EXEC => sys_exec(args[0] as *const u8),
         SysCode::SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as usize).await,
         SysCode::GETRANDOM => sys_getrandom(args[0] as *const u8, args[1] as usize, args[2] as usize),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),

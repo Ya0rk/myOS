@@ -124,7 +124,7 @@ impl FileTrait for NormalFile {
         }
 
         let mut ext4file = self.metadata.inode.get_ext4file();
-        ext4file.file_rename(&old_path, &new_path);
+        ext4file.file_rename(&old_path, &new_path).unwrap();
         self.path = new_path;
         
         Ok(0)

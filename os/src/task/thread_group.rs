@@ -23,6 +23,7 @@ impl ThreadGroup {
         self.tasks.remove(&taskid);
     }
 
+    #[allow(unused)]
     pub fn thread_num(&self) -> usize {
         self.tasks.len()
     }

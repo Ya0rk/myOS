@@ -30,9 +30,9 @@ impl Ext4Inode {
         let size;
         {
             let mut lock_file = ext4file.lock();
-            lock_file.file_open(path, O_RDONLY);
+            lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open file!");
             size = lock_file.file_size() as usize;
-            lock_file.file_close();
+            lock_file.file_close().expect("[ext4Inode new]: file close fail!");
         }
 
         let inode = Arc::new(Self {
@@ -80,7 +80,7 @@ impl InodeTrait for Ext4Inode {
                 }
             } else {
                 ext4file.file_open(path, O_RDWR | O_CREAT | O_TRUNC).expect("create file failed!");
-                ext4file.file_close();
+                ext4file.file_close().expect("[do_creat]: file clone fail!");
             }
         }
         Some(nf)
@@ -122,7 +122,7 @@ impl InodeTrait for Ext4Inode {
         file.file_seek(offset as i64, SEEK_SET)
             .map_err(|_| Errno::EIO).unwrap();
         let r = file.file_read(buf);
-        file.file_close();
+        file.file_close().expect("[read_dirctly]: file close fail!");
         r.map_err(|_| Errno::EIO).unwrap()
     }
 
@@ -151,7 +151,7 @@ impl InodeTrait for Ext4Inode {
         file.file_seek(offset as i64, SEEK_SET)
             .map_err(|_| Errno::EIO).unwrap();
         let r = file.file_write(buf);
-        file.file_close();
+        file.file_close().expect("[write_directly]: file close fail!");
         r.map_err(|_| Errno::EIO).unwrap()
     }
 
@@ -164,7 +164,7 @@ impl InodeTrait for Ext4Inode {
         //     .map_err(|_| Errno::EIO).unwrap();
 
         let r = file.file_truncate(size as u64);
-        self.set_size(size);
+        self.set_size(size).expect("[truncate]: set size fail!");
 
         // file.file_close();
         r.map_or_else(|_| Errno::EIO.into(), |_| 0)
@@ -182,7 +182,7 @@ impl InodeTrait for Ext4Inode {
         let mut buf: Vec<u8> = vec![0; file.file_size() as usize];
         file.file_seek(0, SEEK_SET).map_err(|_| Errno::EIO)?;
         let r = file.file_read(buf.as_mut_slice());
-        file.file_close();
+        file.file_close().expect("[read_all]: file close fail!");
         r.map_or_else(|_| Err(Errno::EIO), |_| Ok(buf))
     }
     /// 在当前路径下查询是否存在这个path的文件

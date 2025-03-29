@@ -12,6 +12,7 @@ use crate::signal::do_signal;
 use crate::sync::{get_waker, suspend_now};
 use crate::task::{TaskControlBlock, TaskStatus};
 pub use context::TrapContext;
+pub use context::UserFloatRegs;
 
 global_asm!(include_str!("trap.S"));
 

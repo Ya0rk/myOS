@@ -256,5 +256,5 @@ pub fn sys_getrandom(
             buf,
             buflen
     ));
-    unsafe { Ok(RNG.fill_buf(buffer)) }
+    Ok(RNG.lock().fill_buf(buffer))
 }

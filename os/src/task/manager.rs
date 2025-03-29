@@ -17,9 +17,9 @@ pub struct Manager {
 }
 
 /// 存放所有任务的管理器，可以通过pid快速找到对应的Task
-struct TaskManager(HashMap<Pid, Weak<TaskControlBlock>>);
+pub struct TaskManager(HashMap<Pid, Weak<TaskControlBlock>>);
 /// 存放进程组的管理器，通过进程组的leader 的pid可以定位到进程组
-struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
+pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
 
 impl Manager {
     pub fn new() -> Self {

@@ -67,7 +67,7 @@ impl PageCache {
                     let start_offset = idx * BLOCK_SIZE;
                     let start = page_addr_aligned + start_offset;
                     let buf = &page.frame.ppn.get_bytes_array()[start_offset..start_offset + BLOCK_SIZE].to_vec();
-                    inode.clone().write_back(start, BLOCK_SIZE, buf);
+                    inode.clone().write_back(start, BLOCK_SIZE, buf)?;
                 }
                 dirty_blocks.clear();
             }
@@ -133,7 +133,7 @@ impl PageCache {
                     self.insert_page(offset)
                 }
             };
-            page.set_dirty(page_offset);
+            page.set_dirty(page_offset).await;
 
             let page_buf = page.frame.ppn.get_bytes_array();
             let len = min(buf.len() - buf_cur, PAGE_SIZE - page_offset);
