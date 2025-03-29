@@ -78,7 +78,9 @@ pub async fn flush_preload() {
                 initproc_end as usize - initproc_start as usize,
             ) as &'static mut [u8]
         });
+        info!("kkkk");
         initproc.write(UserBuffer::new(v)).await.unwrap();
+        info!("ddddd");
     }
 }
 
@@ -227,22 +229,6 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
     open(&"/", path, flags)
 }
 
-// pub fn open_dir(path: &str, flags: OpenFlags, mode: usize) -> Option<FileClass>{
-//     unimplemented!()
-// }
-
-/// Opens a file or device at the specified path with the given flags.
-///
-/// # Arguments
-///
-/// * `cwd` - The current working directory.
-/// * `path` - The path to the file to open.
-/// * `flags` - The flags that determine how the file should be opened.
-///
-/// # Returns
-///
-/// An `Option<FileClass>` which is `Some(FileClass::File(vfile))` if the file is opened successfully,
-/// or `Some(FileClass::Abs(device))` if a device file is opened, or `None` if the file cannot be opened.
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     // Convert the provided path string into a Path object
     let kpath = Path::string2path(path.to_string());

@@ -1,9 +1,10 @@
 #![allow(non_snake_case)]
+use log::info;
 use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
 
 use crate::{
     drivers::Disk,
-    fs::{page_cache::PageCache, stat::as_inode_stat, InodeTrait, Kstat, SuperBlockTrait},
+    fs::{page_cache::PageCache, InodeTrait, Kstat, SuperBlockTrait},
 };
 
 use alloc::sync::Arc;
@@ -23,7 +24,9 @@ impl Ext4SuperBlock {
         let inner =
             Ext4BlockWrapper::<Disk>::new(disk).expect("failed to initialize EXT4 filesystem");
         let page_cache = Some(PageCache::new_bare());
+        info!("aaa");
         let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR, page_cache.clone());
+        info!("bbbb");
         Self { inner, root }
     }
 }
@@ -33,14 +36,15 @@ impl SuperBlockTrait for Ext4SuperBlock {
         self.root.clone()
     }
     fn fs_stat(&self) -> Kstat {
-        let mut file = self.root.file.lock();
-        match file.fstat() {
-            Ok(stat) => {
-                let (atime, mtime, ctime) = self.root.metadata.timestamp.lock().get();
-                as_inode_stat(stat, atime, mtime, ctime)
-            }
-            Err(_) => Kstat::new()
-        }
+        Kstat::new()
+        // let mut file = self.root.file.lock();
+        // match file.fstat() {
+        //     Ok(stat) => {
+        //         let (atime, mtime, ctime) = self.root.metadata.timestamp.lock().get();
+        //         as_inode_stat(stat, atime, mtime, ctime)
+        //     }
+        //     Err(_) => Kstat::new()
+        // }
     }
     fn sync(&self) {
         todo!()

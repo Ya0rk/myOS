@@ -101,6 +101,7 @@ pub async fn user_trap_handler() {
 #[no_mangle]
 pub fn user_trap_return() {
     // 重新修改stvec设置 user 的trap handler entry
+    info!("trap_return");
     set_trap_handler(IndertifyMode::User);
 
     let trap_cx = current_trap_cx();

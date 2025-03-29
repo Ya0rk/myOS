@@ -3,6 +3,7 @@
 extern crate alloc;
 
 use alloc::{collections::VecDeque, task};
+use log::info;
 use core::{future::Future, sync::atomic::{AtomicU32, AtomicUsize}};
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use crate::{config::HART_NUM, sync::SpinNoIrqLock};
@@ -118,10 +119,13 @@ pub fn run() {
         // 首先尝试从自己的队列中获取任务
         let worker_id = get_current_hart_id();
         if let Some(task) = TASK_QUEUES[worker_id].fetch() {
+            info!("nihao");
             task.run();
+            info!("sssss");
             steal_counter = 0; // 重置窃取计数器
         } else {
             // 如果自己的队列为空，尝试从其他队列中窃取任务
+            info!("bhao");
             steal_counter += 1;
             if steal_counter > QUEUE_NUM * 2 {
                 // 如果多次窃取失败，可能没有任务了，退出循环

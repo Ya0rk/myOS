@@ -69,7 +69,9 @@ pub fn rust_main(hart_id: usize) -> ! {
         );
         trap::init();
         task::init_processors();
+        println!("a");
         block_on(fs::init());
+        println!("b");
         task::add_initproc();
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
@@ -90,7 +92,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         finish = fs::list_apps();
     }
     while !finish {}
-    // task::run_tasks();
     executor::run();
     panic!("Unreachable in rust_main!");
 }

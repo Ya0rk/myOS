@@ -1,13 +1,11 @@
 use async_trait::async_trait;
+use log::info;
 use lwext4_rust::{
-    bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET},
-    Ext4File, InodeTypes,
+    bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, Ext4File, InodeTypes
 };
 use crate::{
     fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, 
-    page_cache::PageCache, stat::as_inode_stat, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
-    sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
-    utils::{Errno, SysResult},
+    page_cache::PageCache, InodeMeta, InodeTrait, Kstat, INODE_CACHE}, sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp}, utils::{Errno, SysResult}
 };
 
 use alloc::{sync::Arc, vec::Vec};
@@ -27,13 +25,13 @@ impl Ext4Inode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
     pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<Self> {
         let ext4file = new_shared(Ext4File::new(path, types));
-        let size;
-        {
-            let mut lock_file = ext4file.lock();
-            lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open file!");
-            size = lock_file.file_size() as usize;
-            lock_file.file_close().expect("[ext4Inode new]: file close fail!");
-        }
+        let size = 0;
+        // {
+        //     let mut lock_file = ext4file.lock();
+        //     lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
+        //     size = lock_file.file_size() as usize;
+        //     lock_file.file_close().expect("[ext4Inode new]: file close fail!");
+        // }
 
         let inode = Arc::new(Self {
             metadata: InodeMeta::new(size),
@@ -53,7 +51,13 @@ impl Ext4Inode {
 impl InodeTrait for Ext4Inode {
     /// 获取文件大小
     fn size(&self) -> usize {
-        *self.metadata.size.lock()
+        let mut lock_file = self.file.lock();
+        let binding = lock_file.get_path();
+        let path = binding.to_str().unwrap();
+        lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
+        let size = lock_file.file_size() as usize;
+        lock_file.file_close().expect("[ext4Inode new]: file close fail!");
+        size
     }
 
     fn set_size(&self, new_size: usize) -> SysResult {
@@ -135,9 +139,11 @@ impl InodeTrait for Ext4Inode {
 
         match &self.page_cache {
             None => {
+                info!("llll");
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
+                info!("ssss");
                 cache.write(buf, offset).await
             }
         }
@@ -204,14 +210,20 @@ impl InodeTrait for Ext4Inode {
     }
     /// 获取文件状态
     fn fstat(&self) -> Kstat {
-        let mut file = self.file.lock();
-        match file.fstat() {
-            Ok(stat) => {
-                let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
-                as_inode_stat(stat, atime, mtime, ctime)
-            }
-            Err(_) => Kstat::new()
-        }
+        // let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+        // let file_size = self.size();
+        // let st_size = file_size / BLOCK_SIZE;
+        // let ino= self.metadata.ino;
+        Kstat::new()
+
+        // let mut file = self.file.lock();
+        // match file.fstat() {
+        //     Ok(stat) => {
+        //         let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+        //         as_inode_stat(stat, atime, mtime, ctime)
+        //     }
+        //     Err(_) => Kstat::new()
+        // }
     }
     /// 读取目录项
     fn read_dentry(&self, _off: usize, _len: usize) -> Option<(Vec<u8>, isize)> {
