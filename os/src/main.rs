@@ -32,7 +32,7 @@ pub mod signal;
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::{block_on, timer};
-use task::{executor, get_current_hart_id};
+use task::{executor, get_current_hart_id, spawn_kernel_task};
 
 global_asm!(include_str!("entry.asm"));
 
@@ -72,7 +72,9 @@ pub fn rust_main(hart_id: usize) -> ! {
         println!("a");
         block_on(fs::init());
         println!("b");
-        task::add_initproc();
+        spawn_kernel_task(async move {
+            task::add_initproc()
+        });
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]

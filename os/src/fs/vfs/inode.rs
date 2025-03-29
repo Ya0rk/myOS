@@ -1,7 +1,7 @@
 use crate::{
     fs::{ffi::InodeType, file::NormalFile, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
         sync::{MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
-        utils::{Errno, SysResult}
+        utils::SysResult
 };
 use alloc::{
     string::String, sync::{Arc, Weak},
@@ -185,7 +185,7 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// Ok(Vec<u8>) containing the file's contents, or an error code.
-    fn read_all(&self) -> Result<Vec<u8>, Errno> {
+    async fn read_all(&self) -> SysResult<Vec<u8>> {
         todo!();
     }
 
