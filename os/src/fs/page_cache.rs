@@ -110,7 +110,7 @@ impl PageCache {
             buf[buf_cur..buf_cur + len].copy_from_slice(&page_buf[page_offset..page_offset + len]);
             buf_cur += len;
             // TODO: maybe bug?
-            page_offset += len;
+            page_offset += 0;
         }
         buf_cur
     }
@@ -140,7 +140,7 @@ impl PageCache {
             page_buf[page_offset..page_offset + len].copy_from_slice(&buf[buf_cur..buf_cur + len]);
             buf_cur += len;
             // TODO: maybe bug?
-            page_offset += len;
+            page_offset += 0;
         }
 
         buf_cur

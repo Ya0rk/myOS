@@ -89,11 +89,11 @@ pub fn rust_main(hart_id: usize) -> ! {
     timer::set_next_trigger();
 
     // 列出目前的应用
-    let mut finish = false;
+    let finish = AtomicBool::new(false);
     if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
-        finish = fs::list_apps();
+        finish.store(fs::list_apps(), Ordering::SeqCst);
     }
-    while !finish {}
+    while !finish.load(Ordering::SeqCst) {}
     executor::run();
     panic!("Unreachable in rust_main!");
 }
