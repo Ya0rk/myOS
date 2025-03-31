@@ -1,36 +1,40 @@
 use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::hal::arch::timer::{sleep_for, TimeSepc, TimeVal, Tms};
-use crate::syscall::ffi::Utsname;
+use crate::signal::{SigDetails, SigMask};
+use crate::sync::{sleep_for, suspend_now, yield_now, TimeSepc, TimeVal, Tms};
+use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
-    add_task, current_task, current_user_token, exit_current_and_run_next,
-    suspend_current_and_run_next,
+    add_task, current_task, current_user_token, spawn_user_task
 };
-use crate::utils::{Errno, SysResult};
-use alloc::sync::Arc;
-use log::debug;
+use crate::utils::{Errno, SysResult, RNG};
+use log::{debug, info};
 use zerocopy::IntoBytes;
 
 // use super::ffi::Utsname;
 
-pub fn sys_exit(exit_code: i32) -> ! {
-    exit_current_and_run_next(exit_code);
-    panic!("Unreachable in sys_exit!");
+pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    task.set_zombie();
+
+    if task.is_leader(){
+        task.set_exit_code((exit_code & 0xFF) << 8);
+    }
+    Ok(0)
 }
 
-pub fn sys_nanosleep(req: *const u8, _rem: *const u8) -> SysResult<usize> {
+pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
     let req = *translated_ref(current_user_token(), req as *const TimeSepc);
     if !req.check_valid() {
         return Err(Errno::EINVAL);
     }
 
-    sleep_for(req);
+    sleep_for(req).await;
     Ok(0)
 }
 
-pub fn sys_yield() -> SysResult<usize> {
-    suspend_current_and_run_next();
+pub async  fn sys_yield() -> SysResult<usize> {
+    yield_now().await;
     Ok(0)
 }
 
@@ -97,29 +101,63 @@ pub fn sys_getppid() -> SysResult<usize> {
     Ok(current_task().unwrap().get_ppid() as usize)
 }
 
-pub fn sys_clone() -> SysResult<usize> {
+pub fn sys_clone(
+    flags: usize,
+    child_stack: usize,
+    ptid: usize,
+    tls: usize,
+    ctid: usize,
+    ) -> SysResult<usize> {
     debug!("start sys_fork");
+    let flag = CloneFlags::from_bits(flags as u32).unwrap();
     let current_task = current_task().unwrap();
-    let new_task = current_task.fork();
-    let new_pid = new_task.pid.0;
-    // modify trap context of new_task, because it returns immediately after switching
-    let child_trap_cx = new_task.inner_lock().get_trap_cx();
+    let token = current_task.get_user_token();
+    let new_task = match flag.contains(CloneFlags::CLONE_THREAD) {
+        true  => current_task.thread_fork(flag),
+        false => current_task.process_fork(flag),
+    };
+    drop(current_task);
+
+    let new_pid = new_task.get_pid();
+    let mut child_trap_cx = *new_task.get_trap_cx_mut();
+
+    // 子进程不能使用父进程的栈，所以需要手动指定
+    if child_stack != 0 {
+        child_trap_cx.set_sp(child_stack);
+    }
+    if flag.contains(CloneFlags::CLONE_SETTLS) {
+        child_trap_cx.set_tp(tls);
+    }
+    // 检查是否需要设置 parent_tid
+    if flag.contains(CloneFlags::CLONE_PARENT_SETTID) {
+        *translated_refmut(token, ptid as *mut u32) = new_pid as u32;
+    }
+    // 检查是否需要设置子进程的 set_child_tid,clear_child_tid
+    if flag.contains(CloneFlags::CLONE_CHILD_SETTID) {
+        *translated_refmut(token, ctid as *mut u32) = new_pid as u32;
+    }
+    // 检查是否需要设置child_cleartid,在线程退出时会将指向的地址清零
+    if flag.contains(CloneFlags::CLONE_CHILD_CLEARTID) {
+        new_task.set_child_cleartid(ctid);
+    }
+
     // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
     // 只需要修改子进程返回值为0即可
     child_trap_cx.user_x[10] = 0;
-    // 将子进程加入调度器，等待被调度
-    add_task(new_task);
-    debug!("new pid is : {}", new_pid);
+    // 将子进程加入任务管理器，这里可以快速找到进程
+    add_task(&new_task);
+    spawn_user_task(new_task);
+
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
 }
 
-pub fn sys_exec(path: *const u8) -> SysResult<usize> {
+pub async fn sys_exec(path: usize) -> SysResult<usize> {
     let token = current_user_token();
-    let path = translated_str(token, path);
+    let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
-        let all_data = app_inode.file()?.inode.read_all()?;
+        let all_data = app_inode.file()?.metadata.inode.read_all().await?;
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
         Ok(0)
@@ -130,53 +168,93 @@ pub fn sys_exec(path: *const u8) -> SysResult<usize> {
 
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
-pub fn sys_wait4(pid: isize, exit_code_ptr: *mut i32, options: usize, _rusage: usize) -> SysResult<usize> {
+/// pid = -1: 等待任意子进程
+/// pid = 0 : 等待与调用进程（父进程）同一个进程组的所有子进程
+/// pid < -1: 等待进程组标识符与pid绝对值相等的所有子进程
+/// pid > 0 ：等待进程id为pid的子进程
+pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usize) -> SysResult<usize> {
     debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
     let task = current_task().unwrap();
-    
-    loop {
-        // 获取当前任务的内部锁
-        let mut inner = task.inner_lock();
+    if task.children.lock().is_empty() {
+        info!("task pid = {}, has no child.", pid);
+        return Err(Errno::ECHILD);
+    }
 
-        // 快速查看是否存在符合条件的子进程
-        if !inner
-            .children
-            .iter()
-            .any(|p| pid == -1 || pid as usize == p.getpid())
-        {
-            return Err(Errno::NOPID);
+    let op = WaitOptions::from_bits(options as i32).unwrap();
+
+    // 缩小 locked_child 的作用域
+    let target_task = {
+        let locked_child = task.children.lock().clone();
+        match pid {
+            -1 => {
+                locked_child.iter().find(|task| task.is_zombie()).cloned()
+            }
+            p if p > 0 => {
+                locked_child.iter().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
+            }
+            _ => unimplemented!(),
         }
+    }; // locked_child 在这里自动释放
 
-        // 查找僵尸子进程
-        let zombie_child = inner.children.iter().enumerate().find_map(|(idx, p)| {
-            //检查是否为僵尸进程且符合 PID 条件
-            if p.inner_lock().is_zombie() && (pid == -1 || pid as usize == p.getpid()) {
-                Some(idx)
-            } else {
-                None
+    match target_task {
+        Some(zombie_child) => {
+            info!("sys_wait4: find a target zombie child task.");
+            let zombie_pid = zombie_child.get_pid();
+            let exit_code = zombie_child.get_exit_code();
+            task.do_wait4(zombie_pid, wstatus as *mut i32, exit_code);
+            return Ok(zombie_pid);
+        }
+        None => {
+            if op.contains(WaitOptions::WNOHANG) {
+                return Ok(0)
             }
-        });
-
-        if let Some(idx) = zombie_child {
-            // 移除子进程
-            let removed_child = inner.children.remove(idx);
-            // 确认子进程的引用计数为 1
-            assert_eq!(Arc::strong_count(&removed_child), 1);
-
-            // 获取子进程的 PID 和退出状态
-            let found_pid = removed_child.getpid();
-            let exit_code = removed_child.inner_lock().exit_code;
-
-            // 将退出状态写入用户提供的指针
-            if !exit_code_ptr.is_null() {
-                *translated_refmut(inner.memory_set.token(), exit_code_ptr) = (exit_code & 0xff) << 8;
-            }
-            return Ok(found_pid as usize);
-        } else {
-            // 未找到僵尸子进程，释放锁并挂起当前任务
-            drop(inner); // 避免死锁
-            suspend_current_and_run_next();
+            // 如果等待的进程还不是zombie，那么本进程进行await，
+            // 直到等待的进程do_exit然后发送SIGCHLD信号唤醒自己
+            let (child_pid, _status, exit_code) = loop {
+                task.set_wake_up_signal(!*task.get_blocked() | SigMask::SIGCHLD);
+                suspend_now().await;
+                // 在pending队列中取出希望的信号，也就是子进程结束后发送给父进程的信号
+                match task.sig_pending.lock().take_expected_one(SigMask::SIGCHLD) {
+                    Some(sig_info) => {
+                        if let SigDetails::Chld { 
+                            pid: find_pid, 
+                            status, 
+                            exit_code 
+                        } = sig_info.sifields
+                        {
+                            match pid {
+                                -1 => break (find_pid, status, exit_code),
+                                p if p > 0 => {
+                                    if find_pid == p as usize {
+                                        break (find_pid, status, exit_code);
+                                    }
+                                }
+                                _ => unimplemented!(),
+                            }
+                        }
+                    }
+                    None => return Err(Errno::EINTR),
+                }
+            };
+            info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
+            task.do_wait4(child_pid, wstatus as *mut i32, exit_code);
+            return Ok(child_pid);
         }
     }
-    // ---- release current PCB lock automatically
+}
+
+
+pub fn sys_getrandom(
+    buf: *const u8,
+    buflen: usize,
+    _flags: usize,
+) -> SysResult<usize> {
+    let token = current_user_token();
+    let buffer = UserBuffer::new(
+        translated_byte_buffer(
+            token,
+            buf,
+            buflen
+    ));
+    Ok(RNG.lock().fill_buf(buffer))
 }

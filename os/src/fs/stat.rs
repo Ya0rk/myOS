@@ -1,3 +1,7 @@
+use lwext4_rust::bindings::ext4_inode_stat;
+
+use crate::{config::BLOCK_SIZE, sync::TimeSepc};
+
 #[repr(C)]
 pub struct Kstat {
     pub st_dev: u32,   // 包含文件的设备 ID
@@ -56,5 +60,32 @@ impl Kstat {
     pub fn as_bytes(&self) -> &[u8] {
         let size = core::mem::size_of::<Self>();
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, size) }
+    }
+}
+
+
+/// 将 ext4_inode_stat 转换为 Kstat
+#[allow(unused)]
+pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSepc, mtime: TimeSepc, ctime: TimeSepc) -> Kstat {
+    Kstat {
+        st_dev: stat.st_dev as u32,
+        st_ino: stat.st_ino as u64,
+        st_mode: stat.st_mode,
+        st_nlink: stat.st_nlink,
+        st_uid: stat.st_uid,
+        st_gid: stat.st_gid,
+        st_rdev: 0, // 如果需要，可以根据具体情况设置
+        __pad: 0,   // 填充字段
+        st_size: stat.st_size as i64,
+        st_blksize: BLOCK_SIZE as i64,
+        __pad2: 0,  // 填充字段
+        st_blocks: stat.st_blocks as u64,
+        st_atime_sec: atime.tv_sec as i64,
+        st_atime_nsec: atime.tv_nsec as i64,
+        st_mtime_sec: mtime.tv_sec as i64,
+        st_mtime_nsec: mtime.tv_nsec as i64,
+        st_ctime_sec: ctime.tv_sec as i64,
+        st_ctime_nsec: ctime.tv_nsec as i64,
+        __unused: [0; 2], // 填充字段
     }
 }

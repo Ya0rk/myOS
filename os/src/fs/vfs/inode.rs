@@ -1,111 +1,246 @@
 use crate::{
-    fs::{SEEK_CUR, SEEK_END, SEEK_SET},
-    mm::UserBuffer,
-    utils::Errno,
+    fs::{ffi::InodeType, file::NormalFile, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
+        sync::{MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
+        utils::SysResult
 };
-
-use super::{File, Inode, Kstat};
 use alloc::{
-    string::String,
-    sync::{Arc, Weak},
+    string::String, sync::{Arc, Weak},
+    vec::Vec
 };
+use alloc::boxed::Box;
+use async_trait::async_trait;
+use lwext4_rust::Ext4File;
 use spin::Mutex;
+use super::alloc_ino;
 
-pub struct OSInode {
-    readable: bool, // 该文件是否允许通过 sys_read 进行读
-    writable: bool, // 该文件是否允许通过 sys_write 进行写
-    pub inode: Arc<dyn Inode>, // 文件的inode，在ext4中是Ext4_inode
-    pub parent: Option<Weak<dyn Inode>>, // 父目录的弱引用
-    pub path: String, // 文件的路径
-    pub inner: Mutex<OSInodeInner>, // 文件的内部状态
-}
-pub struct OSInodeInner {
-    pub(crate) offset: usize, // 偏移量
+
+/// inode的基础字段
+/// 
+/// timestamp: 每次访问和修改都要更新
+pub struct InodeMeta {
+    /// 节点的编号
+    pub ino: usize,
+    /// 文件大小
+    pub size: Mutex<usize>,
+    /// 时间戳
+    pub timestamp: SpinNoIrqLock<TimeStamp>,
 }
 
-impl OSInode {
-    pub fn new(
-        readable: bool,
-        writable: bool,
-        inode: Arc<dyn Inode>,
-        parent: Option<Weak<dyn Inode>>,
-        path: String,
-    ) -> Self {
+impl InodeMeta {
+    pub fn new(size: usize) -> Self {
         Self {
-            readable,
-            writable,
-            inode,
-            parent,
-            path,
-            inner: Mutex::new(OSInodeInner { offset: 0 }),
+            ino:  alloc_ino(), 
+            size: Mutex::new(size), 
+            timestamp: SpinNoIrqLock::new(TimeStamp::new()),
         }
     }
 }
 
-// 为 OSInode 实现 File Trait
-impl File for OSInode {
-    fn readable(&self) -> bool {
-        self.readable
+/// Virtual File System (VFS) Inode interface.
+///
+/// This trait defines the standard operations that can be performed on an inode
+/// in the virtual file system. An inode represents either a file, directory, or
+/// other file system object.
+#[async_trait]
+pub trait InodeTrait: Send + Sync {
+    /// Returns the size of the file in bytes.
+    ///
+    /// # Returns
+    ///
+    /// The size of the file in bytes.
+    fn size(&self) -> usize {
+        todo!()
     }
 
-    fn writable(&self) -> bool {
-        self.writable
+    /// 设置大小
+    fn set_size(&self, new_size: usize) -> SysResult;
+
+    /// Returns the type of the inode (file, directory, etc.).
+    ///
+    /// # Returns
+    ///
+    /// An `InodeType` value indicating the type of this inode.
+    fn node_type(&self) -> InodeType {
+        todo!()
     }
 
-    fn read(&self, mut buf: UserBuffer) -> usize {
-        let mut inner = self.inner.lock();
-        let mut total_read_size = 0usize;
-
-        if self.inode.size() <= inner.offset {
-            //读取位置超过文件大小，返回结果为EOF
-            return 0;
-        }
-
-        // 这边要使用 iter_mut()，因为要将数据写入
-        for slice in buf.buffers.iter_mut() {
-            let read_size = self.inode.read_at(inner.offset, *slice);
-            if read_size == 0 {
-                break;
-            }
-            inner.offset += read_size;
-            total_read_size += read_size;
-        }
-        total_read_size
+    /// Returns the file status information.
+    ///
+    /// # Returns
+    ///
+    /// A `Kstat` structure containing various metadata about the file.
+    fn fstat(&self) -> Kstat {
+        todo!()
     }
 
-    fn write(&self, buf: UserBuffer) -> usize {
-        let mut inner = self.inner.lock();
-        let mut total_write_size = 0usize;
-        for slice in buf.buffers.iter() {
-            let write_size = self.inode.write_at(inner.offset, *slice);
-            assert_eq!(write_size, slice.len());
-            inner.offset += write_size;
-            total_write_size += write_size;
-        }
-        total_write_size
+    /// Creates a new file or directory in the current directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The name of the new file or directory
+    /// * `ty` - The type of inode to create
+    ///
+    /// # Returns
+    ///
+    /// Some(Arc<dyn Inode>) if creation succeeds, None otherwise.
+    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
+        todo!()
     }
-    fn lseek(&self, offset: isize, whence: usize) -> usize {
-        if offset < 0 || whence > 2 {
-            return Errno::EINVAL.into();
-        }
-        let offset: usize = offset as usize;
-        let mut inner = self.inner.lock();
-        if whence == SEEK_SET {
-            inner.offset = offset;
-        } else if whence == SEEK_CUR {
-            inner.offset += offset;
-        } else if whence == SEEK_END {
-            inner.offset = self.inode.size() + offset;
-        }
-        inner.offset
+
+    /// Finds an inode by its path relative to this inode.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to search for
+    ///
+    /// # Returns
+    ///
+    /// Some(Arc<dyn Inode>) if found, None otherwise.
+    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+        todo!()
     }
-    
-    fn get_name(&self) -> String {
-        self.path.clone()
+
+    /// Reads data from the file at the specified offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `off` - The offset from which to start reading
+    /// * `buf` - The buffer to read into
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes actually read.
+    async fn read_at(&self, _off: usize, _buf: &mut [u8]) -> usize {
+        todo!()
     }
-    fn fstat(&self, stat: &mut Kstat) -> () {
-        let inode = self.inode.as_ref();
-        *stat = inode.fstat();
-        ()
+
+    /// 绕过cache，直接从磁盘读
+    async fn read_dirctly(&self, _offset: usize, _buf: &mut [u8]) -> usize;
+
+    /// Writes data to the file at the specified offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `off` - The offset at which to start writing
+    /// * `buf` - The buffer containing the data to write
+    ///
+    /// # Returns
+    ///
+    /// The number of bytes actually written.
+    async fn write_at(&self, _off: usize, _buf: &[u8]) -> usize {
+        todo!()
+    }
+
+    /// 直接写
+    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize;
+
+    /// Reads directory entries.
+    ///
+    /// # Arguments
+    ///
+    /// * `off` - The offset from which to start reading entries
+    /// * `len` - Maximum number of bytes to read
+    ///
+    /// # Returns
+    ///
+    /// Some((Vec<u8>, isize)) containing the directory entries and the next offset,
+    /// or None if no more entries.
+    fn read_dentry(&self, _off: usize, _len: usize) -> Option<(Vec<u8>, isize)> {
+        todo!()
+    }
+
+    /// 将文件设置新的size，这里用于将文件size为0
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - The new size for the file
+    ///
+    /// # Returns
+    ///
+    /// The actual new size of the file.
+    fn truncate(&self, _size: usize) -> usize {
+        todo!()
+    }
+
+    /// Synchronizes the file's in-memory state with storage.
+    fn sync(&self) {
+        todo!()
+    }
+
+    /// Removes a child entry from this directory.
+    ///
+    /// # Arguments
+    ///
+    /// * `child_name` - The name of the child to unlink
+    ///
+    /// # Returns
+    ///
+    /// Ok(0) on success, or an error code.
+    fn unlink(&self, _child_name: &str) -> SysResult<usize> {
+        todo!();
+    }
+
+    /// Reads the entire contents of the file.
+    ///
+    /// # Returns
+    ///
+    /// Ok(Vec<u8>) containing the file's contents, or an error code.
+    async fn read_all(&self) -> SysResult<Vec<u8>> {
+        todo!();
+    }
+
+    /// 将数据写回
+    /// 
+    /// offset：数据开始的地址
+    /// 
+    /// len : 长度
+    /// 
+    /// buf: 数据存在的位置
+    fn write_back(self: Arc<Self>, _offset: usize, _len: usize, _buf: &[u8]) -> SysResult {
+        todo!();
+    }
+
+    /// 获取时间戳，用于修改或访问
+    fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, >;
+
+    /// 获取lwext4的ext4file
+    fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
+}
+
+impl dyn InodeTrait {
+    /// Sets the access and modification times of the file.
+    ///
+    /// # Arguments
+    ///
+    /// * `atime_sec` - Optional new access time in seconds
+    /// * `mtime_sec` - Optional new modification time in seconds
+    ///
+    /// # Returns
+    ///
+    /// Ok(0) on success, or an error code.
+    pub fn set_timestamps(&self, timestamp: TimeStamp) -> SysResult<usize> {
+        let mut mytime = self.get_timestamp();
+        mytime.set(timestamp);
+        Ok(0)
+    }
+
+    /// 打开一个inode，创建一个管理该inode的对应的file返回
+    pub fn do_open(self: Arc<Self>, parent: Option<Weak<dyn InodeTrait>>, flags: OpenFlags, path: String) -> Option<FileClass> {
+        let new_file = NormalFile::new(
+            flags, 
+            parent,
+            self,
+            path
+        );
+        // 将指针移到文件末尾
+        if flags.contains(OpenFlags::O_APPEND) {
+            new_file.lseek(0, SEEK_END).unwrap();
+        }
+        // 截断文件长度为0
+        if flags.contains(OpenFlags::O_TRUNC) {
+            new_file.metadata.inode.truncate(0);
+        }
+        
+        Some(FileClass::File(Arc::new(new_file)))
     }
 }
