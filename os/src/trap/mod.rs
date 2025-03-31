@@ -35,7 +35,7 @@ pub fn init() {
 pub async fn trap_loop(task: Arc<TaskControlBlock>) {
     // 设置task的waker TODO：将这个放入 UserTaskFuture中
     task.set_task_waker(get_waker().await);
-    info!("trap loop!!");
+    // info!("trap loop!!");
     loop {
         match task.get_status() {
             TaskStatus::Zombie => break,

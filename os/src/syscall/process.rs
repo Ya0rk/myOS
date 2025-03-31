@@ -153,6 +153,7 @@ pub fn sys_clone(
 }
 
 pub async fn sys_exec(path: usize) -> SysResult<usize> {
+    info!("[sys_exec] start");
     let token = current_user_token();
     let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
@@ -174,6 +175,7 @@ pub async fn sys_exec(path: usize) -> SysResult<usize> {
 /// pid > 0 ：等待进程id为pid的子进程
 pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usize) -> SysResult<usize> {
     debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
+    info!("[sys_wait4] start, pid = {}, options = {}", pid,options);
     let task = current_task().unwrap();
     if task.children.lock().is_empty() {
         info!("task pid = {}, has no child.", pid);
@@ -187,11 +189,11 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
         let locked_child = task.children.lock().clone();
         match pid {
             -1 => {
-                info!("[sys_wait4]aaaa");
+                // info!("[sys_wait4]aaaa");
                 locked_child.values().find(|task| task.is_zombie()).cloned()
             }
             p if p > 0 => {
-                info!("[sys_wait4]bbbb, target pid = {}", p);
+                info!("[sys_wait4] target pid = {}", p);
                 locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
             }
             _ => unimplemented!(),
