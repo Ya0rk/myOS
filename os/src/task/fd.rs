@@ -1,5 +1,6 @@
 // #![allow(unused)]
 use alloc::{sync::Arc, vec::Vec};
+use log::info;
 use crate::{config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, utils::{Errno, SysResult}};
 
 #[derive(Clone)]
@@ -70,8 +71,10 @@ impl FdTable {
             Ok(valid_idx)
         } else {
             // 在最后加入
+            info!("before len = {}", self.table_len());
             let new_fd = self.table_len();
             self.put_in(fd, new_fd)?;
+            info!("after len = {}", self.table_len());
             Ok(new_fd)
         }
     }

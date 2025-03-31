@@ -30,8 +30,9 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     let token = current_user_token();
     let task = current_task().unwrap();
-    // let inner = task.inner_lock();
     if fd >= task.fd_table_len() {
+        // info!("[sys_read] task pid = {}", task.get_pid());
+        // info!("[sys_read] fd = {}, but fd len is {}", fd, task.fd_table_len());
         return Err(Errno::EBADF);
     }
     match task.get_file_by_fd(fd) {
@@ -40,8 +41,6 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             let file = file.clone();
-            // release current task TCB manually to avoid multi-borrow
-            // drop(inner);
             Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
@@ -95,16 +94,12 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
 /// 
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
-
-    // Err(Errno::EBADCALL)
     info!("sys_openat start");
 
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = Path::string2path(translated_str(token, path));
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
-
-    // let inner = task.inner_lock();
 
     // 计算目标路径
     let target_path = if path.is_absolute() {
@@ -124,14 +119,14 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
         path.join_path_2_absolute(other_cwd).get()
     };
 
-    // drop(inner);
     // 检查路径是否有效并打开文件
     let result = if let Some(inode) = open_file(target_path.as_str(), flags) {
-        // let mut inner = task.inner_lock();
-        let fd = task.get_fd_table().alloc_fd(Fd::new(inode.file()?, flags))? as usize;
+        let fd = task.alloc_fd(Fd::new(inode.file()?, flags));
         if fd > RLIMIT_NOFILE {
             Err(Errno::EMFILE)
         } else {
+            // info!("[sys_openat] task pid = {}", task.get_pid());
+            // info!("[sys_openat] new fd = {}", fd);
             Ok(fd)
         }
     } else {
@@ -144,13 +139,12 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
 pub fn sys_close(fd: usize) -> SysResult<usize> {
     info!("start sys_close");
     let task = current_task().unwrap();
-    // let mut inner = task.inner_lock();
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
     
     // 删除对应的fd
-    task.get_fd_table().remove(fd)?;
+    task.remove_fd(fd);
     Ok(0)
 }
 
@@ -167,8 +161,8 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
         // let mut inner = task.inner_lock();
         let (read, write) = Pipe::new();
         (
-            task.get_fd_table().alloc_fd(Fd::new(read, flags))?,
-            task.get_fd_table().alloc_fd(Fd::new(write, flags))?,
+            task.alloc_fd(Fd::new(read, flags)),
+            task.alloc_fd(Fd::new(write, flags)),
         )
     };
 
@@ -299,7 +293,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.set_close_on_exec(true);
-    let new_fd = FdTable::alloc_fd(&mut task.get_fd_table(), new_temp_fd)?;
+    let new_fd = task.alloc_fd(new_temp_fd);
     // drop(inner);
     if new_fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -341,7 +335,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.set_close_on_exec(cloexec);
     // 将newfd 放到指定位置
-    task.get_fd_table().put_in(new_temp_fd, newfd)?;
+    task.put_fd_in(new_temp_fd, newfd);
 
     Ok(newfd)
 }
@@ -357,9 +351,9 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = Path::string2path(translated_str(token, path));
-    info!("sys_mkdirat: path = {}, mode = {}", path.get(), mode);
+    // info!("sys_mkdirat: path = {}, mode = {}", path.get(), mode);
 
-    info!("sys_mkdirat cwd is {}", task.get_current_path());
+    // info!("sys_mkdirat cwd is {}", task.get_current_path());
 
     // 计算目标路径
     let target_path = if path.is_absolute() {
@@ -378,7 +372,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
         let other_cwd = inode.get_name()?;
         path.join_path_2_absolute(other_cwd).get()
     };
-    info!("sys_mkdirat target_path is {}", target_path);
+    // info!("sys_mkdirat target_path is {}", target_path);
 
     // drop(inner);
 
@@ -418,7 +412,7 @@ pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags:
         true => String::new(),
         false => translated_str(token, data),
     };
-    info!("sys_mount: source = {}, target = {}, fstype = {}, flags = {}, data = {}", source, target, fstype, flags, data);
+    // info!("sys_mount: source = {}, target = {}, fstype = {}, flags = {}, data = {}", source, target, fstype, flags, data);
 
     let check_flags = MountFlags::from_bits(flags).unwrap();
 
@@ -443,35 +437,6 @@ pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags:
 /// Success: 返回0； 失败： 返回-1；
 pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     // info!("sys_chdir start");
-
-    // let token = current_user_token();
-    // let task = current_task().unwrap();
-    // let path = Path::string2path(translated_str(token, path));
-
-    // // 辅助函数：打开目录并更新当前路径
-    // fn change_directory(task: &Arc<TaskControlBlock>, new_path: String) -> SysResult<usize> {
-    //     if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
-    //         let mut inner = task.inner_lock();
-    //         inner.current_path = new_path;
-    //         Ok(0) // 成功
-    //     } else {
-    //         Err(Errno::EBADCALL) // 失败
-    //     }
-    // }
-
-    // let inner = task.inner_lock();
-    // let current_path = inner.current_path.clone();
-    // drop(inner); // 释放锁
-
-    // if path.is_absolute() {
-    //     // 绝对路径
-    //     change_directory(&task, path.get())
-    // } else {
-    //     // 相对路径
-    //     let absolute_path = path.join_path_2_absolute(current_path);
-    //     change_directory(&task, absolute_path.get())
-    // }
-    info!("sys_chdir start");
 
     let token = current_user_token();
     let task = current_task().unwrap();

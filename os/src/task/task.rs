@@ -176,7 +176,7 @@ impl TaskControlBlock {
 
 
         debug!("task.exec.pid={}", self.pid.0);
-        info!("[exec] exec success task.exec.pid = {}", self.pid.0);
+        // info!("[exec] exec success task.exec.pid = {}", self.pid.0);
     }
 
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
@@ -260,6 +260,8 @@ impl TaskControlBlock {
         add_proc_group_member(new_task.get_pgid(), new_task.get_pid());
         new_task.add_thread_group_member(new_task.clone());
 
+        // 需要将自己加入？？也是wait的问题？
+        new_task.add_child(new_task.clone());
         info!("process fork success, new pid = {}", new_task.get_pid());
         
         new_task
@@ -339,7 +341,7 @@ impl TaskControlBlock {
     }
     
     pub fn do_exit(&self) {
-        info!("[do_exit] Task pid = {} exit;", self.get_pid());
+        // info!("[do_exit] Task pid = {} exit;", self.get_pid());
         let pid = self.get_pid();
 
         // 如果是idle进程
@@ -356,14 +358,14 @@ impl TaskControlBlock {
         }
 
         if !self.is_leader() {
-            info!("[do_exit] task not leader");
+            // info!("[do_exit] task not leader");
             self.remove_thread_group_member(pid);
             remove_task_by_pid(pid);
         } else {
             // 将当前进程的子进程移动到initproc下
-            info!("[do_exit] task is leader");
+            // info!("[do_exit] task is leader");
             if !self.children.lock().is_empty(){
-                info!("[do_exit] task has child");
+                // info!("[do_exit] task has child");
                 let init_proc = get_init_proc();
                 for (pid, child) in self.children.lock().iter() {
                     if child.is_zombie() {
@@ -387,7 +389,7 @@ impl TaskControlBlock {
             // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
             match self.get_parent() {
                 Some(parent) => {
-                    info!("[do_exit] parent pid = {}", parent.get_pid());
+                    // info!("[do_exit] parent pid = {}", parent.get_pid());
                     let sig_info = SigInfo::new(
                SigNom::SIGCHLD, 
                 SigCode::CLD_EXITED, 
@@ -404,7 +406,7 @@ impl TaskControlBlock {
             }
         }
         if self.is_leader() {
-            info!("[do_exit] self status = {}", self.get_status());
+            // info!("[do_exit] self status = {}", self.get_status());
             self.set_zombie();
         }
         
@@ -721,10 +723,19 @@ impl TaskControlBlock {
     pub fn get_fd(&self, fd: usize) -> Fd {
         self.fd_table.lock().get_fd(fd).unwrap()
     }
-    /// 获取fd_table
-    pub fn get_fd_table(&self) -> FdTable {
-        self.fd_table.lock().clone()
+    /// 分配fd
+    pub fn alloc_fd(&self, fd: Fd) -> usize{
+        self.fd_table.lock().alloc_fd(fd).expect("task alloc fd fail")
     }
+    /// 删除fd
+    pub fn remove_fd(&self, fd: usize) {
+        self.fd_table.lock().remove(fd).expect("task remove fd fail")
+    }
+    /// 在指定位置设置fd
+    pub fn put_fd_in(&self, fd: Fd, idx: usize) {
+        self.fd_table.lock().put_in(fd, idx).expect("task [put fd in] fail")
+    }
+
     /// 清空fd_table
     pub fn clear_fd_table(&self) {
         self.fd_table.lock().clear();

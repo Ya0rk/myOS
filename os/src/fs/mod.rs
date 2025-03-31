@@ -237,7 +237,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     let new_path = kpath.join_path_2_absolute(cwd.to_string());
     // 目标文件的路径
     let abs_path = new_path.get();
-    info!("open() abs_path is {}", abs_path);
+    // info!("open() abs_path is {}", abs_path);
     // Check if the absolute path corresponds to a device file
     if find_device(&abs_path) {
         // Attempt to open the device file
@@ -290,7 +290,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
 /// - path: 文件夹目录（绝对路径）
 /// - mode: 创建模式
 pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
-    info!("open() abs_path is {}", path);
+    // info!("open() abs_path is {}", path);
 
     // 查看当前路径是否是设备
     if find_device(path) {
