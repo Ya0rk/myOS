@@ -11,7 +11,7 @@ pub fn enable_interrupt() {
 #[cfg(target_arch = "loongarch64")]
 #[inline(always)]
 pub fn enable_interrupt() {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -24,7 +24,7 @@ pub fn disable_interrupt() {
 #[cfg(target_arch = "loongarch64")]
 #[inline(always)]
 pub fn disable_interrupt() {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -35,7 +35,7 @@ pub fn interrupt_is_enabled() -> bool {
 #[cfg(target_arch = "loongarch64")]
 #[inline(always)]
 pub fn interrupt_is_enabled() -> bool {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 
 /// enable timer interrupt in sie CSR
@@ -49,7 +49,7 @@ pub unsafe fn enable_timer_interrupt() {
 #[cfg(target_arch = "loongarch64")]
 #[inline(always)]
 pub unsafe fn enable_timer_interrupt() {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 
 /// A guard that disable interrupt when it is created and enable interrupt when it is dropped.
