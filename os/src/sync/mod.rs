@@ -1,4 +1,4 @@
-// mod interrupt;
+mod interrupt;
 mod up;
 mod mutex;
 mod misc;

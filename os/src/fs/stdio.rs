@@ -1,7 +1,8 @@
 use super::ffi::RenameFlags;
 use super::FileTrait;
 use super::Kstat;
-use crate::hal::arch::console_getchar;
+// use crate::hal::arch::console_getchar;
+use crate::arch::console_getchar;
 use crate::utils::Errno;
 use crate::utils::SysResult;
 use crate::mm::UserBuffer;
