@@ -1,6 +1,7 @@
 mod rv64;
 
 use rv64::sbi;
+pub use rv64::sstatus;
 
 pub fn console_putchar(c: usize) {
     sbi::console_putchar(c);

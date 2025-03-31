@@ -1,4 +1,5 @@
-use log::info;
+use log::{debug, error, info, warn};
+use lwext4_rust::KernelDevOp;
 
 use crate::drivers::BlockDriver;
 
@@ -116,5 +117,77 @@ impl Disk {
         let block_id = offset / BLOCK_SIZE;
         self.dev.write_block(block_id, buf).unwrap();
         Ok(buf.len())
+    }
+}
+
+impl KernelDevOp for Disk {
+    //type DevType = Box<Disk>;
+    type DevType = Disk;
+    /// 读取硬盘数据到指定buf
+    fn read(dev: &mut Disk, mut buf: &mut [u8]) -> Result<usize, i32> {
+        debug!("READ block device buf={}", buf.len());
+        let mut read_len = 0;
+        while !buf.is_empty() {
+            match dev.read_one(buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let tmp = buf;
+                    buf = &mut tmp[n..];
+                    read_len += n;
+                }
+                Err(_e) => return Err(-1),
+            }
+        }
+        debug!("READ rt len={}", read_len);
+        Ok(read_len)
+    }
+    /// 写入数据到硬盘
+    fn write(dev: &mut Self::DevType, mut buf: &[u8]) -> Result<usize, i32> {
+        debug!("WRITE block device buf={}", buf.len());
+        let mut write_len = 0;
+        while !buf.is_empty() {
+            match dev.write_one(buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    buf = &buf[n..];
+                    write_len += n;
+                }
+                Err(_e) => return Err(-1),
+            }
+        }
+        debug!("WRITE rt len={}", write_len);
+        Ok(write_len)
+    }
+    fn flush(_dev: &mut Self::DevType) -> Result<usize, i32> {
+        Ok(0)
+    }
+    fn seek(dev: &mut Disk, off: i64, whence: i32) -> Result<i64, i32> {
+        let size = dev.size();
+        debug!(
+            "SEEK block device size:{}, pos:{}, offset={}, whence={}",
+            size,
+            &dev.position(),
+            off,
+            whence
+        );
+        let new_pos = match whence as u32 {
+            lwext4_rust::bindings::SEEK_SET => Some(off),
+            lwext4_rust::bindings::SEEK_CUR => dev
+                .position()
+                .checked_add_signed(off as isize)
+                .map(|v| v as i64),
+            lwext4_rust::bindings::SEEK_END => size.checked_add_signed(off as isize).map(|v| v as i64),
+            _ => {
+                error!("invalid seek() whence: {}", whence);
+                Some(off)
+            }
+        }
+        .ok_or(-1)?;
+
+        if new_pos as usize > size {
+            warn!("Seek beyond the end of the block device");
+        }
+        dev.set_position(new_pos as usize);
+        Ok(new_pos)
     }
 }

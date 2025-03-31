@@ -1,55 +1,42 @@
-/// # 管道模块
-/// `os/src/fs/pipe.rs`
-/// ```
-/// pub struct Pipe
-/// enum RingBufferStatus
-/// pub struct PipeRingBuffer
-///
-/// pub fn make_pipe()
-/// ```
-//
-use super::{File, Kstat};
-use crate::mm::UserBuffer;
-use alloc::sync::{Arc, Weak};
+use core::{cmp::min, future::Future, task::{Poll, Waker}};
+use super::{ffi::RenameFlags, FileTrait, Kstat, OpenFlags};
+use crate::{config::PIPE_BUFFER_SIZE, mm::UserBuffer, sync::once::LateInit, utils::{Errno, SysResult}};
+use alloc::{collections::vec_deque::VecDeque, string::String, sync::{Arc, Weak}};
 use spin::Mutex;
+use async_trait::async_trait;
+use alloc::boxed::Box;
 
-use crate::task::suspend_current_and_run_next;
-
-/// ### 管道
-/// 由 读 `readable` / 写 `writable` 权限和 缓冲区 `buffer` 组成，用以分别表示管道的写端和读端
-/// ```
-/// pub fn read_end_with_buffer
-/// pub fn write_end_with_buffer
-/// ```
 pub struct Pipe {
-    readable: bool,
-    writable: bool,
-    buffer: Arc<Mutex<PipeRingBuffer>>,
+    flags: OpenFlags,
+    other : LateInit<Weak<Pipe>>,
+    buffer: Arc<Mutex<PipeInner>>,
 }
 
 impl Pipe {
     /// make pipe: read end and wrtie end
     /// 创建一个管道并返回管道的读端和写端 (read_end, write_end)
     pub fn new() -> (Arc<Self>, Arc<Self>) {
-        let buffer = Arc::new(Mutex::new(PipeRingBuffer::new()));
-        let read_end = Arc::new(Self::read_end_with_buffer(buffer.clone()));
-        let write_end = Arc::new(Self::write_end_with_buffer(buffer.clone()));
-        buffer.lock().set_write_end(&write_end);
+        let buffer = Arc::new(Mutex::new(PipeInner::new()));
+        let read_end  = Arc::new(Self::read_end_with_buffer(buffer.clone()));
+        let write_end = Arc::new(Self::write_end_with_buffer(buffer));
+        read_end.other.init(Arc::downgrade(&write_end));
+        write_end.other.init(Arc::downgrade(&read_end));
+
         (read_end, write_end)
     }
     /// 创建管道的读端
-    pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+    pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeInner>>) -> Self {
         Self {
-            readable: true,
-            writable: false,
+            flags: OpenFlags::O_RDONLY,
+            other: LateInit::new(),
             buffer,
         }
     }
     /// 创建管道的写端
-    pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeRingBuffer>>) -> Self {
+    pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeInner>>) -> Self {
         Self {
-            readable: false,
-            writable: true,
+            flags: OpenFlags::O_WRONLY,
+            other: LateInit::new(),
             buffer,
         }
     }
@@ -63,51 +50,33 @@ enum RingBufferStatus {
     Normal,
 }
 
-const RING_BUFFER_SIZE: usize = 32;
-
-/// ### 管道缓冲区(双端队列,向右增长)
-/// |成员变量|描述|
-/// |--|--|
-/// |`arr`|缓冲区内存块|
-/// |`head`|队列头，读|
-/// |`tail`|队列尾，写|
-/// |`status`|队列状态|
-/// |`write_end`|保存了它的写端的一个弱引用计数，<br>在需要确认该管道所有的写端是否都已经被关闭时，<br>通过这个字段很容易确认这一点|
-/// ```
-/// pub fn new()
-/// pub fn set_write_end()
-/// pub fn write_byte()
-/// pub fn read_byte()
-/// pub fn available_read()
-/// pub fn available_write()
-/// pub fn all_write_ends_closed()
-/// ```
-pub struct PipeRingBuffer {
-    arr: [u8; RING_BUFFER_SIZE],
+pub struct PipeInner {
+    arr: [u8; PIPE_BUFFER_SIZE],
     head: usize,
     tail: usize,
+    reader_waker: VecDeque<Waker>,
+    writer_waker: VecDeque<Waker>,
     status: RingBufferStatus,
     write_end: Option<Weak<Pipe>>,
 }
 
-impl PipeRingBuffer {
+impl PipeInner {
     pub fn new() -> Self {
         Self {
-            arr: [0; RING_BUFFER_SIZE],
+            arr: [0; PIPE_BUFFER_SIZE],
             head: 0,
             tail: 0,
+            reader_waker: VecDeque::new(),
+            writer_waker: VecDeque::new(),
             status: RingBufferStatus::Empty,
             write_end: None,
         }
-    }
-    pub fn set_write_end(&mut self, write_end: &Arc<Pipe>) {
-        self.write_end = Some(Arc::downgrade(write_end));
     }
     /// 写一个字节到管道尾
     pub fn write_byte(&mut self, byte: u8) {
         self.status = RingBufferStatus::Normal;
         self.arr[self.tail] = byte;
-        self.tail = (self.tail + 1) % RING_BUFFER_SIZE;
+        self.tail = (self.tail + 1) % PIPE_BUFFER_SIZE;
         if self.tail == self.head {
             self.status = RingBufferStatus::Full;
         }
@@ -116,28 +85,26 @@ impl PipeRingBuffer {
     pub fn read_byte(&mut self) -> u8 {
         self.status = RingBufferStatus::Normal;
         let c = self.arr[self.head];
-        self.head = (self.head + 1) % RING_BUFFER_SIZE;
+        self.head = (self.head + 1) % PIPE_BUFFER_SIZE;
         if self.head == self.tail {
             self.status = RingBufferStatus::Empty;
         }
         c
     }
     /// 获取管道中剩余可读长度
-    pub fn available_read(&self) -> usize {
+    pub fn available_read(&self, buf_len: usize) -> usize {
         if self.status == RingBufferStatus::Empty {
             0
-        } else if self.tail > self.head {
-            self.tail - self.head
         } else {
-            self.tail + RING_BUFFER_SIZE - self.head
+            min(buf_len, self.arr.len())
         }
     }
     /// 获取管道中剩余可写长度
-    pub fn available_write(&self) -> usize {
+    pub fn available_write(&self, buf_len: usize) -> usize {
         if self.status == RingBufferStatus::Full {
             0
         } else {
-            RING_BUFFER_SIZE - self.available_read()
+            min(buf_len, PIPE_BUFFER_SIZE - self.arr.len())
         }
     }
     /// 通过管道缓冲区写端弱指针判断管道的所有写端都被关闭
@@ -146,67 +113,41 @@ impl PipeRingBuffer {
     }
 }
 
-
-impl File for Pipe {
+#[async_trait]
+impl FileTrait for Pipe {
     fn readable(&self) -> bool {
-        self.readable
+        self.flags.contains(OpenFlags::O_RDONLY)
     }
     fn writable(&self) -> bool {
-        self.writable
+        self.flags.contains(OpenFlags::O_WRONLY)
     }
-    fn read(&self, buf: UserBuffer) -> usize {
+    async fn read(&self, buf: UserBuffer) -> SysResult<usize> {
         assert!(self.readable());
-        let mut buf_iter = buf.into_iter();
-        let mut read_size = 0usize;
-        loop {
-            let mut ring_buffer = self.buffer.lock();
-            let loop_read = ring_buffer.available_read();
-            if loop_read == 0 {
-                if ring_buffer.all_write_ends_closed() {
-                    return read_size;
-                }
-                drop(ring_buffer);
-                suspend_current_and_run_next();
-                continue;
-            }
-            // read at most loop_read bytes
-            for _ in 0..loop_read {
-                if let Some(byte_ref) = buf_iter.next() {
-                    unsafe {
-                        *byte_ref = ring_buffer.read_byte();
-                    }
-                    read_size += 1;
-                } else {
-                    return read_size;
-                }
-            }
+        if buf.len() == 0{
+            return Ok(0);
         }
+        PipeReadFuture {
+            pipe: self,
+            buf,
+            cur: 0,
+        }.await
     }
-    fn write(&self, buf: UserBuffer) -> usize {
+    async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
         assert!(self.writable());
-        let mut buf_iter = buf.into_iter();
-        let mut write_size = 0usize;
-        loop {
-            let mut ring_buffer = self.buffer.lock();
-            let loop_write = ring_buffer.available_write();
-            if loop_write == 0 {
-                drop(ring_buffer);
-                suspend_current_and_run_next();
-                continue;
-            }
-            // write at most loop_write bytes
-            for _ in 0..loop_write {
-                if let Some(byte_ref) = buf_iter.next() {
-                    ring_buffer.write_byte(unsafe { *byte_ref });
-                    write_size += 1;
-                } else {
-                    return write_size;
-                }
-            }
+        if buf.len() == 0{
+            return Ok(0);
         }
+        PipeWriteFuture {
+            pipe: self,
+            buf,
+            cur: 0,
+        }.await
     }
     
-    fn get_name(&self) -> alloc::string::String {
+    fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
@@ -226,7 +167,81 @@ impl File for Pipe {
     //     }
     //     revents
     // }
-    fn fstat(&self, _stat: &mut Kstat) -> () {
+    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
+    }
+}
+
+struct PipeReadFuture<'a> {
+    pipe: &'a Pipe,
+    buf: UserBuffer,
+    cur: usize
+}
+
+impl Future for PipeReadFuture<'_> {
+    type Output = SysResult<usize>;
+
+    fn poll(mut self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
+        let mut inner = self.pipe.buffer.lock();
+        let size = inner.available_read(self.buf.len() - self.cur);
+        if size > 0 {
+            let mut pos = 0;
+            let mut idx = 0;
+            loop {
+                if pos >= size { break; }
+                let len = self.buf[idx].len();
+                self.buf[idx].copy_from_slice(&inner.arr[pos..pos + len]);
+                idx += 1;
+                pos += len;
+            }
+            self.cur += size;
+            while let Some(waker) = inner.writer_waker.pop_front() {
+                waker.wake();
+            }
+            Poll::Ready(Ok(size))
+        } else {
+            if self.pipe.other.strong_count() == 0 {
+                return Poll::Ready(Ok(0));
+            }
+            inner.reader_waker.push_back(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+struct PipeWriteFuture<'a> {
+    pipe: &'a Pipe,
+    buf: UserBuffer,
+    cur: usize
+}
+
+impl Future for PipeWriteFuture<'_> {
+    type Output = SysResult<usize>;
+
+    fn poll(mut self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
+        let mut inner = self.pipe.buffer.lock();
+        if self.pipe.other.strong_count() == 0 {
+            return Poll::Ready(Err(Errno::EPIPE));
+        }
+        let size = inner.available_write(self.buf.len() - self.cur);
+        if size > 0 {
+            let mut pos = 0;
+            let mut idx = 0;
+            loop {
+                if pos > size { break; }
+                let len = self.buf[idx].len();
+                inner.arr.copy_from_slice(&self.buf[idx][0..len]);
+                idx += 1;
+                pos += len;
+            }
+            self.cur += size;
+            while let Some(waker) = inner.reader_waker.pop_front() {
+                waker.wake();
+            }
+            Poll::Ready(Ok(size))
+        } else {
+            inner.writer_waker.push_back(cx.waker().clone());
+            Poll::Pending
+        }
     }
 }

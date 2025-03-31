@@ -73,6 +73,7 @@ pub enum SysCode {
     SYSCALL_CLONE     = 220,
     SYSCALL_EXEC      = 221,
     SYSCALL_WAIT4     = 260,
+    GETRANDOM         = 278,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -114,6 +115,76 @@ impl SysCode {
             Self::SYSCALL_EXEC => "exec",
             Self::SYSCALL_WAIT4 => "wait4",
             Self::SYSCALL_UNKNOWN => "unknown",
+            Self::GETRANDOM => "getrandom",
         }
+    }
+}
+
+bitflags! {
+    #[derive(Debug,Clone,Copy)]
+    pub struct CloneFlags: u32 {
+        /// 子进程退出时发送 SIGCHLD 信号（传统 fork() 行为）
+        const SIGCHLD = (1 << 4) | (1 << 0);
+        /// 共享虚拟内存（线程的典型行为）
+        const CLONE_VM = 1 << 8;
+        /// 共享文件系统信息（根目录/工作目录等）
+        const CLONE_FS = 1 << 9;
+        /// 共享打开的文件描述符表
+        const CLONE_FILES = 1 << 10;
+        /// 共享信号处理函数和阻塞信号掩码
+        const CLONE_SIGHAND = 1 << 11;
+        /// 在父进程中返回子进程的 pidfd（进程文件描述符）
+        const CLONE_PIDFD = 1 << 12;
+        /// 允许调试器继续跟踪子进程
+        const CLONE_PTRACE = 1 << 13;
+        /// 父进程阻塞，直到子进程调用 exec() 或退出（类似 vfork()）
+        const CLONE_VFORK = 1 << 14;
+        /// 子进程与调用者共享父进程（而非成为调用者的子进程）
+        const CLONE_PARENT = 1 << 15;
+        /// 将子进程放入同一线程组（实现 POSIX 线程）
+        const CLONE_THREAD = 1 << 16;
+        /// 创建新的挂载命名空间（Mount Namespace）
+        const CLONE_NEWNS = 1 << 17;
+        /// 共享 System V 信号量的 SEM_UNDO 状态
+        const CLONE_SYSVSEM = 1 << 18;
+        /// 为子进程设置新的线程本地存储（TLS）
+        const CLONE_SETTLS = 1 << 19;
+        /// 将子进程的线程ID（TID）写入父进程的指定地址
+        const CLONE_PARENT_SETTID = 1 << 20;
+        /// 子进程退出时清除其线程ID（用于线程库同步）
+        const CLONE_CHILD_CLEARTID = 1 << 21;
+        /// （已废弃）早期标记线程为"分离状态"
+        const CLONE_DETACHED = 1 << 22;
+        /// 禁止调试进程强制启用 CLONE_PTRACE
+        const CLONE_UNTRACED = 1 << 23;
+        /// 将子进程的线程ID写入子进程的指定地址
+        const CLONE_CHILD_SETTID = 1 << 24;
+        /// 创建新的 Cgroup 命名空间
+        const CLONE_NEWCGROUP = 1 << 25;
+        /// 创建新的 UTS 命名空间（隔离主机名和域名）
+        const CLONE_NEWUTS = 1 << 26;
+        /// 创建新的 IPC 命名空间（隔离 System V IPC/POSIX 消息队列）
+        const CLONE_NEWIPC = 1 << 27;
+        /// 创建新的用户命名空间（隔离用户/组 ID）
+        const CLONE_NEWUSER = 1 << 28;
+        /// 创建新的 PID 命名空间（隔离进程 ID）
+        const CLONE_NEWPID = 1 << 29;
+        /// 创建新的网络命名空间（隔离网络设备、端口等）
+        const CLONE_NEWNET = 1 << 30;
+        /// 共享 I/O 上下文（优化块设备 I/O 调度）
+        const CLONE_IO = 1 << 31;
+    }
+}
+
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    /// Defined in <bits/waitflags.h>.
+    pub struct WaitOptions: i32 {
+        /// 如果pid所指向的子进程状态未改变，则立即返回0，不会阻塞
+        const WNOHANG = 1;
+        /// 除了返回子进程的信息外，还要返回因信号而停止的子进程信息
+        const WUNTRACED = 1 << 1;
+        /// 返回那些因收到SIGCONT信号而恢复执行并且已经停止的子进程信息
+        const WCONTINUED = 1 << 3;
     }
 }

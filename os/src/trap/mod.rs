@@ -2,12 +2,18 @@ mod context;
 mod user_trap;
 mod kernel_trap;
 
-pub use context::TrapContext;
+use alloc::sync::Arc;
+use log::info;
 use user_trap::{user_trap_handler, user_trap_return};
 use core::arch::global_asm;
 use core::fmt::Display;
 use riscv::register::mtvec::TrapMode;
 use riscv::register::stvec;
+use crate::signal::do_signal;
+use crate::sync::{get_waker, suspend_now};
+use crate::task::{TaskControlBlock, TaskStatus};
+pub use context::TrapContext;
+pub use context::UserFloatRegs;
 
 global_asm!(include_str!("trap.S"));
 
@@ -15,6 +21,7 @@ global_asm!(include_str!("trap.S"));
 extern "C" {
     fn __trap_from_user();
     fn __trap_from_kernel();
+    pub fn __sigret_helper();
     #[allow(improper_ctypes)]
     fn __return_to_user(ctx: *mut TrapContext);
 }
@@ -23,12 +30,44 @@ pub fn init() {
     set_trap_handler(IndertifyMode::Kernel);
 }
 
-pub fn trap_loop() {
+
+/// 用户态陷入内核态后，执行完内核态代码后，返回用户态
+pub async fn trap_loop(task: Arc<TaskControlBlock>) {
+    // 设置task的waker TODO：将这个放入 UserTaskFuture中
+    task.set_task_waker(get_waker().await);
+    info!("trap loop!!");
     loop {
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
+            _ => {},
+        }
+
         user_trap_return();
-        user_trap_handler(); 
+
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
+            _ => {},
+        }
+
+        user_trap_handler().await;
+
+        match task.get_status() {
+            TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
+            _ => {},
+        }
+
+        if task.pending() {
+            do_signal(&task);
+        }
     }
+
+    task.do_exit();
 }
+
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(unused)]

@@ -1,3 +1,4 @@
+#![allow(unused)]
 pub const SYSCALL_GETCWD: usize     = 17;
 pub const SYSCALL_DUP: usize        = 23;
 pub const SYSCALL_DUP3: usize       = 24;
@@ -22,4 +23,5 @@ pub const SYSCALL_GETPID: usize     = 172;
 pub const SYSCALL_GETPPID: usize    = 173;
 pub const SYSCALL_FORK: usize       = 220;
 pub const SYSCALL_EXEC: usize       = 221;
-pub const SYSCALL_WAIT4: usize    = 260;
+pub const SYSCALL_WAIT4: usize      = 260;
+pub const GETRANDOM: usize          = 278;
