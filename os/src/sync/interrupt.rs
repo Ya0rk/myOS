@@ -1,30 +1,34 @@
-use riscv::register::{sie, sstatus};
+// use riscv::register::{sie, sstatus};
 
 #[inline(always)]
 pub fn enable_interrupt() {
-    unsafe {
-        sstatus::set_sie();
-    }
+    // unsafe {
+    //     sstatus::set_sie();
+    // }
+    unimplemented!()
 }
 
 #[inline(always)]
 pub fn disable_interrupt() {
-    unsafe {
-        sstatus::clear_sie();
-    }
+    // unsafe {
+    //     sstatus::clear_sie();
+    // }
+    unimplemented!()
 }
 
 #[inline(always)]
 pub fn interrupt_is_enabled() -> bool {
-    sstatus::read().sie()
+    // sstatus::read().sie()
+    unimplemented!()
 }
 
 /// enable timer interrupt in sie CSR
 #[inline(always)]
 pub unsafe fn enable_timer_interrupt() {
-    unsafe {
-        sie::set_stimer();
-    }
+    // unsafe {
+    //     sie::set_stimer();
+    // }
+    unimplemented!()
 }
 
 /// A guard that disable interrupt when it is created and enable interrupt when it is dropped.

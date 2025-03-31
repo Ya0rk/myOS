@@ -6,9 +6,9 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use log::debug;
 use spin::Mutex;
-use core::arch::asm;
+// use core::arch::asm;
 use lazy_static::*;
-use riscv::register::satp;
+// use riscv::register::satp;
 
 extern "C" {
     fn stext();
@@ -266,12 +266,13 @@ impl MemorySet {
     }
     ///Refresh TLB with `sfence.vma`
     pub unsafe fn activate(& self) {
-        let satp = self.page_table.token();
-        unsafe {
-            satp::write(satp);
-            asm!("sfence.vma");
-        }
+        // let satp = self.page_table.token();
+        // unsafe {
+        //     satp::write(satp);
+        //     asm!("sfence.vma");
+        // }
         // crate::hal::arch::switch_pagetable(satp);
+        unimplemented!()
     }
     ///Translate throuth pagetable
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
