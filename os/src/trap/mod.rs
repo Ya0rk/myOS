@@ -108,5 +108,5 @@ fn set_trap_handler(mode: IndertifyMode) {
 }
 #[cfg(target_arch = "loongarch64")]
 fn set_trap_handler(mode: IndertifyMode) {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }

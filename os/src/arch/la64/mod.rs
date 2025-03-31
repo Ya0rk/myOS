@@ -2,23 +2,23 @@ pub mod sbi;
 pub mod sstatus;
 
 pub fn fp_read() -> usize {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 
 pub fn tp_read() -> usize {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 /// riscv::register::satp::read().bits()
 pub fn satp_read() -> usize {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 
 pub fn satp_write(satp: usize) {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 
 
 
 pub fn sfence() {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
