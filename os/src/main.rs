@@ -21,7 +21,7 @@ mod lang_items;
 pub mod mm;
 pub mod fs;
 pub mod task;
-// pub mod trap;
+pub mod trap;
 pub mod sync;
 pub mod utils;
 pub mod syscall;
@@ -67,7 +67,7 @@ pub fn rust_main(hart_id: usize) -> ! {
             "[kernel] ---------- hart {} is starting... ----------",
             hart_id
         );
-        hal::arch::trap_init();
+        trap::init();
         task::init_processors();
         println!("a");
         block_on(fs::init());
@@ -81,11 +81,11 @@ pub fn rust_main(hart_id: usize) -> ! {
         utils::boot_all_harts(hart_id);
     } else {
 
-        hal::arch::trap_init();
+        trap::init();
         mm::init(false);        
     }
     
-    unsafe { hal::interrupt::enable_timer_interrupt() };
+    unsafe { sync::enable_timer_interrupt() };
     timer::set_next_trigger();
 
     // 列出目前的应用

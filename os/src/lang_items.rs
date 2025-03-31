@@ -1,5 +1,5 @@
 use log::*;
-use crate::{hal::arch::shutdown, task::get_current_hart_id, utils::backtrace};
+use crate::{arch::shutdown, task::get_current_hart_id, utils::backtrace};
 use core::panic::PanicInfo;
 
 #[panic_handler]
