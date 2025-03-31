@@ -3,9 +3,13 @@
 // use core::arch::asm;
 // use riscv::{addr::BitField, register::sstatus::FS};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// Floating-point extension state
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum FS {
-    Dirty = 0,
+    Off = 0,
+    Initial = 1,
+    Clean = 2,
+    Dirty = 3,
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -266,13 +266,14 @@ impl MemorySet {
     }
     ///Refresh TLB with `sfence.vma`
     pub unsafe fn activate(& self) {
-        // let satp = self.page_table.token();
+        let satp = self.page_table.token();
+        crate::arch::satp_write(satp);
+        crate::arch::sfence();
         // unsafe {
         //     satp::write(satp);
         //     asm!("sfence.vma");
         // }
         // crate::hal::arch::switch_pagetable(satp);
-        unimplemented!()
     }
     ///Translate throuth pagetable
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {

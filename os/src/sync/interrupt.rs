@@ -1,33 +1,54 @@
-// use riscv::register::{sie, sstatus};
+#[cfg(target_arch = "riscv64")]
+use riscv::register::{sie, sstatus};
 
+#[cfg(target_arch = "riscv64")]
 #[inline(always)]
 pub fn enable_interrupt() {
-    // unsafe {
-    //     sstatus::set_sie();
-    // }
+    unsafe {
+        sstatus::set_sie();
+    }
+}
+#[cfg(target_arch = "loongarch64")]
+#[inline(always)]
+pub fn enable_interrupt() {
     unimplemented!()
 }
 
+#[cfg(target_arch = "riscv64")]
 #[inline(always)]
 pub fn disable_interrupt() {
-    // unsafe {
-    //     sstatus::clear_sie();
-    // }
+    unsafe {
+        sstatus::clear_sie();
+    }
+}
+#[cfg(target_arch = "loongarch64")]
+#[inline(always)]
+pub fn disable_interrupt() {
     unimplemented!()
 }
 
+#[cfg(target_arch = "riscv64")]
 #[inline(always)]
 pub fn interrupt_is_enabled() -> bool {
-    // sstatus::read().sie()
+    sstatus::read().sie()
+}
+#[cfg(target_arch = "loongarch64")]
+#[inline(always)]
+pub fn interrupt_is_enabled() -> bool {
     unimplemented!()
 }
 
 /// enable timer interrupt in sie CSR
+#[cfg(target_arch = "riscv64")]
 #[inline(always)]
 pub unsafe fn enable_timer_interrupt() {
-    // unsafe {
-    //     sie::set_stimer();
-    // }
+    unsafe {
+        sie::set_stimer();
+    }
+}
+#[cfg(target_arch = "loongarch64")]
+#[inline(always)]
+pub unsafe fn enable_timer_interrupt() {
     unimplemented!()
 }
 
