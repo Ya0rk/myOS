@@ -9,9 +9,11 @@ use core::arch::global_asm;
 use core::fmt::Display;
 use riscv::register::mtvec::TrapMode;
 use riscv::register::stvec;
-use crate::sync::get_waker;
+use crate::signal::do_signal;
+use crate::sync::{get_waker, suspend_now};
 use crate::task::{TaskControlBlock, TaskStatus};
 pub use context::TrapContext;
+pub use context::UserFloatRegs;
 
 global_asm!(include_str!("trap.S"));
 
@@ -19,6 +21,7 @@ global_asm!(include_str!("trap.S"));
 extern "C" {
     fn __trap_from_user();
     fn __trap_from_kernel();
+    pub fn __sigret_helper();
     #[allow(improper_ctypes)]
     fn __return_to_user(ctx: *mut TrapContext);
 }
@@ -32,9 +35,11 @@ pub fn init() {
 pub async fn trap_loop(task: Arc<TaskControlBlock>) {
     // 设置task的waker TODO：将这个放入 UserTaskFuture中
     task.set_task_waker(get_waker().await);
+    info!("trap loop!!");
     loop {
         match task.get_status() {
             TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
             _ => {},
         }
 
@@ -42,6 +47,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
 
         match task.get_status() {
             TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
             _ => {},
         }
 
@@ -49,12 +55,16 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
 
         match task.get_status() {
             TaskStatus::Zombie => break,
+            TaskStatus::Stopped => suspend_now().await,
             _ => {},
+        }
+
+        if task.pending() {
+            do_signal(&task);
         }
     }
 
-    info!("Task {} exit with code {}", task.get_pid(), task.get_exit_code());
-    task.exit();
+    task.do_exit();
 }
 
 

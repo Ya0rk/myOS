@@ -1,6 +1,6 @@
 use core::{cell::UnsafeCell, marker::PhantomData, ops::{Deref, DerefMut}, sync::atomic::{AtomicBool, Ordering}};
 
-use super::MutexOperations;
+use super::{ffi::SendWrapper, MutexOperations};
 
 pub struct MutexGuard<'a, T: ?Sized, S: MutexOperations> {
     mutex: &'a SpinMutex<T, S>,
@@ -61,6 +61,10 @@ impl<T, S: MutexOperations> SpinMutex<T, S> {
             mutex: self,
             support_guard,
         }
+    }
+
+    pub unsafe fn sent_lock(&self) -> impl DerefMut<Target = T> + '_ {
+        SendWrapper::new(self.lock())
     }
 
 }

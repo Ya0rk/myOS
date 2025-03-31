@@ -1,6 +1,7 @@
 use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
+use crate::signal::{SigDetails, SigMask};
 use crate::sync::{sleep_for, suspend_now, yield_now, TimeSepc, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
@@ -22,7 +23,7 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
     Ok(0)
 }
 
-pub async fn sys_nanosleep(req: *const u8, _rem: *const u8) -> SysResult<usize> {
+pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
     let req = *translated_ref(current_user_token(), req as *const TimeSepc);
     if !req.check_valid() {
         return Err(Errno::EINVAL);
@@ -151,12 +152,12 @@ pub fn sys_clone(
     Ok(new_pid as usize)
 }
 
-pub fn sys_exec(path: *const u8) -> SysResult<usize> {
+pub async fn sys_exec(path: usize) -> SysResult<usize> {
     let token = current_user_token();
-    let path = translated_str(token, path);
+    let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
-        let all_data = app_inode.file()?.inode.read_all()?;
+        let all_data = app_inode.file()?.metadata.inode.read_all().await?;
         let task = current_task().unwrap();
         task.exec(all_data.as_slice());
         Ok(0)
@@ -171,7 +172,7 @@ pub fn sys_exec(path: *const u8) -> SysResult<usize> {
 /// pid = 0 : 等待与调用进程（父进程）同一个进程组的所有子进程
 /// pid < -1: 等待进程组标识符与pid绝对值相等的所有子进程
 /// pid > 0 ：等待进程id为pid的子进程
-pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: usize) -> SysResult<usize> {
+pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usize) -> SysResult<usize> {
     debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
     let task = current_task().unwrap();
     if task.children.lock().is_empty() {
@@ -186,10 +187,12 @@ pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: u
         let locked_child = task.children.lock().clone();
         match pid {
             -1 => {
-                locked_child.iter().find(|task| task.is_zombie()).cloned()
+                info!("[sys_wait4]aaaa");
+                locked_child.values().find(|task| task.is_zombie()).cloned()
             }
             p if p > 0 => {
-                locked_child.iter().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
+                info!("[sys_wait4]bbbb, target pid = {}", p);
+                locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
             }
             _ => unimplemented!(),
         }
@@ -197,22 +200,47 @@ pub async fn sys_wait4(pid: isize, wstatus: *mut i32, options: usize, _rusage: u
 
     match target_task {
         Some(zombie_child) => {
-            info!("sys_wait4: find a target zombie child task.");
+            info!("[sys_wait4] find a target zombie child task.");
             let zombie_pid = zombie_child.get_pid();
-            task.do_wait4(zombie_pid, wstatus);
+            let exit_code = zombie_child.get_exit_code();
+            task.do_wait4(zombie_pid, wstatus as *mut i32, exit_code);
             return Ok(zombie_pid);
         }
         None => {
+            info!("[sys_wait4] current task pid = {}", task.get_pid());
             if op.contains(WaitOptions::WNOHANG) {
                 return Ok(0)
             }
             // 如果等待的进程还不是zombie，那么本进程进行await，
             // 直到等待的进程do_exit然后发送SIGCHLD信号唤醒自己
-            let child_pid = loop {
-                // TODO(YJJ): 等待子进程的信号唤醒
+            let (child_pid, _status, exit_code) = loop {
+                task.set_wake_up_signal(!*task.get_blocked() | SigMask::SIGCHLD);
                 suspend_now().await;
+                // 在pending队列中取出希望的信号，也就是子进程结束后发送给父进程的信号
+                match task.sig_pending.lock().take_expected_one(SigMask::SIGCHLD) {
+                    Some(sig_info) => {
+                        if let SigDetails::Chld { 
+                            pid: find_pid, 
+                            status, 
+                            exit_code 
+                        } = sig_info.sifields
+                        {
+                            match pid {
+                                -1 => break (find_pid, status, exit_code),
+                                p if p > 0 => {
+                                    if find_pid == p as usize {
+                                        break (find_pid, status, exit_code);
+                                    }
+                                }
+                                _ => unimplemented!(),
+                            }
+                        }
+                    }
+                    None => return Err(Errno::EINTR),
+                }
             };
-            task.do_wait4(child_pid, wstatus);
+            info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
+            task.do_wait4(child_pid, wstatus as *mut i32, exit_code);
             return Ok(child_pid);
         }
     }
@@ -231,5 +259,5 @@ pub fn sys_getrandom(
             buf,
             buflen
     ));
-    unsafe { Ok(RNG.fill_buf(buffer)) }
+    Ok(RNG.lock().fill_buf(buffer))
 }

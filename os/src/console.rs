@@ -1,6 +1,5 @@
-use spin::Mutex;
 use core::fmt::{self, Write};
-use crate::arch::console_putchar;
+use crate::{arch::console_putchar, sync::SpinNoIrqLock};
 use lazy_static::*;
 
 struct Stdout;
@@ -15,7 +14,7 @@ impl Write for Stdout {
 }
 
 lazy_static! {
-    static ref MUTEX_STDOUT: Mutex<Stdout> = Mutex::new(Stdout {});
+    static ref MUTEX_STDOUT: SpinNoIrqLock<Stdout> = SpinNoIrqLock::new(Stdout {});
 }
 pub fn print(args: fmt::Arguments) {
     // unsafe {

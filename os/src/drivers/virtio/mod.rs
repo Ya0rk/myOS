@@ -1,8 +1,6 @@
 mod blk;
 
 pub use blk::*;
-
-// use log::info;
 use spin::Mutex;
 use virtio_drivers::Hal;
 

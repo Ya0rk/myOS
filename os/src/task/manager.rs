@@ -17,9 +17,9 @@ pub struct Manager {
 }
 
 /// 存放所有任务的管理器，可以通过pid快速找到对应的Task
-struct TaskManager(HashMap<Pid, Weak<TaskControlBlock>>);
+pub struct TaskManager(HashMap<Pid, Weak<TaskControlBlock>>);
 /// 存放进程组的管理器，通过进程组的leader 的pid可以定位到进程组
-struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
+pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
 
 impl Manager {
     pub fn new() -> Self {
@@ -61,6 +61,10 @@ pub fn get_task_by_pid(pid: usize) -> Option<Arc<TaskControlBlock>> {
 pub fn remove_task_by_pid(pid: usize) {
     MANAGER.task_manager.lock().remove(pid);
 }
+/// 获取到init proc
+pub fn get_init_proc() -> Arc<TaskControlBlock> {
+    MANAGER.task_manager.lock().get(INITPROC_PID).unwrap()
+}
 
 impl ProcessGroupManager {
     fn add_new_group(&mut self, pgid: PGid) {
@@ -86,10 +90,10 @@ pub fn new_process_group(pgid: PGid) {
     MANAGER.process_group.lock().add_new_group(pgid);
 }
 
-pub fn remove_group_member(pgid: PGid, pid: Pid) {
+pub fn remove_proc_group_member(pgid: PGid, pid: Pid) {
     MANAGER.process_group.lock().remove(pgid, pid);
 }
 
-pub fn add_process_group_member(pgid: PGid, pid: Pid) {
+pub fn add_proc_group_member(pgid: PGid, pid: Pid) {
     MANAGER.process_group.lock().add(pgid, pid);
 }

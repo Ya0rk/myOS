@@ -5,7 +5,7 @@ use crate::arch::sstatus::{self, Sstatus, SPP};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct UserFloatRegs {
+pub struct UserFloatRegs {
     f: [f64; 32], // 50-81
     fcsr: u32,
     need_save: u8,
@@ -20,7 +20,7 @@ pub struct TrapContext {
     /*  32  */ pub sstatus: Sstatus,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
-    /*  35  */ pub trap_loop: usize,
+    /*  35  */ pub kernal_ra: usize,
     /* 36-47*/ pub kernel_s: [usize; 12],
     /*  48  */ pub kernel_fp: usize,
     /*  49  */ pub kernel_tp: usize,
@@ -33,7 +33,7 @@ impl TrapContext {
         entry: usize,
         sp: usize,
         kernel_sp: usize,
-        trap_loop: usize,
+        _trap_loop: usize,
     ) -> Self {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
@@ -42,7 +42,7 @@ impl TrapContext {
             sstatus,
             sepc: entry,
             kernel_sp,
-            trap_loop,
+            kernal_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,
             kernel_tp: 0,
@@ -68,6 +68,21 @@ impl TrapContext {
     }
     pub fn set_kernel_sp(&mut self, kernel_sp: usize) {
         self.kernel_sp = kernel_sp;
+    }
+    /// 在do_signal信号处理中,重新设置trap context
+    /// 返回到用户自定义函数
+    /// 
+    /// handler: 信号处理 函数addr
+    /// 
+    /// new_sp: 信号处理栈的sp
+    /// 
+    /// sigret: 信号处理完后返回到sigreturn系统调用
+    pub fn flash(&mut self, handler: usize, new_sp: usize, sigret: usize, signo: usize) {
+        self.sepc = handler;
+        self.set_sp(new_sp);
+        self.user_x[1] = sigret;
+        self.user_x[10] = signo;
+
     }
 }
 
