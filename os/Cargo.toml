@@ -12,9 +12,9 @@ bitflags = "2.8.0"
 xmas-elf = "0.9.1"
 virtio-drivers = { path = "../vendor/virtio-drivers" }
 log = "0.4"
-sbi-rt = { version = "0.0.3", features = ["legacy"] }
+# sbi-rt = { version = "0.0.3", features = ["legacy"] }
 spin = "0.9.8"
-# sbi-spec = "0.0.8"
+sbi-spec = "0.0.8"
 num_enum = { version = "0.7.2", default-features = false }
 zerocopy = { version = "0.8.21", features = ["derive"]}
 lwext4_rust= {path = "../lwext4_rust"}

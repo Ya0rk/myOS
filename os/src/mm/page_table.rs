@@ -1,6 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use core::arch::asm;
+// use core::arch::asm;
 use crate::config::KERNEL_PGNUM_OFFSET;
 // use crate::hal;
 use super::address::KernelAddr;
@@ -9,7 +9,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
-use riscv::register::satp;
+// use riscv::register::satp;
 
 // TODO(COW标志位可以设置在这里)
 bitflags! {
@@ -70,9 +70,10 @@ impl PageTableEntry {
     }
 }
 
-pub unsafe fn switch_pgtable(page_table_token: usize) {
-    satp::write(page_table_token);
-    asm!("sfence.vma");
+pub unsafe fn switch_pgtable(_page_table_token: usize) {
+    unimplemented!()
+    // satp::write(page_table_token);
+    // asm!("sfence.vma");
     // hal::arch::switch_pagetable(page_table_token);
 }
 

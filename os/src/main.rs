@@ -5,7 +5,7 @@
 // #![feature(panic_info_message)]
 #![feature(alloc_error_handler)]
 #![feature(negative_impls)]
-
+#![allow(unused)]
 extern crate alloc;
 
 #[macro_use]
@@ -34,7 +34,7 @@ use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
-global_asm!(include_str!("entry.asm"));
+// global_asm!(include_str!("entry.asm"));
 
 #[macro_use]
 extern crate lazy_static;

@@ -1,6 +1,6 @@
 use core::time::Duration;
 use crate::{arch::set_timer, config::CLOCK_FREQ};
-use riscv::register::time;
+// use riscv::register::time;
 use super::{time::TimeSepc, yield_now};
 
 const TICKS_PER_SEC: usize = 100; // 设置每秒中断次数，可以计算出每次中断的时间间隔
@@ -12,7 +12,8 @@ pub const TIME_SLICE_DUATION: Duration = Duration::new(0, (NSEC_PER_SEC / TICKS_
 #[inline(always)]
 /// 获取开机以来，晶振片过了几个时钟周期
 pub fn get_time() -> usize {
-    time::read()
+    // time::read()
+    unimplemented!()
 }
 
 /// 获取时间：单位s

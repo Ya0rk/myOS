@@ -98,16 +98,16 @@ pub fn get_cpu(hart_id: usize) -> &'static mut CPU {
 
 /// 获取当前运行的 Processor id
 pub fn get_current_hart_id() -> usize {
-    use core::arch::asm;
-    let hartid;
-    unsafe {
-        asm! {
-            "mv {}, tp",
-            out(reg) hartid
-        };
-    }
-    hartid
-    // hal::arch::get_current_hart_id()
+    unimplemented!()
+    // use core::arch::asm;
+    // let hartid;
+    // unsafe {
+    //     asm! {
+    //         "mv {}, tp",
+    //         out(reg) hartid
+    //     };
+    // }
+    // hartid
 }
 
 ///The main part of process execution and scheduling
@@ -144,8 +144,8 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 
 ///Get token of the address space of current task
 pub fn current_user_token() -> usize {
-    riscv::register::satp::read().bits()
-    // hal::arch::read_page_table_root()
+    // riscv::register::satp::read().bits()
+    unimplemented!()
 }
 
 ///Get the mutable reference to trap context of current task
