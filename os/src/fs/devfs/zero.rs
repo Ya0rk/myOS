@@ -1,5 +1,7 @@
 use alloc::string::String;
-use crate::{fs::{FileTrait, Kstat}, mm::UserBuffer};
+use crate::{fs::{ffi::RenameFlags, FileTrait, Kstat}, mm::UserBuffer, utils::SysResult};
+use async_trait::async_trait;
+use alloc::boxed::Box;
 
 
 pub struct DevZero;
@@ -10,6 +12,7 @@ impl DevZero {
     }
 }
 
+#[async_trait]
 impl FileTrait for DevZero {
     fn readable(&self) -> bool {
         true
@@ -17,15 +20,18 @@ impl FileTrait for DevZero {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, mut user_buf: UserBuffer) -> usize {
-        user_buf.clear()
+    async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
+        Ok(user_buf.clear())
     }
-    fn write(&self, user_buf: UserBuffer) -> usize {
+    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
         // do nothing
-        user_buf.len()
+        Ok(user_buf.len())
     }
     
-    fn get_name(&self) -> String {
+    fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
@@ -38,7 +44,7 @@ impl FileTrait for DevZero {
     //     }
     //     revents
     // }
-    fn fstat(&self, _stat: &mut Kstat) -> () {
+    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
 }

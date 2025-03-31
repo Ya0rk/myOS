@@ -11,6 +11,10 @@ SECTIONS
     .text : {
         *(.text.entry)
         . = ALIGN(4K);
+        sigret = .;
+        *(.text.sigret);
+        . = ALIGN(4K);
+        esigret = .;
         *(.text .text.*)
     }
 

@@ -1,4 +1,5 @@
 #![allow(warnings)]
+// #![deny(warnings)]
 #![no_std]
 #![no_main]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
@@ -10,6 +11,7 @@
 #![feature(const_ops)]
 #![feature(const_trait_impl)]
 #![feature(core_intrinsics)]
+#![allow(unused_imports)]
 
 extern crate alloc;
 
@@ -32,11 +34,12 @@ pub mod utils;
 pub mod syscall;
 pub mod drivers;
 pub mod arch;
+pub mod signal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
-use sync::timer;
-use task::{executor, get_current_hart_id};
+use sync::{block_on, timer};
+use task::{executor, get_current_hart_id, spawn_kernel_task};
 
 global_asm!(include_str!("entry.asm"));
 
@@ -73,8 +76,12 @@ pub fn rust_main(hart_id: usize) -> ! {
         );
         trap::init();
         task::init_processors();
-        fs::init();
-        task::add_initproc();
+        println!("a");
+        block_on(fs::init());
+        println!("b");
+        spawn_kernel_task(async move {
+            task::add_initproc()
+        });
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]
@@ -89,12 +96,11 @@ pub fn rust_main(hart_id: usize) -> ! {
     timer::set_next_trigger();
 
     // 列出目前的应用
-    let mut finish = false;
+    let finish = AtomicBool::new(false);
     if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
-        finish = fs::list_apps();
+        finish.store(fs::list_apps(), Ordering::SeqCst);
     }
-    while !finish {}
-    // task::run_tasks();
+    while !finish.load(Ordering::SeqCst) {}
     executor::run();
     panic!("Unreachable in rust_main!");
 }

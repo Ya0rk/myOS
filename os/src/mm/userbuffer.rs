@@ -1,7 +1,6 @@
 use core::ops::{Index, IndexMut};
 use alloc::vec::Vec;
 /// u8数组切片，使内核可以访问用户空间
-
 pub struct UserBuffer {
     ///U8 vec
     pub buffers: Vec<&'static mut [u8]>,

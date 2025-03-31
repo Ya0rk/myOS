@@ -3,7 +3,7 @@ use riscv::register::stval;
 use riscv::register::scause::{self, Exception, Interrupt, Trap};
 use crate::sync::{set_next_trigger, yield_now};
 use crate::syscall::syscall;
-use crate::task::{current_task, current_trap_cx, executor, exit_current_and_run_next, get_current_hart_id};
+use crate::task::{current_task, current_trap_cx, executor, get_current_hart_id};
 use super::{__return_to_user, set_trap_handler, IndertifyMode};
 
 #[no_mangle]
@@ -72,14 +72,16 @@ pub async fn user_trap_handler() {
                 current_trap_cx().get_sepc(),
             );
             // page fault exit code
-            exit_current_and_run_next(-2);
+            // exit_current_and_run_next(-2);
+            task.set_zombie();
         }
         Trap::Exception(Exception::IllegalInstruction) => { // 2
             println!("[kernel] hart_id = {:?}, IllegalInstruction in application, kernel killed it.",
                 get_current_hart_id()
             );
             // illegal instruction exit code
-            exit_current_and_run_next(-3);
+            // exit_current_and_run_next(-3);
+            task.set_zombie();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
             set_next_trigger();

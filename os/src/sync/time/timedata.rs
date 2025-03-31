@@ -1,6 +1,7 @@
 use core::time::Duration;
 use crate::sync::timer::{time_duration, TIME_SLICE_DUATION};
 
+#[allow(unused)]
 pub struct TimeData {
     /// 开机时间
     machine_start_time: Duration,
@@ -67,9 +68,9 @@ impl TimeData {
     }
 
     /// 在现成退出时更新user time和system time
-    pub fn update_child_time_when_exit(&mut self) {
-        self.child_user_time += self.child_user_time;
-        self.child_system_time += self.child_system_time;
+    pub fn update_child_time_when_exit(&mut self, utime: Duration, stime: Duration) {
+        self.child_user_time += utime;
+        self.child_system_time += stime;
     }
 
     /// 获取用户态花费时间
@@ -81,6 +82,10 @@ impl TimeData {
     #[inline(always)]
     pub fn get_system_time(&self) -> Duration {
         self.system_time
+    }
+
+    pub fn get_ustime(&self) -> (Duration, Duration) {
+        (self.get_user_time(), self.get_system_time())
     }
 
     /// 判断任务在executor中的时间片是否用完

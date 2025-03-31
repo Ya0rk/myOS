@@ -1,160 +1,233 @@
+use async_trait::async_trait;
+use log::info;
 use lwext4_rust::{
-    bindings::{ext4_inode_stat, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET},
-    Ext4File, InodeTypes,
+    bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, Ext4File, InodeTypes
 };
-
 use crate::{
-    fs::{InodeTrait, InodeType, Kstat},
-    sync::SyncUnsafeCell,
-    utils::{Errno, SysResult},
+    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, 
+    page_cache::PageCache, InodeMeta, InodeTrait, Kstat, INODE_CACHE}, sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp}, utils::{Errno, SysResult}
 };
 
 use alloc::{sync::Arc, vec::Vec};
 use alloc::vec;
+use alloc::boxed::Box;
 
-pub struct Ext4Inode(SyncUnsafeCell<Ext4File>);
+pub struct Ext4Inode {
+    pub metadata: InodeMeta,
+    pub file    : Shared<Ext4File>,
+    pub page_cache: Option<Arc<PageCache>>,
+}
 
 unsafe impl Send for Ext4Inode {}
 unsafe impl Sync for Ext4Inode {}
 
 impl Ext4Inode {
-    pub fn new(path: &str, types: InodeTypes) -> Self {
-        Ext4Inode(SyncUnsafeCell::new(Ext4File::new(path, types)))
+    /// 创建一个inode，设置pagecache，并将其加入Inodecache
+    pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<Self> {
+        let ext4file = new_shared(Ext4File::new(path, types));
+        let size = 0;
+        // {
+        //     let mut lock_file = ext4file.lock();
+        //     lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
+        //     size = lock_file.file_size() as usize;
+        //     lock_file.file_close().expect("[ext4Inode new]: file close fail!");
+        // }
+
+        let inode = Arc::new(Self {
+            metadata: InodeMeta::new(size),
+            file    : ext4file,
+            page_cache: page_cache.clone()
+        });
+        // 修改 inode.page_cache
+        if let Some(pg) = &inode.page_cache {
+            pg.set_inode(inode.clone());
+        }
+        INODE_CACHE.insert(path, inode.clone());
+        inode
     }
 }
 
+#[async_trait]
 impl InodeTrait for Ext4Inode {
     /// 获取文件大小
     fn size(&self) -> usize {
-        let file = self.0.get_unchecked_mut();
-        let types = as_inode_type(file.file_type_get());
-        if types == InodeType::File {
-            let path = file.get_path();
-            let path = path.to_str().unwrap();
-            let _ = file.file_open(path, O_RDONLY);
-            let fsize = file.file_size();
-            let _ = file.file_close();
-            fsize as usize
-        } else {
-            0
-        }
+        let mut lock_file = self.file.lock();
+        let binding = lock_file.get_path();
+        let path = binding.to_str().unwrap();
+        lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
+        let size = lock_file.file_size() as usize;
+        lock_file.file_close().expect("[ext4Inode new]: file close fail!");
+        size
     }
 
-    /// 创建文件
-    fn create(&self, path: &str, ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
+    fn set_size(&self, new_size: usize) -> SysResult {
+        *self.metadata.size.lock() = new_size;
+        Ok(())
+    }
+
+    /// 创建文件或者目录
+    fn do_create(&self, path: &str, ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
         let types = as_ext4_de_type(ty);
-        let file = self.0.get_unchecked_mut();
-        let nf = Ext4Inode::new(path, types.clone());
+        let mut file = self.file.lock();
+        let page_cache = match ty {
+            InodeType::File => Some(PageCache::new_bare()),
+            _ => None
+        };
+        let nf = Ext4Inode::new(path, types.clone(), page_cache.clone());
 
         if !file.check_inode_exist(path, types.clone()) {
-            let nfile = nf.0.get_unchecked_mut();
+            drop(file);
+            let mut ext4file = nf.file.lock();
             if types == InodeTypes::EXT4_DE_DIR {
-                if nfile.dir_mk(path).is_err() {
+                if ext4file.dir_mk(path).is_err() {
                     return None;
                 }
-            } else if nfile.file_open(path, O_RDWR | O_CREAT | O_TRUNC).is_err() {
-                return None;
             } else {
-                let _ = nfile.file_close();
+                ext4file.file_open(path, O_RDWR | O_CREAT | O_TRUNC).expect("create file failed!");
+                ext4file.file_close().expect("[do_creat]: file clone fail!");
             }
         }
-        Some(Arc::new(nf))
+        Some(nf)
     }
     /// 获取文件类型
     fn node_type(&self) -> InodeType {
-        as_inode_type(self.0.get_unchecked_mut().file_type_get())
+        as_inode_type(self.file.lock().file_type_get())
     }
-    /// 读取文件
-    fn read_at(&self, off: usize, buf: &mut [u8]) -> usize {
-        let file = self.0.get_unchecked_mut();
+    /// 读取文件 TODO(YJJ):这里可能有问题
+    async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
+        let file_size = self.size();
+        if file_size == 0 || offset > file_size{
+            return 0;
+        }
+
+        // 缩减buf长度，不需要那么长
+        if buf.len() > file_size - offset {
+            buf = &mut buf[..file_size-offset];
+        }
+
+        match &self.page_cache {
+            // 没有cache就直接读磁盘
+            None => {
+                self.read_dirctly(offset, buf).await
+            }
+            // 有cache就从cache中找
+            Some(cache) => {
+                cache.read(buf, offset).await
+            }
+        }
+    }
+
+    /// 直接读取
+    async fn read_dirctly(&self, offset: usize, buf: &mut [u8]) -> usize {
+        let mut file = self.file.lock();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDONLY).map_err(|_| Errno::EIO).unwrap();
-        file.file_seek(off as i64, SEEK_SET)
+        file.file_seek(offset as i64, SEEK_SET)
             .map_err(|_| Errno::EIO).unwrap();
         let r = file.file_read(buf);
-        let _ = file.file_close();
+        file.file_close().expect("[read_dirctly]: file close fail!");
         r.map_err(|_| Errno::EIO).unwrap()
     }
+
     /// 写入文件
-    fn write_at(&self, off: usize, buf: &[u8]) -> usize {
-        let file = self.0.get_unchecked_mut();
+    async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
+        let file_size = self.size();
+        if buf.len() > file_size - offset {
+            self.truncate(offset + buf.len());
+        }
+
+        match &self.page_cache {
+            None => {
+                info!("llll");
+                self.write_directly(offset, buf).await
+            }
+            Some(cache) => {
+                info!("ssss");
+                cache.write(buf, offset).await
+            }
+        }
+    }
+
+    async fn write_directly(&self, offset: usize, buf: &[u8]) -> usize {
+        let mut file = self.file.lock();
         let path = file.get_path();
         let path = path.to_str().unwrap();
         file.file_open(path, O_RDWR).map_err(|_| Errno::EIO).unwrap();
-        file.file_seek(off as i64, SEEK_SET)
+        file.file_seek(offset as i64, SEEK_SET)
             .map_err(|_| Errno::EIO).unwrap();
         let r = file.file_write(buf);
-        let _ = file.file_close();
+        file.file_close().expect("[write_directly]: file close fail!");
         r.map_err(|_| Errno::EIO).unwrap()
     }
+
     /// 截断文件
     fn truncate(&self, size: usize) -> usize {
-        let file = self.0.get_unchecked_mut();
-        let path = file.get_path();
-        let path = path.to_str().unwrap();
-        file.file_open(path, O_RDWR | O_CREAT | O_TRUNC)
-            .map_err(|_| Errno::EIO).unwrap();
+        let mut file = self.file.lock();
+        // let path = file.get_path();
+        // let path = path.to_str().unwrap();
+        // file.file_open(path, O_RDWR | O_CREAT | O_TRUNC)
+        //     .map_err(|_| Errno::EIO).unwrap();
 
-        let t = file.file_truncate(size as u64);
+        let r = file.file_truncate(size as u64);
+        self.set_size(size).expect("[truncate]: set size fail!");
 
-        let _ = file.file_close();
-        if let Err(_) = t {
-            Errno::EIO.into()
-        } else {
-            0
-        }
-    }
-    /// 重命名文件
-    fn rename(&self, _file: Arc<dyn InodeTrait>) -> SysResult<usize> {
-        todo!()
-    }
-    /// 设置文件时间戳
-    fn set_timestamps(&self, _atime_sec: Option<u64>, _mtime_sec: Option<u64>) -> SysResult<usize> {
-        todo!()
+        // file.file_close();
+        r.map_or_else(|_| Errno::EIO.into(), |_| 0)
     }
     /// 同步文件
     fn sync(&self) {
         todo!()
     }
     /// 读取文件所有内容
-    fn read_all(&self) -> Result<Vec<u8>, Errno> {
-        let file = self.0.get_unchecked_mut();
-        let path = file.get_path();
-        let path = path.to_str().unwrap();
-        file.file_open(path, O_RDONLY).map_err(|_| Errno::EIO)?;
-        let mut buf: Vec<u8> = vec![0; file.file_size() as usize];
-        file.file_seek(0, SEEK_SET).map_err(|_| Errno::EIO)?;
-        let r = file.file_read(buf.as_mut_slice());
-        let _ = file.file_close();
-        if let Err(_) = r {
-            Err(Errno::EIO)
-        } else {
-            Ok(buf)
-        }
+    async fn read_all(&self) -> SysResult<Vec<u8>> {
+        // let mut file = self.file.lock();
+        // let path = file.get_path();
+        // let path = path.to_str().unwrap();
+        // file.file_open(path, O_RDONLY).map_err(|_| Errno::EIO)?;
+        // let mut buf: Vec<u8> = vec![0; file.file_size() as usize];
+        // file.file_seek(0, SEEK_SET).map_err(|_| Errno::EIO)?;
+        // let r = file.file_read(buf.as_mut_slice());
+        // file.file_close().expect("[read_all]: file close fail!");
+        // r.map_or_else(|_| Err(Errno::EIO), |_| Ok(buf))
+        info!("[read_all]: size = {}", self.size());
+        let mut buf = vec![0; self.size()];
+        self.read_at(0, &mut buf).await;
+        Ok(buf)
     }
     /// 在当前路径下查询是否存在这个path的文件
-    fn find_by_path(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
-        let file = self.0.get_unchecked_mut();
+    /// 
+    /// 如果存在就创建一个inode
+    fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
+        let mut file = self.file.lock();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
             // debug!("lookup new DIR FileWrapper");
-            Some(Arc::new(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR)))
+            let page_cache = None;
+            Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
             // debug!("lookup new FILE FileWrapper");
-            Some(Arc::new(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE)))
+            let page_cache = Some(PageCache::new_bare());
+            Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE, page_cache.clone()))
         } else {
             None
         }
     }
     /// 获取文件状态
     fn fstat(&self) -> Kstat {
-        let file = self.0.get_unchecked_mut();
-        match file.fstat() {
-            Ok(stat) => {
-                as_inode_stat(stat)
-            }
-            Err(_) => Kstat::new()
-        }
+        // let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+        // let file_size = self.size();
+        // let st_size = file_size / BLOCK_SIZE;
+        // let ino= self.metadata.ino;
+        Kstat::new()
+
+        // let mut file = self.file.lock();
+        // match file.fstat() {
+        //     Ok(stat) => {
+        //         let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+        //         as_inode_stat(stat, atime, mtime, ctime)
+        //     }
+        //     Err(_) => Kstat::new()
+        // }
     }
     /// 读取目录项
     fn read_dentry(&self, _off: usize, _len: usize) -> Option<(Vec<u8>, isize)> {
@@ -164,66 +237,18 @@ impl InodeTrait for Ext4Inode {
     fn unlink(&self, _child_name: &str) -> SysResult<usize> {
         todo!()
     }
+    fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, > {
+        self.metadata.timestamp.lock()
+    }
+    fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
+        self.file.lock()
+    }
 }
 
 impl Drop for Ext4Inode {
     fn drop(&mut self) {
-        let file = self.0.get_unchecked_mut();
+        let mut file = self.file.lock();
         // debug!("Drop struct FileWrapper {:?}", file.get_path());
         file.file_close().expect("failed to close fd");
-    }
-}
-
-fn as_ext4_de_type(types: InodeType) -> InodeTypes {
-    match types {
-        InodeType::BlockDevice => InodeTypes::EXT4_DE_BLKDEV,
-        InodeType::CharDevice => InodeTypes::EXT4_DE_CHRDEV,
-        InodeType::Dir => InodeTypes::EXT4_DE_DIR,
-        InodeType::Fifo => InodeTypes::EXT4_DE_FIFO,
-        InodeType::File => InodeTypes::EXT4_DE_REG_FILE,
-        InodeType::Socket => InodeTypes::EXT4_DE_SOCK,
-        InodeType::SymLink => InodeTypes::EXT4_DE_SYMLINK,
-        InodeType::Unknown => InodeTypes::EXT4_DE_UNKNOWN,
-    }
-}
-
-fn as_inode_type(types: InodeTypes) -> InodeType {
-    match types {
-        InodeTypes::EXT4_INODE_MODE_FIFO => InodeType::Fifo,
-        InodeTypes::EXT4_INODE_MODE_CHARDEV => InodeType::CharDevice,
-        InodeTypes::EXT4_INODE_MODE_DIRECTORY => InodeType::Dir,
-        InodeTypes::EXT4_INODE_MODE_BLOCKDEV => InodeType::BlockDevice,
-        InodeTypes::EXT4_INODE_MODE_FILE => InodeType::File,
-        InodeTypes::EXT4_INODE_MODE_SOFTLINK => InodeType::SymLink,
-        InodeTypes::EXT4_INODE_MODE_SOCKET => InodeType::Socket,
-        _ => {
-            // warn!("unknown file type: {:?}", vtype);
-            unreachable!()
-        }
-    }
-}
-
-/// 将 ext4_inode_stat 转换为 Kstat
-fn as_inode_stat(stat: ext4_inode_stat) -> Kstat {
-    Kstat {
-        st_dev: stat.st_dev as u32,
-        st_ino: stat.st_ino as u64,
-        st_mode: stat.st_mode,
-        st_nlink: stat.st_nlink,
-        st_uid: stat.st_uid,
-        st_gid: stat.st_gid,
-        st_rdev: 0, // 如果需要，可以根据具体情况设置
-        __pad: 0,   // 填充字段
-        st_size: stat.st_size as i64,
-        st_blksize: stat.st_blksize as i64,
-        __pad2: 0,  // 填充字段
-        st_blocks: stat.st_blocks as u64,
-        st_atime_sec: stat.st_atime as i64,
-        st_atime_nsec: 0, // 如果需要，可以根据具体情况设置
-        st_mtime_sec: stat.st_mtime as i64,
-        st_mtime_nsec: 0, // 如果需要，可以根据具体情况设置
-        st_ctime_sec: stat.st_ctime as i64,
-        st_ctime_nsec: 0, // 如果需要，可以根据具体情况设置
-        __unused: [0; 2], // 填充字段
     }
 }

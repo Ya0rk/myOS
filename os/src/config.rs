@@ -31,6 +31,7 @@ pub const HART_START_ADDR: usize = 0x80200000;
 
 // scheudler
 pub const HART_NUM: usize = 2;
+#[allow(unused)]
 pub const IDLE_PID: usize = 0;
 pub const INITPROC_PID: usize = 1;
 
@@ -118,3 +119,4 @@ pub fn align_up_by_page(addr: usize) -> usize {
 pub fn is_aligned_to_page(addr: usize) -> bool {
     (addr & PAGE_MASK) == 0
 }
+pub const PIPE_BUFFER_SIZE: usize = 0x10000;

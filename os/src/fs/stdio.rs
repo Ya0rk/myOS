@@ -1,12 +1,14 @@
+use super::ffi::RenameFlags;
 use super::FileTrait;
 use super::Kstat;
 use crate::arch::console_getchar;
 use crate::utils::Errno;
-use crate::{
-    mm::UserBuffer,
-    task::suspend_current_and_run_next,
-};
+use crate::utils::SysResult;
+use crate::mm::UserBuffer;
+use alloc::string::String;
 use alloc::vec::Vec;
+use async_trait::async_trait;
+use alloc::boxed::Box;
 /// # 标准输入输出接口
 /// `os/src/fs/stdio.rs`
 /// ```
@@ -24,6 +26,7 @@ pub struct Stdin;
 
 pub struct Stdout;
 
+#[async_trait]
 impl FileTrait for Stdin {
     fn readable(&self) -> bool {
         true
@@ -31,19 +34,20 @@ impl FileTrait for Stdin {
     fn writable(&self) -> bool {
         false
     }
-    fn read(&self, mut user_buf: UserBuffer) -> usize {
+    async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
         //一次读取多个字符
         let mut c: usize;
         let mut count: usize = 0;
         let mut buf = Vec::new();
         while count < user_buf.len() {
             c = console_getchar();
+            if c > 255 { break; }
             match c {
                 // `c > 255`是为了兼容OPENSBI，OPENSBI未获取字符时会返回-1
-                0 | 256.. => {
-                    suspend_current_and_run_next();
-                    continue;
-                }
+                // 0 | 256.. => {
+                //     suspend_current_and_run_next();
+                //     continue;
+                // }
                 CR => {
                     buf.push(LF as u8);
                     count += 1;
@@ -61,14 +65,17 @@ impl FileTrait for Stdin {
             }
         }
         user_buf.write(buf.as_slice());
-        count
+        Ok(count)
     }
-    fn write(&self, _user_buf: UserBuffer) -> usize {
-        Errno::EINVAL.into()
+    async fn write(&self, _user_buf: UserBuffer) -> SysResult<usize> {
+        Err(Errno::EINVAL)
         // panic!("Cannot write to stdin!");
     }
     
-    fn get_name(&self) -> alloc::string::String {
+    fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
@@ -78,7 +85,7 @@ impl FileTrait for Stdin {
     //     }
     //     revents
     // }
-    fn fstat(&self, _stat: &mut Kstat) -> () {
+    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
 }
@@ -131,6 +138,7 @@ impl FileTrait for Stdin {
 //     }
 // }
 
+#[async_trait]
 impl FileTrait for Stdout {
     fn readable(&self) -> bool {
         false
@@ -138,17 +146,20 @@ impl FileTrait for Stdout {
     fn writable(&self) -> bool {
         true
     }
-    fn read(&self, _user_buf: UserBuffer) -> usize {
+    async fn read(&self, _user_buf: UserBuffer) -> SysResult<usize> {
         panic!("Cannot read from stdout!");
     }
-    fn write(&self, user_buf: UserBuffer) -> usize {
+    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
         for buffer in user_buf.buffers.iter() {
             print!("{}", core::str::from_utf8(*buffer).unwrap());
         }
-        user_buf.len()
+        Ok(user_buf.len())
     }
     
-    fn get_name(&self) -> alloc::string::String {
+    fn get_name(&self) -> SysResult<String> {
+        todo!()
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
     // fn poll(&self, events: PollEvents) -> PollEvents {
@@ -158,7 +169,7 @@ impl FileTrait for Stdout {
     //     }
     //     revents
     // }
-    fn fstat(&self, _stat: &mut Kstat) -> () {
+    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
 }

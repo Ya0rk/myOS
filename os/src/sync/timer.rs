@@ -37,7 +37,7 @@ pub fn get_time_us() -> usize {
 /// 获取时间：单位ns
 #[inline(always)]
 pub fn get_time_ns() -> usize {
-    get_time() / (CLOCK_FREQ / NSEC_PER_SEC)
+    (get_time() * NSEC_PER_SEC) / CLOCK_FREQ
 }
 
 pub fn time_duration() -> Duration {
