@@ -181,16 +181,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 读取文件所有内容
     async fn read_all(&self) -> SysResult<Vec<u8>> {
-        // let mut file = self.file.lock();
-        // let path = file.get_path();
-        // let path = path.to_str().unwrap();
-        // file.file_open(path, O_RDONLY).map_err(|_| Errno::EIO)?;
-        // let mut buf: Vec<u8> = vec![0; file.file_size() as usize];
-        // file.file_seek(0, SEEK_SET).map_err(|_| Errno::EIO)?;
-        // let r = file.file_read(buf.as_mut_slice());
-        // file.file_close().expect("[read_all]: file close fail!");
-        // r.map_or_else(|_| Err(Errno::EIO), |_| Ok(buf))
-        info!("[read_all]: size = {}", self.size());
+        // info!("[read_all]: size = {}", self.size());
         let mut buf = vec![0; self.size()];
         self.read_at(0, &mut buf).await;
         Ok(buf)

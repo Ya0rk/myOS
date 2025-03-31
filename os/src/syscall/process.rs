@@ -9,6 +9,7 @@ use crate::task::{
 };
 use crate::utils::{Errno, SysResult, RNG};
 use log::{debug, info};
+use lwext4_rust::bindings::true_;
 use zerocopy::IntoBytes;
 
 // use super::ffi::Utsname;
@@ -26,6 +27,7 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
 pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
     let req = *translated_ref(current_user_token(), req as *const TimeSepc);
     if !req.check_valid() {
+        // info!("req = {}", req);
         return Err(Errno::EINVAL);
     }
 
@@ -33,7 +35,8 @@ pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
     Ok(0)
 }
 
-pub async  fn sys_yield() -> SysResult<usize> {
+pub async fn sys_yield() -> SysResult<usize> {
+    info!("[sys_yield] start");
     yield_now().await;
     Ok(0)
 }
@@ -153,7 +156,7 @@ pub fn sys_clone(
 }
 
 pub async fn sys_exec(path: usize) -> SysResult<usize> {
-    info!("[sys_exec] start");
+    // info!("[sys_exec] start");
     let token = current_user_token();
     let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
@@ -175,10 +178,10 @@ pub async fn sys_exec(path: usize) -> SysResult<usize> {
 /// pid > 0 ：等待进程id为pid的子进程
 pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usize) -> SysResult<usize> {
     debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
-    info!("[sys_wait4] start, pid = {}, options = {}", pid,options);
+    // info!("[sys_wait4] start, pid = {}, options = {}", pid,options);
     let task = current_task().unwrap();
     if task.children.lock().is_empty() {
-        info!("task pid = {}, has no child.", pid);
+        info!("task pid = {}, has no child.", task.get_pid());
         return Err(Errno::ECHILD);
     }
 
@@ -193,7 +196,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
                 locked_child.values().find(|task| task.is_zombie()).cloned()
             }
             p if p > 0 => {
-                info!("[sys_wait4] target pid = {}", p);
+                // info!("[sys_wait4] target pid = {}", p);
                 locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
             }
             _ => unimplemented!(),
@@ -202,14 +205,14 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
 
     match target_task {
         Some(zombie_child) => {
-            info!("[sys_wait4] find a target zombie child task.");
+            // info!("[sys_wait4] find a target zombie child task.");
             let zombie_pid = zombie_child.get_pid();
             let exit_code = zombie_child.get_exit_code();
             task.do_wait4(zombie_pid, wstatus as *mut i32, exit_code);
             return Ok(zombie_pid);
         }
         None => {
-            info!("[sys_wait4] current task pid = {}", task.get_pid());
+            // info!("[sys_wait4] current task pid = {}", task.get_pid());
             if op.contains(WaitOptions::WNOHANG) {
                 return Ok(0)
             }
@@ -241,7 +244,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
                     None => return Err(Errno::EINTR),
                 }
             };
-            info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
+            // info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
             task.do_wait4(child_pid, wstatus as *mut i32, exit_code);
             return Ok(child_pid);
         }
