@@ -171,12 +171,12 @@ impl TaskControlBlock {
         // TODO(YJJ):这里需要将自己加入child中，不然do_wait4中会报错
         // 因为我在do_wait4中要获取zombie，也就是自己
         // 后序修改do_wait4逻辑应该就能删除这里
-        info!("[exec] current taskpid = {}", current_task().unwrap().get_pid());
+        // info!("[exec] current taskpid = {}", current_task().unwrap().get_pid());
         self.add_child(current_task().unwrap());
 
 
         debug!("task.exec.pid={}", self.pid.0);
-        info!("[exec] task.exec.pid={}", self.pid.0);
+        info!("[exec] exec success task.exec.pid = {}", self.pid.0);
     }
 
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
@@ -256,9 +256,11 @@ impl TaskControlBlock {
             exit_code,
         });
         // add child
-        self.children.lock().insert(self.pid.0, new_task.clone());
+        self.add_child(new_task.clone());
         add_proc_group_member(new_task.get_pgid(), new_task.get_pid());
         new_task.add_thread_group_member(new_task.clone());
+
+        info!("process fork success, new pid = {}", new_task.get_pid());
         
         new_task
     }
@@ -329,6 +331,9 @@ impl TaskControlBlock {
         });
 
         new_task.add_thread_group_member(new_task.clone());
+
+        // 这里也要把自己加入自己的child
+        new_task.add_child(new_task.clone());
 
         new_task
     }
@@ -682,7 +687,8 @@ impl TaskControlBlock {
     }
     /// 删除一个子线程
     pub fn remove_child(&self, pid: usize) -> Arc<TaskControlBlock>{
-        self.children.lock().remove(&pid).expect("[remove_child] children has no such pid task")
+        // info!("[remove_child] self pid = {}", pid);
+        self.children.lock().remove(&pid).expect("[remove_child] task has no such pid task")
     }
     /// 设置父进程
     pub fn set_parent(&self, parent: Option<Weak<TaskControlBlock>>) {
