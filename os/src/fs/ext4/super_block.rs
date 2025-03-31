@@ -24,9 +24,7 @@ impl Ext4SuperBlock {
         let inner =
             Ext4BlockWrapper::<Disk>::new(disk).expect("failed to initialize EXT4 filesystem");
         let page_cache = Some(PageCache::new_bare());
-        info!("aaa");
         let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR, page_cache.clone());
-        info!("bbbb");
         Self { inner, root }
     }
 }
