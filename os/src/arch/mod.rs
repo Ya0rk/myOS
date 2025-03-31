@@ -1,7 +1,13 @@
-mod rv64;
+// #[cfg(target_arch = "riscv64")]
+// mod rv64;
+// #[cfg(target_arch = "loongarch64")]
+mod la64;
 
-use rv64::sbi;
-pub use rv64::sstatus;
+// #[cfg(target_arch = "riscv64")]
+// use rv64::*;
+// #[cfg(target_arch = "loongarch64")]
+use la64::*;
+
 
 pub fn console_putchar(c: usize) {
     sbi::console_putchar(c);
