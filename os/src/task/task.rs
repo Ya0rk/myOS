@@ -1,4 +1,6 @@
 use core::cell::SyncUnsafeCell;
+use core::fmt::Display;
+use core::future::Ready;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 
@@ -11,20 +13,13 @@ use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigI
 use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
-use crate::task::{add_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task};
+use crate::task::{add_task, current_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task};
 use crate::trap::{trap_loop, TrapContext};
+use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use log::{debug, info};
-
-#[derive(Copy, Clone, PartialEq)]
-pub enum TaskStatus {
-    Ready,
-    Running,
-    Stopped,
-    Zombie,
-}
 
 pub struct TaskControlBlock {
     // 不可变
@@ -40,7 +35,7 @@ pub struct TaskControlBlock {
     thread_group:   Shared<ThreadGroup>,
     memory_set:     Shared<MemorySet>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
-    pub children:   Shared<Vec<Arc<TaskControlBlock>>>,
+    pub children:   Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
     fd_table:       Shared<FdTable>,
     current_path:   Shared<String>,
 
@@ -100,7 +95,7 @@ impl TaskControlBlock {
             thread_group: new_shared(ThreadGroup::new()),
             memory_set: new_shared(memory_set),
             parent: new_shared(None),
-            children: new_shared(Vec::new()),
+            children: new_shared(BTreeMap::new()),
             fd_table: new_shared(FdTable::new()),
             current_path: new_shared(String::from("/")), // root directory
 
@@ -145,8 +140,18 @@ impl TaskControlBlock {
         );
         debug!("exec memory_set created");
         
+        // 终止所有子线程
+        for (_, weak_task) in self.thread_group.lock().tasks.iter() {
+            let task = weak_task.upgrade().unwrap();
+            if !task.is_leader() {
+                info!("[exec]: terminate task, pid = {}", task.get_pid());
+                task.set_zombie();
+            }
+        }
+
         // **** access inner exclusively
         // substitute memory_set
+        unsafe { memory_set.switch_pgtable() };
         let mut mem = self.memory_set.lock();
         *mem = memory_set;
 
@@ -163,8 +168,15 @@ impl TaskControlBlock {
         // 重置自定义的信号处理
         self.handler.lock().flash_signal_handlers();
 
+        // TODO(YJJ):这里需要将自己加入child中，不然do_wait4中会报错
+        // 因为我在do_wait4中要获取zombie，也就是自己
+        // 后序修改do_wait4逻辑应该就能删除这里
+        info!("[exec] current taskpid = {}", current_task().unwrap().get_pid());
+        self.add_child(current_task().unwrap());
+
 
         debug!("task.exec.pid={}", self.pid.0);
+        info!("[exec] task.exec.pid={}", self.pid.0);
     }
 
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
@@ -178,7 +190,7 @@ impl TaskControlBlock {
         let sig_stack = SyncUnsafeCell::new(None);
         let thread_group = new_shared(ThreadGroup::new());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
-        let children = new_shared(Vec::new());
+        let children = new_shared(BTreeMap::new());
         let time_data = SyncUnsafeCell::new(TimeData::new());
         let exit_code = AtomicI32::new(0);
         let waker = SyncUnsafeCell::new(None);
@@ -211,7 +223,6 @@ impl TaskControlBlock {
             MapPermission::R | MapPermission::W,
         );
         let memory_set = new_shared(child_memory_set);
-        // let task_cx = SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top));
 
         let new_task = Arc::new(TaskControlBlock {
             pid,
@@ -245,7 +256,7 @@ impl TaskControlBlock {
             exit_code,
         });
         // add child
-        self.children.lock().push(new_task.clone());
+        self.children.lock().insert(self.pid.0, new_task.clone());
         add_proc_group_member(new_task.get_pgid(), new_task.get_pid());
         new_task.add_thread_group_member(new_task.clone());
         
@@ -323,7 +334,7 @@ impl TaskControlBlock {
     }
     
     pub fn do_exit(&self) {
-        info!("Task {} exit;", self.get_pid());
+        info!("[do_exit] Task pid = {} exit;", self.get_pid());
         let pid = self.get_pid();
 
         // 如果是idle进程
@@ -339,21 +350,24 @@ impl TaskControlBlock {
             // task.futex_queue.lock().wake(tidaddress as u32, 1);
         }
 
-        if !self.is_leader() {   
+        if !self.is_leader() {
+            info!("[do_exit] task not leader");
             self.remove_thread_group_member(pid);
             remove_task_by_pid(pid);
         } else {
             // 将当前进程的子进程移动到initproc下
+            info!("[do_exit] task is leader");
             if !self.children.lock().is_empty(){
+                info!("[do_exit] task has child");
                 let init_proc = get_init_proc();
-                for child in self.children.lock().iter() {
+                for (pid, child) in self.children.lock().iter() {
                     if child.is_zombie() {
                         let sig_info = SigInfo::new(
                             SigNom::SIGCHLD, 
                             SigCode::CLD_EXITED, 
                             SigErr::empty(), 
                             SigDetails::Chld { 
-                                pid: child.get_pid(), 
+                                pid: *pid, 
                                 status: child.get_status(), 
                                 exit_code: child.get_exit_code()
                             }
@@ -361,13 +375,14 @@ impl TaskControlBlock {
                         init_proc.proc_recv_siginfo(sig_info);
                     }
                     child.set_parent(Some(Arc::downgrade(&init_proc)));
-                    init_proc.add_children(child.clone());
+                    init_proc.add_child(child.clone());
                 }
-                self.clear_children();
+                self.clear_child();
             }
             // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
             match self.get_parent() {
                 Some(parent) => {
+                    info!("[do_exit] parent pid = {}", parent.get_pid());
                     let sig_info = SigInfo::new(
                SigNom::SIGCHLD, 
                 SigCode::CLD_EXITED, 
@@ -382,6 +397,10 @@ impl TaskControlBlock {
                 }
                 None => panic!("this proc has no parent!"),
             }
+        }
+        if self.is_leader() {
+            info!("[do_exit] self status = {}", self.get_status());
+            self.set_zombie();
         }
         
         self.clear_fd_table();
@@ -654,15 +673,16 @@ impl TaskControlBlock {
     //     self.children.lock().clone()
     // }
     /// 添加子进程
-    pub fn add_children(&self, child: Arc<TaskControlBlock>) {
-        self.children.lock().push(child);
+    pub fn add_child(&self, child: Arc<TaskControlBlock>) {
+        self.children.lock().insert(child.get_pid(), child);
     }
     /// 移除所有子进程
-    pub fn clear_children(&self) {
+    pub fn clear_child(&self) {
         self.children.lock().clear();
     }
+    /// 删除一个子线程
     pub fn remove_child(&self, pid: usize) -> Arc<TaskControlBlock>{
-        self.children.lock().remove(pid)
+        self.children.lock().remove(&pid).expect("[remove_child] children has no such pid task")
     }
     /// 设置父进程
     pub fn set_parent(&self, parent: Option<Weak<TaskControlBlock>>) {
@@ -734,5 +754,25 @@ impl TaskControlBlock {
     /// 设置child_cleartid，参考：Linux系统编程手册500页
     pub fn set_child_cleartid(&self, ctid: usize) {
         unsafe { *self.child_cleartid.get() = Some(ctid) };
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+pub enum TaskStatus {
+    Ready,
+    Running,
+    Stopped,
+    Zombie,
+}
+
+impl Display for TaskStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let status = match self {
+            Self::Ready => "Ready",
+            Self::Running => "Running",
+            Self::Stopped => "Stopped",
+            Self::Zombie => "Zombie",
+        };
+        write!(f, "{}", status)
     }
 }

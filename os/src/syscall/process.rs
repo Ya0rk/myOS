@@ -187,10 +187,12 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
         let locked_child = task.children.lock().clone();
         match pid {
             -1 => {
-                locked_child.iter().find(|task| task.is_zombie()).cloned()
+                info!("[sys_wait4]aaaa");
+                locked_child.values().find(|task| task.is_zombie()).cloned()
             }
             p if p > 0 => {
-                locked_child.iter().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
+                info!("[sys_wait4]bbbb, target pid = {}", p);
+                locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
             }
             _ => unimplemented!(),
         }
@@ -198,13 +200,14 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
 
     match target_task {
         Some(zombie_child) => {
-            info!("sys_wait4: find a target zombie child task.");
+            info!("[sys_wait4] find a target zombie child task.");
             let zombie_pid = zombie_child.get_pid();
             let exit_code = zombie_child.get_exit_code();
             task.do_wait4(zombie_pid, wstatus as *mut i32, exit_code);
             return Ok(zombie_pid);
         }
         None => {
+            info!("[sys_wait4] current task pid = {}", task.get_pid());
             if op.contains(WaitOptions::WNOHANG) {
                 return Ok(0)
             }
