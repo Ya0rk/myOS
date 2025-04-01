@@ -151,8 +151,10 @@ LA:
 	cargo clean
 	cargo build --target loongarch64-unknown-none
 	qemu-system-loongarch64 \
+		-M virt \
 		-m 128M \
 		-smp 1 \
 		-kernel ./target/loongarch64-unknown-none/debug/os \
 		-vga none \
 		-nographic \
+		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
