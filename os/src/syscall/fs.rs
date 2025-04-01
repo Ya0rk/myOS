@@ -7,9 +7,9 @@ use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
+    // info!("[sys_write] start");
     let token = current_user_token();
     let task = current_task().unwrap();
-    // let inner = task.inner_lock();
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
@@ -19,8 +19,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             let file = file.clone();
-            // release current task TCB manually to avoid multi-borrow
-            // drop(inner);
+
             Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
@@ -120,20 +119,20 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     };
 
     // 检查路径是否有效并打开文件
-    let result = if let Some(inode) = open_file(target_path.as_str(), flags) {
+    if let Some(inode) = open_file(target_path.as_str(), flags) {
         let fd = task.alloc_fd(Fd::new(inode.file()?, flags));
+        info!("[sys_openat] alloc fd finished, new fd = {}", fd);
         if fd > RLIMIT_NOFILE {
-            Err(Errno::EMFILE)
+            return Err(Errno::EMFILE);
         } else {
             // info!("[sys_openat] task pid = {}", task.get_pid());
             // info!("[sys_openat] new fd = {}", fd);
-            Ok(fd)
+            return Ok(fd);
         }
     } else {
-        Err(Errno::EBADCALL)
+        info!("openat fail");
+        return Err(Errno::EBADCALL);
     };
-
-    result
 }
 
 pub fn sys_close(fd: usize) -> SysResult<usize> {

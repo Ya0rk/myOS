@@ -132,10 +132,11 @@ impl InodeTrait for Ext4Inode {
 
     /// 写入文件
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
-        let file_size = self.size();
-        if buf.len() > file_size - offset {
-            self.truncate(offset + buf.len());
-        }
+        // let file_size = self.size();
+        // if buf.len() > file_size - offset {
+        //     info!("[write_at] file size = {}", file_size);
+        //     self.truncate(offset + buf.len());
+        // }
 
         match &self.page_cache {
             None => {
@@ -164,10 +165,6 @@ impl InodeTrait for Ext4Inode {
     /// 截断文件
     fn truncate(&self, size: usize) -> usize {
         let mut file = self.file.lock();
-        // let path = file.get_path();
-        // let path = path.to_str().unwrap();
-        // file.file_open(path, O_RDWR | O_CREAT | O_TRUNC)
-        //     .map_err(|_| Errno::EIO).unwrap();
 
         let r = file.file_truncate(size as u64);
         self.set_size(size).expect("[truncate]: set size fail!");
@@ -181,7 +178,6 @@ impl InodeTrait for Ext4Inode {
     }
     /// 读取文件所有内容
     async fn read_all(&self) -> SysResult<Vec<u8>> {
-        // info!("[read_all]: size = {}", self.size());
         let mut buf = vec![0; self.size()];
         self.read_at(0, &mut buf).await;
         Ok(buf)

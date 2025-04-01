@@ -76,7 +76,6 @@ impl FileTrait for NormalFile {
         for slice in buf.buffers.iter() {
             let old_offset = self.metadata.offset();
             let write_size = self.metadata.inode.write_at(old_offset, *slice).await;
-            // assert_eq!(write_size, slice.len());
             self.metadata.set_offset(old_offset+write_size);
             total_write_size += write_size;
         }
