@@ -1,7 +1,7 @@
 use core::{cmp::min, future::Future, task::{Poll, Waker}};
 use super::{ffi::RenameFlags, FileTrait, Kstat, OpenFlags};
 use crate::{config::PIPE_BUFFER_SIZE, mm::UserBuffer, sync::once::LateInit, utils::{Errno, SysResult}};
-use alloc::{collections::vec_deque::VecDeque, string::String, sync::{Arc, Weak}};
+use alloc::{collections::vec_deque::VecDeque, string::String, sync::{Arc, Weak}, vec::Vec};
 use spin::Mutex;
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -52,12 +52,11 @@ enum RingBufferStatus {
 
 pub struct PipeInner {
     arr: [u8; PIPE_BUFFER_SIZE],
-    head: usize,
-    tail: usize,
+    head: usize, // 指针开始位置
+    tail: usize, // 指针结束位置
     reader_waker: VecDeque<Waker>,
     writer_waker: VecDeque<Waker>,
     status: RingBufferStatus,
-    write_end: Option<Weak<Pipe>>,
 }
 
 impl PipeInner {
@@ -69,47 +68,57 @@ impl PipeInner {
             reader_waker: VecDeque::new(),
             writer_waker: VecDeque::new(),
             status: RingBufferStatus::Empty,
-            write_end: None,
         }
     }
-    /// 写一个字节到管道尾
-    pub fn write_byte(&mut self, byte: u8) {
+    /// 写n个字节到管道尾
+    pub fn write_nbyte(&mut self, nbyte: &[u8]) {
+        // 这里不用再判断是否不够用
         self.status = RingBufferStatus::Normal;
-        self.arr[self.tail] = byte;
-        self.tail = (self.tail + 1) % PIPE_BUFFER_SIZE;
+
+        for &c in nbyte {
+            self.arr[self.tail] = c;
+            self.tail = (self.tail + 1) % PIPE_BUFFER_SIZE;
+        }
+
         if self.tail == self.head {
             self.status = RingBufferStatus::Full;
         }
     }
-    /// 从管道头读一个字节
-    pub fn read_byte(&mut self) -> u8 {
+    /// 从管道头读n个字节
+    pub fn read_nbyte(&mut self, nbyte: usize) -> Vec<u8> {
+        // 这里不用再判断可读数量，因为len就是计算后的最小值，不会越界
         self.status = RingBufferStatus::Normal;
-        let c = self.arr[self.head];
-        self.head = (self.head + 1) % PIPE_BUFFER_SIZE;
+        let mut res = Vec::with_capacity(nbyte);
+
+        for _ in 0..nbyte {
+            res.push(self.arr[self.head]);
+            self.head = (self.head + 1) % PIPE_BUFFER_SIZE;
+        }
+
         if self.head == self.tail {
             self.status = RingBufferStatus::Empty;
         }
-        c
+        res
     }
     /// 获取管道中剩余可读长度
     pub fn available_read(&self, buf_len: usize) -> usize {
         if self.status == RingBufferStatus::Empty {
             0
+        } else if self.tail > self.head {
+            min(buf_len, self.tail - self.head)
         } else {
-            min(buf_len, self.arr.len())
+            min(buf_len, PIPE_BUFFER_SIZE - self.head + self.tail)
         }
     }
     /// 获取管道中剩余可写长度
     pub fn available_write(&self, buf_len: usize) -> usize {
         if self.status == RingBufferStatus::Full {
             0
+        } else if self.tail > self.head {
+            min(buf_len, self.tail - self.head)
         } else {
-            min(buf_len, PIPE_BUFFER_SIZE - self.arr.len())
+            min(buf_len, PIPE_BUFFER_SIZE - self.head + self.tail)
         }
-    }
-    /// 通过管道缓冲区写端弱指针判断管道的所有写端都被关闭
-    pub fn all_write_ends_closed(&self) -> bool {
-        self.write_end.as_ref().unwrap().upgrade().is_none()
     }
 }
 
@@ -189,8 +198,8 @@ impl Future for PipeReadFuture<'_> {
             let mut idx = 0;
             loop {
                 if pos >= size { break; }
-                let len = self.buf[idx].len();
-                self.buf[idx].copy_from_slice(&inner.arr[pos..pos + len]);
+                let len = min(self.buf[idx].len(), size - pos);
+                self.buf[idx].copy_from_slice(&inner.read_nbyte(len));
                 idx += 1;
                 pos += len;
             }
@@ -228,9 +237,9 @@ impl Future for PipeWriteFuture<'_> {
             let mut pos = 0;
             let mut idx = 0;
             loop {
-                if pos > size { break; }
-                let len = self.buf[idx].len();
-                inner.arr.copy_from_slice(&self.buf[idx][0..len]);
+                if pos >= size { break; }
+                let len = min(self.buf[idx].len(), size - pos);
+                inner.write_nbyte(&self.buf[idx][0..len]);
                 idx += 1;
                 pos += len;
             }
