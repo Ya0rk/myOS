@@ -5,14 +5,14 @@ authors = ["Yao Junjie <345024941@qq.com>"]
 edition = "2021"
 
 [dependencies]
-riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
+# riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
 buddy_system_allocator = "0.11.0"
 bitflags = "2.8.0"
 xmas-elf = "0.9.1"
 virtio-drivers = { path = "../vendor/virtio-drivers" }
 log = "0.4"
-sbi-rt = { version = "0.0.3", features = ["legacy"] }
+# sbi-rt = { version = "0.0.3", features = ["legacy"] }
 spin = "0.9.8"
 sbi-spec = "0.0.8"
 num_enum = { version = "0.7.2", default-features = false }
@@ -23,6 +23,13 @@ async-task = { version = "4.7.1", default-features = false }
 async-trait = { version = "0.1.88"}
 crossbeam-queue = { version = "0.3", default-features = false, features = ["alloc"] }
 # loongarch64 = { git = "https://github.com/Godones/loongArch64", package = "loongArch64" }
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
+sbi-rt = { version = "0.0.3", features = ["legacy"] }
+
+[target.'cfg(target_arch = "loongarch64")'.dependencies]
+loongarch64 = { git = "https://github.com/Godones/loongArch64", package = "loongArch64" }
 
 [features]
 board_qemu = []

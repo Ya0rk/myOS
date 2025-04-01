@@ -23,7 +23,7 @@ pub fn get_time() -> usize {
 /// 获取开机以来，晶振片过了几个时钟周期
 pub fn get_time() -> usize {
     // time::read()
-    unimplemented!(loongarch64)
+    unimplemented!("loongarch64")
 }
 
 /// 获取时间：单位s
