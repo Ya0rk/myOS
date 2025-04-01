@@ -396,7 +396,7 @@ impl TaskControlBlock {
             // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
             match self.get_parent() {
                 Some(parent) => {
-                    // info!("[do_exit] parent pid = {}", parent.get_pid());
+                    info!("[do_exit] task to info parent pid = {}, exit code = {}", parent.get_pid(), self.get_exit_code());
                     let sig_info = SigInfo::new(
                SigNom::SIGCHLD, 
                 SigCode::CLD_EXITED, 
@@ -404,7 +404,8 @@ impl TaskControlBlock {
                  SigDetails::Chld { 
                             pid, 
                             status: self.get_status(), 
-                            exit_code: self.get_exit_code()
+                            // 这里需要将exitcode移回去，因为在sys_exit中位移过
+                            exit_code: (self.get_exit_code() & 0xff00) >> 8
                         }
                     );
                     parent.proc_recv_siginfo(sig_info);

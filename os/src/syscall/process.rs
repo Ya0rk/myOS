@@ -19,7 +19,7 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
     task.set_zombie();
 
     if task.is_leader(){
-        info!("[sys_exit] task is leader, pid = {}", task.get_pid());
+        info!("[sys_exit] task is leader, pid = {}, exit_code = {}", task.get_pid(), exit_code);
         task.set_exit_code((exit_code & 0xFF) << 8);
     }
     Ok(0)
@@ -195,7 +195,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
         let locked_child = task.children.lock().clone();
         match pid {
             -1 => {
-                locked_child.values().find(|task| task.is_zombie() && task.get_pid() != self_pid).cloned()
+                locked_child.values().find(|task| task.is_zombie() && task.get_pid() != self_pid).cloned()// 这里过滤掉了自己
             }
             p if p > 0 => {
                 locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
@@ -245,8 +245,9 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
                     None => return Err(Errno::EINTR),
                 }
             };
-            // info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
+            info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
             task.do_wait4(child_pid, wstatus as *mut i32, exit_code);
+            // info!("[do_wait4] child_pid = {}", child_pid);
             return Ok(child_pid);
         }
     }

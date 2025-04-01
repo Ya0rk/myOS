@@ -9,14 +9,14 @@
 ## 测试用例
 
 - [ ] brk
-- [ ] chdir
+- [x] chdir
 - [x] clone
 - [x] close
 - [x] dup
 - [x] execve
 - [x] exit
 - [x] fork
-- [ ] fstat
+- [ ] fstat // 还不完善
 - [x] getcwd
 - [x] getdents
 - [x] getpid
