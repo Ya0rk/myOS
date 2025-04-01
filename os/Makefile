@@ -145,3 +145,14 @@ gdbclient:
 PHONY += gdbclient
 
 .PHONY: $(PHONY)
+
+# 龙芯架构的启动方式
+LA:
+	cargo clean
+	cargo build --target loongarch64-unknown-none
+	qemu-system-loongarch64 \
+		-m 128M \
+		-smp 1 \
+		-kernel ./target/loongarch64-unknown-none/debug/os \
+		-vga none \
+		-nographic \
