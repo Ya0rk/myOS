@@ -1,6 +1,7 @@
+use core::sync::atomic::AtomicUsize;
 use crate::{
     fs::{ffi::InodeType, file::NormalFile, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
-        sync::{MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
+        sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
         utils::SysResult
 };
 use alloc::{
@@ -21,16 +22,19 @@ pub struct InodeMeta {
     /// 节点的编号
     pub ino: usize,
     /// 文件大小
-    pub size: Mutex<usize>,
+    pub size: AtomicUsize,
+    /// 文件类型
+    pub file_type: InodeType,
     /// 时间戳
     pub timestamp: SpinNoIrqLock<TimeStamp>,
 }
 
 impl InodeMeta {
-    pub fn new(size: usize) -> Self {
+    pub fn new(file_type: InodeType) -> Self {
         Self {
             ino:  alloc_ino(), 
-            size: Mutex::new(size), 
+            size: AtomicUsize::new(0), 
+            file_type,
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
         }
     }
@@ -205,6 +209,8 @@ pub trait InodeTrait: Send + Sync {
 
     /// 获取lwext4的ext4file
     fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
+
+    fn is_dir(&self) -> bool;
 }
 
 impl dyn InodeTrait {

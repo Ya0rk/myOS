@@ -52,6 +52,9 @@ impl FileTrait for DevRtc {
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
+    fn is_dir(&self) -> bool {
+        todo!()
+    }
 }
 
 // impl Ioctl for DevRtc {

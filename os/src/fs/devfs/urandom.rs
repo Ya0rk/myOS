@@ -46,4 +46,7 @@ impl FileTrait for DevRandom {
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
+    fn is_dir(&self) -> bool {
+        todo!()
+    }
 }

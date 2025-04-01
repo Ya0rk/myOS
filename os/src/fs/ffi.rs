@@ -150,15 +150,15 @@ pub enum InodeType {
     Unknown = 0o0,
     /// FIFO (named pipe)
     Fifo = 0o1,
-    /// Character device
+    /// 字符设备
     CharDevice = 0o2,
-    /// Directory
+    /// 目录
     Dir = 0o4,
-    /// Block device
+    /// 块设备
     BlockDevice = 0o6,
-    /// Regular file
+    /// 文件
     File = 0o10,
-    /// Symbolic link
+    /// 符号链接文件
     SymLink = 0o12,
     /// Socket
     Socket = 0o14,
@@ -210,13 +210,13 @@ pub fn as_ext4_de_type(types: InodeType) -> InodeTypes {
 
 pub fn as_inode_type(types: InodeTypes) -> InodeType {
     match types {
-        InodeTypes::EXT4_INODE_MODE_FIFO => InodeType::Fifo,
-        InodeTypes::EXT4_INODE_MODE_CHARDEV => InodeType::CharDevice,
-        InodeTypes::EXT4_INODE_MODE_DIRECTORY => InodeType::Dir,
-        InodeTypes::EXT4_INODE_MODE_BLOCKDEV => InodeType::BlockDevice,
-        InodeTypes::EXT4_INODE_MODE_FILE => InodeType::File,
-        InodeTypes::EXT4_INODE_MODE_SOFTLINK => InodeType::SymLink,
-        InodeTypes::EXT4_INODE_MODE_SOCKET => InodeType::Socket,
+        InodeTypes::EXT4_DE_FIFO => InodeType::Fifo,
+        InodeTypes::EXT4_DE_CHRDEV => InodeType::CharDevice,
+        InodeTypes::EXT4_DE_DIR => InodeType::Dir,
+        InodeTypes::EXT4_DE_BLKDEV => InodeType::BlockDevice,
+        InodeTypes::EXT4_DE_REG_FILE => InodeType::File,
+        InodeTypes::EXT4_DE_SYMLINK => InodeType::SymLink,
+        InodeTypes::EXT4_DE_SOCK => InodeType::Socket,
         _ => {
             // warn!("unknown file type: {:?}", vtype);
             unreachable!()
