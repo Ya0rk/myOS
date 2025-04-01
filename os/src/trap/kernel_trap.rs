@@ -5,7 +5,7 @@ use crate::{sync::set_next_trigger, task::current_trap_cx, utils::backtrace};
 /// Unimplement: traps/interrupts/exceptions from kernel mode
 /// Todo: Chapter 9: I/O device
 pub fn kernel_trap_handler() {
-    backtrace();
+    // backtrace();
     let scause = scause::read();
     match scause.cause() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5

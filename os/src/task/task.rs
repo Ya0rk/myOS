@@ -359,23 +359,30 @@ impl TaskControlBlock {
 
         if !self.is_leader() {
             // info!("[do_exit] task not leader");
+            // self.clear_child();
             self.remove_thread_group_member(pid);
             remove_task_by_pid(pid);
         } else {
             // 将当前进程的子进程移动到initproc下
             // info!("[do_exit] task is leader");
-            if !self.children.lock().is_empty(){
-                // info!("[do_exit] task has child");
+            let mut lock_child = self.children.lock();
+            if !lock_child.is_empty(){
+                info!("[do_exit] task has child");
                 let init_proc = get_init_proc();
-                for (pid, child) in self.children.lock().iter() {
+                for (child_pid, child) in 
+                    lock_child.
+                    iter().
+                    filter(|(find_pid, _)| **find_pid != pid) // 需要过滤掉自己，因为在process_fork中把自己加入了child
+                {
                     if child.is_zombie() {
+                        info!("[do_exit] child pdi = {} is zmobie", child_pid);
                         let sig_info = SigInfo::new(
                             SigNom::SIGCHLD, 
                             SigCode::CLD_EXITED, 
                             SigErr::empty(), 
                             SigDetails::Chld { 
-                                pid: *pid, 
-                                status: child.get_status(), 
+                                pid: *child_pid, 
+                                status: child.get_status(),
                                 exit_code: child.get_exit_code()
                             }
                         );
@@ -384,7 +391,7 @@ impl TaskControlBlock {
                     child.set_parent(Some(Arc::downgrade(&init_proc)));
                     init_proc.add_child(child.clone());
                 }
-                self.clear_child();
+                lock_child.clear();
             }
             // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
             match self.get_parent() {
