@@ -21,6 +21,8 @@ use riscv::register::stvec;
 
 #[cfg(target_arch = "riscv64")]
 global_asm!(include_str!("rv64_trap.S"));
+#[cfg(target_arch = "loongarch64")]
+global_asm!(include_str!("la64_trap.S"));
 
 // 申明外部函数，这些函数是在汇编代码中实现的，用于从用户态和内核态切换
 extern "C" {

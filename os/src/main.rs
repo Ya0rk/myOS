@@ -37,6 +37,9 @@ use task::{executor, get_current_hart_id, spawn_kernel_task};
 #[cfg(target_arch = "riscv64")]
 global_asm!(include_str!("entry.asm"));
 
+#[cfg(target_arch = "loongarch64")]
+global_asm!(include_str!("entry_la.asm"));
+
 #[macro_use]
 extern crate lazy_static;
 

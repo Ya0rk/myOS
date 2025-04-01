@@ -8,5 +8,5 @@ rustflags = [
 ]
 [target.loongarch64-unknown-none]
 rustflags = [
-    "-Clink-arg=-Tsrc/linker-qemu-la.ld", "-Cforce-frame-pointers=yes"
+    "-Clink-arg=-Tsrc/linkerqemula.ld", "-Cforce-frame-pointers=yes", "-Ctarget-feature=-lsx,-lasx"
 ]
