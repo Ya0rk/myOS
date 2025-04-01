@@ -136,8 +136,8 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
 }
 
 pub fn sys_close(fd: usize) -> SysResult<usize> {
-    info!("start sys_close");
     let task = current_task().unwrap();
+    info!("[sys_close] start, pid = {}, closed fd = {}", task.get_pid(), fd);
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
@@ -157,13 +157,13 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
     let task = current_task().unwrap();
     let (read_fd, write_fd) = {
-        // let mut inner = task.inner_lock();
         let (read, write) = Pipe::new();
         (
             task.alloc_fd(Fd::new(read, flags)),
             task.alloc_fd(Fd::new(write, flags)),
         )
     };
+    info!("alloc read_fd = {}, write_fd = {}", read_fd, write_fd);
 
     let token = task.get_user_token();
     *translated_refmut(token, pipefd) = read_fd as u32;

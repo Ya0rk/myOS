@@ -182,6 +182,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
     debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
     // info!("[sys_wait4] start, pid = {}, options = {}", pid,options);
     let task = current_task().unwrap();
+    let self_pid = task.get_pid();
     if task.children.lock().is_empty() {
         info!("task pid = {}, has no child.", task.get_pid());
         return Err(Errno::ECHILD);
@@ -194,7 +195,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
         let locked_child = task.children.lock().clone();
         match pid {
             -1 => {
-                locked_child.values().find(|task| task.is_zombie()).cloned()
+                locked_child.values().find(|task| task.is_zombie() && task.get_pid() != self_pid).cloned()
             }
             p if p > 0 => {
                 locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
