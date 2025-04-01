@@ -71,10 +71,10 @@ impl FdTable {
             Ok(valid_idx)
         } else {
             // 在最后加入
-            info!("before len = {}", self.table_len());
+            // info!("before len = {}", self.table_len());
             let new_fd = self.table_len();
             self.put_in(fd, new_fd)?;
-            info!("after len = {}", self.table_len());
+            // info!("after len = {}", self.table_len());
             Ok(new_fd)
         }
     }

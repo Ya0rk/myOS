@@ -230,45 +230,39 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
 }
 
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
-    // Convert the provided path string into a Path object
     let kpath = Path::string2path(path.to_string());
     
-    // Join the current working directory with the provided path to create an absolute path
     let new_path = kpath.join_path_2_absolute(cwd.to_string());
     // 目标文件的路径
     let abs_path = new_path.get();
-    // info!("open() abs_path is {}", abs_path);
-    // Check if the absolute path corresponds to a device file
+
     if find_device(&abs_path) {
-        // Attempt to open the device file
         if let Some(device) = open_device_file(&abs_path) {
-            return Some(FileClass::Abs(device)); // Return the opened device file
+            return Some(FileClass::Abs(device));
         }
-        return None; // Return None if the device file cannot be opened
+        return None;
     }
 
-    // Split the new path into parent directory and child file name
     let (parent_path, child_name) = new_path.split_with("/");
     let (parent_path, child_name) = (parent_path.as_str(), child_name.as_str());
 
-    debug!(
+    info!(
         "[open] cwd={}, path={}, parent={}, child={}, abs={}",
         cwd, path, parent_path, child_name, &abs_path
     );
 
-    // Check if the parent directory inode exists
     let (parent_inode, _) = if INODE_CACHE.has_inode(parent_path) {
-        (INODE_CACHE.get(parent_path).unwrap(), child_name) // Get the parent inode if it exists
+        // info!("aaaa");
+        (INODE_CACHE.get(parent_path).unwrap(), child_name)
     } else {
-        // If the parent inode does not exist, use the root inode
         if cwd == "/" {
+            // info!("bbbb");
             (root_inode(), path)
         } else {
             (root_inode().walk(cwd).unwrap(), path)
         }
     };
 
-    // Attempt to find the inode for the specified absolute path
     if let Some(inode) = parent_inode.walk(&abs_path) {    
         return inode.do_open(
             Some(Arc::downgrade(&parent_inode)),
@@ -277,8 +271,8 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         );
     }
 
-    // If the inode does not exist and the O_CREAT flag is set, create a new file
     if flags.contains(OpenFlags::O_CREAT) {
+        info!("[vfs open] create");
         return create_file(abs_path.clone(), parent_path, child_name, flags);
     }
 
