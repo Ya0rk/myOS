@@ -1,0 +1,74 @@
+TARGET := riscv64gc-unknown-none-elf
+MODE := release
+KERNEL_ELF := target/$(TARGET)/$(MODE)/os
+KERNEL_BIN := $(KERNEL_ELF).bin
+DISASM_TMP := target/$(TARGET)/$(MODE)/asm
+APPS := ../user/src/bin/*
+
+# fs image
+# FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
+FS = lwext4_rust
+FS_IMG := ../$(FS)/ext4.img
+# FS_IMG := ../simple-fat32/fat32.img
+
+# cpu hart
+CPUS ?= 2
+
+# BOARD
+BOARD := qemu
+SBI ?= rustsbi
+
+# 设置bootloader， 入口地址， OBJDUMP和OBJCOPY，变量ARCH
+ifeq ($(TARGET), riscv64gc-unknown-none-elf)
+	BOOTLOADER 		:= ../bootloader/rustsbi-qemu.bin
+	KERNEL_ENTRY_PA := 0x80200000
+	OBJDUMP 		:= rust-objdump --arch-name=riscv64
+	OBJCOPY 		:= rust-objcopy --binary-architecture=riscv64
+	ARCH 			:= riscv64
+endif
+ifeq ($(TARGET), loongarch64-unknown-none)
+	BOOTLOADER 		:= 
+	KERNEL_ENTRY_PA :=
+	OBJDUMP 		:= rust-objdump --arch-name=loongarch64
+	OBJCOPY 		:= rust-objcopy --binary-architecture=loongarch64
+	ARCH 			:= loongarch64
+endif
+
+# 设置编译选项，是release还是debug（debug为默认选项，不需要设置）
+ifeq ($(MODE), release)
+	MODE_ARG := --release
+endif
+ifeq ($(MODE), debug)
+	MODE_ARG :=
+endif
+
+
+# Disassembly
+DISASM ?= -x
+
+# Run usertests or usershell
+TEST ?=
+
+# 设置QEMU程序
+QEMU_NAME := qemu-system-$(ARCH)
+# 设置QEMU参数
+ 
+ifeq ($(TARGET), riscv64gc-unknown-none-elf)
+	QEMU_ARGS = -machine virt
+	QEMU_ARGS += -m 128M
+	QEMU_ARGS += -nographic 
+	QEMU_ARGS += -bios $(BOOTLOADER) 
+	QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+	QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+	QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+	QEMU_ARGS += -smp $(CPUS)
+endif
+ifeq ($(TARGET), loongarch64-unknown-none)
+	QEMU_ARGS = -M virt 
+	QEMU_ARGS += -m 128M
+	QEMU_ARGS += nographic
+	
+endif
+
+
+
