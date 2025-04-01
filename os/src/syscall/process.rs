@@ -19,6 +19,7 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
     task.set_zombie();
 
     if task.is_leader(){
+        info!("[sys_exit] task is leader, pid = {}", task.get_pid());
         task.set_exit_code((exit_code & 0xFF) << 8);
     }
     Ok(0)
@@ -122,7 +123,7 @@ pub fn sys_clone(
     drop(current_task);
 
     let new_pid = new_task.get_pid();
-    let mut child_trap_cx = *new_task.get_trap_cx_mut();
+    let child_trap_cx = new_task.get_trap_cx_mut();
 
     // 子进程不能使用父进程的栈，所以需要手动指定
     if child_stack != 0 {
@@ -150,6 +151,7 @@ pub fn sys_clone(
     // 将子进程加入任务管理器，这里可以快速找到进程
     add_task(&new_task);
     spawn_user_task(new_task);
+    // info!("[sys_fork] finished new pid = {}", new_pid);
 
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
@@ -192,27 +194,25 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
         let locked_child = task.children.lock().clone();
         match pid {
             -1 => {
-                // info!("[sys_wait4]aaaa");
                 locked_child.values().find(|task| task.is_zombie()).cloned()
             }
             p if p > 0 => {
-                // info!("[sys_wait4] target pid = {}", p);
                 locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
             }
             _ => unimplemented!(),
         }
-    }; // locked_child 在这里自动释放
+    };
 
     match target_task {
         Some(zombie_child) => {
-            // info!("[sys_wait4] find a target zombie child task.");
+            info!("[sys_wait4] find a target zombie child task pid = {}.", zombie_child.get_pid());
             let zombie_pid = zombie_child.get_pid();
             let exit_code = zombie_child.get_exit_code();
             task.do_wait4(zombie_pid, wstatus as *mut i32, exit_code);
             return Ok(zombie_pid);
         }
         None => {
-            // info!("[sys_wait4] current task pid = {}", task.get_pid());
+            info!("[sys_wait4] current task pid = {}", task.get_pid());
             if op.contains(WaitOptions::WNOHANG) {
                 return Ok(0)
             }
