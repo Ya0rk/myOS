@@ -181,11 +181,11 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// 
 /// ```
 /// struct dirent {
-///     uint64 d_ino;	// 索引结点号
-///     int64 d_off;	// 到下一个dirent的偏移
+///     uint64 d_ino;	            // 索引结点号
+///     int64 d_off;	            // 到下一个dirent的偏移
 ///     unsigned short d_reclen;	// 当前dirent的长度
-///     unsigned char d_type;	// 文件类型
-///     char d_name[];	//文件名
+///     unsigned char d_type;	    // 文件类型
+///     char d_name[];	            // 文件名
 /// };
 /// ```
 /// 
@@ -194,7 +194,6 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
 pub fn sys_getdents64(fd: usize, buf: *const u8, _len: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
-    // let inner = task.inner_lock();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
     }
@@ -204,8 +203,12 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, _len: usize) -> SysResult<usize
     }
     Ok(10)
     // TODO: 有待修改
-    // match inner.fd_table.get_file_by_fd(fd) {
-    //     Ok(Some(file)) => {
+
+
+
+
+    // match task.get_file_by_fd(fd) {
+    //     Some(file) => {
     //         if !file.readable() {
     //             return Err(Errno::EACCES);
     //         }

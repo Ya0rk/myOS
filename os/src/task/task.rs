@@ -328,8 +328,6 @@ impl TaskControlBlock {
             time_data,
             child_cleartid,
             exit_code,
-        
-            // task_cx: SyncUnsafeCell::new(TaskContext::zero_init()),//
         });
 
         new_task.add_thread_group_member(new_task.clone());

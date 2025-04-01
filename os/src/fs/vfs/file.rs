@@ -120,6 +120,8 @@ pub trait FileTrait: Send + Sync {
     ///
     /// * `stat` - 用于存储文件状态信息的结构体
     fn fstat(&self, stat: &mut Kstat) -> SysResult;
+
+    fn is_dir(&self) -> bool;
 }
 
 // pub trait Ioctl: File {

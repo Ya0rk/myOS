@@ -1,11 +1,12 @@
+use core::sync::atomic::Ordering;
+
 use async_trait::async_trait;
 use log::info;
 use lwext4_rust::{
     bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, Ext4File, InodeTypes
 };
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, 
-    page_cache::PageCache, InodeMeta, InodeTrait, Kstat, INODE_CACHE}, sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp}, utils::{Errno, SysResult}
+    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, page_cache::PageCache, stat::as_inode_stat, InodeMeta, InodeTrait, Kstat, INODE_CACHE}, sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp}, utils::{Errno, SysResult}
 };
 
 use alloc::{sync::Arc, vec::Vec};
@@ -13,8 +14,8 @@ use alloc::vec;
 use alloc::boxed::Box;
 
 pub struct Ext4Inode {
-    pub metadata: InodeMeta,
-    pub file    : Shared<Ext4File>,
+    pub metadata : InodeMeta,
+    pub file     : Shared<Ext4File>,
     pub page_cache: Option<Arc<PageCache>>,
 }
 
@@ -24,17 +25,11 @@ unsafe impl Sync for Ext4Inode {}
 impl Ext4Inode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
     pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<Self> {
+        let file_type = as_inode_type(types.clone());
         let ext4file = new_shared(Ext4File::new(path, types));
-        let size = 0;
-        // {
-        //     let mut lock_file = ext4file.lock();
-        //     lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
-        //     size = lock_file.file_size() as usize;
-        //     lock_file.file_close().expect("[ext4Inode new]: file close fail!");
-        // }
 
         let inode = Arc::new(Self {
-            metadata: InodeMeta::new(size),
+            metadata: InodeMeta::new(file_type),
             file    : ext4file,
             page_cache: page_cache.clone()
         });
@@ -61,7 +56,7 @@ impl InodeTrait for Ext4Inode {
     }
 
     fn set_size(&self, new_size: usize) -> SysResult {
-        *self.metadata.size.lock() = new_size;
+        self.metadata.size.store(new_size, Ordering::Relaxed);
         Ok(())
     }
 
@@ -133,6 +128,7 @@ impl InodeTrait for Ext4Inode {
     /// 写入文件
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         // let file_size = self.size();
+        // TODO(YJJ): 如果不检测 maybe bug???
         // if buf.len() > file_size - offset {
         //     info!("[write_at] file size = {}", file_size);
         //     self.truncate(offset + buf.len());
@@ -229,6 +225,9 @@ impl InodeTrait for Ext4Inode {
     }
     fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
         self.file.lock()
+    }
+    fn is_dir(&self) -> bool {
+        self.metadata.file_type.is_dir()
     }
 }
 

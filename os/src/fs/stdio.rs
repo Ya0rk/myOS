@@ -88,6 +88,9 @@ impl FileTrait for Stdin {
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
+    fn is_dir(&self) -> bool {
+        todo!()
+    }
 }
 
 // impl Ioctl for Stdin {
@@ -170,6 +173,9 @@ impl FileTrait for Stdout {
     //     revents
     // }
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
+        todo!()
+    }
+    fn is_dir(&self) -> bool {
         todo!()
     }
 }

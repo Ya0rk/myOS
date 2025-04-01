@@ -134,4 +134,8 @@ impl FileTrait for NormalFile {
         *stat = inode.fstat();
         Ok(())
     }
+
+    fn is_dir(&self) -> bool {
+        self.metadata.inode.is_dir()
+    }
 }
