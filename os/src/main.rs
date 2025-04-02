@@ -6,6 +6,7 @@
 #![feature(alloc_error_handler)]
 #![feature(negative_impls)]
 #![allow(unused_imports)]
+#![allow(unused_variables)]
 
 #![allow(unused)]
 extern crate alloc;

@@ -14,7 +14,7 @@ const BS: u8 = 0x08u8;
 
 use alloc::{string::String, vec::Vec};
 use user_lib::console::getchar;
-use user_lib::{chdir, exec, fork, getcwd, waitpid};
+use user_lib::{chdir, exec, fork, getcwd, mkdir, waitpid};
 
 #[no_mangle]
 pub fn main() -> i32 {
@@ -34,6 +34,16 @@ pub fn main() -> i32 {
                                 println!("chdir to {}", parts[1]);
                                 let byte_slice: &[u8] = &conert_str2byte(parts[1]);
                                 chdir(byte_slice);
+                            } else {
+                                println!("cd command error! no enough arguments");
+                            }
+                            line.clear();
+                        }
+                        "mkdir" => {
+                            if parts.len() > 1 {
+                                println!("chdir to {}", parts[1]);
+                                let byte_slice: &[u8] = &conert_str2byte(parts[1]);
+                                mkdir(byte_slice, 0);
                             } else {
                                 println!("cd command error! no enough arguments");
                             }

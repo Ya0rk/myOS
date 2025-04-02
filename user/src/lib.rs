@@ -71,7 +71,7 @@ pub fn dup3(oldfd: usize, newfd: usize, flags: u32) -> isize {
     sys_dup3(oldfd, newfd, flags)
 }
 
-pub fn mkdir(path: &str, mode: usize) -> isize {
+pub fn mkdir(path: &[u8], mode: usize) -> isize {
     sys_mkdir(path, mode)
 }
 
