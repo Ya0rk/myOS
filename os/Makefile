@@ -48,7 +48,7 @@ TEST ?=
 #qemu
 QEMU_NAME := qemu-system-riscv64
 
-QEMU_ARGS = -machine virt 
+QEMU_ARGS =  -machine virt 
 QEMU_ARGS += -m 128M
 QEMU_ARGS += -nographic 
 QEMU_ARGS += -bios $(BOOTLOADER) 
@@ -57,10 +57,14 @@ QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 QEMU_ARGS += -smp $(CPUS)
 
+fdtdump:
+	$(QEMU_NAME) $(QEMU_ARGS) -machine dumpdtb=riscv64-virt.dtb
+	dtc -I dtb -O dts -o riscv64-virt.dts riscv64-virt.dtb
+PHONY = fdtdump
 
 # build: env $(KERNEL_BIN) fs-img
 build: env $(KERNEL_BIN) initproc copy_to_fs
-PHONY = build
+PHONY += build
 
 initproc:
 	@cd ../user && cargo clean && make build
@@ -121,7 +125,7 @@ PHONY += qemu-version-check
 
 run-inner: qemu-version-check build
 	echo "Running QEMU with arguments: $(QEMU_ARGS)"
-	qemu-system-riscv64 $(QEMU_ARGS)
+	$(QEMU_NAME) $(QEMU_ARGS)
 PHONY += run-inner
 
 # debug: qemu-version-check build
@@ -131,13 +135,13 @@ PHONY += run-inner
 # 	tmux -2 attach-session -d
 debug: qemu-version-check build
 	@tmux new-session -d \
-		"qemu-system-riscv64 $(QEMU_ARGS) -s -S" && \
+		"$(QEMU_NAME) $(QEMU_ARGS) -s -S" && \
 		tmux split-window -h "riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'" && \
 		tmux -2 attach-session -d
 PHONY += debug
 
 gdbserver: qemu-version-check build
-	qemu-system-riscv64 $(QEMU_ARGS) -s -S
+	$(QEMU_NAME) $(QEMU_ARGS) -s -S
 PHONY += gdbserver
 
 gdbclient:
