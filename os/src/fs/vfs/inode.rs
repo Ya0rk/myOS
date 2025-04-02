@@ -1,5 +1,5 @@
 use crate::{
-    fs::{ffi::InodeType, file::NormalFile, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
+    fs::{ffi::InodeType, file::NormalFile, page_cache::PageCache, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
         sync::{MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
         utils::SysResult
 };
@@ -205,6 +205,9 @@ pub trait InodeTrait: Send + Sync {
 
     /// 获取lwext4的ext4file
     fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
+
+    /// get page cache from ext4 file
+    fn get_page_cache(&self) -> Option<Arc<PageCache>>;
 }
 
 impl dyn InodeTrait {

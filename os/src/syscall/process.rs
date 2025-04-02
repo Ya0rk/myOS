@@ -157,9 +157,9 @@ pub async fn sys_exec(path: usize) -> SysResult<usize> {
     let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
-        let all_data = app_inode.file()?.metadata.inode.read_all().await?;
+        // let all_data = app_inode.file()?.metadata.inode.read_all().await?;
         let task = current_task().unwrap();
-        task.exec(all_data.as_slice());
+        task.exec(app_inode);
         Ok(0)
     } else {
         Err(Errno::EBADCALL)

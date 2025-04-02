@@ -3,7 +3,7 @@ use xmas_elf::program::ProgramHeader;
 use xmas_elf::program::Type;
 use xmas_elf::ElfFile;
 use xmas_elf::program::Flags;
-use crate::utils::flags::AccessFlags;
+// use crate::utils::flags::AccessFlags;
 pub trait ElfCheck {
     fn check_magic(&self, magic: [u8; 4]) -> bool;
 
@@ -40,17 +40,17 @@ impl ProgramHeaderChecker for ProgramHeader<'_> {
     }
 }
 
-impl AccessFlags for Flags {
-    fn readable(&self) -> bool {
-        self.is_read()
-    }
-    fn writable(&self) -> bool {
-        self.is_write()
-    }
-    fn executable(&self) -> bool {
-        self.is_execute()
-    }
+// impl AccessFlags for Flags {
+//     fn readable(&self) -> bool {
+//         self.is_read()
+//     }
+//     fn writable(&self) -> bool {
+//         self.is_write()
+//     }
+//     fn executable(&self) -> bool {
+//         self.is_execute()
+//     }
 
     
-}
+// }
 

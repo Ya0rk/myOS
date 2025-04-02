@@ -22,6 +22,9 @@ pub use pipe::Pipe;
 pub use stat::Kstat;
 pub use vfs::*;
 pub use stdio::{Stdin, Stdout};
+pub use crate::mm::page::Page;
+use crate::mm::page::PageType;
+// pub use page_cache::Page;
 
 use devfs::{find_device, open_device_file, register_device};
 use ffi::{MOUNTS, MEMINFO, LOCALTIME, ADJTIME};
@@ -31,6 +34,7 @@ use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
 use alloc::{sync::Arc, vec::Vec};
 use log::{debug, info};
+// use page_cache::PageCache;
 
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
@@ -56,6 +60,20 @@ impl FileClass {
         match self {
             FileClass::File(_) => Err(Errno::EINVAL),
             FileClass::Abs(f) => Ok(f.clone()),
+        }
+    }
+    pub async fn get_page_at(&self, offset: usize) -> Result<Arc<crate::mm::page::Page>, Errno> {
+        match self {
+            FileClass::File(file) => {
+                if let Some(page) = file.metadata.inode.get_page_cache().unwrap().get_page(offset) {
+                    // Ok(page)
+                    Ok(page)
+                }
+                else {
+                    Err(Errno::EINVAL)
+                }
+            },
+            FileClass::Abs(_) => Err(Errno::EINVAL),
         }
     }
 }

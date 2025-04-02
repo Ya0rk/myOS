@@ -1,7 +1,8 @@
 use core::fmt;
 
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
-use crate::mm::{VirtAddr, KERNEL_SPACE};
+use crate::mm::page_table::{get_kernel_page_table, KERNEL_PAGE_TABLE};
+use crate::mm::{VirtAddr};
 use alloc::collections::BTreeSet;
 use lazy_static::*;
 use log::debug;
@@ -128,10 +129,11 @@ impl KernelStack {
 
 impl Drop for KernelStack {
     fn drop(&mut self) {
-        let (kernel_stack_bottom, _) = kernel_stack_position(self.pid);
-        let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
-        KERNEL_SPACE
-            .lock()
-            .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
+        let (kernel_stack_bottom, kernel_stack_start) = kernel_stack_position(self.pid);
+        // let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
+        // KERNEL_SPACE
+        //     .lock()
+        //     .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
+        get_kernel_page_table().lock().unmap_kernel_range(kernel_stack_bottom.into()..kernel_stack_start.into());
     }
 }
