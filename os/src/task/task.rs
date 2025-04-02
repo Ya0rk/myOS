@@ -37,7 +37,7 @@ pub struct TaskControlBlock {
 
     base_size:      Shared<usize>, // 迟早要删
     thread_group:   Shared<ThreadGroup>,
-    memory_space:     Shared<MemorySpace>,
+    memory_space:   Shared<MemorySpace>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
     pub children:   Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
     fd_table:       Shared<FdTable>,
@@ -68,6 +68,10 @@ impl TaskControlBlock {
         // let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf(elf_file);
         info!("entry point: {:#x}", entry_point);
+        
+
+        unsafe { memory_space.switch_page_table() };
+        unsafe{riscv::register::sstatus::set_sum();}
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
         let trap_cx = TrapContext::app_init_context(
             entry_point,
@@ -140,7 +144,7 @@ impl TaskControlBlock {
         new_task
     }
     pub fn exec(&self, elf_file: FileClass) {
-        debug!("exec start");
+        info!("exec start");
         let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(&elf_file);
         
         // 建立该进程的kernel stack
@@ -151,7 +155,7 @@ impl TaskControlBlock {
                 MapPerm::RW,
                 VmAreaType::Stack)
         );
-        debug!("exec memory_set created");
+        info!("exec memory_set created");
         
         // 终止所有子线程
         for (_, weak_task) in self.thread_group.lock().tasks.iter() {
@@ -769,6 +773,10 @@ impl TaskControlBlock {
     /// 设置child_cleartid，参考：Linux系统编程手册500页
     pub fn set_child_cleartid(&self, ctid: usize) {
         unsafe { *self.child_cleartid.get() = Some(ctid) };
+    }
+
+    pub fn with_mut_memory_space<T>(&self, f: impl FnOnce(&mut MemorySpace) -> T) -> T {
+        f(&mut self.memory_space.lock())
     }
 }
 

@@ -51,7 +51,7 @@ impl Ext4Inode {
 impl InodeTrait for Ext4Inode {
     
     fn get_page_cache(&self) -> Option<Arc<PageCache>> {
-        return self.page_cache.clone();
+        return self.page_cache.as_ref().cloned();
     }
 
 

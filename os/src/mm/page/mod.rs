@@ -1,6 +1,7 @@
 use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, fs::FileClass, mm::frame_allocator::{frame_alloc, FrameTracker}};
 use alloc::sync::Arc;
 use hashbrown::HashSet;
+use log::info;
 // use crate::fs::File;
 use crate::mm::address::PhysPageNum;
 use crate::sync::mutex::SleepLock;
@@ -86,6 +87,13 @@ impl Page {
         self.get_bytes_array().fill(0);
     }
 
+}
+
+impl Drop for Page {
+    fn drop(&mut self) {
+        info!("Page Dropped, ppn:{:#x}", self.frame.ppn.0);
+    }
+    
 }
 
 // pub struct DirtySet(SleepLock<HashSet<usize>>);

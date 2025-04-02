@@ -5,6 +5,7 @@ use alloc::{
     vec,
     vec::Vec,
 };
+use log::info;
 use core::{
     cell::SyncUnsafeCell,
     cmp,
@@ -270,8 +271,8 @@ impl MemorySpace {
         if let FileClass::File(file) = elf_file {
             let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
             let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
-            let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
-            memory_space.alloc_heap_lazily();
+            let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
+            memory_space.alloc_heap();
             (memory_space, entry_point, sp_init, auxv)
         }
         else {
@@ -315,7 +316,7 @@ impl MemorySpace {
         let (max_end_vpn, header_va) = self.map_elf_data(&elf, 0.into());
 
         let ph_head_addr = header_va.0 + elf.header.pt2.ph_offset() as usize;
-        log::debug!("[from_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x} ");
+        log::info!("[from_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x} ");
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
 
         (self, entry_point, auxv)
@@ -328,7 +329,7 @@ impl MemorySpace {
         let mut max_end_vpn = offset.floor();
         let mut header_va = 0;
         let mut has_found_header_va = false;
-        log::info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
+        log::info!("[map_elf_data]: entry point {:#x}", elf.header.pt2.entry_point());
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
@@ -360,8 +361,8 @@ impl MemorySpace {
 
             let map_offset = start_va - start_va.align_down();
 
-            log::debug!(
-                "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}",
+            log::info!(
+                "[map_elf_data] ph offset {:#x}, file size {:#x}, mem size {:#x}",
                 ph.offset(),
                 ph.file_size(),
                 ph.mem_size()
@@ -424,7 +425,7 @@ impl MemorySpace {
 
             let map_offset = start_va - start_va.align_down();
 
-            log::debug!(
+            log::info!(
                 "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}",
                 ph.offset(),
                 ph.file_size(),
@@ -447,6 +448,7 @@ impl MemorySpace {
                     {
                         if pre_alloc_page_cnt < USER_ELF_PRE_ALLOC_PAGE_CNT {
                             let new_page = Page::new();
+                            info!("pre alloc");
                             // WARN: area outer than region may should be set to zero
                             new_page.copy_from_slice(page.get_bytes_array());
                             // new_page.copy_from_page(&page);
@@ -461,12 +463,18 @@ impl MemorySpace {
                                 new_flags.remove(PTEFlags::W);
                                 (new_flags, page.ppn())
                             };
+                            info!("[map_elf] lazy alloc: vpn: {:#x} offset: {:#x} ppn: {:#x}", vpn.0, offset_aligned, ppn.0 );
                             self.page_table_mut().map(vpn, ppn, pte_flags);
                             vm_area.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         }
                         pre_alloc_page_cnt += 1;
                     } else {
+                        // if let FileClass::File(file) = elf_file {
+                        //     let file_data = block_on(async {file.metadata.inode.read_all().await} ).unwrap();
+                        //     info!("{:?}", file_data);
+                        // }
+                        info!("break");
                         break;
                     }
                 }
@@ -507,7 +515,7 @@ impl MemorySpace {
 
         let ph_head_addr = header_va.0 + elf.header.pt2.ph_offset() as usize;
         auxv.push(AuxHeader::new(AT_RANDOM, ph_head_addr));
-        log::debug!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x}",);
+        log::info!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x}",);
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
 
         (self, entry, auxv)
@@ -656,7 +664,7 @@ impl MemorySpace {
 
         // align to 16 bytes
         let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
-        log::debug!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
+        log::info!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
 
         let mut vm_area = VmArea::new(range.clone(), MapPerm::URW, VmAreaType::Stack);
         vm_area.map_range(
@@ -664,6 +672,27 @@ impl MemorySpace {
             range.end - USER_STACK_PRE_ALLOC_SIZE..range.end,
         );
         self.push_vma_lazily(vm_area);
+        sp_init
+    }
+    pub fn alloc_stack(&mut self, size: usize) -> VirtAddr {
+        let stack_range: Range<VirtAddr> =
+            VirtAddr::from_usize_range(U_SEG_STACK_BEG..U_SEG_STACK_END);
+
+        let range = self
+            .areas()
+            .find_free_range(stack_range, size)
+            .expect("too many stack!");
+
+        // align to 16 bytes
+        let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
+        log::info!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
+
+        let mut vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Stack);
+        // vm_area.map_range(
+        //     self.page_table_mut(),
+        //     range.end - USER_STACK_PRE_ALLOC_SIZE..range.end,
+        // );
+        self.push_vma(vm_area);
         sp_init
     }
 
@@ -677,6 +706,16 @@ impl MemorySpace {
 
         let vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Heap);
         self.push_vma_lazily(vm_area);
+    }
+    pub fn alloc_heap(&mut self) {
+        let heap_range: Range<VirtAddr> =
+            VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_END);
+
+        const INIT_SIZE: usize = PAGE_SIZE;
+        let range = VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_BEG + INIT_SIZE);
+
+        let vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Heap);
+        self.push_vma(vm_area);
     }
 
     pub fn get_heap_break(&self) -> VirtAddr {
@@ -697,7 +736,7 @@ impl MemorySpace {
             .iter_mut()
             .find(|(_, vma)| vma.vma_type == VmAreaType::Heap)
             .unwrap();
-        log::debug!("[MemorySpace::reset_heap_break] heap range: {range:?}, new_brk: {new_brk:?}");
+        log::info!("[MemorySpace::reset_heap_break] heap range: {range:?}, new_brk: {new_brk:?}");
         let result = if new_brk > range.end {
             let ret = self.areas_mut().extend_back(range.start..new_brk);
             if ret.is_ok() {
@@ -732,7 +771,7 @@ impl MemorySpace {
     pub fn from_user_lazily(user_space: &mut Self) -> Self {
         let mut memory_space = Self::new_user();
         for (range, area) in user_space.areas().iter() {
-            log::debug!("[MemorySpace::from_user_lazily] cloning {area:?}");
+            log::info!("[MemorySpace::from_user_lazily] cloning {area:?}");
             let mut new_area = area.clone();
             debug_assert_eq!(range, new_area.range_va());
             for vpn in area.range_vpn() {
@@ -1043,6 +1082,7 @@ pub fn init_stack(
     // --------------------------------------------------------------------------------
     // 在构建栈的时候，我们从底向上塞各个东西
 
+    info!("[init_stack] in");
     let mut sp = sp_init.to_usize();
     debug_assert!(sp & 0xf == 0);
 
@@ -1117,6 +1157,8 @@ pub fn init_stack(
     let argc = args.len();
     push_usize(&mut sp, argc);
 
+    
+    info!("[init_stack] out");
     // 返回值
     (sp, argc, arg_ptr_ptr, env_ptr_ptr)
 }
