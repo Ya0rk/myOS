@@ -4,7 +4,7 @@
 //! including path joining, splitting, and path type checking operations.
 
 use core::fmt::Debug;
-use alloc::{format, string::{String, ToString}};
+use alloc::{format, string::{String, ToString}, vec::Vec};
 
 /// Represents a file system path.
 /// 
@@ -51,7 +51,7 @@ impl Path {
     /// * `path` - The string to convert into a Path
     pub fn string2path(path: String) -> Self {
         Self {
-            content: path
+            content: parse_path(path)
         }
     }
 
@@ -82,42 +82,6 @@ impl Path {
         self.content.starts_with('/')
     }
 
-    /// Joins a relative path with a base path to create an absolute path.
-    /// 
-    /// # Arguments
-    /// 
-    /// * `base` - The base path to join with
-    /// 
-    /// # Returns
-    /// 
-    /// A new Path containing the joined absolute path
-    /// 
-    /// # Examples
-    /// 
-    /// ```
-    /// let path = Path::string2path("foo/bar".to_string());
-    /// let joined = path.join_path_2_absolute("/home/user".to_string());
-    /// assert_eq!(joined.get(), "/home/user/foo/bar");
-    /// ```
-    pub fn join_path_2_absolute(&self, base: String) -> Self {
-        if self.is_absolute() {
-            return Self {
-                content: self.content.clone(),
-            };
-        }
-    
-        let base = base.trim_end_matches('/');
-    
-        let new_path = if base.is_empty() || base == "/" {
-            format!("/{}", self.content)
-        } else {
-            format!("{}/{}", base, self.content)
-        };
-    
-        Self {
-            content: new_path,
-        }
-    }
     /// 通过一个路径获得文件名
     /// 
     /// 使用/对目录进行分割
@@ -153,12 +117,76 @@ pub fn path_test() {
     assert!(!p1.is_absolute(), "p1 should be relative path");
     assert!(p2.is_absolute(), "p2 should be absolute path");
 
-    let base = String::from("/home/user/");
-    let joined = p1.join_path_2_absolute(base.clone());
-    assert_eq!(joined.get(), "/home/user/foo/bar", "join path faid");
-
     let root = Path::string2path(String::from("/"));
     assert!(root.is_root(), "check root faild");
 
+    // 测试路径规范化
+    assert_eq!(parse_path("a/b/../c".to_string()), "a/c");
+    assert_eq!(parse_path("a/b/./c".to_string()), "a/b/c");
+    assert_eq!(parse_path("../a/../b".to_string()), "../b");
+    assert_eq!(parse_path("/./../a".to_string()), "/a");
+    assert_eq!(parse_path("//a//b//".to_string()), "/a/b");
+    
+    // 测试更多边界情况
+    assert_eq!(parse_path("/".to_string()), "/");
+    assert_eq!(parse_path("/..".to_string()), "/");
+    assert_eq!(parse_path("".to_string()), ".");
+    assert_eq!(parse_path(".".to_string()), ".");
+    assert_eq!(parse_path("..".to_string()), "..");
+    assert_eq!(parse_path("../../a".to_string()), "../../a");
+    assert_eq!(parse_path("/a/../../b".to_string()), "/b");
+
     println!("path_test passed!");
+}
+
+fn parse_path(path: String) -> String {
+    let components: Vec<&str> = path.split("/").collect();
+    let mut normalized = Vec::new();
+    let is_absolute = path.starts_with('/');
+
+    for comp in components {
+        match comp {
+            "."  => continue,
+            ".." => {
+                if is_absolute {
+                    if !normalized.is_empty() {
+                        normalized.pop();
+                    } 
+                } else {
+                    // 相对路径下，保留无法返回的..
+                    if normalized.last().map_or(true, |&s| s == "..") {
+                        normalized.push("..");
+                    } else {
+                        normalized.pop();
+                    }
+                }
+            }
+            "" => continue,
+            _  => normalized.push(comp),
+        }
+    }
+
+    let content = match is_absolute {
+        true  => format!("/{}", normalized.join("/")),
+        false => normalized.join("/")
+    };
+
+    match content.is_empty() {
+        true  => {
+            if is_absolute { return "/".to_string(); }
+            else { return ".".to_string(); }
+        }
+        false => return content,
+    }
+}
+
+pub fn join_path_2_absolute(base: String, suffix: String) -> String {
+    if suffix.starts_with("/") {
+        return suffix;
+    }
+    let trim_base = base.trim_end_matches("/").to_string();
+    let temp = format!("{}/{}", trim_base, suffix);
+    let content = parse_path(temp);
+
+    content
 }
