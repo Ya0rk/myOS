@@ -1,6 +1,11 @@
 #[cfg(target_arch = "riscv64")]
 use riscv::register::{sie, sstatus};
 
+#[cfg(target_arch = "loongarch64")]
+use loongarch64::register::*;
+#[cfg(target_arch = "loongarch64")]
+use loongarch64::register::ecfg::LineBasedInterrupt;
+
 #[cfg(target_arch = "riscv64")]
 #[inline(always)]
 pub fn enable_interrupt() {
@@ -11,7 +16,12 @@ pub fn enable_interrupt() {
 #[cfg(target_arch = "loongarch64")]
 #[inline(always)]
 pub fn enable_interrupt() {
-    unimplemented!("loongarch64")
+    unsafe {
+        // 开启全局中断
+        crmd::set_ie(true);
+        // prmd::set_pie(true);
+    }
+    
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -24,7 +34,13 @@ pub fn disable_interrupt() {
 #[cfg(target_arch = "loongarch64")]
 #[inline(always)]
 pub fn disable_interrupt() {
-    unimplemented!("loongarch64")
+    unsafe {
+        // 这个应该是设置中断设置寄存器
+        // ecfg::set_lie(LineBasedInterrupt::empty());
+        // 关闭全局中断
+        crmd::set_ie(false);
+        // prmd::set_pie(false);
+    }
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -35,7 +51,7 @@ pub fn interrupt_is_enabled() -> bool {
 #[cfg(target_arch = "loongarch64")]
 #[inline(always)]
 pub fn interrupt_is_enabled() -> bool {
-    unimplemented!("loongarch64")
+    crmd::read().ie()
 }
 
 /// enable timer interrupt in sie CSR
@@ -49,7 +65,10 @@ pub unsafe fn enable_timer_interrupt() {
 #[cfg(target_arch = "loongarch64")]
 #[inline(always)]
 pub unsafe fn enable_timer_interrupt() {
-    unimplemented!("loongarch64")
+    unsafe {
+        ecfg::set_lie(LineBasedInterrupt::TIMER|LineBasedInterrupt::HWI0);
+        crmd::set_ie(true);
+    }
 }
 
 /// A guard that disable interrupt when it is created and enable interrupt when it is dropped.
