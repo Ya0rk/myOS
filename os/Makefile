@@ -148,7 +148,6 @@ PHONY += gdbclient
 
 # 龙芯架构的启动方式
 LA:
-	cargo clean
 	cargo build --target loongarch64-unknown-none
 	qemu-system-loongarch64 \
 		-M virt \
@@ -157,4 +156,19 @@ LA:
 		-kernel ./target/loongarch64-unknown-none/debug/os \
 		-vga none \
 		-nographic \
+		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors
+
+LAgdbclient:
+	loongarch64-linux-gnu-gdb \
+	ex 'file ./target/loongarch64/debug/os' \
+	ex 'target remote localhost:1234'
+LAgdb:
+	qemu-system-loongarch64 \
+		-M virt \
+		-m 1G \
+		-smp 1 \
+		-kernel ./target/loongarch64-unknown-none/debug/os \
+		-vga none \
+		-nographic \
 		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
+		-s -S
