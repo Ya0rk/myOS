@@ -1,8 +1,9 @@
-use alloc::{string::String, sync::{Arc, Weak}};
+use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 use async_trait::async_trait;
+use sbi_spec::pmu::cache_event::NODE;
 use crate::{
     config::PATH_MAX, 
-    fs::{ffi::RenameFlags, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
+    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
     mm::UserBuffer, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
@@ -42,6 +43,9 @@ impl NormalFile {
 // 为 OSInode 实现 File Trait
 #[async_trait]
 impl FileTrait for NormalFile {
+    fn get_inode(&self) -> Arc<dyn InodeTrait> {
+        self.metadata.inode.clone()
+    }
     fn readable(&self) -> bool {
         self.metadata.flags.read().readable()
     }
@@ -140,5 +144,30 @@ impl FileTrait for NormalFile {
 
     fn is_dir(&self) -> bool {
         self.metadata.inode.is_dir()
+    }
+
+    fn read_dentry(&self) -> Option<Vec<Dirent>> {
+        if !self.is_dir() {
+            return None;
+        }
+
+        let ext4_file = self.metadata.inode.get_ext4file();
+        let dirs = ext4_file.read_dir_from(0).unwrap();
+        let mut dir_entrys = Vec::new();
+
+        for dir in dirs {
+            let (d_ino, d_off, d_reclen, d_type, d_name) = (
+                dir.d_ino,
+                dir.d_off,
+                dir.d_reclen,
+                dir.d_type,
+                dir.d_name
+            );
+
+            let entry = Dirent::new(d_name, d_off, d_ino, d_type, d_reclen);
+            self.metadata.set_offset(d_off as usize);
+            dir_entrys.push(entry);
+        }
+        Some(dir_entrys)
     }
 }

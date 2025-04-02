@@ -43,6 +43,9 @@ impl TmpFile {
 // 为 OSInode 实现 File Trait
 #[async_trait]
 impl FileTrait for TmpFile {
+    fn get_inode(&self) -> Arc<dyn InodeTrait> {
+        self.metadata.inode.clone()
+    }
     fn readable(&self) -> bool {
         self.metadata.flags.read().readable()
     }

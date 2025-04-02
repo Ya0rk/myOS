@@ -136,22 +136,7 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// 直接写
-    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize;
-
-    /// Reads directory entries.
-    ///
-    /// # Arguments
-    ///
-    /// * `off` - The offset from which to start reading entries
-    /// * `len` - Maximum number of bytes to read
-    ///
-    /// # Returns
-    ///
-    /// Some((Vec<u8>, isize)) containing the directory entries and the next offset,
-    /// or None if no more entries.
-    fn read_dentry(&self, _off: usize, _len: usize) -> Option<(Vec<u8>, isize)> {
-        todo!()
-    }
+    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize;    
 
     /// 将文件设置新的size，这里用于将文件size为0
     ///

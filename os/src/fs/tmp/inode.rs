@@ -187,10 +187,6 @@ impl InodeTrait for TmpInode {
         //     Err(_) => Kstat::new()
         // }
     }
-    /// 读取目录项
-    fn read_dentry(&self, _off: usize, _len: usize) -> Option<(Vec<u8>, isize)> {
-        todo!()
-    }
     /// 删除文件
     fn unlink(&self, _child_name: &str) -> SysResult<usize> {
         todo!()
