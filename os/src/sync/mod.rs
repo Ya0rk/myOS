@@ -1,6 +1,6 @@
 mod interrupt;
 mod up;
-mod mutex;
+pub mod mutex;
 mod misc;
 mod time;
 pub mod timer;

@@ -166,6 +166,10 @@ impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V> {
         value
     }
 
+    pub fn remove_all(&mut self) {
+        self.0.clear();
+    }
+
     /// Extend a segment from back.
     ///
     /// # Panic

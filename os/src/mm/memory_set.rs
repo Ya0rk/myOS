@@ -1,3 +1,4 @@
+use super::memory_space::MemorySpace;
 use super::{MapArea, MapPermission, MapType};
 use super::{PageTable, PageTableEntry};
 use super::{VirtAddr, VirtPageNum};
@@ -9,8 +10,8 @@ use spin::Mutex;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
-use crate::utils::elf::ElfCheck;
-use crate::utils::elf::ProgramHeaderChecker;
+// use crate::utils::elf::ElfCheck;
+// use crate::utils::elf::ProgramHeaderChecker;
 // use crate::fs::{File, FileClass};
 
 extern "C" {
@@ -25,19 +26,17 @@ extern "C" {
     fn ekernel();
 }
 
-lazy_static! {
-    /// a memory set instance through lazy_static! managing kernel space
-    pub static ref KERNEL_SPACE: Arc<Mutex<MemorySet>> =
-        Arc::new(Mutex::new(MemorySet::new_kernel()));
-}
+// lazy_static! {
+//     /// a memory set instance through lazy_static! managing kernel space
+//     pub static ref KERNEL_SPACE: Arc<Mutex<MemorySpace>> =
+//         Arc::new(Mutex::new(MemorySpace::new_kernel()));
+// }
 
 pub fn kernel_token() -> usize {
     KERNEL_SPACE.lock().token()
 }
 
-pub fn switch_to_kernel_pgtable() {
-    unsafe { KERNEL_SPACE.lock().activate() };
-}
+
 
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {

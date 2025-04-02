@@ -1,8 +1,8 @@
 //! Implementation of physical and virtual address and page number.
-use alloc::collections::btree_map::Range;
+use core::ops::Range;
 
 use super::PageTableEntry;
-use crate::config::{KERNEL_ADDR_OFFSET, PAGE_SIZE, PAGE_SIZE_BITS};
+use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PAGE_MASK, PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
 // use core::iter::Step;
 /// physical address
@@ -234,7 +234,10 @@ impl VirtAddr {
     }
     ///Get page offset
     pub fn page_offset(&self) -> usize {
-        self.0 & (PAGE_SIZE - 1)
+        self.0 & PAGE_MASK
+    }
+    pub fn align_down(&self) -> Self {
+        Self(self.0 & (!PAGE_MASK))
     }
     ///Check page aligned
     pub fn aligned(&self) -> bool {
@@ -246,6 +249,10 @@ impl VirtAddr {
     pub fn from_usize_range(range: core::ops::Range<usize>) -> core::ops::Range<Self> {
         Self(range.start)..Self(range.end)
     }
+    pub fn to_usize(&self) -> usize {
+        self.0
+    }
+
 }
 impl From<VirtAddr> for VirtPageNum {
     fn from(v: VirtAddr) -> Self {
@@ -279,6 +286,7 @@ impl PhysAddr {
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
+
 }
 impl From<PhysAddr> for PhysPageNum {
     fn from(v: PhysAddr) -> Self {
@@ -327,6 +335,9 @@ impl KernelAddr {
     }
 }
 impl PhysPageNum {
+    pub fn to_paddr(&self) -> PhysAddr {
+        (self.0 << PAGE_SIZE_BITS).into()
+    }
     /// 取出当前节点的页表项数组
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
         let pa: PhysAddr = (*self).into();
@@ -346,10 +357,17 @@ impl PhysPageNum {
         va.get_mut()
     }
     ///Get u8 array on `PhysPageNum` with given length
-    pub fn bytes_array_from_offset(&self, offset: usize, len: usize) -> &'static mut [u8] {
+    pub fn get_bytes_array_from_offset(&self, offset: usize, len: usize) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
         let kernel_va = KernelAddr::from(pa).0 + offset;
         unsafe { core::slice::from_raw_parts_mut(kernel_va as *mut u8, len) }
+    }
+    pub fn get_bytes_array_from_range(&self, range: Range<usize>) -> &'static mut [u8] {
+        debug_assert!(range.end <= PAGE_SIZE, "range: {range:?}");
+        let mut vaddr: VirtAddr = (self.to_paddr().0 + KERNEL_ADDR_OFFSET).into();
+        vaddr += range.start;
+        unsafe { core::slice::from_raw_parts_mut(vaddr.to_usize() as *mut u8, range.len()) }
+
     }
 }
 
@@ -434,3 +452,10 @@ where
 }
 /// a simple range structure for virtual page number
 pub type VPNRange = SimpleRange<VirtPageNum>;
+
+pub fn kernel_map_vaddr_to_paddr(va: VirtAddr) -> PhysAddr {
+    (va.0 - KERNEL_ADDR_OFFSET).into()
+}
+pub fn kernel_map_vpn_to_ppn(vpn: VirtPageNum) -> PhysPageNum {
+    (vpn.0 - KERNEL_PGNUM_OFFSET).into()
+}

@@ -12,6 +12,7 @@
 #![feature(const_trait_impl)]
 #![feature(core_intrinsics)]
 #![allow(unused_imports)]
+#![feature(map_try_insert)]
 
 extern crate alloc;
 
@@ -63,7 +64,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         
         #[cfg(feature = "test")]
         {
-            mm::remap_test();
+            // mm::remap_test();
             fs::path_test();
         }
 

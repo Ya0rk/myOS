@@ -1,4 +1,5 @@
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
+use log::info;
 use core::ops::{Range, RangeBounds};
 
 use core::arch::riscv64::sfence_vma_vaddr;
@@ -8,8 +9,9 @@ use crate::config::{align_down_by_page, PAGE_SIZE};
 use crate::mm::page_table::{PTEFlags, PageTable};
 use crate::mm::address::{VirtAddr, VirtPageNum};
 use crate::mm::page::Page;
+use crate::sync::block_on;
 use crate::utils::{Errno, SysResult};
-use crate::fs::File;
+use crate::fs::FileClass;
 
 // use crate::{
 //     mm::{PageFaultAccessType, PageTable},
@@ -31,6 +33,8 @@ pub enum VmAreaType {
     Mmap,
     /// Shared memory
     Shm,
+    /// Kernel pagetable segments
+    Kernel,
 }
 
 bitflags! {
@@ -115,7 +119,7 @@ pub struct VmArea {
     /// Mmap flags.
     pub mmap_flags: MmapFlags,
     /// The underlying file being mapped.
-    pub backed_file: Option<Arc<dyn File>>,
+    pub backed_file: Option<FileClass>,
     /// Start offset in the file.
     pub offset: usize,
 }
@@ -157,7 +161,7 @@ impl VmArea {
         range_va: Range<VirtAddr>,
         map_perm: MapPerm,
         mmap_flags: MmapFlags,
-        file: Option<Arc<dyn File>>,
+        file: Option<FileClass>,
         offset: usize,
     ) -> Self {
         let range_va = range_va.start.floor().into()..range_va.end.ceil().into();
@@ -173,6 +177,10 @@ impl VmArea {
         log::debug!("[VmArea::new_mmap] {new:?}");
         new
     }
+
+    // pub fn new_kernel(range_va: Range<VirtAddr>, map_perm: MapPerm) -> Self {
+
+    // }
 
     pub fn from_another(another: &Self) -> Self {
         log::debug!("[VmArea::from_another] {another:?}");
@@ -318,7 +326,7 @@ impl VmArea {
                 .find_pte(current_vpn)
                 .unwrap()
                 .ppn()
-                .bytes_array_range(offset..offset + src.len());
+                .get_bytes_array_from_range(offset..offset + src.len());
             dst.copy_from_slice(src);
             start += PAGE_SIZE - offset;
             offset = 0;
@@ -327,7 +335,7 @@ impl VmArea {
     }
 
     pub fn split(self, split_range: Range<VirtAddr>) -> (Option<Self>, Option<Self>, Option<Self>) {
-        debug_assert!(split_range.start.is_aligned() && split_range.end.is_aligned());
+        debug_assert!(split_range.start.aligned() && split_range.end.aligned());
         debug_assert!(split_range.start >= self.start_va() && split_range.end <= self.end_va());
         let (mut left, mut middle, mut right) = (None, None, None);
         let (left_range, middle_range, right_range) = (
@@ -385,9 +393,10 @@ impl VmArea {
         vpn: VirtPageNum,
         access_type: PageFaultAccessType,
     ) -> SysResult<()> {
+        info!("[VmArea] handle page fault");
         log::debug!(
             "[VmArea::handle_page_fault] {self:?}, {vpn:?} at page table {:?}",
-            page_table.root_ppn()
+            page_table.root_ppn
         );
 
         if !access_type.can_access(self.perm()) {
@@ -414,13 +423,13 @@ impl VmArea {
             let cnt = Arc::strong_count(old_page);
             if cnt > 1 {
                 // shared now
-                log::debug!(
-                    "[VmArea::handle_page_fault] copying cow page {old_page:?} with count {cnt}",
-                );
+                // log::debug!(
+                //     "[VmArea::handle_page_fault] copying cow page {old_page:?} with count {cnt}",
+                // );
 
                 // copy the data
                 page = Page::new();
-                page.copy_from_slice(old_page.bytes_array());
+                page.copy_from_slice(old_page.get_bytes_array());
 
                 // unmap old page and map new page
                 pte_flags.remove(PTEFlags::COW);
@@ -431,7 +440,7 @@ impl VmArea {
                 unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
             } else {
                 // not shared
-                log::debug!("[VmArea::handle_page_fault] removing cow flag for page {old_page:?}",);
+                // log::debug!("[VmArea::handle_page_fault] removing cow flag for page {old_page:?}",);
 
                 // set the pte to writable
                 pte_flags.remove(PTEFlags::COW);
@@ -461,16 +470,16 @@ impl VmArea {
                         let offset_aligned = align_down_by_page(offset);
                         if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
                             let page = block_on(async { file.get_page_at(offset_aligned).await })?
-                                .unwrap();
+                                ;
                             page_table.map(vpn, page.ppn(), self.map_perm.into());
                             self.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         } else {
                             let page = block_on(async { file.get_page_at(offset_aligned).await })?
-                                .unwrap();
+                                ;
                             if access_type.contains(PageFaultAccessType::WRITE) {
                                 let new_page = Page::new();
-                                new_page.copy_from_slice(page.bytes_array());
+                                new_page.copy_from_slice(page.get_bytes_array());
                                 page_table.map(vpn, new_page.ppn(), self.map_perm.into());
                                 self.pages.insert(vpn, new_page);
                             } else {

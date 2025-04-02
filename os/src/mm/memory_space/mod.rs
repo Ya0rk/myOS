@@ -14,21 +14,17 @@ use core::{
 use core::arch::riscv64::sfence_vma_vaddr;
 use riscv::register::scause;
 // use async_utils::block_on;
-use crate::config::{
+use crate::{config::{
     
-    is_aligned_to_page, align_down_by_page, DL_INTERP_OFFSET, MMAP_PRE_ALLOC_PAGES, PAGE_SIZE,
-    USER_ELF_PRE_ALLOC_PAGE_CNT, U_SEG_FILE_BEG, U_SEG_FILE_END, U_SEG_HEAP_BEG,
-    U_SEG_HEAP_END, U_SEG_SHARE_BEG, U_SEG_SHARE_END, U_SEG_STACK_BEG, U_SEG_STACK_END,
-    
-    USER_STACK_PRE_ALLOC_SIZE,
-};
+    align_down_by_page, is_aligned_to_page, DL_INTERP_OFFSET, MMAP_PRE_ALLOC_PAGES, PAGE_SIZE, USER_ELF_PRE_ALLOC_PAGE_CNT, USER_STACK_PRE_ALLOC_SIZE, USER_STACK_SIZE, U_SEG_FILE_BEG, U_SEG_FILE_END, U_SEG_HEAP_BEG, U_SEG_HEAP_END, U_SEG_SHARE_BEG, U_SEG_SHARE_END, U_SEG_STACK_BEG, U_SEG_STACK_END
+}, fs::FileClass, sync::block_on};
 // use memory::{pte::PTEFlags, PageTable, PhysAddr, VirtAddr, VirtPageNum};
-use super::page_table::{PTEFlags, PageTable};
+use super::{page_table::{PTEFlags, PageTable}};
 use super::address::{VirtAddr, VirtPageNum, PhysAddr};
 use super::page::Page;
 use crate::utils::container::range_map::RangeMap;
 use crate::utils::{Errno, SysResult};
-use crate::fs::{Dentry, File};
+// use crate::fs::{Dentry, File};
 use xmas_elf::ElfFile;
 
 use self::vm_area::VmArea;
@@ -42,6 +38,19 @@ use crate::{
         TaskControlBlock,
     },
 };
+
+
+extern "C" {
+    fn stext();
+    fn etext();
+    fn srodata();
+    fn erodata();
+    fn sdata();
+    fn edata();
+    fn sbss_with_stack();
+    fn ebss();
+    fn ekernel();
+}
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub struct PageFaultAccessType: u8 {
@@ -175,11 +184,120 @@ impl MemorySpace {
         unsafe { &mut *self.page_table.get() }
     }
 
+    pub fn token(&self) -> usize {
+        self.page_table().token()
+    }
+
+    // pub fn new_kernel() -> Self {
+    //     let mut memory_space = Self::new();
+    //     log::debug!("kernel satp : {:#x}", memory_set.page_table().token());
+    //     // map trampoline
+    //     // memory_set.map_trampoline();
+    //     // map kernel sections
+    //     println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
+    //     println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
+    //     println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
+    //     println!(
+    //         ".bss [{:#x}, {:#x})",
+    //         sbss_with_stack as usize, ebss as usize
+    //     );
+    //     println!("mapping .text section");
+    //     memory_space.push_vma(
+    //         VmArea::new(
+    //             VirtAddr::from_usize_range((stext as usize).into()..(etext as usize).into()),
+    //             MapPerm::RX,
+    //             VmAreaType::Elf,
+    //         )
+    //     );
+    //     println!("mapping .rodata section");
+    //     memory_set.push(
+    //         MapArea::new(
+    //             (srodata as usize).into(),
+    //             (erodata as usize).into(),
+    //             MapType::Direct,
+    //             MapPermission::R,
+    //         ),
+    //         None,
+    //     );
+    //     println!("mapping .data section");
+    //     memory_set.push(
+    //         MapArea::new(
+    //             (sdata as usize).into(),
+    //             (edata as usize).into(),
+    //             MapType::Direct,
+    //             MapPermission::R | MapPermission::W,
+    //         ),
+    //         None,
+    //     );
+    //     println!("mapping .bss section");
+    //     memory_set.push(
+    //         MapArea::new(
+    //             (sbss_with_stack as usize).into(),
+    //             (ebss as usize).into(),
+    //             MapType::Direct,
+    //             MapPermission::R | MapPermission::W,
+    //         ),
+    //         None,
+    //     );
+    //     println!("mapping physical memory");
+    //     memory_set.push(
+    //         MapArea::new(
+    //             (ekernel as usize).into(),
+    //             MEMORY_END.into(),
+    //             MapType::Direct,
+    //             MapPermission::R | MapPermission::W,
+    //         ),
+    //         None,
+    //     );
+    //     println!("mapping memory-mapped registers");
+    //     for pair in MMIO {
+    //         memory_set.push(
+    //             MapArea::new(
+    //                 ((*pair).0 + KERNEL_ADDR_OFFSET).into(),
+    //                 ((*pair).0 + KERNEL_ADDR_OFFSET + (*pair).1).into(),
+    //                 MapType::Direct,
+    //                 MapPermission::R | MapPermission::W,
+    //             ),
+    //             None,
+    //         );
+    //     }
+    //     println!("kernel memory set initialized");
+    //     memory_set
+    // }
+
+
+    pub fn new_user_from_elf(elf_file: FileClass) -> (Self, usize, usize, Vec<AuxHeader>) {
+        if let FileClass::File(file) = elf_file {
+            let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
+            let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
+            let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
+            memory_space.alloc_heap_lazily();
+            (memory_space, entry_point, sp_init, auxv)
+        }
+        else {
+            panic!("File not supported!");
+        }
+
+        
+    }
+    pub fn new_user_from_elf_lazily(elf_file: &FileClass) -> (Self, usize, usize, Vec<AuxHeader>) {
+        if let FileClass::File(file) = elf_file {
+            let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
+            let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data);
+            let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
+            memory_space.alloc_heap_lazily();
+            (memory_space, entry_point, sp_init, auxv)
+        }
+        else {
+            panic!("File not supported!");
+        }
+
+    }
     /// Include sections in elf and TrapContext and user stack,
     /// also returns user_sp and entry point.
     // PERF: resolve elf file lazily
     // TODO: dynamic interpreter
-    pub fn parse_and_map_elf_data(&mut self, elf_data: &[u8]) -> (usize, Vec<AuxHeader>) {
+    pub fn parse_and_map_elf_data(mut self, elf_data: &[u8]) -> (Self, usize, Vec<AuxHeader>) {
         const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
         // map program headers of elf, with U flag
@@ -200,7 +318,7 @@ impl MemorySpace {
         log::debug!("[from_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x} ");
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
 
-        (entry_point, auxv)
+        (self, entry_point, auxv)
     }
 
     pub fn map_elf_data(&mut self, elf: &ElfFile, offset: VirtAddr) -> (VirtPageNum, VirtAddr) {
@@ -236,11 +354,11 @@ impl MemorySpace {
             }
             let mut vm_area = VmArea::new(start_va..end_va, map_perm, VmAreaType::Elf);
 
-            log::debug!("[map_elf] [{start_va:#x}, {end_va:#x}], map_perm: {map_perm:?} start...",);
+            // log::debug!("[map_elf] [{start_va:#x}, {end_va:#x}], map_perm: {map_perm:?} start...",);
 
             max_end_vpn = vm_area.end_vpn();
 
-            let map_offset = start_va - start_va.round_down();
+            let map_offset = start_va - start_va.align_down();
 
             log::debug!(
                 "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}",
@@ -264,7 +382,7 @@ impl MemorySpace {
     /// Return the max end vpn and the first section's va.
     pub fn map_elf(
         &mut self,
-        elf_file: Arc<dyn File>,
+        elf_file: &FileClass,
         elf: &ElfFile,
         offset: VirtAddr,
     ) -> (VirtPageNum, VirtAddr) {
@@ -300,11 +418,11 @@ impl MemorySpace {
             }
             let mut vm_area = VmArea::new(start_va..end_va, map_perm, VmAreaType::Elf);
 
-            log::debug!("[map_elf] [{start_va:#x}, {end_va:#x}], map_perm: {map_perm:?} start...",);
+            // log::debug!("[map_elf] [{start_va:#x}, {end_va:#x}], map_perm: {map_perm:?} start...",);
 
             max_end_vpn = vm_area.end_vpn();
 
-            let map_offset = start_va - start_va.round_down();
+            let map_offset = start_va - start_va.align_down();
 
             log::debug!(
                 "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}",
@@ -324,15 +442,14 @@ impl MemorySpace {
                     let start_offset = ph.offset() as usize;
                     let offset = start_offset + (vpn - vm_area.start_vpn()) * PAGE_SIZE;
                     let offset_aligned = align_down_by_page(offset);
-                    if let Some(page) = {
-                        
-                    }
-                        // block_on(async { elf_file.get_page_at(offset_aligned).await }).unwrap()
+                    if let Ok(page) = block_on(async { elf_file.get_page_at(offset_aligned).await })
+                        // 
                     {
                         if pre_alloc_page_cnt < USER_ELF_PRE_ALLOC_PAGE_CNT {
                             let new_page = Page::new();
                             // WARN: area outer than region may should be set to zero
-                            new_page.copy_from_slice(page.bytes_array());
+                            new_page.copy_from_slice(page.get_bytes_array());
+                            // new_page.copy_from_page(&page);
                             self.page_table_mut()
                                 .map(vpn, new_page.ppn(), map_perm.into());
                             vm_area.pages.insert(vpn, new_page);
@@ -354,7 +471,7 @@ impl MemorySpace {
                     }
                 }
                 self.push_vma_lazily(vm_area);
-                log::info!("[map_elf] [{start_va:#x}, {end_va:#x}], map_perm: {map_perm:?}",);
+                // log::info!("[map_elf] [{start_va:#x}, {end_va:#x}], map_perm: {map_perm:?}",);
             } else {
                 self.push_vma_with_data(
                     vm_area,
@@ -368,10 +485,10 @@ impl MemorySpace {
     }
 
     pub fn parse_and_map_elf(
-        &mut self,
-        elf_file: Arc<dyn File>,
+        mut self,
+        elf_file: &FileClass,
         elf_data: &[u8],
-    ) -> (usize, Vec<AuxHeader>) {
+    ) -> (Self, usize, Vec<AuxHeader>) {
         const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
         // map program headers of elf, with U flag
@@ -393,7 +510,7 @@ impl MemorySpace {
         log::debug!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x}",);
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
 
-        (entry, auxv)
+        (self, entry, auxv)
     }
 
     /// Check whether the elf file is dynamic linked and if so, load the dl
@@ -452,6 +569,7 @@ impl MemorySpace {
     /// address to attach.
     ///
     /// `size` and `shmaddr` need to be page-aligned
+    #[allow(unused)]
     pub fn attach_shm(
         &mut self,
         size: usize,
@@ -461,11 +579,11 @@ impl MemorySpace {
     ) -> VirtAddr {
         let mut ret_addr = shmaddr;
         let mut vm_area = if shmaddr == 0.into() {
-            const SHARED_RANGE: Range<VirtAddr> =
+            let shared_range: Range<VirtAddr> =
                 VirtAddr::from_usize_range(U_SEG_SHARE_BEG..U_SEG_SHARE_END);
             let range: Range<VirtAddr> = self
                 .areas()
-                .find_free_range(SHARED_RANGE, size)
+                .find_free_range(shared_range, size)
                 .expect("no free shared area");
             ret_addr = range.start;
             VmArea::new(range, map_perm, VmAreaType::Shm)
@@ -528,16 +646,16 @@ impl MemorySpace {
     ///
     /// The stack has a range of [sp - size, sp].
     pub fn alloc_stack_lazily(&mut self, size: usize) -> VirtAddr {
-        const STACK_RANGE: Range<VirtAddr> =
+        let stack_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_STACK_BEG..U_SEG_STACK_END);
 
         let range = self
             .areas()
-            .find_free_range(STACK_RANGE, size)
+            .find_free_range(stack_range, size)
             .expect("too many stack!");
 
         // align to 16 bytes
-        let sp_init = VirtAddr::from((range.end.bits() - 1) & !0xf);
+        let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
         log::debug!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
 
         let mut vm_area = VmArea::new(range.clone(), MapPerm::URW, VmAreaType::Stack);
@@ -551,7 +669,7 @@ impl MemorySpace {
 
     /// Alloc heap lazily.
     pub fn alloc_heap_lazily(&mut self) {
-        const HEAP_RANGE: Range<VirtAddr> =
+        let heap_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_END);
 
         const INIT_SIZE: usize = PAGE_SIZE;
@@ -619,7 +737,7 @@ impl MemorySpace {
             debug_assert_eq!(range, new_area.range_va());
             for vpn in area.range_vpn() {
                 if let Some(page) = area.pages.get(&vpn) {
-                    let pte = user_space.page_table_mut().find_leaf_pte(vpn).unwrap();
+                    let pte = user_space.page_table_mut().find_pte(vpn).unwrap();
                     let (pte_flags, ppn) = match area.vma_type {
                         VmAreaType::Shm => {
                             // If shared memory,
@@ -675,13 +793,13 @@ impl MemorySpace {
         perm: MapPerm,
         flags: MmapFlags,
     ) -> SysResult<VirtAddr> {
-        const SHARED_RANGE: Range<VirtAddr> =
+        let shared_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_SHARE_BEG..U_SEG_SHARE_END);
         let range = if flags.contains(MmapFlags::MAP_FIXED) {
             addr..addr + length
         } else {
             self.areas_mut()
-                .find_free_range(SHARED_RANGE, length)
+                .find_free_range(shared_range, length)
                 .expect("shared range is full")
         };
         let start = range.start;
@@ -698,13 +816,13 @@ impl MemorySpace {
         perm: MapPerm,
         flags: MmapFlags,
     ) -> SysResult<VirtAddr> {
-        const MMAP_RANGE: Range<VirtAddr> =
+        let mmap_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_FILE_BEG..U_SEG_FILE_END);
         let range = if flags.contains(MmapFlags::MAP_FIXED) {
             addr..addr + length
         } else {
             self.areas_mut()
-                .find_free_range(MMAP_RANGE, length)
+                .find_free_range(mmap_range, length)
                 .expect("mmap range is full")
         };
         let start = range.start;
@@ -721,30 +839,30 @@ impl MemorySpace {
         length: usize,
         perm: MapPerm,
         flags: MmapFlags,
-        file: Arc<dyn File>,
+        file: FileClass,
         offset: usize,
     ) -> SysResult<VirtAddr> {
         debug_assert!(is_aligned_to_page(offset));
 
-        const MMAP_RANGE: Range<VirtAddr> =
+        let mmap_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_FILE_BEG..U_SEG_FILE_END);
 
         let range = if flags.contains(MmapFlags::MAP_FIXED) {
             addr..addr + length
         } else {
             self.areas_mut()
-                .find_free_range(MMAP_RANGE, length)
+                .find_free_range(mmap_range, length)
                 .expect("mmap range is full")
         };
         let start = range.start;
 
         let page_table = self.page_table_mut();
-        let inode = file.inode();
+        // let inode = file.inode();
         let mut vma = VmArea::new_mmap(range, perm, flags, Some(file.clone()), offset);
         let mut range_vpn = vma.range_vpn();
         let length = cmp::min(length, MMAP_PRE_ALLOC_PAGES * PAGE_SIZE);
         for offset_aligned in (offset..offset + length).step_by(PAGE_SIZE) {
-            if let Some(page) = block_on(async { file.get_page_at(offset_aligned).await })? {
+            if let Ok(page) = block_on(async { file.get_page_at(offset_aligned).await }) {
                 let vpn = range_vpn.next().unwrap();
                 if flags.contains(MmapFlags::MAP_PRIVATE) {
                     let (pte_flags, ppn) = {
@@ -795,8 +913,8 @@ impl MemorySpace {
     }
 
     pub fn unmap(&mut self, range: Range<VirtAddr>) -> SysResult<()> {
-        debug_assert!(range.start.is_aligned());
-        debug_assert!(range.end.is_aligned());
+        debug_assert!(range.start.aligned());
+        debug_assert!(range.end.aligned());
         log::debug!("[MemorySpace::unmap] remove area {:?}", range.clone());
 
         // First find the left most vm_area containing `range.start`.
@@ -841,7 +959,7 @@ impl MemorySpace {
     }
 
     pub fn mprotect(&mut self, range: Range<VirtAddr>, perm: MapPerm) -> SysResult<()> {
-        debug_assert!(range.start.is_aligned() && range.end.is_aligned());
+        debug_assert!(range.start.aligned() && range.end.aligned());
         let (old_range, area) = self
             .areas_mut()
             .get_key_value_mut(range.start)
@@ -865,7 +983,7 @@ impl MemorySpace {
         access_type: PageFaultAccessType,
     ) -> SysResult<()> {
         log::trace!("[MemorySpace::handle_page_fault] {va:?}");
-        let vm_area = self.areas_mut().get_mut(va.round_down()).ok_or_else(|| {
+        let vm_area = self.areas_mut().get_mut(va.align_down()).ok_or_else(|| {
             log::warn!("[handle_page_fault] no area containing {va:?}");
             Errno::EFAULT
         })?;
@@ -875,6 +993,10 @@ impl MemorySpace {
 
     pub unsafe fn switch_page_table(&self) {
         self.page_table().switch();
+    }
+
+    pub fn recycle_data_pages(&mut self) {
+        self.areas.get_mut().remove_all();
     }
 }
 
@@ -921,7 +1043,7 @@ pub fn init_stack(
     // --------------------------------------------------------------------------------
     // 在构建栈的时候，我们从底向上塞各个东西
 
-    let mut sp = sp_init.bits();
+    let mut sp = sp_init.to_usize();
     debug_assert!(sp & 0xf == 0);
 
     // 存放环境与参数的字符串本身
