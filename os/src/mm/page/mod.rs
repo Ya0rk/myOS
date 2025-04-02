@@ -91,7 +91,7 @@ impl Page {
 
 impl Drop for Page {
     fn drop(&mut self) {
-        info!("Page Dropped, ppn:{:#x}", self.frame.ppn.0);
+        // info!("Page Dropped, ppn:{:#x}", self.frame.ppn.0);
     }
     
 }

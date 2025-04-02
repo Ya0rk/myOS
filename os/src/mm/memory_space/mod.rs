@@ -426,14 +426,15 @@ impl MemorySpace {
             let map_offset = start_va - start_va.align_down();
 
             log::info!(
-                "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}",
+                "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}, flags{}",
                 ph.offset(),
                 ph.file_size(),
-                ph.mem_size()
+                ph.mem_size(),
+                ph_flags
             );
 
             if ph.file_size() == ph.mem_size() && is_aligned_to_page(ph.offset() as usize) {
-                assert!(!map_perm.contains(MapPerm::W));
+                // assert!(!map_perm.contains(MapPerm::W));
                 // NOTE: only add cow flag in elf page newly mapped.
                 // FIXME: mprotect is not checked yet
                 // WARN: the underlying elf file page cache may be edited, may cause unknown
