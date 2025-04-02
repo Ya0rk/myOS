@@ -14,7 +14,7 @@ pub mod tmp;
 
 pub use ext4::{root_inode,ls};
 pub use ffi::{OpenFlags, UmountFlags, MountFlags};
-pub use path::{Path, path_test};
+pub use path::{Path, path_test, join_path_2_absolute};
 pub use dirent::Dirent;
 pub use inode_cache::*;
 pub use mount::MNT_TABLE;
@@ -230,14 +230,17 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
 }
 
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
-    let kpath = Path::string2path(path.to_string());
     
-    let new_path = kpath.join_path_2_absolute(cwd.to_string());
+    let new_path = Path::string2path(
+        join_path_2_absolute(
+            cwd.to_string(), 
+            path.to_string()
+    ));
     // 目标文件的路径
     let abs_path = new_path.get();
 
     if find_device(&abs_path) {
-        info!("bbb");
+        // info!("bbb");
         if let Some(device) = open_device_file(&abs_path) {
             return Some(FileClass::Abs(device));
         }

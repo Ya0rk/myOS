@@ -1,7 +1,7 @@
 use alloc::string::String;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{ mkdir, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ join_path_2_absolute, mkdir, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
@@ -97,17 +97,18 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
 
     let task = current_task().unwrap();
     let token = current_user_token();
-    let path = Path::string2path(translated_str(token, path));
+    let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
+    info!("[sys_openat] path = {}", path);
 
     // 计算目标路径
-    let target_path = if path.is_absolute() {
+    let target_path = if path.starts_with("/") {
         // 绝对路径，忽略 fd
-        path.get()
+        path
     } else if fd == AT_FDCWD {
         // 相对路径，以当前目录为起点
         let current_path = task.get_current_path();
-        path.join_path_2_absolute(current_path).get()
+        join_path_2_absolute(current_path, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
         if fd < 0 || fd as usize > RLIMIT_NOFILE {
@@ -115,7 +116,8 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
         }
         let inode = task.get_file_by_fd(fd as usize).unwrap();
         let other_cwd = inode.get_name()?;
-        path.join_path_2_absolute(other_cwd).get()
+        info!("[sys_openat] other cwd = {}", other_cwd);
+        join_path_2_absolute(other_cwd, path)
     };
 
     // 检查路径是否有效并打开文件
@@ -325,19 +327,16 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
 
     let task = current_task().unwrap();
     let token = current_user_token();
-    let path = Path::string2path(translated_str(token, path));
-    // info!("sys_mkdirat: path = {}, mode = {}", path.get(), mode);
-
-    // info!("sys_mkdirat cwd is {}", task.get_current_path());
+    let path = translated_str(token, path);
 
     // 计算目标路径
-    let target_path = if path.is_absolute() {
+    let target_path = if path.starts_with("/") {
         // 绝对路径，忽略 dirfd
-        path.get()
+        path
     } else if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
         let current_path = task.get_current_path();
-        path.join_path_2_absolute(current_path).get()
+        join_path_2_absolute(current_path, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
         if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
@@ -345,7 +344,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
         }
         let inode = task.get_file_by_fd(dirfd as usize).unwrap();
         let other_cwd = inode.get_name()?;
-        path.join_path_2_absolute(other_cwd).get()
+        join_path_2_absolute(other_cwd, path)
     };
     // info!("sys_mkdirat target_path is {}", target_path);
 
@@ -415,16 +414,16 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
 
     let token = current_user_token();
     let task = current_task().unwrap();
-    let path = Path::string2path(translated_str(token, path));
+    let path = translated_str(token, path);
 
     // let mut inner = task.inner_lock();
     let current_path = task.get_current_path();
 
     // 计算新路径
-    let new_path = if path.is_absolute() {
-        path.get()
+    let new_path = if path.starts_with("/") {
+        path
     } else {
-        path.join_path_2_absolute(current_path).get()
+        join_path_2_absolute(current_path, path)
     };
 
     // 检查路径是否有效
