@@ -1,5 +1,6 @@
 pub mod sbi;
 pub mod sstatus;
+pub mod uart;
 
 pub fn fp_read() -> usize {
     unimplemented!("loongarch64")

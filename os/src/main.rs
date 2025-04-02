@@ -49,6 +49,9 @@ static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
 pub fn rust_main(hart_id: usize) -> ! {
+
+    println!("hello world!");
+
     if FIRST_HART
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
         .is_ok() 
