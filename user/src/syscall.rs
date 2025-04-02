@@ -36,7 +36,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> isize {
     syscall(SYSCALL_DUP3, [oldfd, newfd, flags as usize, 0, 0, 0])
 }
 
-pub fn sys_mkdir(path: &str, mode: usize) -> isize {
+pub fn sys_mkdir(path: &[u8], mode: usize) -> isize {
     syscall(SYSCALL_MKDIRAT, [AT_FDCWD as usize, path.as_ptr() as usize, mode as usize, 0, 0, 0])
 }
 
