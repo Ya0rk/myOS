@@ -10,6 +10,7 @@ use crate::mm::page_table::{PTEFlags, PageTable};
 use crate::mm::address::{VirtAddr, VirtPageNum};
 use crate::mm::page::Page;
 use crate::sync::block_on;
+use crate::task::current_task;
 use crate::utils::{Errno, SysResult};
 use crate::fs::FileClass;
 
@@ -393,7 +394,7 @@ impl VmArea {
         vpn: VirtPageNum,
         access_type: PageFaultAccessType,
     ) -> SysResult<()> {
-        info!("[VmArea] handle page fault");
+        // info!("[VmArea] handle page fault, access: {:?}, pid: {}", access_type, current_task().unwrap().get_pid());
         log::debug!(
             "[VmArea::handle_page_fault] {self:?}, {vpn:?} at page table {:?}",
             page_table.root_ppn
@@ -410,8 +411,10 @@ impl VmArea {
         let page: Arc<Page>;
         let pte = page_table.find_pte(vpn);
         if let Some(pte) = pte {
+            // info!("[VmArea] page fault of COW");
             // if PTE is valid, then it must be COW
-            log::debug!("[VmArea::handle_page_fault] pte flags: {:?}", pte.flags());
+            // log::info!("[VmArea::handle_page_fault] pte flags: {:?}", pte.flags());
+            // log::info!("[VmArea::handle_page_fault] pte bits: {:#x}", pte.bits);
             let mut pte_flags = pte.flags();
 
             debug_assert!(pte_flags.contains(PTEFlags::COW));
@@ -449,6 +452,8 @@ impl VmArea {
                 unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
             }
         } else {
+            
+            // info!("[VmArea] page fault of lazy alloc");
             log::debug!(
                 "[VmArea::handle_page_fault] handle for type {:?}",
                 self.vma_type

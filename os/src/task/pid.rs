@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
-use crate::mm::page_table::{get_kernel_page_table, KERNEL_PAGE_TABLE};
+use crate::mm::page_table::{KERNEL_PAGE_TABLE};
 use crate::mm::{VirtAddr};
 use alloc::collections::BTreeSet;
 use lazy_static::*;
@@ -134,6 +134,6 @@ impl Drop for KernelStack {
         // KERNEL_SPACE
         //     .lock()
         //     .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
-        get_kernel_page_table().lock().unmap_kernel_range(kernel_stack_bottom.into()..kernel_stack_start.into());
+        KERNEL_PAGE_TABLE.lock().unmap_kernel_range(kernel_stack_bottom.into()..kernel_stack_start.into());
     }
 }

@@ -18,6 +18,6 @@ fn panic(info: &PanicInfo) -> ! {
             info.message()
         );
     }
-    backtrace();
+    // backtrace();
     shutdown(true)
 }

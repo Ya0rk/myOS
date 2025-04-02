@@ -2,6 +2,7 @@ use core::cmp::min;
 
 use alloc::{collections::btree_map::BTreeMap, sync::{Arc, Weak}};
 use hashbrown::HashSet;
+use log::info;
 use spin::RwLock;
 use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::SleepLock, utils::{Errno, SysResult}};
 use super::InodeTrait;
@@ -51,6 +52,7 @@ impl PageCache {
         // let frame = frame_alloc().expect("no more frame!");
         let page = Page::new_file();
         self.pages.write().insert(offset_aligned, page.clone());
+        info!("insert page: {:#x}", self.pages.read().get(&offset_aligned).unwrap().frame.ppn.0);
         page
     }
 
@@ -84,13 +86,18 @@ impl PageCache {
         let ppn_end = (offset + buf.len()).div_ceil(PAGE_SIZE);
         let mut page_offset = offset % PAGE_SIZE;
         let mut buf_cur = 0;
+        
 
         for ppn in ppn_start..ppn_end {
             let page = match self.get_page(ppn * PAGE_SIZE){
-                Some(page) => page, // cache中找到了page
+                Some(page) => {
+                    info!("[PageCache] read from cache!");
+                    page
+                }, // cache中找到了page
                 None => {
+                    info!("[PageCache] read from device! now page cnt: {}", self.pages.read().len());
                     // cache中没有找到就新建cache page
-                    let temp_page = self.insert_page(offset);
+                    let temp_page = self.insert_page(ppn * PAGE_SIZE);
                     let array = temp_page.frame.ppn.get_bytes_array();
                     self.inode
                         .read()

@@ -70,6 +70,7 @@ impl FileClass {
                     Ok(page)
                 }
                 else {
+                    info!("[get_page_at] get page from offset {:#x} failed", offset);
                     Err(Errno::EINVAL)
                 }
             },
@@ -88,6 +89,7 @@ pub async fn flush_preload() {
         fn initproc_end();
     }
 
+        println!("aaa");
     if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
         let mut v = Vec::new();
         v.push(unsafe {
@@ -223,7 +225,7 @@ fn create_file(
     child_name: &str,
     flags: OpenFlags,
 ) -> Option<FileClass> {
-    debug!(
+    println!(
         "[create_file],flags={:?},abs_path={},parent_path={},child_name={}",
         flags, abs_path, parent_path, child_name
     );

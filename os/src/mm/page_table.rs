@@ -2,8 +2,8 @@
 
 use core::arch::asm;
 use core::ops::Range;
-use crate::board::MEMORY_END;
-use crate::config::KERNEL_PGNUM_OFFSET;
+use crate::board::{MEMORY_END, MMIO};
+use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 use super::address::{kernel_map_vpn_to_ppn, KernelAddr};
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
@@ -57,7 +57,7 @@ impl PageTableEntry {
     }
     ///Return 10bit flag
     pub fn flags(&self) -> PTEFlags {
-        PTEFlags::from_bits(self.bits as u16).unwrap()
+        PTEFlags::from_bits((self.bits & ((1 << 9) - 1)) as u16).unwrap()
     }
     ///Check PTE valid
     pub fn is_valid(&self) -> bool {
@@ -132,11 +132,14 @@ pub unsafe fn switch_pgtable(page_table_token: usize) {
 
 // TODO: 优化结构
 
-pub static mut KERNEL_PAGE_TABLE: Option<Arc<Mutex<PageTable>>> = None;
-
-pub fn get_kernel_page_table() -> &'static Arc<Mutex<PageTable>> {
-    unsafe {KERNEL_PAGE_TABLE.as_ref().unwrap()}
+// pub static mut KERNEL_PAGE_TABLE: Option<Arc<Mutex<PageTable>>> = None;
+lazy_static! {
+    pub static ref KERNEL_PAGE_TABLE: Arc<Mutex<PageTable>> = Arc::new(Mutex::new(PageTable::init_kernel_page_table()));
 }
+
+// pub fn get_kernel_page_table() -> &'static Arc<Mutex<PageTable>> {
+//     unsafe {KERNEL_PAGE_TABLE.as_ref()}
+// }
 
 
 pub struct PageTable {
@@ -155,7 +158,7 @@ impl PageTable {
     }
     pub fn new_from_kernel() -> Self {
         let frame = frame_alloc().unwrap();
-        let kernel_page_table = get_kernel_page_table().lock();
+        let kernel_page_table = KERNEL_PAGE_TABLE.lock();
         let kernel_root_ppn = kernel_page_table.root_ppn;
         // 第一级页表
         let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
@@ -195,14 +198,16 @@ impl PageTable {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
         let mut result: Option<&mut PageTableEntry> = None;
+        // info!("[find_pte] walk vpn {:#x}", vpn.0);
         for (i, idx) in idxs.iter().enumerate() {
             let pte = &mut ppn.get_pte_array()[*idx];
+            // info!("[find_pte] layer {}, pte {:#x}, ppn {:#x}", i, pte.bits, pte.ppn().0);
+            if !pte.is_valid() {
+                return None;
+            }
             if i == 2 {
                 result = Some(pte);
                 break;
-            }
-            if !pte.is_valid() {
-                return None;
             }
             ppn = pte.ppn();
         }
@@ -222,11 +227,11 @@ impl PageTable {
     }
 
     pub fn map_kernel_range(&mut self, range_va: Range<VirtAddr>, flags: PTEFlags) {
-        println!("[map kernel range] range_va:{:?}", range_va);
+        // println!("[map kernel range] range_va:{:?}", range_va);
         let range_vpn = range_va.start.floor()..range_va.end.ceil();
         for vpn in range_vpn {
             let ppn = kernel_map_vpn_to_ppn(vpn);
-            println!("[map vpn] vpn:{:#x}, ppn:{:#x}", vpn.0, ppn.0);
+            // println!("[map vpn] vpn:{:#x}, ppn:{:#x}", vpn.0, ppn.0);
             self.map(vpn, ppn, flags);
         }
     }    
@@ -365,7 +370,7 @@ impl PageTable {
             (ekernel as usize).into()..(MEMORY_END).into(),
             PTEFlags::R | PTEFlags::W,
         );
-        // println!("mapping memory-mapped registers");
+        println!("mapping memory-mapped registers");
         // for pair in MMIO {
         //     memory_set.push(
         //         MapArea::new(
@@ -377,13 +382,20 @@ impl PageTable {
         //         None,
         //     );
         // }
+        for pair in MMIO {
+            let base = (*pair).0 + KERNEL_ADDR_OFFSET;
+            kernel_page_table.map_kernel_range(
+                base.into()..(base + (*pair).1).into(),
+                PTEFlags::R | PTEFlags::W,
+            );
+        }
         println!("kernel memory set initialized");
         kernel_page_table
     }
 }
 
 pub fn switch_to_kernel_pgtable() {
-    unsafe { get_kernel_page_table().lock().switch(); }
+    unsafe { KERNEL_PAGE_TABLE.lock().switch(); }
 }
 /// translate a pointer to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
