@@ -21,6 +21,7 @@ use riscv::register::stvec;
 
 #[cfg(target_arch = "riscv64")]
 global_asm!(include_str!("rv64_trap.S"));
+
 #[cfg(target_arch = "loongarch64")]
 global_asm!(include_str!("la64_trap.S"));
 

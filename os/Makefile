@@ -7,10 +7,8 @@ DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
 
 # fs image
-# FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 FS = lwext4_rust
 FS_IMG := ../$(FS)/ext4.img
-# FS_IMG := ../simple-fat32/fat32.img
 
 # cpu hart
 CPUS ?= 2
@@ -19,7 +17,6 @@ CPUS ?= 2
 BOARD := qemu
 SBI ?= rustsbi
 BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
-# BOOTLOADER = /usr/lib/riscv64-linux-gnu/opensbi/generic/fw_dynamic.bin
 
 # GDB wrapper to handle virtual path to core lib and types display in Rust
 GDB_PATH := /home/ya0/comp/gdb-16.2/build-riscv64/bin/riscv64-unknown-elf-gdb
@@ -80,12 +77,6 @@ PHONY += env
 
 $(KERNEL_BIN): kernel
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
-
-# fs-img: $(APPS)
-# 	@cd ../user && make build TEST=$(TEST)
-# 	@rm -f ../$(FS)/fs
-# 	@cd ../easy-fs-fuse && cargo run $(MODE_ARG) -- -s ../user/src/bin/ -t ../user/target/$(TARGET)/$(MODE)/
-# PHONY += fs-img
 
 copy_to_fs: 
 	cd ../$(FS) && sh create_img.sh 
@@ -149,7 +140,6 @@ gdbclient:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
 PHONY += gdbclient
 
-.PHONY: $(PHONY)
 
 # 龙芯架构的启动方式
 LA:
@@ -162,11 +152,14 @@ LA:
 		-vga none \
 		-nographic \
 		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors
+PHONY += LA
 
 LAgdbclient:
 	loongarch64-linux-gnu-gdb \
 	ex 'file ./target/loongarch64/debug/os' \
 	ex 'target remote localhost:1234'
+PHONY += LAgdbclient
+
 LAgdb:
 	qemu-system-loongarch64 \
 		-M virt \
@@ -177,3 +170,7 @@ LAgdb:
 		-nographic \
 		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
 		-s -S
+PHONY += LAgdb
+
+
+.PHONY: $(PHONY)
