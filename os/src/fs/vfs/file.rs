@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
-use crate::{fs::{ffi::RenameFlags, Kstat, OpenFlags}, mm::UserBuffer, utils::SysResult};
-use alloc::{string::String, sync::Arc};
+use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::UserBuffer, utils::SysResult};
+use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 use spin::RwLock;
@@ -40,6 +40,7 @@ impl FileMeta {
 /// 它提供了读取、写入、查询状态等基本文件操作。
 #[async_trait]
 pub trait FileTrait: Send + Sync {
+    fn get_inode(&self) -> Arc<dyn InodeTrait>;
     /// 检查文件是否可读
     ///
     /// # 返回
@@ -122,6 +123,10 @@ pub trait FileTrait: Send + Sync {
     fn fstat(&self, stat: &mut Kstat) -> SysResult;
 
     fn is_dir(&self) -> bool;
+
+    fn read_dentry(&self) -> Option<Vec<Dirent>> {
+        todo!()
+    }
 }
 
 // pub trait Ioctl: File {

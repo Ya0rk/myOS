@@ -1,5 +1,5 @@
 use core::{cmp::min, future::Future, task::{Poll, Waker}};
-use super::{ffi::RenameFlags, FileTrait, Kstat, OpenFlags};
+use super::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags};
 use crate::{config::PIPE_BUFFER_SIZE, mm::UserBuffer, sync::once::LateInit, utils::{Errno, SysResult}};
 use alloc::{collections::vec_deque::VecDeque, string::String, sync::{Arc, Weak}, vec::Vec};
 use spin::Mutex;
@@ -181,6 +181,9 @@ impl FileTrait for Pipe {
     }
 
     fn is_dir(&self) -> bool {
+        todo!()
+    }
+    fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
 }

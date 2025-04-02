@@ -1,7 +1,7 @@
 use alloc::string::String;
 use log::info;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{ mkdir, open_file, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE};
+use crate::fs::{ mkdir, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
@@ -192,7 +192,7 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// len：buf的大小。
 /// 
 /// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
-pub fn sys_getdents64(fd: usize, buf: *const u8, _len: usize) -> SysResult<usize> {
+pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -201,54 +201,27 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, _len: usize) -> SysResult<usize
     if buf.is_null() {
         return Err(Errno::EFAULT);
     }
-    Ok(10)
     // TODO: 有待修改
 
+    let token = task.get_user_token();
+    let mut buffer = UserBuffer::new(translated_byte_buffer(token, buf, len));
+    let file = task.get_file_by_fd(fd).unwrap();
+    let dentrys = match file.read_dentry() {
+        Some(dir_entrys) => dir_entrys,
+        _ => return Err(Errno::EINVAL),
+    };
 
+    let mut res = 0;
+    let one_den_len = size_of::<Dirent>();
+    for den in dentrys {
+        if res + one_den_len > len {
+            break;
+        }
+        buffer.write_at(res, den.as_bytes());
+        res += one_den_len;
+    }
 
-
-    // match task.get_file_by_fd(fd) {
-    //     Some(file) => {
-    //         if !file.readable() {
-    //             return Err(Errno::EACCES);
-    //         }
-    //         if !file.is_dir() {
-    //             return Err(Errno::ENOENT);
-    //         }
-
-    //         let token = inner.get_user_token();
-    //         drop(inner);
-    //         let mut buffer = UserBuffer::new(
-    //             translated_byte_buffer(
-    //                 token, 
-    //                 buf, 
-    //                 len
-    //         ));
-
-    //         let mut dirent = Dirent::new();
-    //         let mut current_wirte_len = 0;
-    //         let dirent_size = core::mem::size_of::<Dirent>();
-
-    //         if len < dirent_size {
-    //             return Err(Errno::EINVAL);
-    //         }
-
-    //         // TODO :按照测试用例的话这里不需要循环
-    //         while len >= dirent_size + current_wirte_len {
-    //             let readsize: isize = file.get_dirent(&mut dirent);
-    //             if readsize < 0 {
-    //                 return Ok(current_wirte_len);
-    //             }
-    //             let dirent_bytes = dirent.as_bytes();
-    //             buffer.write_at(current_wirte_len, dirent_bytes);
-    //             current_wirte_len += dirent_size;
-    //         }
-    //         return Ok(current_wirte_len);
-    //     }
-    //     _ => {
-    //         return Err(Errno::EBADCALL);
-    //     }
-    // }
+    Ok(res)
 }
 
 /// 获取当前工作目录： https://man7.org/linux/man-pages/man3/getcwd.3.html

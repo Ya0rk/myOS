@@ -1,5 +1,5 @@
-use alloc::string::String;
-use crate::{fs::{ffi::RenameFlags, FileTrait, Kstat}, mm::UserBuffer, task::get_init_proc, utils::SysResult};
+use alloc::{string::String, sync::Arc};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::UserBuffer, task::get_init_proc, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -14,6 +14,9 @@ impl DevTty {
 
 #[async_trait]
 impl FileTrait for DevTty {
+    fn get_inode(&self) -> Arc<dyn InodeTrait> {
+        todo!()
+    }
     fn readable(&self) -> bool {
         true
     }

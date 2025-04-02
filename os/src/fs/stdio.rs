@@ -1,21 +1,16 @@
 use super::ffi::RenameFlags;
 use super::FileTrait;
+use super::InodeTrait;
 use super::Kstat;
 use crate::arch::console_getchar;
 use crate::utils::Errno;
 use crate::utils::SysResult;
 use crate::mm::UserBuffer;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use async_trait::async_trait;
 use alloc::boxed::Box;
-/// # 标准输入输出接口
-/// `os/src/fs/stdio.rs`
-/// ```
-/// pub struct Stdin
-/// pub struct Stdout
-/// ```
-//
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -89,6 +84,9 @@ impl FileTrait for Stdin {
         todo!()
     }
     fn is_dir(&self) -> bool {
+        todo!()
+    }
+    fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
 }
@@ -176,6 +174,9 @@ impl FileTrait for Stdout {
         todo!()
     }
     fn is_dir(&self) -> bool {
+        todo!()
+    }
+    fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
 }

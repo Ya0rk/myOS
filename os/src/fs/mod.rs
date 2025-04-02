@@ -237,6 +237,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     let abs_path = new_path.get();
 
     if find_device(&abs_path) {
+        info!("bbb");
         if let Some(device) = open_device_file(&abs_path) {
             return Some(FileClass::Abs(device));
         }
@@ -261,7 +262,8 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         }
     };
 
-    if let Some(inode) = parent_inode.walk(&abs_path) {    
+    if let Some(inode) = parent_inode.walk(&abs_path) {
+        info!("aaaa");   
         return inode.do_open(
             Some(Arc::downgrade(&parent_inode)),
             flags,
