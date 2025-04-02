@@ -9,8 +9,8 @@ mod stdio;
 mod vfs;
 mod ffi;
 mod path;
-mod file;
 pub mod ext4;
+pub mod tmp;
 
 pub use ext4::{root_inode,ls};
 pub use ffi::{OpenFlags, UmountFlags, MountFlags};
@@ -25,7 +25,7 @@ pub use stdio::{Stdin, Stdout};
 
 use devfs::{find_device, open_device_file, register_device};
 use ffi::{MOUNTS, MEMINFO, LOCALTIME, ADJTIME};
-use file::NormalFile;
+use ext4::file::NormalFile;
 use crate::mm::UserBuffer;
 use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
@@ -252,11 +252,9 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     );
 
     let (parent_inode, _) = if INODE_CACHE.has_inode(parent_path) {
-        // info!("aaaa");
         (INODE_CACHE.get(parent_path).unwrap(), child_name)
     } else {
         if cwd == "/" {
-            // info!("bbbb");
             (root_inode(), path)
         } else {
             (root_inode().walk(cwd).unwrap(), path)

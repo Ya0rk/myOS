@@ -1,6 +1,8 @@
 mod inode;
+pub mod file;
 pub mod super_block;
 
+pub use file::*;
 pub use inode::*;
 pub use super_block::*;
 
