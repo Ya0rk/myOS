@@ -7,6 +7,7 @@
 #![feature(negative_impls)]
 #![allow(unused_imports)]
 
+#![allow(unused)]
 extern crate alloc;
 
 #[macro_use]
@@ -35,7 +36,11 @@ use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
+#[cfg(target_arch = "riscv64")]
 global_asm!(include_str!("entry.asm"));
+
+#[cfg(target_arch = "loongarch64")]
+global_asm!(include_str!("entry_la.asm"));
 
 #[macro_use]
 extern crate lazy_static;
@@ -46,6 +51,9 @@ static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
 pub fn rust_main(hart_id: usize) -> ! {
+
+    println!("hello world!");
+
     if FIRST_HART
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
         .is_ok() 

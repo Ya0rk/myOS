@@ -1,31 +1,18 @@
-#![allow(unused_import_braces)]
-#![allow(unused)]
 use log::info;
-use crate::sync::{set_next_trigger, yield_now};
-use crate::syscall::syscall;
-use crate::task::{current_task, current_trap_cx, executor, get_current_hart_id};
-use super::{__return_to_user, set_trap_handler, IndertifyMode};
-/// 导入riscv架构相关的包
-#[cfg(target_arch = "riscv64")]
 use riscv::register::stval;
-#[cfg(target_arch = "riscv64")]
 use riscv::register::scause::{self, Exception, Interrupt, Trap};
+use crate::syscall::syscall;
+use crate::timer::set_next_trigger;
+use crate::task::{current_trap_cx, exit_current_and_run_next, get_current_hart_id, suspend_current_and_run_next};
+use super::{__return_to_user, set_trap_handler, IndertifyMode};
 
-#[cfg(target_arch = "riscv64")]
 #[no_mangle]
 /// handle user interrupt, exception, or system call from user space
-pub async fn user_trap_handler() {
+pub fn user_trap_handler() {
     // 设置kernel的trap handler entry
     set_trap_handler(IndertifyMode::Kernel);
     let scause = scause::read();
     let stval = stval::read();
-    let task = current_task().unwrap();
-
-    if task.get_time_data().usedout_timeslice() && executor::has_task() {
-        // log::info!("time slice used up, yield now");
-        yield_now().await;
-    }
-
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => { // 7
             let mut cx = current_trap_cx();
@@ -33,15 +20,7 @@ pub async fn user_trap_handler() {
             let syscall_id = cx.user_x[17];
             cx.set_sepc(old_sepc + 4);
 
-            let result = syscall(
-                syscall_id, 
-                [cx.user_x[10], 
-                cx.user_x[11], 
-                cx.user_x[12], 
-                cx.user_x[13], 
-                cx.user_x[14],
-                cx.user_x[15]]
-            ).await;
+            let result = syscall(syscall_id, [cx.user_x[10], cx.user_x[11], cx.user_x[12], cx.user_x[13], cx.user_x[14], cx.user_x[15]]);
 
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
@@ -78,20 +57,18 @@ pub async fn user_trap_handler() {
                 current_trap_cx().get_sepc(),
             );
             // page fault exit code
-            // exit_current_and_run_next(-2);
-            task.set_zombie();
+            exit_current_and_run_next(-2);
         }
         Trap::Exception(Exception::IllegalInstruction) => { // 2
             println!("[kernel] hart_id = {:?}, IllegalInstruction in application, kernel killed it.",
                 get_current_hart_id()
             );
             // illegal instruction exit code
-            // exit_current_and_run_next(-3);
-            task.set_zombie();
+            exit_current_and_run_next(-3);
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
             set_next_trigger();
-            yield_now().await;
+            suspend_current_and_run_next();
         }
         _ => {
             panic!(
@@ -103,10 +80,6 @@ pub async fn user_trap_handler() {
         }
     }
 }
-#[cfg(target_arch = "loongarch64")]
-pub async fn user_trap_handler() {
-    unimplemented!()
-}
 
 #[no_mangle]
 pub fn user_trap_return() {
@@ -114,13 +87,7 @@ pub fn user_trap_return() {
     set_trap_handler(IndertifyMode::User);
 
     let trap_cx = current_trap_cx();
-    trap_cx.float_regs.trap_out_do_with_freg();
-
-    let task = current_task().unwrap();
-
-    task.get_time_data_mut().set_trap_out_time();
-    unsafe { __return_to_user(trap_cx); }
-    task.get_time_data_mut().set_trap_in_time();
-
-    trap_cx.float_regs.trap_in_do_with_freg(trap_cx.sstatus);
+    unsafe {
+        __return_to_user(trap_cx);
+    }
 }

@@ -1,7 +1,9 @@
 use core::arch::asm;
-use riscv::register::sstatus::FS;
+// use riscv::register::sstatus::FS;
 
-use crate::arch::sstatus::{self, Sstatus, SPP};
+use crate::arch::sstatus::{self, Sstatus, SPP, FS};
+
+
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -120,7 +122,7 @@ impl UserFloatRegs {
     }
 
     // TODO: 完善信号处理时 是否需要保存浮点寄存器的内容
-
+    #[cfg(target_arch = "riscv64")]
     pub fn save(&mut self) {
         if self.need_save == 0 {
             return;
@@ -168,8 +170,13 @@ impl UserFloatRegs {
             );
         };
     }
+    #[cfg(target_arch = "loongarch64")]
+    pub fn save(&mut self) {
+
+    }
 
     /// Restore mem -> reg
+    #[cfg(target_arch = "riscv64")]
     pub fn restore(&mut self) {
         if self.need_restore == 0 {
             return;
@@ -214,5 +221,9 @@ impl UserFloatRegs {
         ", in(reg) self
             );
         }
+    }
+    #[cfg(target_arch = "loongarch64")]
+    pub fn restore(&mut self) {
+        unimplemented!()
     }
 }

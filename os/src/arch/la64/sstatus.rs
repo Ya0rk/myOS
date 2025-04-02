@@ -1,5 +1,7 @@
-use core::arch::asm;
-use riscv::addr::BitField;
+#![allow(unused)]
+
+// use core::arch::asm;
+// use riscv::{addr::BitField, register::sstatus::FS};
 
 /// Floating-point extension state
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -32,100 +34,82 @@ impl Sstatus {
     /// User Interrupt Enable
     #[inline]
     pub fn uie(&self) -> bool {
-        self.bits.get_bit(0)
+        unimplemented!()
+
     }
 
     /// Supervisor Interrupt Enable
     #[inline]
     pub fn sie(&self) -> bool {
-        self.bits.get_bit(1)
+        unimplemented!()
     }
 
     /// User Previous Interrupt Enable
     #[inline]
     pub fn upie(&self) -> bool {
-        self.bits.get_bit(4)
+        unimplemented!()
     }
 
     /// Supervisor Previous Interrupt Enable
     #[inline]
     pub fn spie(&self) -> bool {
-        self.bits.get_bit(5)
+        unimplemented!()
     }
 
     /// Supervisor Previous Privilege Mode
     #[inline]
     pub fn spp(&self) -> SPP {
-        match self.bits.get_bit(8) {
-            true => SPP::Supervisor,
-            false => SPP::User,
-        }
+        unimplemented!()
     }
 
     /// The status of the floating-point unit
     #[inline]
     pub fn fs(&self) -> FS {
-        match self.bits.get_bits(13..15) {
-            0 => FS::Off,
-            1 => FS::Initial,
-            2 => FS::Clean,
-            3 => FS::Dirty,
-            _ => unreachable!(),
-        }
+        unimplemented!()
     }
 
     /// The status of additional user-mode extensions
     /// and associated state
     #[inline]
     pub fn xs(&self) -> FS {
-        match self.bits.get_bits(15..17) {
-            0 => FS::Off,
-            1 => FS::Initial,
-            2 => FS::Clean,
-            3 => FS::Dirty,
-            _ => unreachable!(),
-        }
+        unimplemented!()
     }
 
     /// Permit Supervisor User Memory access
     #[inline]
     pub fn sum(&self) -> bool {
-        self.bits.get_bit(18)
+        unimplemented!()
     }
 
     /// Make eXecutable Readable
     #[inline]
     pub fn mxr(&self) -> bool {
-        self.bits.get_bit(19)
+        unimplemented!()
     }
 
     /// Whether either the FS field or XS field
     /// signals the presence of some dirty state
     #[inline]
     pub fn sd(&self) -> bool {
-        self.bits.get_bit(size_of::<usize>() * 8 - 1)
+        unimplemented!()
     }
 
     #[inline]
     pub fn set_spie(&mut self, val: bool) {
-        self.bits.set_bit(5, val);
+        unimplemented!()
     }
 
     #[inline]
     pub fn set_sie(&mut self, val: bool) {
-        self.bits.set_bit(1, val);
+        unimplemented!()
     }
 
     #[inline]
     pub fn set_spp(&mut self, val: SPP) {
-        self.bits.set_bit(8, val == SPP::Supervisor);
+        unimplemented!()
     }
 }
 
 pub fn read() -> Sstatus {
-    let bits: usize;
-    unsafe {
-        asm!("csrr {}, sstatus", out(reg) bits);
-    }
-    Sstatus { bits }
+    unimplemented!()
 }

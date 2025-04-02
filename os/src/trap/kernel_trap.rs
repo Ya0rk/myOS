@@ -1,6 +1,9 @@
-use riscv::register::{scause::{self, Interrupt, Trap}, stval};
 use crate::{sync::set_next_trigger, task::current_trap_cx, utils::backtrace};
 
+#[cfg(target_arch = "riscv64")]
+use riscv::register::{scause::{self, Interrupt, Trap}, stval};
+
+#[cfg(target_arch = "riscv64")]
 #[no_mangle]
 /// Unimplement: traps/interrupts/exceptions from kernel mode
 /// Todo: Chapter 9: I/O device
@@ -21,7 +24,12 @@ pub fn kernel_trap_handler() {
             panic!("a trap {:?} from kernel!", scause::read().cause());
         }
     }
+}
 
-    
-   
+#[cfg(target_arch = "loongarch64")]
+#[no_mangle]
+/// Unimplement: traps/interrupts/exceptions from kernel mode
+/// Todo: Chapter 9: I/O device
+pub fn kernel_trap_handler() {
+    unimplemented!()
 }

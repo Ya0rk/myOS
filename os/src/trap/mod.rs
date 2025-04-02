@@ -7,15 +7,22 @@ use log::info;
 use user_trap::{user_trap_handler, user_trap_return};
 use core::arch::global_asm;
 use core::fmt::Display;
-use riscv::register::mtvec::TrapMode;
-use riscv::register::stvec;
+
 use crate::signal::do_signal;
 use crate::sync::{get_waker, suspend_now};
 use crate::task::{TaskControlBlock, TaskStatus};
 pub use context::TrapContext;
 pub use context::UserFloatRegs;
 
-global_asm!(include_str!("trap.S"));
+#[cfg(target_arch = "riscv64")]
+use riscv::register::mtvec::TrapMode;
+#[cfg(target_arch = "riscv64")]
+use riscv::register::stvec;
+
+#[cfg(target_arch = "riscv64")]
+global_asm!(include_str!("rv64_trap.S"));
+#[cfg(target_arch = "loongarch64")]
+global_asm!(include_str!("la64_trap.S"));
 
 // 申明外部函数，这些函数是在汇编代码中实现的，用于从用户态和内核态切换
 extern "C" {
@@ -85,7 +92,9 @@ impl Display for IndertifyMode {
     }
 }
 
+#[cfg(target_arch = "riscv64")]
 fn set_trap_handler(mode: IndertifyMode) {
+    // unimplemented!()
     match mode {
         IndertifyMode::User => {
             unsafe {
@@ -98,4 +107,8 @@ fn set_trap_handler(mode: IndertifyMode) {
             }
         },
     }
+}
+#[cfg(target_arch = "loongarch64")]
+fn set_trap_handler(mode: IndertifyMode) {
+    unimplemented!("loongarch64")
 }

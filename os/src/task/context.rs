@@ -1,4 +1,4 @@
-use crate::trap::trap_loop;
+use crate::hal::arch::trap_loop;
 
 #[repr(C)]
 /// task context structure containing some registers
