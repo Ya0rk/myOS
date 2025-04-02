@@ -16,16 +16,16 @@ use alloc::{sync::Arc, vec::Vec};
 use alloc::vec;
 use alloc::boxed::Box;
 
-pub struct Ext4Inode {
+pub struct TmpInode {
     pub metadata : InodeMeta,
     pub file     : Shared<Ext4File>,
     pub page_cache: Option<Arc<PageCache>>,
 }
 
-unsafe impl Send for Ext4Inode {}
-unsafe impl Sync for Ext4Inode {}
+unsafe impl Send for TmpInode {}
+unsafe impl Sync for TmpInode {}
 
-impl Ext4Inode {
+impl TmpInode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
     pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<Self> {
         let file_type = as_inode_type(types.clone());
@@ -46,15 +46,15 @@ impl Ext4Inode {
 }
 
 #[async_trait]
-impl InodeTrait for Ext4Inode {
+impl InodeTrait for TmpInode {
     /// 获取文件大小
     fn size(&self) -> usize {
         let mut lock_file = self.file.lock();
         let binding = lock_file.get_path();
         let path = binding.to_str().unwrap();
-        lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
+        lock_file.file_open(path, O_RDONLY).expect("[TmpInode new]: file open fail!");
         let size = lock_file.file_size() as usize;
-        lock_file.file_close().expect("[ext4Inode new]: file close fail!");
+        lock_file.file_close().expect("[TmpInode new]: file close fail!");
         size
     }
 
@@ -71,7 +71,7 @@ impl InodeTrait for Ext4Inode {
             InodeType::File => Some(PageCache::new_bare()),
             _ => None
         };
-        let nf = Ext4Inode::new(path, types.clone(), page_cache.clone());
+        let nf = TmpInode::new(path, types.clone(), page_cache.clone());
 
         if !file.check_inode_exist(path, types.clone()) {
             drop(file);
@@ -116,27 +116,12 @@ impl InodeTrait for Ext4Inode {
     }
 
     /// 直接读取
-    async fn read_dirctly(&self, offset: usize, buf: &mut [u8]) -> usize {
-        let mut file = self.file.lock();
-        let path = file.get_path();
-        let path = path.to_str().unwrap();
-        file.file_open(path, O_RDONLY).map_err(|_| Errno::EIO).unwrap();
-        file.file_seek(offset as i64, SEEK_SET)
-            .map_err(|_| Errno::EIO).unwrap();
-        let r = file.file_read(buf);
-        file.file_close().expect("[read_dirctly]: file close fail!");
-        r.map_err(|_| Errno::EIO).unwrap()
+    async fn read_dirctly(&self, _offset: usize, _buf: &mut [u8]) -> usize {
+        0
     }
 
     /// 写入文件
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
-        // let file_size = self.size();
-        // TODO(YJJ): 如果不检测 maybe bug???
-        // if buf.len() > file_size - offset {
-        //     info!("[write_at] file size = {}", file_size);
-        //     self.truncate(offset + buf.len());
-        // }
-
         match &self.page_cache {
             None => {
                 info!("llll");
@@ -149,27 +134,14 @@ impl InodeTrait for Ext4Inode {
         }
     }
 
-    async fn write_directly(&self, offset: usize, buf: &[u8]) -> usize {
-        let mut file = self.file.lock();
-        let path = file.get_path();
-        let path = path.to_str().unwrap();
-        file.file_open(path, O_RDWR).map_err(|_| Errno::EIO).unwrap();
-        file.file_seek(offset as i64, SEEK_SET)
-            .map_err(|_| Errno::EIO).unwrap();
-        let r = file.file_write(buf);
-        file.file_close().expect("[write_directly]: file close fail!");
-        r.map_err(|_| Errno::EIO).unwrap()
+    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize {
+        0
     }
 
     /// 截断文件
     fn truncate(&self, size: usize) -> usize {
-        let mut file = self.file.lock();
-
-        let r = file.file_truncate(size as u64);
-        self.set_size(size).expect("[truncate]: set size fail!");
-
-        // file.file_close();
-        r.map_or_else(|_| Errno::EIO.into(), |_| 0)
+        self.set_size(size).expect("tmp inode set size fail");
+        size
     }
     /// 同步文件
     fn sync(&self) {
@@ -189,11 +161,11 @@ impl InodeTrait for Ext4Inode {
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
             // debug!("lookup new DIR FileWrapper");
             let page_cache = None;
-            Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
+            Some(TmpInode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
             // debug!("lookup new FILE FileWrapper");
             let page_cache = Some(PageCache::new_bare());
-            Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE, page_cache.clone()))
+            Some(TmpInode::new(path, InodeTypes::EXT4_DE_REG_FILE, page_cache.clone()))
         } else {
             None
         }
@@ -234,7 +206,7 @@ impl InodeTrait for Ext4Inode {
     }
 }
 
-impl Drop for Ext4Inode {
+impl Drop for TmpInode {
     fn drop(&mut self) {
         let mut file = self.file.lock();
         // debug!("Drop struct FileWrapper {:?}", file.get_path());

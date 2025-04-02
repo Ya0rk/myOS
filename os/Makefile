@@ -19,6 +19,7 @@ CPUS ?= 2
 BOARD := qemu
 SBI ?= rustsbi
 BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
+# BOOTLOADER = /usr/lib/riscv64-linux-gnu/opensbi/generic/fw_dynamic.bin
 
 # GDB wrapper to handle virtual path to core lib and types display in Rust
 GDB_PATH := /home/ya0/comp/gdb-16.2/build-riscv64/bin/riscv64-unknown-elf-gdb

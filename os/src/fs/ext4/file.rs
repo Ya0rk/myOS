@@ -1,7 +1,10 @@
 use alloc::{string::String, sync::{Arc, Weak}};
 use async_trait::async_trait;
-use crate::{config::PATH_MAX, mm::UserBuffer, utils::{Errno, SysResult}};
-use super::{ffi::RenameFlags, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET};
+use crate::{
+    config::PATH_MAX, 
+    fs::{ffi::RenameFlags, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
+    mm::UserBuffer, utils::{Errno, SysResult}
+};
 use alloc::boxed::Box;
 
 pub struct NormalFile {

@@ -46,3 +46,6 @@ lwext4_rust/c/lwext4/CPackSourceConfig.cmake
 lwext4_rust/c/lwext4/blockdev/cmake_install.cmake
 lwext4_rust/c_old/lwext4/include/generated/ext4_config.h
 lwext4_rust/*
+
+*.dtb
+*.dts

@@ -1,8 +1,8 @@
 use core::sync::atomic::AtomicUsize;
 use crate::{
-    fs::{ffi::InodeType, file::NormalFile, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
-        sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
-        utils::SysResult
+    fs::{ext4::NormalFile, ffi::InodeType, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
+    sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
+    utils::SysResult
 };
 use alloc::{
     string::String, sync::{Arc, Weak},
@@ -214,16 +214,6 @@ pub trait InodeTrait: Send + Sync {
 }
 
 impl dyn InodeTrait {
-    /// Sets the access and modification times of the file.
-    ///
-    /// # Arguments
-    ///
-    /// * `atime_sec` - Optional new access time in seconds
-    /// * `mtime_sec` - Optional new modification time in seconds
-    ///
-    /// # Returns
-    ///
-    /// Ok(0) on success, or an error code.
     pub fn set_timestamps(&self, timestamp: TimeStamp) -> SysResult<usize> {
         let mut mytime = self.get_timestamp();
         mytime.set(timestamp);
