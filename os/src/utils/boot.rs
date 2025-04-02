@@ -1,8 +1,10 @@
+#![allow(unused)]
 use core::arch::asm;
 use crate::{arch::hart_start_success, mm::VirtAddr};
 use crate::config::{HART_NUM, HART_START_ADDR, KERNEL_ADDR_OFFSET};
 
 /// 这里是一个简单的启动代码，它将在启动时运行。
+#[cfg(target_arch = "riscv64")]
 #[no_mangle]
 pub fn jump_helper(hart_id: usize) {
     unsafe { // 调整栈指针 加上偏移，跳转到 rust_main
@@ -17,6 +19,11 @@ pub fn jump_helper(hart_id: usize) {
             options(noreturn)
         );
     }
+}
+#[cfg(target_arch = "loongarch64")]
+#[no_mangle]
+pub fn jump_helper(_hart_id: usize) {
+    unimplemented!()
 }
 
 pub fn logo() {

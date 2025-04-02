@@ -15,8 +15,10 @@ pub use boot::{boot_all_harts, jump_helper, clear_bss, logo};
 
 pub fn backtrace() {
     unsafe {
-        let mut fp: usize;
-        asm!("mv {}, fp", out(reg) fp);
+        // unimplemented!();
+        let mut fp: usize = 0;
+        // asm!("mv {}, fp", out(reg) fp);
+        fp = crate::arch::fp_read();
         let mut start: VirtAddr = VirtAddr::from(fp).floor().into();
         let mut end: VirtAddr = VirtAddr::from(fp).ceil().into();
         let mut fp_addr = VirtAddr::from(fp);

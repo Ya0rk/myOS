@@ -1,5 +1,14 @@
 use core::arch::asm;
-use riscv::{addr::BitField, register::sstatus::FS};
+use riscv::addr::BitField;
+
+/// Floating-point extension state
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FS {
+    Off = 0,
+    Initial = 1,
+    Clean = 2,
+    Dirty = 3,
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Sstatus {

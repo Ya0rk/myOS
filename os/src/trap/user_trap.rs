@@ -1,11 +1,17 @@
+#![allow(unused_import_braces)]
+#![allow(unused)]
 use log::info;
-use riscv::register::stval;
-use riscv::register::scause::{self, Exception, Interrupt, Trap};
 use crate::sync::{set_next_trigger, yield_now};
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, executor, get_current_hart_id};
 use super::{__return_to_user, set_trap_handler, IndertifyMode};
+/// 导入riscv架构相关的包
+#[cfg(target_arch = "riscv64")]
+use riscv::register::stval;
+#[cfg(target_arch = "riscv64")]
+use riscv::register::scause::{self, Exception, Interrupt, Trap};
 
+#[cfg(target_arch = "riscv64")]
 #[no_mangle]
 /// handle user interrupt, exception, or system call from user space
 pub async fn user_trap_handler() {
@@ -96,6 +102,10 @@ pub async fn user_trap_handler() {
             );
         }
     }
+}
+#[cfg(target_arch = "loongarch64")]
+pub async fn user_trap_handler() {
+    unimplemented!()
 }
 
 #[no_mangle]
