@@ -16,7 +16,7 @@
 - [x] execve
 - [x] exit
 - [x] fork
-- [ ] fstat // 还不完善
+- [x] fstat
 - [x] getcwd
 - [x] getdents
 - [x] getpid
@@ -35,7 +35,7 @@
 - [x] times
 - [x] umount
 - [x] uname
-- [ ] unlink
+- [x] unlink
 - [x] wait
 - [x] waitpid
 - [x] write

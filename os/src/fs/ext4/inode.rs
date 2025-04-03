@@ -202,16 +202,16 @@ impl InodeTrait for Ext4Inode {
         // let file_size = self.size();
         // let st_size = file_size / BLOCK_SIZE;
         // let ino= self.metadata.ino;
-        Kstat::new()
+        // Kstat::new()
 
-        // let mut file = self.file.lock();
-        // match file.fstat() {
-        //     Ok(stat) => {
-        //         let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
-        //         as_inode_stat(stat, atime, mtime, ctime)
-        //     }
-        //     Err(_) => Kstat::new()
-        // }
+        let mut file = self.file.lock();
+        match file.fstat() {
+            Ok(stat) => {
+                let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+                as_inode_stat(stat, atime, mtime, ctime)
+            }
+            Err(_) => Kstat::new()
+        }
     }
     /// 删除文件
     fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
