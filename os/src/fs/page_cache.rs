@@ -97,6 +97,9 @@ impl PageCache {
                 None => {
                     // info!("[PageCache] read from device! now page cnt: {}", self.pages.read().len());
                     // cache中没有找到就新建cache page
+                    // 补commit：修复page_cache
+                    // - let temp_page = self.insert_page(offset);
+                    // + let temp_page = self.insert_page(ppn * PAGE_SIZE);
                     let temp_page = self.insert_page(ppn * PAGE_SIZE);
                     let array = temp_page.frame.ppn.get_bytes_array();
                     self.inode
