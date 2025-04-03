@@ -1,4 +1,3 @@
-#![deny(warnings)]
 #![no_std]
 #![no_main]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
@@ -21,7 +20,7 @@ mod lang_items;
 pub mod mm;
 pub mod fs;
 pub mod task;
-pub mod trap;
+// pub mod trap;
 pub mod sync;
 pub mod utils;
 pub mod syscall;
@@ -74,7 +73,7 @@ pub fn rust_main(hart_id: usize) -> ! {
             "[kernel] ---------- hart {} is starting... ----------",
             hart_id
         );
-        trap::init();
+        hal::trap::init();
         task::init_processors();
         println!("a");
         block_on(fs::init());
@@ -88,7 +87,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         utils::boot_all_harts(hart_id);
     } else {
 
-        trap::init();
+        hal::trap::init();
         mm::init(false);        
     }
     

@@ -4,7 +4,7 @@ use crate::config::HART_NUM;
 use crate::mm::switch_to_kernel_pgtable;
 use crate::sync::disable_interrupt;
 use crate::sync::enable_interrupt;
-use crate::trap::TrapContext;
+use crate::hal::trap::TrapContext;
 use crate::utils::backtrace;
 use alloc::sync::Arc;
 

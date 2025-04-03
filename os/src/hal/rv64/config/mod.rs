@@ -1,0 +1,1 @@
+//! `os/src/hal/rv64/config/mod.rs`
