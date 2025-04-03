@@ -172,7 +172,7 @@ impl TaskControlBlock {
         // 因为我在do_wait4中要获取zombie，也就是自己
         // 后序修改do_wait4逻辑应该就能删除这里
         // info!("[exec] current taskpid = {}", current_task().unwrap().get_pid());
-        self.add_child(current_task().unwrap());
+        // self.add_child(current_task().unwrap());
 
 
         debug!("task.exec.pid={}", self.pid.0);
@@ -261,8 +261,8 @@ impl TaskControlBlock {
         new_task.add_thread_group_member(new_task.clone());
 
         // 需要将自己加入？？也是wait的问题？
-        new_task.add_child(new_task.clone());
-        info!("process fork success, new pid = {}", new_task.get_pid());
+        // new_task.add_child(new_task.clone());
+        info!("process fork success, new pid = {}, parent pid = {}", new_task.get_pid(), new_task.get_parent().unwrap().get_pid());
         
         new_task
     }
@@ -333,7 +333,7 @@ impl TaskControlBlock {
         new_task.add_thread_group_member(new_task.clone());
 
         // 这里也要把自己加入自己的child
-        new_task.add_child(new_task.clone());
+        // new_task.add_child(new_task.clone());
 
         new_task
     }
@@ -369,8 +369,8 @@ impl TaskControlBlock {
                 let init_proc = get_init_proc();
                 for (child_pid, child) in 
                     lock_child.
-                    iter().
-                    filter(|(find_pid, _)| **find_pid != pid) // 需要过滤掉自己，因为在process_fork中把自己加入了child
+                    iter()
+                    // filter(|(find_pid, _)| **find_pid != pid) // 需要过滤掉自己，因为在process_fork中把自己加入了child
                 {
                     if child.is_zombie() {
                         info!("[do_exit] child pdi = {} is zmobie", child_pid);
@@ -391,6 +391,7 @@ impl TaskControlBlock {
                 }
                 lock_child.clear();
             }
+            drop(lock_child);
             // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
             match self.get_parent() {
                 Some(parent) => {
@@ -574,7 +575,8 @@ impl TaskControlBlock {
 
     /// 将所有子线程设置为zombie
     pub fn kill_all_thread(self: &Arc<Self>) {
-        for (_, thread) in self.thread_group.lock().tasks.iter() {
+        let lock_thread_gp = self.thread_group.lock();
+        for (_, thread) in lock_thread_gp.tasks.iter() {
             thread.upgrade().unwrap().set_zombie();
         }
     }
@@ -588,23 +590,27 @@ impl TaskControlBlock {
     }
 
     /// 将所有子线程设置为stopped挂起
-    pub fn stop_all_thread(self: &Arc<Self>) {
+    pub fn stop_all_thread(self: &Arc<Self>, signo: SigNom) {
         for (_, thread) in self.thread_group.lock().tasks.iter() {
             let thread = thread.upgrade().unwrap();
             thread.set_stopped();
             thread.set_wake_up_signal(SigMask::SIGCONT | SigMask::SIGKILL | SigMask::SIGSTOP);
         }
+        // self.do_notify_parent(signo, SigCode::CLD_STOPPED);
         self.do_notify_parent(SigNom::SIGCHLD, SigCode::CLD_STOPPED);
+
     }
 
     /// 当收到SIGCONT时，将stopped的子线程设置为running
-    pub fn cont_all_thread(self: &Arc<Self>) {
+    pub fn cont_all_thread(self: &Arc<Self>, signo: SigNom) {
         for (_, thread) in self.thread_group.lock().tasks.iter() {
             let thread = thread.upgrade().unwrap();
             thread.set_running();
             self.wake_up();
         }
+        // self.do_notify_parent(signo, SigCode::CLD_CONTINUED);
         self.do_notify_parent(SigNom::SIGCHLD, SigCode::CLD_CONTINUED);
+
     }
 
     /// 获取当前进程的pgid：组id
@@ -681,10 +687,6 @@ impl TaskControlBlock {
     }
 
     // children
-    // /// 获取所有子进程： Vec
-    // pub fn children(&self) -> Vec<Arc<TaskControlBlock>> {
-    //     self.children.lock().clone()
-    // }
     /// 添加子进程
     pub fn add_child(&self, child: Arc<TaskControlBlock>) {
         self.children.lock().insert(child.get_pid(), child);

@@ -10,12 +10,12 @@ use crate::{mm::translated_byte_buffer,
 /// 这里包含了所有默认的信号处理方式
 
 pub fn do_signal(task:&Arc<TaskControlBlock>) {
-    let old_sigmask = task.get_blocked();
     let trap_cx = task.get_trap_cx_mut();
     let all_len = task.sig_pending.lock().len();
     let mut cur = 0;
 
     while let Some(siginfo) = task.sig_pending.lock().take_one() {
+        let old_sigmask = task.get_blocked();
         cur += 1;
         // 避免队列中全是被阻塞的信号，造成死循环
         if cur > all_len {
@@ -34,7 +34,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
         let sig_handler = task.handler.lock().fetch_signal_handler(signo).sa;
 
-        info!("find a signal: {} ." , signo);
+        info!("[do_signal] find a signal: {} ." , signo);
 
         // if intr && action.flags.contains(SigActionFlag::SA_RESTART) {
         //     cx.sepc -= 4;
@@ -81,8 +81,8 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 fn default_func(task: &Arc<TaskControlBlock>, signo: SigNom) {
     match signo {
         SigNom::SIGCHLD | SigNom::SIGURG  | SigNom::SIGWINCH => {}, // no Core Dump
-        SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => do_signal_stop(task),   // no core dump
-        SigNom::SIGCONT => do_signal_continue(task),         // no core dump
+        SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => do_signal_stop(task, signo),   // no core dump
+        SigNom::SIGCONT => do_signal_continue(task, signo),         // no core dump
         _ => do_group_exit(task, signo),
     }
 }
@@ -96,16 +96,16 @@ fn do_group_exit(task: &Arc<TaskControlBlock>, signo: SigNom) {
 
 /// 在 Linux 中，当子进程状态变化时，内核会向父进程发送 SIGCHLD 信号，
 /// 并通过 siginfo_t 结构体中的 si_code 字段告知具体事件类型。
-fn do_signal_stop(task: &Arc<TaskControlBlock>) {
+fn do_signal_stop(task: &Arc<TaskControlBlock>, signo: SigNom) {
     // 挂起子进程并通知父进程
-    task.stop_all_thread();
+    task.stop_all_thread(signo);
 }
 
 /// 在 Linux 中，当子进程状态变化时，内核会向父进程发送 SIGCHLD 信号，
 /// 并通过 siginfo_t 结构体中的 si_code 字段告知具体事件类型。
-fn do_signal_continue(task: &Arc<TaskControlBlock>) {
+fn do_signal_continue(task: &Arc<TaskControlBlock>, signo: SigNom) {
     // 唤醒子进程并通知父进程
-    task.cont_all_thread();
+    task.cont_all_thread(signo);
 }
 
 /// 从Pantheon借鉴, 不知道可不可以使用UserBuffer

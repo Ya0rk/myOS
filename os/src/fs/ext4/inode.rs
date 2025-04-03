@@ -198,12 +198,6 @@ impl InodeTrait for Ext4Inode {
     }
     /// 获取文件状态
     fn fstat(&self) -> Kstat {
-        // let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
-        // let file_size = self.size();
-        // let st_size = file_size / BLOCK_SIZE;
-        // let ino= self.metadata.ino;
-        // Kstat::new()
-
         let mut file = self.file.lock();
         match file.fstat() {
             Ok(stat) => {
