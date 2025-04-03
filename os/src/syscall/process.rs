@@ -194,11 +194,19 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
     let target_task = {
         let locked_child = task.children.lock().clone();
         match pid {
+            // pid = -1: 等待任意子进程
             -1 => {
-                locked_child.values().find(|task| task.is_zombie() && task.get_pid() != self_pid).cloned()// 这里过滤掉了自己
+                info!("wait any child");
+                locked_child.values().find(|task| task.is_zombie() ).cloned()// 这里过滤掉了自己
             }
+            // pid > 0：等待进程id为pid的子进程
             p if p > 0 => {
+                info!("wait target pid = {}", p);
                 locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
+            }
+            // pid < -1: 等待进程组标识符与pid绝对值相等的所有子进程
+            p if p < -1 => {
+                locked_child.values().find(|task| task.get_pid() == p.abs() as usize).cloned()
             }
             _ => unimplemented!(),
         }
@@ -245,7 +253,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
                     None => return Err(Errno::EINTR),
                 }
             };
-            info!("[sys_wait4]: find a child: pid = {}, exit_code = {}.", child_pid, exit_code);
+            info!("[sys_wait4]: task {} find a child: pid = {}, exit_code = {}.", task.get_pid(), child_pid, exit_code);
             task.do_wait4(child_pid, wstatus as *mut i32, exit_code);
             // info!("[do_wait4] child_pid = {}", child_pid);
             return Ok(child_pid);
