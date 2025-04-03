@@ -137,10 +137,19 @@ pub fn sys_clone(
         *translated_refmut(token, ptid as *mut u32) = new_pid as u32;
     }
     // 检查是否需要设置子进程的 set_child_tid,clear_child_tid
+
+    // 当使用 clone() 系统调用并设置 CLONE_CHILD_SETTID 标志时，
+    // set_child_tid 会被设置为传递给 clone() 的 ctid 参数的值。
+    // 新线程启动时，会将其线程 ID 写入该地址
     if flag.contains(CloneFlags::CLONE_CHILD_SETTID) {
+        new_task.set_child_settid(ctid);
         *translated_refmut(token, ctid as *mut u32) = new_pid as u32;
     }
     // 检查是否需要设置child_cleartid,在线程退出时会将指向的地址清零
+
+    // 当使用 CLONE_CHILD_CLEARTID 标志时，
+    // clear_child_tid 会被设置为传递给 clone() 的 ctid 参数的值。
+    // 当一个线程终止且其 clear_child_tid 不为 NULL 时，内核会在该地址写入 0，
     if flag.contains(CloneFlags::CLONE_CHILD_CLEARTID) {
         new_task.set_child_cleartid(ctid);
     }
@@ -275,4 +284,11 @@ pub fn sys_getrandom(
             buflen
     ));
     Ok(RNG.lock().fill_buf(buffer))
+}
+
+/// set pointer to thread ID
+pub fn sys_set_tid_address(tidptr: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    task.set_child_cleartid(tidptr);
+    Ok(task.get_pid())
 }
