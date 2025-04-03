@@ -12,9 +12,11 @@ use crate::{
     utils::{Errno, SysResult}
 };
 
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{string::ToString, sync::Arc, vec::Vec};
 use alloc::vec;
 use alloc::boxed::Box;
+
+use super::NormalFile;
 
 pub struct Ext4Inode {
     pub metadata : InodeMeta,
@@ -220,6 +222,13 @@ impl InodeTrait for Ext4Inode {
         }
         Ok(0)
     }
+
+    fn link(&self, new_path: &str) -> SysResult<usize> {
+        let mut file = self.file.lock();
+        file.link(new_path);
+        Ok(0)
+    }
+
     fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, > {
         self.metadata.timestamp.lock()
     }

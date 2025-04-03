@@ -51,7 +51,7 @@ pub enum SysCode {
     SYSCALL_DUP3      = 24,
     SYSCALL_MKDIRAT   = 34,
     SYSCALL_UNLINKAT  = 35,
-    // SYSCALL_LINKAT    = 37,
+    SYSCALL_LINKAT    = 37,
     SYSCALL_UMOUNT2   = 39,
     SYSCALL_MOUNT     = 40,
     SYSCALL_CHDIR     = 49,
@@ -93,6 +93,7 @@ impl SysCode {
             Self::SYSCALL_DUP3 => "dup3",
             Self::SYSCALL_MKDIRAT => "mkdirat",
             Self::SYSCALL_UNLINKAT => "unlinkat",
+            Self::SYSCALL_LINKAT => "linkat",
             Self::SYSCALL_UMOUNT2 => "umount2",
             Self::SYSCALL_MOUNT => "mount",
             Self::SYSCALL_CHDIR => "chdir",
@@ -197,3 +198,9 @@ pub const AT_REMOVEDIR: u32 = 0x200;
 
 /// 跟随符号链接（即操作符号链接指向的目标文件）
 pub const AT_SYMLINK_FOLLOW: u32 = 0x400;
+
+// 禁止自动挂载文件系统（当使用 *at 系列函数时，不自动挂载路径中的挂载点）
+pub const AT_NO_AUTOMOUNT: u32 = 0x800;
+
+// 允许操作空路径（当使用 *at 系列函数时，允许文件描述符指向非文件系统中的对象）
+pub const AT_EMPTY_PATH: u32 = 0x1000;
