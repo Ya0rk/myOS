@@ -18,7 +18,7 @@ pub fn backtrace() {
         // unimplemented!();
         let mut fp: usize = 0;
         // asm!("mv {}, fp", out(reg) fp);
-        fp = crate::arch::fp_read();
+        fp = crate::hal::arch::fp_read();
         let mut start: VirtAddr = VirtAddr::from(fp).floor().into();
         let mut end: VirtAddr = VirtAddr::from(fp).ceil().into();
         let mut fp_addr = VirtAddr::from(fp);
