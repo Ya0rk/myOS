@@ -1,5 +1,6 @@
 pub mod sbi;
 pub mod sstatus;
+pub mod interrupt;
 use core::arch::asm;
 use riscv::register::satp;
 

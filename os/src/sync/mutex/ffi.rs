@@ -1,6 +1,6 @@
 use core::ops::{Deref, DerefMut};
 
-use crate::sync::interrupt::InterruptGuard;
+use crate::hal::arch::interrupt::InterruptGuard;
 use super::MutexOperations;
 
 
