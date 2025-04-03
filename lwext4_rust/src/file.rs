@@ -567,6 +567,11 @@ impl Ext4File {
         Ok(EOK as usize)
     }
 
+    /// 获取文件的硬链接数量
+    ///
+    /// # 返回值
+    /// - `Ok(u32)`: 成功时返回文件的硬链接数量
+    /// - `Err(i32)`: 失败时返回错误码
     pub fn links_cnt(&mut self) -> Result<u32, i32> {
         let mut cnt: u32 = 0;
         let c_path = self.file_path.clone();

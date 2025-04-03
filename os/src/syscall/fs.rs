@@ -1,10 +1,14 @@
+use core::cell::SyncUnsafeCell;
 use alloc::string::String;
 use log::info;
+use lwext4_rust::file;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{ join_path_2_absolute, mkdir, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
+
+use super::ffi::AT_REMOVEDIR;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
@@ -435,4 +439,28 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     };
 
     result
+}
+
+
+pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let path = translated_str(token, path);
+    let is_relative = !path.starts_with("/");
+    let base = task.get_current_path();
+
+    if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
+        let file = file_class.file()?;
+        let is_dir = file.is_dir();
+        if is_dir && flags != AT_REMOVEDIR {
+            return Err(Errno::EISDIR);
+        }
+        if flags == AT_REMOVEDIR && !is_dir {
+            return Err(Errno::ENOTDIR);
+        }
+        let child_abs = join_path_2_absolute(base, path);
+        file.get_inode().unlink(&child_abs);
+    }
+    
+    Ok(0)
 }

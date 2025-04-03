@@ -2,9 +2,8 @@ pub type SysResult<T=()> = Result<T, Errno>;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Errno {
-    // 这是waitpid使用的返回值
-    NOPID = -1,
-    HAVEPID = -2,
+    /// 处理返回值为-1的情况
+    EBADCALL = -1,
 
     EUNDEF = 0,
     EPERM = 1,
@@ -138,8 +137,6 @@ pub enum Errno {
     ENOTRECOVERABLE = 131,
     ERFKILL = 132,
     EHWPOISON = 133,
-    /// 处理返回值为-1的情况
-    EBADCALL = 200,
 }
 
 impl Errno {

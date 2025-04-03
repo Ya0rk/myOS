@@ -3,6 +3,7 @@ pub const SYSCALL_GETCWD: usize     = 17;
 pub const SYSCALL_DUP: usize        = 23;
 pub const SYSCALL_DUP3: usize       = 24;
 pub const SYSCALL_MKDIRAT: usize    = 34;
+pub const SYSCALL_UNLINKAT: usize   = 35;
 pub const SYSCALL_UMOUNT2: usize    = 39;
 pub const SYSCALL_MOUNT: usize      = 40;
 pub const SYSCALL_CHDIR: usize      = 49;

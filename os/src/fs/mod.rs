@@ -230,7 +230,6 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
 }
 
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
-    
     let new_path = Path::string2path(
         join_path_2_absolute(
             cwd.to_string(), 
@@ -265,8 +264,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         }
     };
 
-    if let Some(inode) = parent_inode.walk(&abs_path) {
-        info!("aaaa");   
+    if let Some(inode) = parent_inode.walk(&abs_path) { 
         return inode.do_open(
             Some(Arc::downgrade(&parent_inode)),
             flags,
