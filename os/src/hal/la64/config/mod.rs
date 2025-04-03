@@ -1,0 +1,1 @@
+pub const UART_ADDR: usize = 0x0_1FE0_01E0 | 0x9000_0000_0000_0000;

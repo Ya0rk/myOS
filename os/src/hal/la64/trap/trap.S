@@ -1,6 +1,7 @@
-    .section k_eentry
-    .globl __alltraps
-    .globl __restore
+.section .text
+    .globl __trap_from_user
+    .globl __return_to_user
+    .global __trap_from_kernel
     .align 4
 
 # user -> kernel
@@ -109,10 +110,8 @@ __return_to_user:
     csrwr   $sp, 0x502        #将用户栈指针与内核栈指针交换
     ertn
 
-.section k1_eentry
-.globl kernel_trap_entry
 .align 4
-kernel_trap_entry:
+__trap_from_kernel:
     addi.d  $sp, $sp, -264
     st.d    $ra, $sp, 0
     st.d    $tp, $sp, 8
@@ -150,7 +149,7 @@ kernel_trap_entry:
     st.d    $t0, $sp, 248
     st.d    $t1, $sp, 256
 
-    la.abs  $t0, trap_handler_kernel
+    la.abs  $t0, kernel_trap_handler
     # call the C trap handler in trap.c
     jirl    $ra, $t0, 0
 
@@ -194,3 +193,8 @@ kernel_trap_entry:
 
     addi.d  $sp, $sp, 264
     ertn
+
+.section .text.sigret
+.align 12
+.global __sigret_helper
+__sigret_helper:
