@@ -108,7 +108,7 @@ pub fn get_current_hart_id() -> usize {
     //     };
     // }
     // hartid
-    crate::arch::tp_read()
+    crate::hal::arch::tp_read()
 }
 
 ///The main part of process execution and scheduling
@@ -147,7 +147,7 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 pub fn current_user_token() -> usize {
     // riscv::register::satp::read().bits()
     // unimplemented!()
-    crate::arch::satp_read()
+    crate::hal::arch::satp_read()
 }
 
 ///Get the mutable reference to trap context of current task

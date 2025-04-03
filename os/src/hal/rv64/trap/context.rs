@@ -1,7 +1,7 @@
 use core::arch::asm;
 // use riscv::register::sstatus::FS;
 
-use crate::arch::sstatus::{self, Sstatus, SPP, FS};
+use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
 
 
 

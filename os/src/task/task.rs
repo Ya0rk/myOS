@@ -4,7 +4,7 @@ use core::task::Waker;
 
 use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
-use crate::arch::shutdown;
+use crate::hal::arch::shutdown;
 use crate::fs::FileTrait;
 use crate::mm::{translated_refmut, MapPermission, MemorySet};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};

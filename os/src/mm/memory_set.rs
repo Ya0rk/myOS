@@ -267,8 +267,8 @@ impl MemorySet {
     ///Refresh TLB with `sfence.vma`
     pub unsafe fn activate(& self) {
         let satp = self.page_table.token();
-        crate::arch::satp_write(satp);
-        crate::arch::sfence();
+        crate::hal::arch::satp_write(satp);
+        crate::hal::arch::sfence();
         // unsafe {
         //     satp::write(satp);
         //     asm!("sfence.vma");
