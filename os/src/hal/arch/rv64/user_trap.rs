@@ -30,8 +30,8 @@ pub fn user_trap_handler() {
                     cx.user_x[10] = ret as usize;
                 }
                 Err(err) => {
-                    // TODO：这里单独处理的waitpid返回值情况，后序要修改
-                    if err as isize == -1 || err as isize == -2 {
+                    // TODO：这里单独处理返回值-1情况，后序要修改
+                    if err as isize == -1 {
                         cx.user_x[10] = err as usize;
                     } else {
                         cx.user_x[10] = -(err as isize) as usize;

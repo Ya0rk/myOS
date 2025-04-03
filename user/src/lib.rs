@@ -55,6 +55,10 @@ bitflags! {
     }
 }
 
+pub fn unlink(dirfd: isize, path: &str, flags: OpenFlags) -> isize {
+    sys_unlinkat(dirfd, path, flags.bits())
+}
+
 pub fn getcwd(buf: &mut [u8], size: usize) -> isize {
     sys_getcwd(buf, size)
 }

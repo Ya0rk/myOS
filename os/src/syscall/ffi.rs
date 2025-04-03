@@ -50,7 +50,7 @@ pub enum SysCode {
     SYSCALL_DUP       = 23,
     SYSCALL_DUP3      = 24,
     SYSCALL_MKDIRAT   = 34,
-    // SYSCALL_UNLINKAT  = 35,
+    SYSCALL_UNLINKAT  = 35,
     // SYSCALL_LINKAT    = 37,
     SYSCALL_UMOUNT2   = 39,
     SYSCALL_MOUNT     = 40,
@@ -92,7 +92,7 @@ impl SysCode {
             Self::SYSCALL_DUP => "dup",
             Self::SYSCALL_DUP3 => "dup3",
             Self::SYSCALL_MKDIRAT => "mkdirat",
-            
+            Self::SYSCALL_UNLINKAT => "unlinkat",
             Self::SYSCALL_UMOUNT2 => "umount2",
             Self::SYSCALL_MOUNT => "mount",
             Self::SYSCALL_CHDIR => "chdir",
@@ -188,3 +188,12 @@ bitflags! {
         const WCONTINUED = 1 << 3;
     }
 }
+
+/// 不跟随符号链接（即操作符号链接本身而非其指向的目标）
+pub const AT_SYMLINK_NOFOLLOW: u32 = 0x100;
+
+/// 允许删除目录（通常与unlinkat等系统调用一起使用）
+pub const AT_REMOVEDIR: u32 = 0x200;
+
+/// 跟随符号链接（即操作符号链接指向的目标文件）
+pub const AT_SYMLINK_FOLLOW: u32 = 0x400;
