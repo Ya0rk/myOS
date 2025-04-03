@@ -18,6 +18,14 @@ pub fn fp_read() -> usize {
         fp
     }
 }
+pub fn ra_read() -> usize {
+    
+    unsafe {
+        let mut ra: usize;
+        asm!("mv {}, ra", out(reg) ra);
+        ra
+    }
+}
 /// riscv::register::satp::read().bits()
 pub fn satp_read() -> usize {
     riscv::register::satp::read().bits()

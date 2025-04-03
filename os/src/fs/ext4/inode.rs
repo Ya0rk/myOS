@@ -47,6 +47,12 @@ impl Ext4Inode {
 
 #[async_trait]
 impl InodeTrait for Ext4Inode {
+    
+    fn get_page_cache(&self) -> Option<Arc<PageCache>> {
+        return self.page_cache.as_ref().cloned();
+    }
+
+
     /// 获取文件大小
     fn size(&self) -> usize {
         let mut lock_file = self.file.lock();

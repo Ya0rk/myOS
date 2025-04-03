@@ -1,12 +1,19 @@
+#![allow(warnings)]
 // #![deny(warnings)]
 #![no_std]
 #![no_main]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
+#![feature(riscv_ext_intrinsics)]
 #![feature(alloc_error_handler)]
 #![feature(negative_impls)]
+#![feature(step_trait)]
+#![feature(const_ops)]
+#![feature(const_trait_impl)]
+#![feature(core_intrinsics)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]
+#![feature(map_try_insert)]
 
 #![allow(unused)]
 extern crate alloc;
@@ -66,7 +73,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         
         #[cfg(feature = "test")]
         {
-            mm::remap_test();
+            // mm::remap_test();
             fs::path_test();
         }
 

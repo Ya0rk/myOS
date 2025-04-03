@@ -1,6 +1,6 @@
 use core::sync::atomic::AtomicUsize;
 use crate::{
-    fs::{ext4::NormalFile, ffi::InodeType, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
+    fs::{ext4::NormalFile, ffi::InodeType, page_cache::PageCache, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
     utils::SysResult
 };
@@ -196,6 +196,9 @@ pub trait InodeTrait: Send + Sync {
     fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
 
     fn is_dir(&self) -> bool;
+
+    /// get page cache from ext4 file
+    fn get_page_cache(&self) -> Option<Arc<PageCache>>;
 }
 
 impl dyn InodeTrait {

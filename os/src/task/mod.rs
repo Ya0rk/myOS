@@ -9,6 +9,7 @@ mod sched;
 mod thread_group;
 #[allow(clippy::module_inception)]
 mod task;
+pub mod aux;
 
 pub use fd::{FdTable, Fd};
 // pub use context::TaskContext;
@@ -45,9 +46,9 @@ use crate::fs::open_file;
 // }
 ///Add init process to the manager
 pub fn add_initproc() {
-    if let Some(FileClass::File(file)) = open_file("initproc", OpenFlags::O_RDONLY) {
-        let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
-        TaskControlBlock::new(&elf_data);
+    if let Some(file) = open_file("initproc", OpenFlags::O_RDONLY) {
+        // let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
+        TaskControlBlock::new(file);
     } else {
         panic!("error: initproc from Abs File!");
     }
