@@ -1,13 +1,18 @@
-// os/src/hal/mod.rs
+//! `os/src/hal/mod.rs`
+//! 硬件抽象层Hardware Abstraction Layer
 
-// #[cfg(target_arch = "loongarch64")]
-pub use arch::la64::timer;
-// #[cfg(target_arch = "loongarch64")]
-pub use arch::la64::interrupt;
 
-// #[cfg(target_arch = "riscv64")]
-// pub use arch::rv64::timer;
-// #[cfg(target_arch = "riscv64")]
-// pub use arch::rv64::interrupt;
+#[cfg(target_arch = "riscv64")]
+pub mod rv64;
+#[cfg(target_arch = "riscv64")]
+pub use rv64::*;
 
-pub mod arch;
+#[cfg(target_arch = "loongarch64")]
+pub mod la64;
+#[cfg(target_arch = "loongarch64")]
+pub use la64::*;
+
+
+
+
+
