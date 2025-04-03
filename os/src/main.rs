@@ -28,6 +28,7 @@ pub mod syscall;
 pub mod drivers;
 pub mod arch;
 pub mod signal;
+pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
@@ -60,7 +61,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         utils::logo();
 
         mm::init(true);
-        
+        println!("finished mm::init");
         #[cfg(feature = "test")]
         {
             mm::remap_test();
@@ -68,7 +69,6 @@ pub fn rust_main(hart_id: usize) -> ! {
         }
 
         utils::logger_init();
-
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
