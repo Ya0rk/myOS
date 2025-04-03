@@ -34,11 +34,11 @@ use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
-#[cfg(target_arch = "riscv64")]
-global_asm!(include_str!("entry.asm"));
+// #[cfg(target_arch = "riscv64")]
+// global_asm!(include_str!("entry.asm"));
 
-#[cfg(target_arch = "loongarch64")]
-global_asm!(include_str!("entry_la.asm"));
+// #[cfg(target_arch = "loongarch64")]
+// global_asm!(include_str!("entry_la.asm"));
 
 #[macro_use]
 extern crate lazy_static;
@@ -56,8 +56,8 @@ pub fn rust_main(hart_id: usize) -> ! {
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
         .is_ok() 
     {
-        utils::clear_bss();
-        utils::logo();
+        hal::entry::boot::clear_bss();
+        hal::entry::boot::logo();
 
         mm::init(true);
         println!("finished mm::init");
@@ -84,7 +84,7 @@ pub fn rust_main(hart_id: usize) -> ! {
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]
-        utils::boot_all_harts(hart_id);
+        hal::entry::boot::boot_all_harts(hart_id);
     } else {
 
         hal::trap::init();
