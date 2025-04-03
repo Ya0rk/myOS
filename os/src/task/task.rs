@@ -52,7 +52,8 @@ pub struct TaskControlBlock {
     trap_cx:        SyncUnsafeCell<TrapContext>,
     // task_cx:        SyncUnsafeCell<TaskContext>,// 迟早会删
     time_data:      SyncUnsafeCell<TimeData>,
-    child_cleartid: SyncUnsafeCell<Option<usize>>,
+    clear_child_tid:SyncUnsafeCell<Option<usize>>,
+    set_child_tid:  SyncUnsafeCell<Option<usize>>,
 
     exit_code:      AtomicI32,
 }
@@ -111,7 +112,8 @@ impl TaskControlBlock {
             trap_cx: SyncUnsafeCell::new(trap_cx),
             // task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
             time_data: SyncUnsafeCell::new(TimeData::new()),
-            child_cleartid: SyncUnsafeCell::new(None),
+            clear_child_tid: SyncUnsafeCell::new(None),
+            set_child_tid:   SyncUnsafeCell::new(None),
 
             exit_code: AtomicI32::new(0),
         });
@@ -196,7 +198,8 @@ impl TaskControlBlock {
         let waker = SyncUnsafeCell::new(None);
         let parent = new_shared(Some(Arc::downgrade(self)));
         let current_path = self.current_path.clone();
-        let child_cleartid = SyncUnsafeCell::new(None);
+        let clear_child_tid = SyncUnsafeCell::new(None);
+        let set_child_tid = SyncUnsafeCell::new(None);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().clone())
@@ -252,7 +255,8 @@ impl TaskControlBlock {
             trap_cx,
             // task_cx,
             time_data,
-            child_cleartid,
+            clear_child_tid,
+            set_child_tid,
             exit_code,
         });
         // add child
@@ -285,7 +289,8 @@ impl TaskControlBlock {
         let waker = SyncUnsafeCell::new(None);
         let trap_cx = SyncUnsafeCell::new(*self.get_trap_cx());
         let time_data = SyncUnsafeCell::new(TimeData::new());
-        let child_cleartid = SyncUnsafeCell::new(None);
+        let clear_child_tid = SyncUnsafeCell::new(None);
+        let set_child_tid = SyncUnsafeCell::new(None);
         let exit_code = AtomicI32::new(0);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
@@ -326,7 +331,8 @@ impl TaskControlBlock {
             waker,
             trap_cx,
             time_data,
-            child_cleartid,
+            clear_child_tid,
+            set_child_tid,
             exit_code,
         });
 
@@ -773,12 +779,17 @@ impl TaskControlBlock {
         unsafe { *self.waker.get() = Some(waker) }
     }
 
+    // tid
     pub fn get_child_cleartid(&self) -> Option<usize> {
-        unsafe { *self.child_cleartid.get() }
+        unsafe { *self.clear_child_tid.get() }
     }
-    /// 设置child_cleartid，参考：Linux系统编程手册500页
+    /// 设置clear_child_tid，参考：Linux系统编程手册500页
     pub fn set_child_cleartid(&self, ctid: usize) {
-        unsafe { *self.child_cleartid.get() = Some(ctid) };
+        unsafe { *self.clear_child_tid.get() = Some(ctid) };
+    }
+    /// 设置set_child_tid字段
+    pub fn set_child_settid(&self, ctid: usize) {
+        unsafe { *self.set_child_tid.get() = Some(ctid) };
     }
 }
 

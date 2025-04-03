@@ -369,7 +369,12 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_umount2(target: *const u8, flags: u32) -> SysResult<usize> {
-    UmountFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
+    let ufg = UmountFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
+    if ufg.contains(UmountFlags::MNT_EXPIRE)
+        && (ufg.contains(UmountFlags::MNT_DETACH) || ufg.contains(UmountFlags::MNT_FORCE))
+    {
+        return Err(Errno::EINVAL);
+    }
 
     let token = current_user_token();
     let target = translated_str(token, target);

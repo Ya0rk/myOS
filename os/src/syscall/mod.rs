@@ -41,6 +41,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_EXEC => sys_exec(args[0] as usize).await,
         SysCode::SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as usize).await,
         SysCode::GETRANDOM => sys_getrandom(args[0] as *const u8, args[1] as usize, args[2] as usize),
+        SysCode::SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as usize),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }
