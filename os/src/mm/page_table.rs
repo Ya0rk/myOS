@@ -186,7 +186,7 @@ impl PageTable {
                 break;
             }
             if !pte.is_valid() {
-                let frame = frame_alloc().unwrap();
+                let frame = frame_alloc().expect("no free space to allocate!");
                 *pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
                 self.frames.push(frame);
             }
@@ -217,7 +217,7 @@ impl PageTable {
     /// 建立虚拟地址和物理地址的映射
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
-        assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
+        debug_assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
     pub fn map_force(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
@@ -229,6 +229,7 @@ impl PageTable {
     pub fn map_kernel_range(&mut self, range_va: Range<VirtAddr>, flags: PTEFlags) {
         // println!("[map kernel range] range_va:{:?}", range_va);
         let range_vpn = range_va.start.floor()..range_va.end.ceil();
+        println!("[map_kernel_range] map area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
         for vpn in range_vpn {
             let ppn = kernel_map_vpn_to_ppn(vpn);
             // println!("[map vpn] vpn:{:#x}, ppn:{:#x}", vpn.0, ppn.0);
@@ -237,6 +238,7 @@ impl PageTable {
     }    
     pub fn unmap_kernel_range(&mut self, range_va: Range<VirtAddr>) {
         let range_vpn = range_va.start.floor()..range_va.end.ceil();
+        info!("[unmap_kernel_range] unmap area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
         for vpn in range_vpn {
             let ppn = kernel_map_vpn_to_ppn(vpn);
             self.unmap(vpn);
@@ -245,8 +247,8 @@ impl PageTable {
     #[allow(unused)]
     /// 解除映射
     pub fn unmap(&mut self, vpn: VirtPageNum) {
-        let pte = self.find_pte(vpn).unwrap();
-        assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
+        let pte = self.find_pte(vpn).expect("leaf pte is not valid");
+        debug_assert!(pte.is_valid(), "vpn {:?} is invalid before unmapping", vpn);
         *pte = PageTableEntry::empty();
     }
     pub fn translate(&self, vpn: VirtPageNum) -> Option<PageTableEntry> {
