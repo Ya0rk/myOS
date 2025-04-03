@@ -3,6 +3,7 @@ use alloc::string::String;
 use log::info;
 use lwext4_rust::file;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
+use crate::fs::ext4::NormalFile;
 use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};
@@ -462,5 +463,32 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
         file.get_inode().unlink(&child_abs);
     }
     
+    Ok(0)
+}
+
+/// make a new name for a file: a hard link
+pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let old_path = translated_str(token, oldpath);
+    let new_path = translated_str(token, newpath);
+    let cwd = task.get_current_path();
+
+    if olddirfd == AT_FDCWD {
+        if let Some(file_class) = open(&cwd, &old_path, OpenFlags::O_RDWR) {
+            let file = file_class.file()?;
+            let has_same = file.is_child(&new_path);
+            if has_same {
+                return Err(Errno::EEXIST);
+            }
+            file.get_inode().link(&new_path);
+            let new_file = NormalFile::new(
+                file.metadata.flags.read().clone(),
+                file.parent.clone(),
+                file.metadata.inode.clone(),
+                new_path
+            );
+        }
+    }
     Ok(0)
 }

@@ -169,6 +169,10 @@ pub trait InodeTrait: Send + Sync {
         todo!();
     }
 
+    fn link(&self, _new_path: &str) -> SysResult<usize> {
+        todo!();
+    }
+
     /// Reads the entire contents of the file.
     ///
     /// # Returns
