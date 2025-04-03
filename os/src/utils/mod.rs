@@ -1,5 +1,5 @@
 ///! This module contains utility functions that are used throughout the OS.
-mod boot;
+// mod boot;
 mod logger;
 mod errtype;
 mod random;
@@ -11,7 +11,7 @@ use crate::mm::VirtAddr;
 pub use errtype::{Errno, SysResult};
 pub use logger::logger_init;
 pub use random::{LcgRng, RNG};
-pub use boot::{boot_all_harts, jump_helper, clear_bss, logo};
+// pub use boot::{boot_all_harts, jump_helper, clear_bss, logo};
 
 pub fn backtrace() {
     unsafe {
