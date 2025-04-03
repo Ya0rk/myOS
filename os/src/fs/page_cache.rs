@@ -2,9 +2,11 @@ use core::cmp::min;
 
 use alloc::{collections::btree_map::BTreeMap, sync::{Arc, Weak}};
 use hashbrown::HashSet;
+use log::info;
 use spin::RwLock;
 use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::SleepLock, utils::{Errno, SysResult}};
 use super::InodeTrait;
+use crate::mm::page::*;
 
 /// 使用对齐的地址作为key
 pub struct PageCache {
@@ -47,11 +49,10 @@ impl PageCache {
         offset: usize
     ) -> Arc<Page> {
         let offset_aligned = offset & !(PAGE_SIZE - 1);
-        let frame = frame_alloc().expect("no more frame!");
-        let page = Arc::new(Page::new(
-            frame
-        ));
+        // let frame = frame_alloc().expect("no more frame!");
+        let page = Page::new_file();
         self.pages.write().insert(offset_aligned, page.clone());
+        // info!("insert page: {:#x}", self.pages.read().get(&offset_aligned).unwrap().frame.ppn.0);
         page
     }
 
@@ -61,7 +62,7 @@ impl PageCache {
     ) -> SysResult<usize> {
         for (page_addr_aligned, page) in self.pages.read().iter() {
             let inode = self.inode.read().as_ref().ok_or(Errno::EBADF)?.upgrade().unwrap();
-            let mut dirty_blocks = page.dirty_blocks.lock().await;
+            let mut dirty_blocks = page.dirty_set().unwrap().lock().await;
             if !dirty_blocks.is_empty() {
                 for idx in dirty_blocks.iter() {
                     let start_offset = idx * BLOCK_SIZE;
@@ -85,13 +86,21 @@ impl PageCache {
         let ppn_end = (offset + buf.len()).div_ceil(PAGE_SIZE);
         let mut page_offset = offset % PAGE_SIZE;
         let mut buf_cur = 0;
+        
 
         for ppn in ppn_start..ppn_end {
             let page = match self.get_page(ppn * PAGE_SIZE){
-                Some(page) => page, // cache中找到了page
+                Some(page) => {
+                    // info!("[PageCache] read from cache!");
+                    page
+                }, // cache中找到了page
                 None => {
+                    // info!("[PageCache] read from device! now page cnt: {}", self.pages.read().len());
                     // cache中没有找到就新建cache page
-                    let temp_page = self.insert_page(offset);
+                    // 补commit：修复page_cache
+                    // - let temp_page = self.insert_page(offset);
+                    // + let temp_page = self.insert_page(ppn * PAGE_SIZE);
+                    let temp_page = self.insert_page(ppn * PAGE_SIZE);
                     let array = temp_page.frame.ppn.get_bytes_array();
                     self.inode
                         .read()
@@ -110,7 +119,7 @@ impl PageCache {
             buf[buf_cur..buf_cur + len].copy_from_slice(&page_buf[page_offset..page_offset + len]);
             buf_cur += len;
             // TODO: maybe bug?
-            page_offset += 0;
+            page_offset = 0;
         }
         buf_cur
     }
@@ -140,7 +149,7 @@ impl PageCache {
             page_buf[page_offset..page_offset + len].copy_from_slice(&buf[buf_cur..buf_cur + len]);
             buf_cur += len;
             // TODO: maybe bug?
-            page_offset += 0;
+            page_offset = 0;
         }
 
         buf_cur
@@ -149,24 +158,61 @@ impl PageCache {
 }
 
 
-pub struct Page {
-    pub frame: FrameTracker,
-    /// 存放dirty block的idx
-    dirty_blocks: SleepLock<HashSet<usize>>,
-}
+// pub struct Page {
+//     pub frame: FrameTracker,
+//     /// 存放dirty block的idx
+//     pub page_type: PageType,
+// }
 
-impl Page {
-    fn new(frame: FrameTracker) -> Self {
-        Self { 
-            frame, 
-            dirty_blocks: SleepLock::new(HashSet::new()) 
-        }
-    }
+// pub enum PageType {
+//     Anon,
+//     File(DirtySet),
+// }
 
-    pub async fn set_dirty(&self, offset: usize) {
-        let idx = offset / BLOCK_SIZE;
-        let mut dirty_blocks = self.dirty_blocks.lock().await;
-        dirty_blocks.insert(idx);
-    }
+// impl Page {
+//     fn new_file() -> Self {
+//         Self { 
+//             frame: frame_alloc().expect("frame alloc failed"), 
+//             page_type: PageType::File(DirtySet::new()),
+//         }
+//     }
 
-}
+//     fn new() -> Self {
+//         Self {
+//             frame: frame_alloc().expect("frame alloc failed"),
+//             page_type: PageType::Anon,
+//         }
+//     }
+
+//     pub async fn set_dirty(&self, offset: usize) {
+//         // self.set_block(offset);
+//         match self.page_type {
+//             PageType::Anon => {
+//                 panic!("Cannot set dirty block for an anonymous map!");
+//             }
+//             PageType::File(dirty_set) => {
+//                 dirty_set.set_block(offset);
+//             }
+//         }
+//     }
+
+// }
+
+// pub struct DirtySet(SleepLock<HashSet<usize>>);
+
+// impl DirtySet {
+
+//     pub fn new() -> Self {
+//         SleepLock::new(HashSet::new())
+//     }
+//     pub async fn set_block(&self, offset: usize) {
+//         let idx = offset / BLOCK_SIZE;
+//         let mut dirty_blocks = self.0.lock().await;
+//         dirty_blocks.insert(idx);
+//     }
+
+//     pub async fn get_blocks(&self) -> HashSet<usize> {
+//         self.0.lock().await
+//     }
+    
+// }

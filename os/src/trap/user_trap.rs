@@ -1,13 +1,16 @@
 #![allow(unused_import_braces)]
 #![allow(unused)]
 use log::info;
+// use riscv::register::{sepc, stval};
+// use riscv::register::scause::{self, Exception, Interrupt, Trap};
+use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, yield_now};
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, executor, get_current_hart_id};
 use super::{__return_to_user, set_trap_handler, IndertifyMode};
 /// 导入riscv架构相关的包
 #[cfg(target_arch = "riscv64")]
-use riscv::register::stval;
+use riscv::register::{sepc, stval};
 #[cfg(target_arch = "riscv64")]
 use riscv::register::scause::{self, Exception, Interrupt, Trap};
 
@@ -19,6 +22,8 @@ pub async fn user_trap_handler() {
     set_trap_handler(IndertifyMode::Kernel);
     let scause = scause::read();
     let stval = stval::read();
+    let sepc = sepc::read();
+    let cause = scause.cause();
     let task = current_task().unwrap();
 
     if task.get_time_data().usedout_timeslice() && executor::has_task() {
@@ -26,7 +31,7 @@ pub async fn user_trap_handler() {
         yield_now().await;
     }
 
-    match scause.cause() {
+    match cause {
         Trap::Exception(Exception::UserEnvCall) => { // 7
             let mut cx = current_trap_cx();
             let old_sepc: usize = cx.get_sepc();
@@ -63,12 +68,28 @@ pub async fn user_trap_handler() {
             
             
         }
+        Trap::Exception(Exception::StorePageFault)
+        | Trap::Exception(Exception::LoadPageFault)
+        | Trap::Exception(Exception::InstructionPageFault) => {
+            // log::info!(
+            //     "[user_trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+            // );
+            let access_type = match cause {
+                Trap::Exception(Exception::InstructionPageFault) => PageFaultAccessType::RX,
+                Trap::Exception(Exception::LoadPageFault) => PageFaultAccessType::RO,
+                Trap::Exception(Exception::StorePageFault) => PageFaultAccessType::RW,
+                _ => unreachable!(),
+            };
+
+            let result = current_task().unwrap().with_mut_memory_space(|m| {
+                m.handle_page_fault(stval.into(), access_type)
+            });
+
+
+        }
         Trap::Exception(Exception::StoreFault) // 6
-        | Trap::Exception(Exception::StorePageFault) // 11
         | Trap::Exception(Exception::InstructionFault) // 1
-        | Trap::Exception(Exception::InstructionPageFault) // 9
-        | Trap::Exception(Exception::LoadFault) // 4
-        | Trap::Exception(Exception::LoadPageFault) => { // 10
+        | Trap::Exception(Exception::LoadFault) => { // 10
             println!(
                 "[kernel] hart_id = {:?}, {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 get_current_hart_id(),

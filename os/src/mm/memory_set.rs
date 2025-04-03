@@ -1,3 +1,4 @@
+use super::memory_space::MemorySpace;
 use super::{MapArea, MapPermission, MapType};
 use super::{PageTable, PageTableEntry};
 use super::{VirtAddr, VirtPageNum};
@@ -22,19 +23,17 @@ extern "C" {
     fn ekernel();
 }
 
-lazy_static! {
-    /// a memory set instance through lazy_static! managing kernel space
-    pub static ref KERNEL_SPACE: Arc<Mutex<MemorySet>> =
-        Arc::new(Mutex::new(MemorySet::new_kernel()));
-}
+// lazy_static! {
+//     /// a memory set instance through lazy_static! managing kernel space
+//     pub static ref KERNEL_SPACE: Arc<Mutex<MemorySpace>> =
+//         Arc::new(Mutex::new(MemorySpace::new_kernel()));
+// }
 
 pub fn kernel_token() -> usize {
     KERNEL_SPACE.lock().token()
 }
 
-pub fn switch_to_kernel_pgtable() {
-    unsafe { KERNEL_SPACE.lock().activate() };
-}
+
 
 /// memory set structure, controls virtual-memory space
 pub struct MemorySet {
@@ -184,9 +183,10 @@ impl MemorySet {
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
         let magic = elf_header.pt1.magic;
+        // assert!(elf.check_magic([0x7f, 0x45, 0x4c, 0x46]), "invalid elf!");
         assert_eq!(magic, [0x7f, 0x45, 0x4c, 0x46], "invalid elf!");
         let ph_count = elf_header.pt2.ph_count();
-        let mut max_end_vpn = VirtPageNum(0);
+        let mut max_end_vpn: VirtPageNum = VirtPageNum(0);
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() == xmas_elf::program::Type::Load {
@@ -221,7 +221,7 @@ impl MemorySet {
         memory_set.push(
             MapArea::new(
                 user_stack_bottom.into(),
-                (user_stack_top+0x10).into(), // TODO 这里是强行修改+10，为了通过一些测试用例，猜测是还木有实现cow
+                (user_stack_top+10).into(), // TODO 这里是强行修改+10，为了通过一些测试用例，猜测是还木有实现cow
                 MapType::Framed,
                 MapPermission::R | MapPermission::W | MapPermission::U,
             ),
