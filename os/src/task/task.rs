@@ -12,7 +12,7 @@ use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
 use crate::task::{add_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task};
-use crate::trap::{trap_loop, TrapContext};
+use crate::hal::trap::{trap_loop, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;

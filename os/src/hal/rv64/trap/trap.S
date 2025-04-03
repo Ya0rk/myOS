@@ -143,3 +143,10 @@ __trap_from_kernel:
     ld  a7, 16*8(sp)
     addi sp, sp, 17*8
     sret
+
+.section .text.sigret
+.align 12
+.global __sigret_helper
+__sigret_helper:
+    li	a7,139
+    ecall
