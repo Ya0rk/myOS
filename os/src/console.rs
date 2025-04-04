@@ -1,5 +1,5 @@
 use core::fmt::{self, Write};
-use crate::{arch::console_putchar, sync::SpinNoIrqLock};
+use crate::{hal::arch::console_putchar, sync::SpinNoIrqLock};
 use lazy_static::*;
 
 struct Stdout;

@@ -1,4 +1,4 @@
-mod interrupt;
+// mod interrupt;
 mod up;
 pub mod mutex;
 mod misc;
@@ -9,7 +9,7 @@ pub mod once;
 use core::{future::Future, task::{Context, Poll}};
 use alloc::{boxed::Box, sync::Arc, task::Wake};
 
-pub use interrupt::{enable_interrupt, disable_interrupt, interrupt_is_enabled, enable_timer_interrupt};
+pub use crate::hal::arch::interrupt::{enable_interrupt, disable_interrupt, interrupt_is_enabled, enable_timer_interrupt};
 pub use mutex::{new_shared, new_sleep_shared};
 pub use timer::{get_time, sleep_for, set_next_trigger};
 pub use misc::{get_waker, yield_now, suspend_now};

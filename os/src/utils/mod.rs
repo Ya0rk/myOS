@@ -1,7 +1,7 @@
 ///! This module contains utility functions that are used throughout the OS.
 
 mod random;
-pub mod boot;
+// pub mod boot;
 pub mod logger;
 pub mod errtype;
 // pub mod elf;
@@ -10,12 +10,12 @@ pub mod container;
 
 use core::arch::asm;
 use log::warn;
-use crate::{arch::{fp_read, ra_read}, mm::VirtAddr};
+use crate::{hal::arch::{fp_read, ra_read}, mm::VirtAddr};
 
 pub use errtype::{Errno, SysResult};
 pub use logger::logger_init;
 pub use random::{LcgRng, RNG};
-pub use boot::{boot_all_harts, jump_helper, clear_bss, logo};
+// pub use boot::{boot_all_harts, jump_helper, clear_bss, logo};
 
 pub fn backtrace() {
     extern "C" {
@@ -32,6 +32,7 @@ pub fn backtrace() {
             warn!("[stack_backtrace] {:#x}", current_pc);
             current_fp = *(current_fp as *const usize).offset(-2);
             current_pc = *(current_fp as *const usize).offset(-1);
+
         }
     }
 }
