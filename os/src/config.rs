@@ -13,6 +13,7 @@ pub const KERNEL_HEAP_SIZE: usize = 0x20_0000;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 12;
 
+
 pub const PAGE_MASK: usize = PAGE_SIZE - 1;
 
 pub const PTE_SIZE: usize = 8;
@@ -20,7 +21,11 @@ pub const PTES_PER_PAGE: usize = PAGE_SIZE / PTE_SIZE;
 /// 3 level for sv39 page table
 pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
+
+#[cfg(target_arch = "riscv64")]
 pub const KERNEL_ADDR_OFFSET: usize = 0xffff_ffc0_0000_0000;
+#[cfg(target_arch = "loongarch64")]
+pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_9000_0000;
 // When directly map: vpn = ppn + kernel direct offset
 pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_ADDR_OFFSET >> PAGE_SIZE_BITS;
 pub const USER_SPACE_TOP: usize = 0x30_0000_0000;

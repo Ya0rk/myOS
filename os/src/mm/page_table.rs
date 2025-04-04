@@ -125,8 +125,13 @@ impl PageTableEntry {
 
 
 pub unsafe fn switch_pgtable(page_table_token: usize) {
-    crate::arch::satp_write(page_table_token);
-    crate::arch::sfence();
+    // unimplemented!()
+    // satp::write(page_table_token);
+    // asm!("sfence.vma");
+    crate::hal::arch::satp_write(page_table_token);
+    crate::hal::arch::sfence();
+    // hal::arch::switch_pagetable(page_table_token);
+
 }
 
 

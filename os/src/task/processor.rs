@@ -5,7 +5,7 @@ use crate::mm::page_table::switch_to_kernel_pgtable;
 // use crate::mm::switch_to_kernel_pgtable;
 use crate::sync::disable_interrupt;
 use crate::sync::enable_interrupt;
-use crate::trap::TrapContext;
+use crate::hal::trap::TrapContext;
 use crate::utils::backtrace;
 use alloc::sync::Arc;
 
@@ -109,7 +109,7 @@ pub fn get_current_hart_id() -> usize {
     //     };
     // }
     // hartid
-    crate::arch::tp_read()
+    crate::hal::arch::tp_read()
 }
 
 ///The main part of process execution and scheduling
@@ -148,7 +148,7 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 pub fn current_user_token() -> usize {
     // riscv::register::satp::read().bits()
     // unimplemented!()
-    crate::arch::satp_read()
+    crate::hal::arch::satp_read()
 }
 
 ///Get the mutable reference to trap context of current task

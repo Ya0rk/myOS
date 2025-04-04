@@ -14,4 +14,4 @@ build_docker:
 	docker run -it --name myos -v .:/myOS --network=host --privileged -p 1234:1234 -e http_proxy=http://127.0.0.1:7890 -e https_proxy=http://127.0.0.1:7890 os-image:latest /bin/bash
 
 run:
-	docker start myos 
+	docker exec -it myos /bin/bash

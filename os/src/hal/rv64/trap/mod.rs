@@ -1,6 +1,6 @@
-mod context;
-mod user_trap;
-mod kernel_trap;
+pub mod context;
+pub mod user_trap;
+pub mod kernel_trap;
 
 use alloc::sync::Arc;
 use log::info;
@@ -30,8 +30,7 @@ use loongarch64::time::get_timer_freq;
 
 // trap汇编代码
 #[cfg(target_arch = "riscv64")]
-global_asm!(include_str!("rv64_trap.S"));
-
+global_asm!(include_str!("trap.S"));
 #[cfg(target_arch = "loongarch64")]
 global_asm!(include_str!("la64_trap.S"));
 
@@ -53,7 +52,7 @@ pub fn init() {
 pub async fn trap_loop(task: Arc<TaskControlBlock>) {
     // 设置task的waker TODO：将这个放入 UserTaskFuture中
     task.set_task_waker(get_waker().await);
-    // info!("trap loop!!");
+    info!("trap loop!!");
     loop {
         match task.get_status() {
             TaskStatus::Zombie => break,
