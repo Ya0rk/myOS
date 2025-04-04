@@ -1,5 +1,7 @@
 use core::cell::SyncUnsafeCell;
+use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec;
 use log::info;
 use lwext4_rust::file;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
@@ -496,4 +498,42 @@ pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath:
         }
     }
     Ok(0)
+}
+
+/// copies data between one file descriptor and another
+pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let src = task.get_file_by_fd(in_fd).ok_or(Errno::EBADF)?;
+    let dest = task.get_file_by_fd(out_fd).ok_or(Errno::EBADF)?;
+    if !src.readable() || !dest.writable() {
+        return Err(Errno::EPERM);
+    }
+    
+    let mut len: usize = 0;
+    let mut buf = vec![0u8; count];
+    let mut new_offset = offset;
+
+    loop {
+        let read_size = src.read_at(new_offset, &mut buf).await?;
+        if read_size == 0 {
+            break;
+        }
+        let write_size = dest.write_at(new_offset, &buf).await?;
+        if read_size != write_size {
+            return Err(Errno::EIO);
+        }
+        new_offset += read_size;
+        len += read_size;
+    }
+
+    // If offset is not NULL, then sendfile() does not modify the file offset of in_fd; 
+    // otherwise the file offset is adjusted to reflect the number of bytes read from in_fd.
+    if offset == 0 {
+        // 重新设置offset：
+        let token = task.get_user_token();
+        src.lseek(len as isize, SEEK_CUR).unwrap();
+        *translated_refmut(token, offset as *mut usize) = new_offset;
+    }
+
+    Ok(len)
 }

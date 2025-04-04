@@ -3,6 +3,7 @@ use core::fmt::Display;
 use core::future::Ready;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
+use core::time::Duration;
 
 use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
@@ -790,6 +791,20 @@ impl TaskControlBlock {
     /// 设置set_child_tid字段
     pub fn set_child_settid(&self, ctid: usize) {
         unsafe { *self.set_child_tid.get() = Some(ctid) };
+    }
+
+    /// 获取当前进程所有线程的cpu时间总和
+    pub fn process_cputime(&self) -> Duration {
+        let mut utime = Duration::ZERO;
+        let mut stime = Duration::ZERO;
+        for (_, thread) in self.thread_group.lock().tasks.iter() {
+            if let Some(thread) = thread.upgrade() {
+                let (ut, st) = thread.get_time_data().get_ustime();
+                utime += ut;
+                stime += st;
+            }
+        }
+        utime+stime
     }
 }
 

@@ -108,7 +108,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `off` - The offset from which to start reading
+    /// * `off` - The offset from which to start reading, page中的偏移
     /// * `buf` - The buffer to read into
     ///
     /// # Returns
@@ -125,7 +125,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `off` - The offset at which to start writing
+    /// * `off` - The offset at which to start writing， page中的偏移
     /// * `buf` - The buffer containing the data to write
     ///
     /// # Returns

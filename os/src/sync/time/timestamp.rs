@@ -1,25 +1,25 @@
-use super::TimeSepc;
+use super::TimeSpec;
 
 /// 这个结构用来记录文件（inode）创建、访问和修改的时间
 pub struct TimeStamp {
     /// 上次被访问的时间
-    atime: TimeSepc, 
+    atime: TimeSpec, 
     /// 上次被修改的时间
-    mtime: TimeSepc, 
+    mtime: TimeSpec, 
     /// 创建时间
-    ctime: TimeSepc, 
+    ctime: TimeSpec, 
 }
 
 impl TimeStamp {
     pub fn new() -> Self {
         TimeStamp { 
-            atime: TimeSepc::new(), 
-            mtime: TimeSepc::new(), 
-            ctime: TimeSepc::new() 
+            atime: TimeSpec::new(), 
+            mtime: TimeSpec::new(), 
+            ctime: TimeSpec::new() 
         }
     }
 
-    pub fn get(&self) -> (TimeSepc, TimeSepc, TimeSepc) {
+    pub fn get(&self) -> (TimeSpec, TimeSpec, TimeSpec) {
         (self.atime, self.mtime, self.ctime)
     }
 

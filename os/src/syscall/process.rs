@@ -2,7 +2,8 @@ use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{SigDetails, SigMask};
-use crate::sync::{sleep_for, suspend_now, yield_now, TimeSepc, TimeVal, Tms};
+use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
+use crate::sync::{sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
     add_task, current_task, current_user_token, spawn_user_task
@@ -26,7 +27,7 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
 }
 
 pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
-    let req = *translated_ref(current_user_token(), req as *const TimeSepc);
+    let req = *translated_ref(current_user_token(), req as *const TimeSpec);
     if !req.check_valid() {
         // info!("req = {}", req);
         return Err(Errno::EINVAL);
@@ -291,4 +292,43 @@ pub fn sys_set_tid_address(tidptr: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     task.set_child_cleartid(tidptr);
     Ok(task.get_pid())
+}
+
+/// exit all threads in a process
+pub fn sys_exit_group(exit_code: i32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    task.kill_all_thread();
+    task.set_exit_code((exit_code & 0xFF) << 8);
+    Ok(0)
+}
+
+pub fn sys_clock_settime(
+    clock_id: usize,
+    timespec: *const u8,
+) -> SysResult<usize> {
+    if timespec.is_null() {
+        info!("[sys_clock_settime] timespec is null");
+        return Err(Errno::EBADCALL);
+    }
+    Ok(0)
+}
+
+pub fn sys_clock_gettime(
+    clock_id: usize,
+    timespec: *const u8,
+) -> SysResult<usize> {
+    if timespec.is_null() {
+        info!("[sys_clock_gettime] timespec is null");
+        return Err(Errno::EBADCALL);
+    }
+    let tp = timespec as *mut TimeSpec;
+    let time = match clock_id {
+        CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::new(),
+        CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
+        CLOCK_THREAD_CPUTIME_ID => TimeSpec::thread_cputime_now(),
+        CLOCK_BOOTTIME => TimeSpec::boottime_now(),
+        _ => return Err(Errno::EINVAL),
+    };
+    unsafe { tp.write_volatile(time) };
+    Ok(0)
 }

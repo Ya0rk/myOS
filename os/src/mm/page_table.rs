@@ -1,7 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-// use core::arch::asm;
-use crate::config::KERNEL_PGNUM_OFFSET;
+use crate::config::{KERNEL_PGNUM_OFFSET, PAGE_SIZE_BITS};
 // use crate::hal;
 use super::address::KernelAddr;
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum, KERNEL_SPACE};
@@ -242,15 +241,20 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
         String::from_utf8(core::slice::from_raw_parts_mut(ptr, len as usize).to_vec()).unwrap()
     }
 }
-///translate a generic through page table and return a mutable reference
+/// translate a generic through page table and return a mutable reference
+/// 将一个用户的指针转化为一个可变引用，就能直接操作这个指针指向的内存了
 pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     //println!("into translated_refmut!");
     let page_table = PageTable::from_token(token);
     let va = ptr as usize;
 
+    // 检查指针
+    assert!(ptr as usize % core::mem::align_of::<T>() == 0, "[translated_refmut] ptr not aligned");
+    assert!(!ptr.is_null(), "[translated_refmut] ptr is null");
+
     KernelAddr::from(page_table
         .translate_va(VirtAddr::from(va))
-        .unwrap())
+        .expect("[translated_refmut] translate failed"))
         .get_mut()
 }
 /// 通过token，将一个指针转化为 特定的数据结构

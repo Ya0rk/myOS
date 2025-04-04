@@ -96,8 +96,6 @@ pub fn list_apps() -> bool{
     true
 }
 
-
-
 pub async fn create_init_files() -> SysResult {
     //创建/proc文件夹
     open(

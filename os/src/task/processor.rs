@@ -98,40 +98,8 @@ pub fn get_cpu(hart_id: usize) -> &'static mut CPU {
 
 /// 获取当前运行的 Processor id
 pub fn get_current_hart_id() -> usize {
-    // unimplemented!()
-    // use core::arch::asm;
-    // let hartid;
-    // unsafe {
-    //     asm! {
-    //         "mv {}, tp",
-    //         out(reg) hartid
-    //     };
-    // }
-    // hartid
     crate::arch::tp_read()
 }
-
-///The main part of process execution and scheduling
-///Loop `fetch_task` to get the process that needs to run, and switch the process through `__switch`
-// pub fn run_tasks() {
-//     loop {
-//         let processor = get_current_processor();
-//         if let Some(task) = fetch_task() {
-//             let idle_task_cx_ptr = processor.get_idle_task_cx_ptr(); // 内核线程负责分发用户线程
-//             // access coming task TCB exclusively
-//             let next_task_cx_ptr = task.get_task_cx() as *const TaskContext;
-//             task.set_running();
-//             task.switch_pgtable(); // 更新stap寄存器和刷新TLB
-            
-//             // release coming task TCB manually
-//             processor.current = Some(task);
-//             unsafe {
-//                 __switch(idle_task_cx_ptr, next_task_cx_ptr);
-//             }
-//             unsafe { KERNEL_SPACE.lock().activate() };
-//         }
-//     }
-// }
 
 ///Take the current task,leaving a None in its place
 pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
@@ -159,12 +127,3 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
         .unwrap()
         .get_trap_cx_mut()
 }
-
-// /Return to idle control flow for new scheduling
-// pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
-//     let processor = get_current_processor();
-//     let idle_task_cx_ptr = processor.get_idle_task_cx_ptr();
-//     unsafe {
-//         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
-//     }
-// }
