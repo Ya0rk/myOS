@@ -61,10 +61,14 @@ pub enum SysCode {
     SYSCALL_GETDENTS64= 61,
     SYSCALL_READ      = 63,
     SYSCALL_WRITE     = 64,
+    SYSCALL_SENDFILE  = 71,
     SYSCALL_FSTAT     = 80,
     SYSCALL_EXIT      = 93,
+    SYSCALL_EXIT_GROUP= 94,
     SYSCALL_SET_TID_ADDRESS = 96,
     SYSCALL_NANOSLEEP = 101,
+    SYSCALL_CLOCK_SETTIME = 112,
+    SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_YIELD     = 124,
     SYSCALL_TIMES     = 153,
     SYSCALL_UNAME     = 160,
@@ -89,6 +93,10 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SENDFILE => "sendfile",
+            Self::SYSCALL_CLOCK_SETTIME => "clock_settime",
+            Self::SYSCALL_CLOCK_GETTIME => "clock_gettime",
+            Self::SYSCALL_EXIT_GROUP => "exit_group",
             Self::SYSCALL_SET_TID_ADDRESS => "set_tid_address",
             Self::SYSCALL_GETCWD => "getcwd",
             Self::SYSCALL_DUP => "dup",

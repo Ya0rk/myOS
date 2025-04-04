@@ -1,6 +1,6 @@
 use lwext4_rust::bindings::ext4_inode_stat;
 
-use crate::{config::BLOCK_SIZE, sync::TimeSepc};
+use crate::{config::BLOCK_SIZE, sync::TimeSpec};
 
 #[repr(C)]
 pub struct Kstat {
@@ -66,7 +66,7 @@ impl Kstat {
 
 /// 将 ext4_inode_stat 转换为 Kstat
 #[allow(unused)]
-pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSepc, mtime: TimeSepc, ctime: TimeSepc) -> Kstat {
+pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeSpec, ctime: TimeSpec) -> Kstat {
     Kstat {
         st_dev: stat.st_dev as u32,
         st_ino: stat.st_ino as u64,
