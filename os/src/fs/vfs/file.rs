@@ -55,6 +55,8 @@ pub trait FileTrait: Send + Sync {
     /// 如果文件可写返回 `true`，否则返回 `false`
     fn writable(&self) -> bool;
 
+    fn executable(&self) -> bool;
+
     /// 从文件中读取数据到用户缓冲区
     ///
     /// 尝试从文件中读取数据并填充到提供的缓冲区中，最多将缓冲区填满。

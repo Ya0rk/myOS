@@ -54,6 +54,11 @@ impl FileTrait for NormalFile {
         self.metadata.flags.read().writable()
     }
 
+    fn executable(&self) -> bool {
+        let stat = self.metadata.inode.fstat();
+        stat.st_mode & 0o111 != 0
+    }
+
     async fn read(&self, mut buf: UserBuffer) -> SysResult<usize> {
         let mut total_read_size = 0usize;
 
