@@ -176,7 +176,7 @@ pub async fn sys_exec(path: usize) -> SysResult<usize> {
         // let all_data = app_inode.file()?.metadata.inode.read_all().await?;
         
         let task = current_task().unwrap();
-        task.exec(app_inode);
+        task.exec(app_inode).await;
         Ok(0)
     } else {
         Err(Errno::EBADCALL)

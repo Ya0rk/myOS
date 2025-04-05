@@ -150,9 +150,9 @@ impl TaskControlBlock {
 
         new_task
     }
-    pub fn exec(&self, elf_file: FileClass) {
+    pub async fn exec(&self, elf_file: FileClass) {
         info!("exec start");
-        let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(&elf_file);
+        let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(&elf_file).await;
         
         // 建立该进程的kernel stack
         let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
