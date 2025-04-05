@@ -33,7 +33,7 @@ use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 pub struct TaskControlBlock {
     // 不可变
     pid:            Pid,
-    kernel_stack:   KernelStack,
+    // kernel_stack:   KernelStack,
 
     // 可变
     tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
@@ -82,32 +82,33 @@ impl TaskControlBlock {
         let trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            0,
-            trap_loop as usize,
+            // 0,
         );
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let tgid = pid_handle.0;
-        let kernel_stack = KernelStack::new(&pid_handle);
+
+        // TODO(YJJ):这里好像并不需要kernel stack
+        // let kernel_stack = KernelStack::new(&pid_handle);
         
         // 每个task有自己的kernel stack
-        let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
+        // let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
         // memory_space.insert_framed_area(
         //     kernel_stack_bottom.into(),
         //     kernel_stack_top.into(), 
         //     ,
         // );
-        memory_space.push_vma(
-            VmArea::new(
-                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-                MapPerm::RW,
-                VmAreaType::Stack)
-        );
+        // memory_space.push_vma(
+        //     VmArea::new(
+        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+        //         MapPerm::RW,
+        //         VmAreaType::Stack)
+        // );
         
         // push a task context which goes to trap_return to the top of kernel stack
         let new_task = Arc::new(Self {
             pid: pid_handle,
-            kernel_stack,
+            // kernel_stack,
             
             // Shared
             pgid: AtomicUsize::new(0),
@@ -154,14 +155,15 @@ impl TaskControlBlock {
         info!("exec start");
         let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(&elf_file).await;
         
+        // TODO(YJJ):这里好像并不需要kernel stack
         // 建立该进程的kernel stack
-        let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
-        memory_space.push_vma(
-            VmArea::new(
-                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-                MapPerm::RW,
-                VmAreaType::Stack)
-        );
+        // let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
+        // memory_space.push_vma(
+        //     VmArea::new(
+        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+        //         MapPerm::RW,
+        //         VmAreaType::Stack)
+        // );
         info!("exec memory_set created");
         
         // 终止所有子线程
@@ -181,14 +183,17 @@ impl TaskControlBlock {
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
 
         // initialize trap_cx
-        let trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            self.kernel_stack.get_top(),
-            trap_loop as usize,
-        );
-        let old_trap_cx = self.get_trap_cx_mut();
-        *old_trap_cx = trap_cx;
+        // let trap_cx = TrapContext::app_init_context(
+        //     entry_point,
+        //     user_sp,
+        //     // self.kernel_stack.get_top(),
+        // );
+        
+        // set trap cx
+        let trap_cx = self.get_trap_cx_mut();
+        trap_cx.set_sepc(entry_point);
+        trap_cx.set_sp(user_sp);
+        trap_cx.set_arg(argc, argv_p, env_p);
 
         // 重置自定义的信号处理
         self.handler.lock().flash_signal_handlers();
@@ -232,28 +237,29 @@ impl TaskControlBlock {
             false => new_shared(self.handler.lock().clone()), // 一个新的副本，子进程可以独立修改
         };
 
-        let kernel_stack = KernelStack::new(&pid);
-        let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
+        // let kernel_stack = KernelStack::new(&pid);
+        // let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
 
         // modify kernel_sp in trap_cx
         let trap_cx = self.get_trap_cx_mut();
-        trap_cx.set_kernel_sp(kernel_stack_top);
+        // trap_cx.set_kernel_sp(kernel_stack_top);
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
         // TODO(YJJ):需要修改为clone和cow
         let mut child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
         // let mut child_memory_set = self.memory_set.clone();
-        child_memory_space.push_vma(
-            VmArea::new(
-                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-                MapPerm::RW,
-                VmAreaType::Stack)
-        );
+        // child_memory_space.push_vma(
+        //     VmArea::new(
+        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+        //         MapPerm::RW,
+        //         VmAreaType::Stack)
+        // );
+
         let memory_space = new_shared(child_memory_space);
 
         let new_task = Arc::new(TaskControlBlock {
             pid,
-            kernel_stack,
+            // kernel_stack,
 
             // Shared
             pgid,
@@ -331,7 +337,7 @@ impl TaskControlBlock {
         );
 
         let new_task = Arc::new(TaskControlBlock{
-            kernel_stack: KernelStack::new(&pid),//
+            // kernel_stack: KernelStack::new(&pid),//
             pid,
 
             pgid,
