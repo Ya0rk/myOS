@@ -6,7 +6,7 @@ use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_I
 use crate::sync::{sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
-    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, spawn_user_task
+    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_task_by_pid, spawn_user_task
 };
 use crate::utils::{Errno, SysResult, RNG};
 use log::{debug, info};
@@ -341,11 +341,41 @@ pub fn sys_clock_gettime(
 pub fn sys_setsid() -> SysResult<usize> {
     let task = current_task().unwrap();
     let pid = task.get_pid();   // task的pid
-    let pgid = task.get_pgid(); // task现在所属的进程组
+    let old_pgid = task.get_pgid(); // task现在所属的进程组
     if !task.is_leader() {
         // set the calling task to new process group
-        extract_proc_to_new_group(pgid, pid); // 从原进程组中提取，放入一个新的进程组
-        task.set_pgid(pid); // 设置进程组ID为pid
+        let new_pgid = pid;
+        task.set_pgid(new_pgid); // 设置进程组ID为pid
+        extract_proc_to_new_group(old_pgid, new_pgid, pid); // 从原进程组中提取，放入一个新的进程组
     }
     Ok(pid) // 返回新进程组的ID
+}
+
+/// sets the PGID of the process specified by pid to pgid.
+/// 
+/// If pid is zero, then the process ID of the calling process is used.  
+/// If pgid is zero, then the PGID of the process specified by pid is made the same
+/// as  its  process ID.  If setpgid() is used to move a process from one process group to another (as is done by some shells when creating pipelines), 
+/// both process groups must be part of the same session. 
+/// In this case, the pgid specifies an existing process group to be joined and the session ID of that group must match the session ID of the joining process.
+pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
+    if (pgid as isize) < 0 {
+        return Err(Errno::EINVAL);
+    }
+    let target_task = match pid {
+        0 => current_task().unwrap(),
+        _ => get_task_by_pid(pid).ok_or(Errno::ESRCH)?,
+    };
+
+    let old_pgid = target_task.get_pgid();
+    let pid = target_task.get_pid();
+    if pgid == 0{
+        let new_pgid = pid;
+        target_task.set_pgid(pid);
+        extract_proc_to_new_group(old_pgid, new_pgid, pid);
+    } else {
+        target_task.set_pgid(pgid);
+        extract_proc_to_new_group(old_pgid, pgid, pid);
+    }
+    Ok(0)
 }

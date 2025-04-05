@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
+use crate::config::{INITPROC_PID, KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
 use crate::mm::page_table::{PTEFlags, KERNEL_PAGE_TABLE};
 use crate::mm::{VirtAddr};
 use alloc::collections::BTreeSet;
@@ -21,7 +21,7 @@ pub struct PidAllocator {
 impl PidAllocator {
     fn new() -> Self {
         PidAllocator {
-            current: 0,
+            current: INITPROC_PID,
             recycled: BTreeSet::new(),
         }
     }
