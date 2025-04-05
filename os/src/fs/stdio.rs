@@ -30,6 +30,9 @@ impl FileTrait for Stdin {
     fn writable(&self) -> bool {
         false
     }
+    fn executable(&self) -> bool {
+        false
+    }
     async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
         //一次读取多个字符
         let mut c: usize;
@@ -147,6 +150,9 @@ impl FileTrait for Stdout {
     }
     fn writable(&self) -> bool {
         true
+    }
+    fn executable(&self) -> bool {
+        false
     }
     async fn read(&self, _user_buf: UserBuffer) -> SysResult<usize> {
         panic!("Cannot read from stdout!");

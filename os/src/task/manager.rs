@@ -70,7 +70,7 @@ impl ProcessGroupManager {
     fn add_new_group(&mut self, pgid: PGid) {
         let mut vec: Vec<usize> = Vec::new();
         if pgid != INITPROC_PID {
-            vec.push(pgid);
+            vec.push(pgid); // 因为新建一个进程组是以自己为leader，所以pgid = pid，可以直接push(pgid)
         }
         self.0.insert(pgid, vec);
     }
@@ -96,4 +96,10 @@ pub fn remove_proc_group_member(pgid: PGid, pid: Pid) {
 
 pub fn add_proc_group_member(pgid: PGid, pid: Pid) {
     MANAGER.process_group.lock().add(pgid, pid);
+}
+
+/// 将原进程从进程组中删除，加入一个全新的进程组，该进程组以自己为leader
+pub fn extract_proc_to_new_group(pgid: PGid, pid: Pid) {
+    MANAGER.process_group.lock().remove(pgid, pid);
+    MANAGER.process_group.lock().add_new_group(pid);
 }

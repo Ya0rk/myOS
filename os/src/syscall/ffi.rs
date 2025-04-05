@@ -54,11 +54,13 @@ pub enum SysCode {
     SYSCALL_LINKAT    = 37,
     SYSCALL_UMOUNT2   = 39,
     SYSCALL_MOUNT     = 40,
+    SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR     = 49,
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
     SYSCALL_PIPE2     = 59,
     SYSCALL_GETDENTS64= 61,
+    SYSCALL_LSEEK     = 62,  
     SYSCALL_READ      = 63,
     SYSCALL_WRITE     = 64,
     SYSCALL_SENDFILE  = 71,
@@ -71,6 +73,7 @@ pub enum SysCode {
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_YIELD     = 124,
     SYSCALL_TIMES     = 153,
+    SYSCALL_SETSID    = 157,
     SYSCALL_UNAME     = 160,
     SYSCALL_GETTIMEOFDAY  = 169,
     SYSCALL_GETPID    = 172,
@@ -93,6 +96,9 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SETSID => "setsid",
+            Self::SYSCALL_LSEEK => "lseek",
+            Self::SYSCALL_FACCESSAT => "faccessat",
             Self::SYSCALL_SENDFILE => "sendfile",
             Self::SYSCALL_CLOCK_SETTIME => "clock_settime",
             Self::SYSCALL_CLOCK_GETTIME => "clock_gettime",
@@ -200,9 +206,6 @@ bitflags! {
     }
 }
 
-/// 不跟随符号链接（即操作符号链接本身而非其指向的目标）
-pub const AT_SYMLINK_NOFOLLOW: u32 = 0x100;
-
 /// 允许删除目录（通常与unlinkat等系统调用一起使用）
 pub const AT_REMOVEDIR: u32 = 0x200;
 
@@ -212,5 +215,22 @@ pub const AT_SYMLINK_FOLLOW: u32 = 0x400;
 // 禁止自动挂载文件系统（当使用 *at 系列函数时，不自动挂载路径中的挂载点）
 pub const AT_NO_AUTOMOUNT: u32 = 0x800;
 
-// 允许操作空路径（当使用 *at 系列函数时，允许文件描述符指向非文件系统中的对象）
-pub const AT_EMPTY_PATH: u32 = 0x1000;
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct FaccessatFlags: u32 {
+        /// 不跟随符号链接（即操作符号链接本身而非其指向的目标）
+        const AT_SYMLINK_NOFOLLOW = 0x100;
+        const AT_EACCESS = 0x200;
+        const AT_EMPTY_PATH = 0x1000;
+    }
+    pub struct FaccessatMode: u32 {
+        /// 检查文件是否存在
+        const F_OK = 0;
+        /// 检查文件是否可读
+        const R_OK = 4;
+        /// 检查文件是否可写
+        const W_OK = 2;
+        /// 检查文件是否可执行
+        const X_OK = 1;
+    }
+}

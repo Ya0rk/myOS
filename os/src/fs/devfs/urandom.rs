@@ -22,6 +22,9 @@ impl FileTrait for DevRandom {
     fn writable(&self) -> bool {
         true
     }
+    fn executable(&self) -> bool {
+        false
+    }
     async fn read(&self, user_buf: UserBuffer) -> SysResult<usize> {
         Ok(RNG.lock().fill_buf(user_buf))
     }

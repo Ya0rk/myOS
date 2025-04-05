@@ -6,7 +6,7 @@ use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_I
 use crate::sync::{sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
-    add_task, current_task, current_user_token, spawn_user_task
+    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, spawn_user_task
 };
 use crate::utils::{Errno, SysResult, RNG};
 use log::{debug, info};
@@ -332,4 +332,20 @@ pub fn sys_clock_gettime(
     };
     unsafe { tp.write_volatile(time) };
     Ok(0)
+}
+
+/// creates a session and sets the process group ID
+/// 调用进程成为新会话的领头进程(session leader)
+/// 调用进程成为新进程组的领头进程(process group leader)
+/// 调用进程不再有控制终端(controlling terminal)
+pub fn sys_setsid() -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let pid = task.get_pid();   // task的pid
+    let pgid = task.get_pgid(); // task现在所属的进程组
+    if !task.is_leader() {
+        // set the calling task to new process group
+        extract_proc_to_new_group(pgid, pid); // 从原进程组中提取，放入一个新的进程组
+        task.set_pgid(pid); // 设置进程组ID为pid
+    }
+    Ok(pid) // 返回新进程组的ID
 }

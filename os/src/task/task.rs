@@ -36,8 +36,8 @@ pub struct TaskControlBlock {
     kernel_stack:   KernelStack,
 
     // 可变
-    tgid:           AtomicUsize, // 线程组group_leader的 pid
-    pgid:           AtomicUsize,
+    tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
+    pgid:           AtomicUsize, // 所属进程组id号
     task_status:    SpinNoIrqLock<TaskStatus>,
 
     base_size:      Shared<usize>, // 迟早要删
@@ -648,7 +648,7 @@ impl TaskControlBlock {
         self.pgid.load(core::sync::atomic::Ordering::Relaxed)
     }
     /// 设置当前进程的pgid
-    pub fn set_pgid(&mut self, pgid: usize) {
+    pub fn set_pgid(&self, pgid: usize) {
         self.pgid.store(pgid, core::sync::atomic::Ordering::Relaxed);
     }
 

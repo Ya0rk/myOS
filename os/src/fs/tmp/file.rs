@@ -54,6 +54,10 @@ impl FileTrait for TmpFile {
         self.metadata.flags.read().writable()
     }
 
+    fn executable(&self) -> bool {
+        false
+    }
+
     async fn read(&self, mut buf: UserBuffer) -> SysResult<usize> {
         let mut total_read_size = 0usize;
 
