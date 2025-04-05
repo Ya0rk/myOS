@@ -40,7 +40,7 @@ pub struct TaskControlBlock {
     pgid:           AtomicUsize, // 所属进程组id号
     task_status:    SpinNoIrqLock<TaskStatus>,
 
-    base_size:      Shared<usize>, // 迟早要删
+    // base_size:      Shared<usize>, // 迟早要删
     thread_group:   Shared<ThreadGroup>,
     memory_space:   Shared<MemorySpace>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
@@ -114,7 +114,7 @@ impl TaskControlBlock {
             pgid: AtomicUsize::new(0),
             tgid: AtomicUsize::new(tgid),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
-            base_size: new_shared(user_sp),
+            // base_size: new_shared(user_sp),
             thread_group: new_shared(ThreadGroup::new()),
             memory_space: new_shared(memory_space),
             parent: new_shared(None),
@@ -264,7 +264,7 @@ impl TaskControlBlock {
             // Shared
             pgid,
             tgid,
-            base_size: self.base_size.clone(),
+            // base_size: self.base_size.clone(),
             thread_group,
             task_status,
             memory_space,
@@ -351,7 +351,7 @@ impl TaskControlBlock {
             sig_stack,
 
             task_status,
-            base_size: self.base_size.clone(),
+            // base_size: self.base_size.clone(),
             thread_group,
             memory_space,
             parent,
