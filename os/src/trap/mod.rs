@@ -13,12 +13,22 @@ use crate::sync::{get_waker, suspend_now};
 use crate::task::{TaskControlBlock, TaskStatus};
 pub use context::TrapContext;
 pub use context::UserFloatRegs;
-
+// riscv架构有关
 #[cfg(target_arch = "riscv64")]
 use riscv::register::mtvec::TrapMode;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::stvec;
+// loongarch架构有关
+#[cfg(target_arch = "loongarch64")]
+use loongarch64::register::*;
+#[cfg(target_arch = "loongarch64")]
+use loongarch64::register::ecfg::LineBasedInterrupt;
+#[cfg(target_arch = "loongarch64")]
+use loongarch64::register::estat::{Exception, Interrupt, Trap};
+#[cfg(target_arch = "loongarch64")]
+use loongarch64::time::get_timer_freq;
 
+// trap汇编代码
 #[cfg(target_arch = "riscv64")]
 global_asm!(include_str!("rv64_trap.S"));
 
@@ -110,6 +120,25 @@ fn set_trap_handler(mode: IndertifyMode) {
     }
 }
 #[cfg(target_arch = "loongarch64")]
+#[inline]
 fn set_trap_handler(mode: IndertifyMode) {
-    unimplemented!("loongarch64")
+    match mode {
+        IndertifyMode::User => {
+            unsafe {
+                ecfg::set_vs(0);
+                eentry::set_eentry(__trap_from_user as usize);
+            }
+        },
+        IndertifyMode::Kernel => {
+            unsafe {
+                ecfg::set_vs(0);
+                eentry::set_eentry(__trap_from_kernel as usize);
+            }
+        },
+    }
+}
+
+#[cfg(target_arch = "loongarch64")]
+pub fn init_loongarch() {
+
 }

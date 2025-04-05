@@ -1,12 +1,21 @@
+
+#![allow(warnings)]
 // #![deny(warnings)]
+
 #![no_std]
 #![no_main]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
+#![feature(riscv_ext_intrinsics)]
 #![feature(alloc_error_handler)]
 #![feature(negative_impls)]
+#![feature(step_trait)]
+#![feature(const_ops)]
+#![feature(const_trait_impl)]
+#![feature(core_intrinsics)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]
+#![feature(map_try_insert)]
 
 #![allow(unused)]
 extern crate alloc;
@@ -24,24 +33,25 @@ mod lang_items;
 pub mod mm;
 pub mod fs;
 pub mod task;
-pub mod trap;
+// pub mod trap;
 pub mod sync;
 pub mod utils;
 pub mod syscall;
 pub mod drivers;
-pub mod arch;
+// pub mod arch;
 pub mod signal;
+pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
-#[cfg(target_arch = "riscv64")]
-global_asm!(include_str!("entry.asm"));
+// #[cfg(target_arch = "riscv64")]
+// global_asm!(include_str!("entry.asm"));
 
-#[cfg(target_arch = "loongarch64")]
-global_asm!(include_str!("entry_la.asm"));
+// #[cfg(target_arch = "loongarch64")]
+// global_asm!(include_str!("entry_la.asm"));
 
 #[macro_use]
 extern crate lazy_static;
@@ -59,25 +69,24 @@ pub fn rust_main(hart_id: usize) -> ! {
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
         .is_ok() 
     {
-        utils::clear_bss();
-        utils::logo();
+        hal::entry::boot::clear_bss();
+        hal::entry::boot::logo();
 
         mm::init(true);
-        
+        println!("finished mm::init");
         #[cfg(feature = "test")]
         {
-            mm::remap_test();
+            // mm::remap_test();
             fs::path_test();
         }
 
         utils::logger_init();
-
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
             hart_id
         );
-        trap::init();
+        hal::trap::init();
         task::init_processors();
         println!("a");
         block_on(fs::init());
@@ -88,10 +97,10 @@ pub fn rust_main(hart_id: usize) -> ! {
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]
-        utils::boot_all_harts(hart_id);
+        hal::entry::boot::boot_all_harts(hart_id);
     } else {
 
-        trap::init();
+        hal::trap::init();
         mm::init(false);        
     }
     

@@ -7,20 +7,28 @@ use core::time::Duration;
 
 use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
-use crate::arch::shutdown;
-use crate::fs::FileTrait;
-use crate::mm::{translated_refmut, MapPermission, MemorySet};
+
+use crate::hal::arch::shutdown;
+use crate::fs::{init, FileClass, FileTrait};
+use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
+use crate::mm::{memory_space, translated_refmut, MapPermission};
+
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
+
 use crate::task::{add_task, current_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task};
-use crate::trap::{trap_loop, TrapContext};
+use crate::hal::trap::{trap_loop, TrapContext};
 use alloc::collections::btree_map::BTreeMap;
+
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use log::{debug, info};
+// use riscv::addr::VirtAddr;
+use crate::mm::address::VirtAddr;
+use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 
 pub struct TaskControlBlock {
     // 不可变
@@ -34,7 +42,7 @@ pub struct TaskControlBlock {
 
     base_size:      Shared<usize>, // 迟早要删
     thread_group:   Shared<ThreadGroup>,
-    memory_set:     Shared<MemorySet>,
+    memory_space:   Shared<MemorySpace>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
     pub children:   Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
     fd_table:       Shared<FdTable>,
@@ -61,10 +69,16 @@ pub struct TaskControlBlock {
 
 impl TaskControlBlock {
     /// 创建新task,只有initproc会调用
-    pub fn new(elf_data: &[u8]) -> Arc<Self> {
+    pub fn new(elf_file: FileClass) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
-        let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        // let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf(elf_file);
         info!("entry point: {:#x}", entry_point);
+        
+
+        unsafe { memory_space.switch_page_table() };
+        unsafe{riscv::register::sstatus::set_sum();}
+        let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
         let trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
@@ -78,10 +92,16 @@ impl TaskControlBlock {
         
         // 每个task有自己的kernel stack
         let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
-        memory_set.insert_framed_area(
-            kernel_stack_bottom.into(),
-            kernel_stack_top.into(), 
-            MapPermission::R | MapPermission::W,
+        // memory_space.insert_framed_area(
+        //     kernel_stack_bottom.into(),
+        //     kernel_stack_top.into(), 
+        //     ,
+        // );
+        memory_space.push_vma(
+            VmArea::new(
+                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+                MapPerm::RW,
+                VmAreaType::Stack)
         );
         
         // push a task context which goes to trap_return to the top of kernel stack
@@ -95,7 +115,7 @@ impl TaskControlBlock {
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             base_size: new_shared(user_sp),
             thread_group: new_shared(ThreadGroup::new()),
-            memory_set: new_shared(memory_set),
+            memory_space: new_shared(memory_space),
             parent: new_shared(None),
             children: new_shared(BTreeMap::new()),
             fd_table: new_shared(FdTable::new()),
@@ -130,18 +150,19 @@ impl TaskControlBlock {
 
         new_task
     }
-    pub fn exec(&self, elf_data: &[u8]) {
-        debug!("exec start");
-        let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+    pub fn exec(&self, elf_file: FileClass) {
+        info!("exec start");
+        let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(&elf_file);
         
         // 建立该进程的kernel stack
         let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
-        memory_set.insert_framed_area(
-            kernel_stack_bottom.into(),
-            kernel_stack_top.into(),
-            MapPermission::R | MapPermission::W,
+        memory_space.push_vma(
+            VmArea::new(
+                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+                MapPerm::RW,
+                VmAreaType::Stack)
         );
-        debug!("exec memory_set created");
+        info!("exec memory_set created");
         
         // 终止所有子线程
         for (_, weak_task) in self.thread_group.lock().tasks.iter() {
@@ -154,9 +175,10 @@ impl TaskControlBlock {
 
         // **** access inner exclusively
         // substitute memory_set
-        unsafe { memory_set.switch_pgtable() };
-        let mut mem = self.memory_set.lock();
-        *mem = memory_set;
+        unsafe { memory_space.switch_page_table() };
+        let mut mem = self.memory_space.lock();
+        *mem = memory_space;
+        let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
 
         // initialize trap_cx
         let trap_cx = TrapContext::app_init_context(
@@ -219,14 +241,15 @@ impl TaskControlBlock {
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
         // TODO(YJJ):需要修改为clone和cow
-        let mut child_memory_set = MemorySet::clone_from_existed_memset(&self.memory_set.lock());
+        let mut child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
         // let mut child_memory_set = self.memory_set.clone();
-        child_memory_set.insert_framed_area(
-            kernel_stack_bottom.into(),
-            kernel_stack_top.into(),
-            MapPermission::R | MapPermission::W,
+        child_memory_space.push_vma(
+            VmArea::new(
+                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+                MapPerm::RW,
+                VmAreaType::Stack)
         );
-        let memory_set = new_shared(child_memory_set);
+        let memory_space = new_shared(child_memory_space);
 
         let new_task = Arc::new(TaskControlBlock {
             pid,
@@ -238,7 +261,7 @@ impl TaskControlBlock {
             base_size: self.base_size.clone(),
             thread_group,
             task_status,
-            memory_set,
+            memory_space,
             parent,
             children,
             fd_table,
@@ -283,7 +306,7 @@ impl TaskControlBlock {
         let sig_stack = SyncUnsafeCell::new(None);
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let thread_group = self.thread_group.clone();
-        let memory_set = self.memory_set.clone();
+        let memory_space = self.memory_space.clone();
         let parent = self.parent.clone();
         let children = self.children.clone();
         let current_path = self.current_path.clone();
@@ -324,7 +347,7 @@ impl TaskControlBlock {
             task_status,
             base_size: self.base_size.clone(),
             thread_group,
-            memory_set,
+            memory_space,
             parent,
             children,
             fd_table,
@@ -638,7 +661,7 @@ impl TaskControlBlock {
     }
 
     pub fn get_user_token(&self) -> usize {
-        self.memory_set.lock().token()
+        self.memory_space.lock().token()
     }
 
     /// 进程状态
@@ -680,7 +703,7 @@ impl TaskControlBlock {
 
     /// 刷新TLB
     pub fn switch_pgtable(&self) {
-        unsafe { self.memory_set.lock().activate() };
+        unsafe { self.memory_space.lock().switch_page_table(); };
     }
 
     // exit code
@@ -718,7 +741,7 @@ impl TaskControlBlock {
 
     /// 移除所有的 `MapArea`
     pub fn recycle_data_pages(&self) {
-        self.memory_set.lock().recycle_data_pages();
+        self.memory_space.lock().recycle_data_pages();
     }
     
     // fd
@@ -805,6 +828,10 @@ impl TaskControlBlock {
             }
         }
         utime+stime
+    }
+
+    pub fn with_mut_memory_space<T>(&self, f: impl FnOnce(&mut MemorySpace) -> T) -> T {
+        f(&mut self.memory_space.lock())
     }
 }
 

@@ -1,4 +1,4 @@
-use crate::trap::TrapContext;
+use crate::hal::trap::TrapContext;
 
 use super::SigMask;
 

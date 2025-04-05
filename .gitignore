@@ -10,6 +10,7 @@
 *.img
 *.diff
 *.a
+*.log
 
 os/src/link_app.S
 os/src/linker.ld
@@ -49,3 +50,7 @@ lwext4_rust/c_old/lwext4/include/generated/ext4_config.h
 
 *.dtb
 *.dts
+
+# Added by cargo
+
+/target

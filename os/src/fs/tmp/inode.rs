@@ -200,6 +200,10 @@ impl InodeTrait for TmpInode {
     fn is_dir(&self) -> bool {
         self.metadata.file_type.is_dir()
     }
+
+    fn get_page_cache(&self) -> Option<Arc<PageCache>> {
+        self.page_cache.as_ref().cloned()
+    }
 }
 
 impl Drop for TmpInode {
