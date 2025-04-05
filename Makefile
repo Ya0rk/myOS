@@ -2,7 +2,7 @@ DOCKER_TAG ?= rcore-tutorial-v3:latest
 .PHONY: docker build_docker
 	
 docker:
-	docker run --rm -it -v ${PWD}:/mnt -w /mnt --name rcore-tutorial-v3 ${DOCKER_TAG} bash
+	docker run --rm -it --privileged --network=host -e http_proxy=http://127.0.0.1:10808 -e https_proxy=http://127.0.0.1:10808 -v .:/os -w /os/os os-image:latest bash
 
 # build_docker: 
 # 	docker build -t ${DOCKER_TAG} --target build .
@@ -14,4 +14,4 @@ build_docker:
 	docker run -it --name myos -v .:/myOS --network=host --privileged -p 1234:1234 -e http_proxy=http://127.0.0.1:7890 -e https_proxy=http://127.0.0.1:7890 os-image:latest /bin/bash
 
 run:
-	docker start myos 
+	docker exec -it myos /bin/bash

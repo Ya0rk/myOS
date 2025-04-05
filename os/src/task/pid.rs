@@ -1,10 +1,12 @@
 use core::fmt;
 
 use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
-use crate::mm::{VirtAddr, KERNEL_SPACE};
+use crate::mm::page_table::{PTEFlags, KERNEL_PAGE_TABLE};
+use crate::mm::{VirtAddr};
 use alloc::collections::BTreeSet;
 use lazy_static::*;
-use log::debug;
+use log::{debug, info};
+use riscv::paging::PTE;
 use spin::Mutex;
 
 lazy_static! {
@@ -95,6 +97,8 @@ impl KernelStack {
                 kernel_stack_bottom, 
                 kernel_stack_top
             );
+        let flags = PTEFlags::V | PTEFlags::R | PTEFlags::W;
+        KERNEL_PAGE_TABLE.lock().map_kernel_range(kernel_stack_bottom.into()..kernel_stack_top.into(), flags);
         KernelStack { pid: pid_handle.0 }
     }
     #[allow(unused)]
@@ -128,10 +132,12 @@ impl KernelStack {
 
 impl Drop for KernelStack {
     fn drop(&mut self) {
-        let (kernel_stack_bottom, _) = kernel_stack_position(self.pid);
-        let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
-        KERNEL_SPACE
-            .lock()
-            .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
+        let (kernel_stack_bottom, kernel_stack_start) = kernel_stack_position(self.pid);
+        // let kernel_stack_bottom_va: VirtAddr = kernel_stack_bottom.into();
+        // KERNEL_SPACE
+        //     .lock()
+        //     .remove_area_with_start_vpn(kernel_stack_bottom_va.into());
+        info!("[KernelStack] Drop for pid {}", self.pid);
+        KERNEL_PAGE_TABLE.lock().unmap_kernel_range(kernel_stack_bottom.into()..kernel_stack_start.into());
     }
 }

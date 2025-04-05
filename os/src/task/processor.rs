@@ -1,10 +1,11 @@
 use core::cell::UnsafeCell;
 use super::TaskControlBlock;
 use crate::config::HART_NUM;
-use crate::mm::switch_to_kernel_pgtable;
+use crate::mm::page_table::switch_to_kernel_pgtable;
+// use crate::mm::switch_to_kernel_pgtable;
 use crate::sync::disable_interrupt;
 use crate::sync::enable_interrupt;
-use crate::trap::TrapContext;
+use crate::hal::trap::TrapContext;
 use crate::utils::backtrace;
 use alloc::sync::Arc;
 
@@ -98,7 +99,7 @@ pub fn get_cpu(hart_id: usize) -> &'static mut CPU {
 
 /// 获取当前运行的 Processor id
 pub fn get_current_hart_id() -> usize {
-    crate::arch::tp_read()
+    crate::hal::arch::tp_read()
 }
 
 ///Take the current task,leaving a None in its place
@@ -115,7 +116,7 @@ pub fn current_task() -> Option<Arc<TaskControlBlock>> {
 pub fn current_user_token() -> usize {
     // riscv::register::satp::read().bits()
     // unimplemented!()
-    crate::arch::satp_read()
+    crate::hal::arch::satp_read()
 }
 
 ///Get the mutable reference to trap context of current task

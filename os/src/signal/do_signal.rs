@@ -4,7 +4,7 @@ use log::info;
 use crate::{mm::translated_byte_buffer,
     signal::{SigActionFlag, SigHandler, SigNom, UContext},
     task::TaskControlBlock,
-    trap::__sigret_helper
+    hal::trap::__sigret_helper
 };
 
 /// 这里包含了所有默认的信号处理方式
