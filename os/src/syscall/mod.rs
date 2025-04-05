@@ -49,6 +49,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_FACCESSAT => sys_faccessat(args[0] as isize, args[1] as *const u8, args[2] as u32, args[3] as u32),
         SysCode::SYSCALL_LSEEK => sys_lseek(args[0] as usize, args[1] as isize, args[2] as usize),
         SysCode::SYSCALL_SETSID => sys_setsid(),
+        SysCode::SYSCALL_SETPGID => sys_setpgid(args[0] as usize, args[1] as usize),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

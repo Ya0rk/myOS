@@ -99,7 +99,10 @@ pub fn add_proc_group_member(pgid: PGid, pid: Pid) {
 }
 
 /// 将原进程从进程组中删除，加入一个全新的进程组，该进程组以自己为leader
-pub fn extract_proc_to_new_group(pgid: PGid, pid: Pid) {
-    MANAGER.process_group.lock().remove(pgid, pid);
-    MANAGER.process_group.lock().add_new_group(pid);
+pub fn extract_proc_to_new_group(old_pgid: PGid, new_pgid: PGid, pid: Pid) {
+    MANAGER.process_group.lock().remove(old_pgid, pid);
+    match MANAGER.process_group.lock().0.get_mut(&new_pgid) {
+        Some(vec) => vec.push(pid),
+        None => MANAGER.process_group.lock().add_new_group(new_pgid),
+    }
 }
