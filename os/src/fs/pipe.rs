@@ -1,6 +1,6 @@
 use core::{cmp::min, future::Future, task::{Poll, Waker}};
 use super::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags};
-use crate::{config::PIPE_BUFFER_SIZE, mm::UserBuffer, sync::once::LateInit, utils::{Errno, SysResult}};
+use crate::{hal::config::PIPE_BUFFER_SIZE, mm::UserBuffer, sync::once::LateInit, utils::{Errno, SysResult}};
 use alloc::{collections::vec_deque::VecDeque, string::String, sync::{Arc, Weak}, vec::Vec};
 use spin::Mutex;
 use async_trait::async_trait;

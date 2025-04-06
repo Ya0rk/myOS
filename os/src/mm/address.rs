@@ -2,7 +2,7 @@
 use core::ops::Range;
 
 use super::PageTableEntry;
-use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PAGE_MASK, PAGE_SIZE, PAGE_SIZE_BITS};
+use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PAGE_MASK, PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
 // use core::iter::Step;
 /// physical address

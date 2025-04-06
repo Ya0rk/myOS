@@ -1,6 +1,6 @@
 use lwext4_rust::bindings::ext4_inode_stat;
 
-use crate::{config::BLOCK_SIZE, sync::TimeSepc};
+use crate::{hal::config::BLOCK_SIZE, sync::TimeSepc};
 
 #[repr(C)]
 pub struct Kstat {

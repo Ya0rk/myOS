@@ -28,7 +28,7 @@ mod board;
 
 #[macro_use]
 mod console;
-mod config;
+// mod config;
 mod lang_items;
 pub mod mm;
 pub mod fs;
