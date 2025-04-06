@@ -95,12 +95,12 @@ impl TaskControlBlock {
         //     kernel_stack_top.into(), 
         //     ,
         // );
-        memory_space.push_vma(
-            VmArea::new(
-                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-                MapPerm::RW,
-                VmAreaType::Stack)
-        );
+        // memory_space.push_vma(
+        //     VmArea::new(
+        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+        //         MapPerm::RW,
+        //         VmAreaType::Stack)
+        // );
         
         // push a task context which goes to trap_return to the top of kernel stack
         let new_task = Arc::new(Self {
@@ -153,12 +153,12 @@ impl TaskControlBlock {
         
         // 建立该进程的kernel stack
         let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
-        memory_space.push_vma(
-            VmArea::new(
-                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-                MapPerm::RW,
-                VmAreaType::Stack)
-        );
+        // memory_space.push_vma(
+        //     VmArea::new(
+        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+        //         MapPerm::RW,
+        //         VmAreaType::Stack)
+        // );
         info!("exec memory_set created");
         
         // 终止所有子线程
@@ -239,12 +239,12 @@ impl TaskControlBlock {
         // TODO(YJJ):需要修改为clone和cow
         let mut child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
         // let mut child_memory_set = self.memory_set.clone();
-        child_memory_space.push_vma(
-            VmArea::new(
-                VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-                MapPerm::RW,
-                VmAreaType::Stack)
-        );
+        // child_memory_space.push_vma(
+        //     VmArea::new(
+        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
+        //         MapPerm::RW,
+        //         VmAreaType::Stack)
+        // );
         let memory_space = new_shared(child_memory_space);
 
         let new_task = Arc::new(TaskControlBlock {
