@@ -6,7 +6,7 @@ use log::info;
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, yield_now};
 use crate::syscall::syscall;
-use crate::task::{current_task, current_trap_cx, executor, get_current_hart_id};
+use crate::task::{current_task, current_trap_cx, executor, get_current_cpu, get_current_hart_id};
 use super::{__return_to_user, set_trap_handler, IndertifyMode};
 /// 导入riscv架构相关的包
 #[cfg(target_arch = "riscv64")]
@@ -139,6 +139,7 @@ pub fn user_trap_return() {
 
     let task = current_task().unwrap();
 
+    get_current_cpu().timer_irq_reset();
     task.get_time_data_mut().set_trap_out_time();
     unsafe { __return_to_user(trap_cx); }
     task.get_time_data_mut().set_trap_in_time();

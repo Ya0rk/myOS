@@ -12,6 +12,13 @@ use alloc::sync::Arc;
 ///CPU 结构体，包含当前正在运行的任务和内核线程的上下文
 pub struct CPU {
     current: Option<Arc<TaskControlBlock>>,
+    /// 计数器，记录内核时钟中断的次数
+    /// 在内核时钟中断处理函数中会增加这个计数器
+    /// 在trap return时会清零
+    /// 这个计数器的作用是为了在内核线程中进行调度
+    /// 如果计数器大于一定值，就yield进行调度
+    /// 避免该线程一直占用CPU
+    timer_irq_cnt: usize,
     hart_id: usize,
 }
 
@@ -19,6 +26,7 @@ impl CPU {
     pub const fn new() -> Self {
         Self {
             current: None,
+            timer_irq_cnt: 0,
             hart_id: 0,
         }
     }
@@ -39,7 +47,15 @@ impl CPU {
     pub fn set_cpu_task(&mut self, task: Arc<TaskControlBlock>) {
         self.current = Some(task);
     }
-
+    pub fn timer_irq_inc(&mut self) {
+        self.timer_irq_cnt += 1;
+    }
+    pub fn timer_irq_cnt(&self) -> usize {
+        self.timer_irq_cnt
+    }
+    pub fn timer_irq_reset(&mut self) {
+        self.timer_irq_cnt = 0;
+    }
 }
 
 impl CPU {
