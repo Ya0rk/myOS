@@ -120,6 +120,7 @@ impl PageCache {
             buf_cur += len;
             // TODO: maybe bug?
             page_offset = 0;
+            
         }
         buf_cur
     }

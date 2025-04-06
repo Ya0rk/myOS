@@ -21,7 +21,8 @@ pub use pid::pid_alloc;
 pub use manager::{
     add_task, remove_task_by_pid, get_task_by_pid, 
     remove_proc_group_member, add_proc_group_member, 
-    new_process_group, get_init_proc, extract_proc_to_new_group
+    new_process_group, get_init_proc, extract_proc_to_new_group,
+    get_proc_num
 };
 pub use sched::{spawn_user_task, spawn_kernel_task};
 pub use processor::{

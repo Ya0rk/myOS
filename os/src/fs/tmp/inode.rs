@@ -128,7 +128,7 @@ impl InodeTrait for TmpInode {
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
-                info!("ssss");
+                // info!("ssss");
                 cache.write(buf, offset).await
             }
         }

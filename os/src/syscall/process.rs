@@ -6,12 +6,14 @@ use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_I
 use crate::sync::{sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
-    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_task_by_pid, spawn_user_task
+    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_task_by_pid, spawn_user_task
 };
 use crate::utils::{Errno, SysResult, RNG};
 use log::{debug, info};
 use lwext4_rust::bindings::true_;
 use zerocopy::IntoBytes;
+
+use super::ffi::Sysinfo;
 
 // use super::ffi::Utsname;
 
@@ -400,4 +402,16 @@ pub fn sys_sigreturn() -> SysResult<usize> {
     }
     let a0 = trap_cx.user_x[10];
     Ok(a0)
+}
+
+/// return system information
+pub fn sys_sysinfo(sysinfo: *const u8) -> SysResult<usize> {
+    if sysinfo.is_null() {
+        return Err(Errno::EBADCALL);
+    }
+    let proc_num = get_proc_num();
+    let bind = Sysinfo::new(proc_num);
+    let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
+    unsafe { core::ptr::write(sysinfo, bind) };
+    Ok(0)
 }

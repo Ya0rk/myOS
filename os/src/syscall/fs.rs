@@ -1,6 +1,8 @@
 use core::cell::SyncUnsafeCell;
+use core::ops::Add;
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec::Vec;
 use alloc::vec;
 use log::info;
 use lwext4_rust::file;
@@ -8,6 +10,7 @@ use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::ext4::NormalFile;
 use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
+use crate::syscall::ffi::IoVec;
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
 use super::ffi::{FaccessatMode, AT_REMOVEDIR};
@@ -24,8 +27,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             if !file.writable() {
                 return Err(Errno::EPERM);
             }
-            let file = file.clone();
-
+            // let file = file.clone();
             Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
@@ -45,8 +47,83 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             if !file.readable() {
                 return Err(Errno::EPERM);
             }
-            let file = file.clone();
+            // let file = file.clone();
             Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
+        }
+        _ => Err(Errno::EBADCALL),
+    }
+}
+
+/// system call reads iovcnt buffers from the file associated 
+/// with the file descriptor fd into the buffers described by iov
+/// iov: 指向一个结构体数组，结构体的定义如下：
+/// ```
+/// struct iovec {
+///    void *iov_base;	// 指向数据缓冲区的指针
+///   size_t iov_len;	// 缓冲区的长度
+/// };
+///```
+/// len: 数组的长度
+pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let mut res = 0;
+    if fd >= task.fd_table_len() {
+        return Err(Errno::EBADF);
+    }
+    match task.get_file_by_fd(fd) {
+        Some(file) => {
+            if !file.readable() {
+                return Err(Errno::EPERM);
+            }
+            // 将iov中的结构体一个个取出，转化为UserBuffer
+            for i in 0..iovcnt {
+                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
+                let len = (unsafe { *iov_st }).iov_len;
+                if len == 0 {
+                    continue;
+                }
+                let base = (unsafe { *iov_st }).iov_base;
+                let one = translated_byte_buffer(token, base as *const u8, len);
+                let buffer = UserBuffer::new(one);
+                let read_len = file.read(buffer).await?;
+                res += read_len;
+            }
+            Ok(res)
+        }
+        _ => Err(Errno::EBADCALL),
+    }
+}
+
+/// 和sys_readv相反，将数据从iov中写入到文件中
+/// system call writes iovcnt buffers from the file associated
+/// with the file descriptor fd into the buffers described by iov
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let mut res = 0;
+    if fd >= task.fd_table_len() {
+        return Err(Errno::EBADF);
+    }
+    match task.get_file_by_fd(fd) {
+        Some(file) => {
+            if !file.writable() {
+                return Err(Errno::EPERM);
+            }
+            // 将iov中的结构体一个个取出，转化为UserBuffer
+            for i in 0..iovcnt {
+                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
+                let len = (unsafe { *iov_st }).iov_len;
+                if len == 0 {
+                    continue;
+                }
+                let base = (unsafe { *iov_st }).iov_base;
+                let one = translated_byte_buffer(token, base as *const u8, len);
+                let buffer = UserBuffer::new(one);
+                let write_len = file.write(buffer).await?;
+                res += write_len;
+            }
+            Ok(res)
         }
         _ => Err(Errno::EBADCALL),
     }
