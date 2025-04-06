@@ -1,8 +1,10 @@
 mod fs;
 mod process;
 mod ffi;
+mod mm;
 
 use fs::*;
+use mm::sys_brk;
 use process::*;
 use ffi::SysCode;
 pub use ffi::CloneFlags;
@@ -35,6 +37,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0] as *mut u8, args[1] as *mut u8),
         SysCode::SYSCALL_GETPID => sys_getpid(),
         SysCode::SYSCALL_GETPPID => sys_getppid(),
+        SysCode::SYSCALL_BRK => sys_brk(args[0] as *const u8),
         SysCode::SYSCALL_CLONE => sys_clone(args[0], args[1], args[2], args[3], args[4]),
         SysCode::SYSCALL_EXEC => sys_exec(args[0] as usize).await,
         SysCode::SYSCALL_WAIT4 => sys_wait4(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as usize).await,
