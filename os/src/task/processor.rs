@@ -1,6 +1,6 @@
 use core::cell::UnsafeCell;
 use super::TaskControlBlock;
-use crate::config::HART_NUM;
+use crate::hal::config::HART_NUM;
 use crate::mm::page_table::switch_to_kernel_pgtable;
 // use crate::mm::switch_to_kernel_pgtable;
 use crate::sync::disable_interrupt;

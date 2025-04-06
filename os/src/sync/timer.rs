@@ -1,5 +1,5 @@
 use core::time::Duration;
-use crate::{hal::arch::set_timer, config::CLOCK_FREQ};
+use crate::{hal::arch::set_timer, hal::config::CLOCK_FREQ};
 use super::{time::TimeSepc, yield_now};
 
 const TICKS_PER_SEC: usize = 100; // 设置每秒中断次数，可以计算出每次中断的时间间隔

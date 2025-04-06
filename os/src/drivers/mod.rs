@@ -12,7 +12,7 @@ pub use virtio::*;
 
 use virtio_drivers::VirtIOHeader;
 
-use crate::config::KERNEL_ADDR_OFFSET;
+use crate::hal::config::KERNEL_ADDR_OFFSET;
 
 
 pub type BlockDeviceImpl = VirtIoBlkDev<VirtIoHalImpl>;

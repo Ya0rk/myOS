@@ -1,6 +1,6 @@
 use alloc::string::String;
 use log::info;
-use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
+use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::{ join_path_2_absolute, mkdir, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token, Fd, FdTable};

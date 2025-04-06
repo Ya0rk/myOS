@@ -17,7 +17,7 @@ use crate::hal::arch::sfence_vma_vaddr;
 // use riscv::register::scause; 将从riscv库引入scause替换为从hal::arch引入。在hal::arch中会间接引入riscv::register::scause
 // use crate::hal::arch::scause;
 // use async_utils::block_on;
-use crate::{config::{
+use crate::{hal::config::{
     
     align_down_by_page, is_aligned_to_page, DL_INTERP_OFFSET, MMAP_PRE_ALLOC_PAGES, PAGE_SIZE, USER_ELF_PRE_ALLOC_PAGE_CNT, USER_STACK_PRE_ALLOC_SIZE, USER_STACK_SIZE, U_SEG_FILE_BEG, U_SEG_FILE_END, U_SEG_HEAP_BEG, U_SEG_HEAP_END, U_SEG_SHARE_BEG, U_SEG_SHARE_END, U_SEG_STACK_BEG, U_SEG_STACK_END
 }, fs::FileClass, sync::block_on};

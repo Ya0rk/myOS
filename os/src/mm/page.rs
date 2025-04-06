@@ -1,4 +1,4 @@
-use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, fs::FileClass, mm::frame_allocator::{frame_alloc, FrameTracker}};
+use crate::{hal::config::{BLOCK_SIZE, PAGE_SIZE}, fs::FileClass, mm::frame_allocator::{frame_alloc, FrameTracker}};
 use alloc::sync::Arc;
 use hashbrown::HashSet;
 use log::info;

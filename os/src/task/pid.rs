@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
+use crate::hal::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
 use crate::mm::page_table::{PTEFlags, KERNEL_PAGE_TABLE};
 use crate::mm::{VirtAddr};
 use alloc::collections::BTreeSet;
