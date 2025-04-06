@@ -15,7 +15,7 @@ use core::{
 // use core::arch::riscv64::sfence_vma_vaddr; 关于core::arch::riscv64::中的内容会在crate::hal::arch中统一引入
 use crate::hal::arch::sfence_vma_vaddr;
 // use riscv::register::scause; 将从riscv库引入scause替换为从hal::arch引入。在hal::arch中会间接引入riscv::register::scause
-use crate::hal::arch::scause;
+// use crate::hal::arch::scause;
 // use async_utils::block_on;
 use crate::{config::{
     
@@ -68,14 +68,14 @@ impl PageFaultAccessType {
     pub const RW: Self = Self::RO.union(Self::WRITE);
     pub const RX: Self = Self::RO.union(Self::EXECUTE);
 
-    pub fn from_exception(e: scause::Exception) -> Self {
-        match e {
-            scause::Exception::InstructionPageFault => Self::RX,
-            scause::Exception::LoadPageFault => Self::RO,
-            scause::Exception::StorePageFault => Self::RW,
-            _ => panic!("unexcepted exception type for PageFaultAccessType"),
-        }
-    }
+    // pub fn from_exception(e: scause::Exception) -> Self {
+    //     match e {
+    //         scause::Exception::InstructionPageFault => Self::RX,
+    //         scause::Exception::LoadPageFault => Self::RO,
+    //         scause::Exception::StorePageFault => Self::RW,
+    //         _ => panic!("unexcepted exception type for PageFaultAccessType"),
+    //     }
+    // }
 
     pub fn can_access(self, flag: MapPerm) -> bool {
         if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) {
