@@ -1,8 +1,11 @@
 pub mod sbi;
 pub mod sstatus;
 pub mod interrupt;
+
 use core::arch::asm;
 use riscv::register::satp;
+pub use riscv::register::scause;
+// pub use core::arch::riscv64::*;
 
 pub fn tp_read() -> usize {
     unsafe {
@@ -47,6 +50,10 @@ pub fn sfence() {
     }
 }
 
+pub unsafe fn sfence_vma_vaddr(vaddr: usize) {
+    asm!("sfence.vma {}, x0", in(reg) vaddr, options(nostack))
+}
+
 pub fn console_putchar(c: usize) {
     sbi::console_putchar(c);
 }
@@ -67,3 +74,5 @@ pub fn shutdown(failuer: bool) -> ! {
 pub fn hart_start_success(hartid: usize, start_addr: usize) -> bool {
     sbi::hart_start(hartid, start_addr)
 }
+
+
