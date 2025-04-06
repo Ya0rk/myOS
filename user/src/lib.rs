@@ -163,3 +163,15 @@ pub fn sleep(period_ms: usize) {
     let req = [period_ms as u8, 0, 0, 0, 0, 0, 0, 0];
     sys_nanosleep(&req, &[0; 8]);
 }
+
+pub fn mmap(addr: *const u8, length: usize, prot: i32, flags: i32, fd: i32, offset: usize) -> *mut u8 {
+    sys_mmap(addr, length, prot, flags, fd, offset)
+}
+
+pub fn munmap(addr: *const u8, length: usize) -> isize {
+    sys_munmap(addr, length)
+}
+
+pub fn brk(end_data_segment: *const u8) -> isize {
+    sys_brk(end_data_segment)
+}
