@@ -1,7 +1,7 @@
 use core::mem::size_of;
 use crate::fs::{open_file, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::signal::{SigDetails, SigMask};
+use crate::signal::{SigDetails, SigMask, UContext};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
 use crate::sync::{sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
@@ -378,4 +378,26 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
         extract_proc_to_new_group(old_pgid, pgid, pid);
     }
     Ok(0)
+}
+
+/// sigreturn() is a system call that is used to restore the state of a process after it has been interrupted by a signal.
+/// when a signal handler finished executing, it can call sigreturn() to restore the process's state to what it was before the signal was received.
+/// 用于从信号处理函数返回到用户程序被中断的位置
+pub fn sys_sigreturn() -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let ucontext = task.get_ucontext() as *const UContext;
+    let ucontext = unsafe { core::ptr::read(ucontext) };
+    let sig_stack = ucontext.uc_stack;
+    let sig_mask = ucontext.uc_sigmask;
+    let trap_cx = task.get_trap_cx_mut();
+    let sepc = ucontext.get_sepc();
+    trap_cx.set_sepc(sepc); // 恢复sepc
+    trap_cx.user_x = ucontext.get_userx(); // 恢复寄存器
+    task.set_blocked(sig_mask); // 恢复信号屏蔽字
+    // 恢复信号栈
+    if sig_stack.ss_size != 0 {
+        unsafe { *task.sig_stack.get() = Some(sig_stack) };
+    }
+    let a0 = trap_cx.user_x[10];
+    Ok(a0)
 }

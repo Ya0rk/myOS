@@ -64,7 +64,8 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
                 let sig_stack = task.get_sig_stack_mut().take();
                 let token = task.get_user_token();
-                let ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx); // 保存当前的user 状态
+                // 保存当前的user 状态,在sigreturn中恢复
+                let ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx);
                 copy2user(token, new_sp as *mut UContext, &ucontext);
 
                 // 修改trap_cx，函数trap return后返回到信号处理函数

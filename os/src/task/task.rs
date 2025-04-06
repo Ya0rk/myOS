@@ -572,6 +572,10 @@ impl TaskControlBlock {
     pub fn get_blocked_mut(&self) -> &mut SigMask {
         unsafe { &mut *self.blocked.get() }
     }
+    /// 设置信号屏蔽字段
+    pub fn set_blocked(&self, mask: SigMask) {
+        unsafe { *self.blocked.get() = mask };
+    }
 
     /// 设置ucontext
     pub fn set_ucontext(&self, addr: usize) {

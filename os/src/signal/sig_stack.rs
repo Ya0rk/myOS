@@ -76,6 +76,14 @@ impl UContext {
             uc_mcontext: MContext::new(sepc, user_x)
         }
     }
+
+    pub fn get_sepc(&self) -> usize {
+        self.uc_mcontext.sepc
+    }
+
+    pub fn get_userx(&self) -> [usize; 32] {
+        self.uc_mcontext.user_x
+    }
 }
 
 impl MContext {
