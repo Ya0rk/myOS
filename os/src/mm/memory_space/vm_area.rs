@@ -2,7 +2,8 @@ use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use log::info;
 use core::ops::{Range, RangeBounds};
 
-use core::arch::riscv64::sfence_vma_vaddr;
+// use core::arch::riscv64::sfence_vma_vaddr; //这个core::arch::riscv64包会在hal::arch中统一引入
+use crate::hal::arch::sfence_vma_vaddr;
 // use async_utils::block_on;
 use crate::config::{align_down_by_page, PAGE_SIZE};
 // use memory::{pte::PTEFlags, VirtAddr, VirtPageNum};
