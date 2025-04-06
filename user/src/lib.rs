@@ -13,6 +13,8 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
+use core::convert::TryInto;
+
 use buddy_system_allocator::LockedHeap;
 use syscall::*;
 
@@ -140,6 +142,16 @@ pub fn uname(buf: &mut [u8]) -> isize {
 pub fn get_time() -> isize {
     let mut ts = [0u8; 16];
     sys_gettimeofday(ts.as_mut())
+}
+pub fn get_mtime() -> isize {
+    let mut ts = [0u8; 16];
+    sys_gettimeofday(ts.as_mut());
+    let (first, second) = ts.split_at(8);
+    
+    // Convert each 8-byte slice to usize
+    let first_usize = usize::from_ne_bytes(first.try_into().unwrap());
+    let second_usize = usize::from_ne_bytes(second.try_into().unwrap());
+    ((first_usize & 0xffff) * 1000 + second_usize / 1000) as isize
 }
 pub fn getpid() -> isize {
     sys_getpid()

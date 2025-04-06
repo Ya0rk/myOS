@@ -75,7 +75,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
         }
 
     }
-    task.set_pending(task.sig_pending.lock().is_empty());
+    task.set_pending(!task.sig_pending.lock().is_empty());
 }
 
 /// 根据signo分发处理函数

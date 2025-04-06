@@ -84,6 +84,15 @@ impl ProcessGroupManager {
         let target_group = self.0.get_mut(&pgid).unwrap();
         target_group.remove(pid);
     }
+
+    /// 获取所有进程数量
+    pub fn get_all_process_num(&self) -> u16 {
+        let mut num = 0;
+        for (_, vec) in self.0.iter() {
+            num += vec.len();
+        }
+        num as u16
+    }
 }
 
 pub fn new_process_group(pgid: PGid) {
@@ -96,6 +105,10 @@ pub fn remove_proc_group_member(pgid: PGid, pid: Pid) {
 
 pub fn add_proc_group_member(pgid: PGid, pid: Pid) {
     MANAGER.process_group.lock().add(pgid, pid);
+}
+
+pub fn get_proc_num() -> u16 {
+    MANAGER.process_group.lock().get_all_process_num()
 }
 
 /// 将原进程从进程组中删除，加入一个全新的进程组，该进程组以自己为leader

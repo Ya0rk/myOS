@@ -151,7 +151,7 @@ impl InodeTrait for Ext4Inode {
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
-                info!("ssss");
+                // info!("ssss");
                 cache.write(buf, offset).await
             }
         }

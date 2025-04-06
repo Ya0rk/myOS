@@ -2,6 +2,8 @@ use core::fmt::{self, Display};
 use num_enum::FromPrimitive;
 use zerocopy::{Immutable, IntoBytes};
 
+use crate::sync::timer::get_time_s;
+
 #[derive(IntoBytes, Immutable)]
 #[allow(unused)]
 #[repr(C)]
@@ -63,6 +65,8 @@ pub enum SysCode {
     SYSCALL_LSEEK     = 62,  
     SYSCALL_READ      = 63,
     SYSCALL_WRITE     = 64,
+    SYSCALL_READV     = 65,
+    SYSCALL_WRITEV    = 66,
     SYSCALL_SENDFILE  = 71,
     SYSCALL_FSTAT     = 80,
     SYSCALL_EXIT      = 93,
@@ -80,6 +84,7 @@ pub enum SysCode {
     SYSCALL_GETTIMEOFDAY  = 169,
     SYSCALL_GETPID    = 172,
     SYSCALL_GETPPID   = 173,
+    SYSCALL_SYSINFO   = 179,
     SYSCALL_CLONE     = 220,
     SYSCALL_EXEC      = 221,
     SYSCALL_WAIT4     = 260,
@@ -98,6 +103,9 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_WRITEV => "writev",
+            Self::SYSCALL_READV => "readv",
+            Self::SYSCALL_SYSINFO => "sysinfo",
             Self::SYSCALL_SIGRETURN => "sigreturn",
             Self::SYSCALL_SETPGID => "setpgid",
             Self::SYSCALL_SETSID => "setsid",
@@ -237,4 +245,69 @@ bitflags! {
         /// 检查文件是否可执行
         const X_OK = 1;
     }
+}
+
+const _F_SIZE: usize = 20 - 2 * size_of::<u64>() - size_of::<u32>();
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct Sysinfo {
+    /// 系统启动以来的秒数
+    pub uptime: i64,
+    /// 1分钟、5分钟和15分钟的系统平均负载
+    pub loads: [u64; 3],
+    /// 总可用主内存大小（单位：mem_unit字节）
+    pub totalram: u64,
+    /// 可用内存大小（单位：mem_unit字节）
+    pub freeram: u64,
+    /// 共享内存大小（单位：mem_unit字节）
+    pub sharedram: u64,
+    /// 缓冲区使用的内存（单位：mem_unit字节）
+    pub bufferram: u64,
+    /// 总交换空间大小（单位：mem_unit字节）
+    pub totalswap: u64,
+    /// 剩余可用交换空间（单位：mem_unit字节）
+    pub freeswap: u64,
+    /// 当前进程数量
+    pub procs: u16,
+    /// 为m68k架构显式填充的字段
+    pub pad: u16,
+    /// 总高端内存大小（单位：mem_unit字节）
+    pub totalhigh: u64,
+    /// 可用高端内存大小（单位：mem_unit字节）
+    pub freehigh: u64,
+    /// 内存单位大小（字节）
+    pub mem_uint: u32,
+    /// 填充字段：libc5曾使用此字段...
+    pub _f: [u8; _F_SIZE],
+}
+
+impl Sysinfo {
+    pub fn new(proc_num: u16) -> Self {
+        Self {
+            uptime: get_time_s() as i64,
+            loads: [0; 3],
+            totalram: 0,
+            freeram: 0,
+            sharedram: 0,
+            bufferram: 0,
+            totalswap: 0,
+            freeswap: 0,
+            procs: proc_num,
+            pad: 0,
+            totalhigh: 0,
+            freehigh: 0,
+            mem_uint: 0,
+            _f: [0; _F_SIZE],
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct IoVec {
+    /// start address of the buffer
+    pub iov_base: usize,
+    /// length of the buffer
+    pub iov_len: usize,
 }
