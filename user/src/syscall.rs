@@ -139,3 +139,15 @@ pub fn sys_exec(path: &str) -> isize {
 pub fn sys_wait4(pid: isize, exit_code: *mut i32, options: usize) -> isize {
     syscall(SYSCALL_WAIT4, [pid as usize, exit_code as usize, options as usize, 0, 0, 0])
 }
+
+pub fn sys_mmap(addr: *const u8, length: usize, prot: i32, flags: i32, fd: i32, offset: usize) -> *mut u8 {
+    syscall(SYSCALL_MMAP, [addr as usize, length, prot as usize, flags as usize, fd as usize, offset]) as *mut u8
+}
+
+pub fn sys_munmap(addr: *const u8, length: usize) -> isize {
+    syscall(SYSCALL_MUNMAP, [addr as usize, length, 0, 0, 0, 0])
+}
+
+pub fn sys_brk(end_data_segment: *const u8) -> isize {
+    syscall(SYSCALL_BRK, [end_data_segment as usize, 0, 0, 0, 0, 0])
+}
