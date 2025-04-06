@@ -20,7 +20,7 @@ impl log::Log for SimpleLogger {
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
             println!(
-                "\x1b[{}m[{}] [PID{}] {}\x1b[0m",
+                "\x1b[{}m[{}] [HARTID{}] {}\x1b[0m",
                 level_color(record.level()),
                 record.level(),
                 get_current_hart_id(),

@@ -4,7 +4,7 @@ use alloc::{collections::btree_map::BTreeMap, sync::{Arc, Weak}};
 use hashbrown::HashSet;
 use log::info;
 use spin::RwLock;
-use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::SleepLock, utils::{Errno, SysResult}};
+use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::{yield_now, SleepLock}, task::get_current_cpu, utils::{Errno, SysResult}};
 use super::InodeTrait;
 use crate::mm::page::*;
 
@@ -120,7 +120,10 @@ impl PageCache {
             buf_cur += len;
             // TODO: maybe bug?
             page_offset = 0;
-            
+            // 这里需要yield一下，防止cpu占用过高
+            if get_current_cpu().timer_irq_cnt() >= 2 {
+                yield_now().await;
+            }
         }
         buf_cur
     }
@@ -151,6 +154,11 @@ impl PageCache {
             buf_cur += len;
             // TODO: maybe bug?
             page_offset = 0;
+            // 这里需要yield一下，防止cpu占用过高
+            if get_current_cpu().timer_irq_cnt() >= 2 {
+                info!("[PageCache] yield now!");
+                yield_now().await;
+            }
         }
 
         buf_cur

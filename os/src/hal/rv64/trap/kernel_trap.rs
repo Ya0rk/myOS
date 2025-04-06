@@ -11,13 +11,17 @@ use riscv::register::{scause::{self, Exception, Interrupt, Trap}, stval, sepc};
 /// Unimplement: traps/interrupts/exceptions from kernel mode
 /// Todo: Chapter 9: I/O device
 pub fn kernel_trap_handler() {
-    // backtrace();
+    use log::info;
+
+    use crate::task::get_current_cpu;
     let scause = scause::read();
     let stval = stval::read();
     let sepc = sepc::read();
     let cause = scause.cause();
     match cause {
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
+            info!("[kernel_trap_handler] kernel timer interrupt");
+            get_current_cpu().timer_irq_inc();
             set_next_trigger();
         },
         Trap::Exception(e) => match e {
