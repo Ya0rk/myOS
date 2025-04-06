@@ -6,7 +6,7 @@ use crate::mm::{VirtAddr};
 use alloc::collections::BTreeSet;
 use lazy_static::*;
 use log::{debug, info};
-use riscv::paging::PTE;
+// use riscv::paging::PTE;
 use spin::Mutex;
 
 lazy_static! {
