@@ -83,30 +83,30 @@ core::arch::global_asm!(include_str!("preload.S"));
 
 // os\src\fs\mod.rs
 //将预加载到内存中的程序写入文件根目录
-pub async fn flush_preload() {
-    extern "C" {
-        fn initproc_start();
-        fn initproc_end();
-    }
+// pub async fn flush_preload() {
+//     extern "C" {
+//         fn initproc_start();
+//         fn initproc_end();
+//     }
 
-        println!("aaa");
-    if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
-        let mut v = Vec::new();
-        v.push(unsafe {
-            core::slice::from_raw_parts_mut(
-                initproc_start as *mut u8,
-                initproc_end as usize - initproc_start as usize,
-            ) as &'static mut [u8]
-        });
-        info!("kkkk");
-        initproc.write(UserBuffer::new(v)).await.unwrap();
-        info!("ddddd");
-    }
-}
+//     println!("aaa");
+//     if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
+//         let mut v = Vec::new();
+//         v.push(unsafe {
+//             core::slice::from_raw_parts_mut(
+//                 initproc_start as *mut u8,
+//                 initproc_end as usize - initproc_start as usize,
+//             ) as &'static mut [u8]
+//         });
+//         info!("kkkk");
+//         initproc.write(UserBuffer::new(v)).await.unwrap();
+//         info!("ddddd");
+//     }
+// }
 
-pub async fn init() {
-    flush_preload().await;
-    let _ = create_init_files();
+pub fn init() {
+    // flush_preload().await;
+    create_init_files();
 }
 
 pub fn list_apps() -> bool{
