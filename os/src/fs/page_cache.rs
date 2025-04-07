@@ -68,7 +68,7 @@ impl PageCache {
                     let start_offset = idx * BLOCK_SIZE;
                     let start = page_addr_aligned + start_offset;
                     let buf = &page.frame.ppn.get_bytes_array()[start_offset..start_offset + BLOCK_SIZE].to_vec();
-                    inode.clone().write_back(start, BLOCK_SIZE, buf)?;
+                    inode.clone().write_directly(start, buf).await;
                 }
                 dirty_blocks.clear();
             }
@@ -100,6 +100,7 @@ impl PageCache {
                     // 补commit：修复page_cache
                     // - let temp_page = self.insert_page(offset);
                     // + let temp_page = self.insert_page(ppn * PAGE_SIZE);
+                    info!("[PageCache] read from device! now page cnt: {}", self.pages.read().len());
                     let temp_page = self.insert_page(ppn * PAGE_SIZE);
                     let array = temp_page.frame.ppn.get_bytes_array();
                     self.inode
@@ -143,13 +144,17 @@ impl PageCache {
                 Some(page) => page, // cache中找到了page
                 None => {
                     // cache中没有找到就新建cache page
+                    // info!("[PageCache] write from device! now page cnt: {}", self.pages.read().len());
                     self.insert_page(offset)
                 }
             };
-            page.set_dirty(page_offset).await;
+            // page.set_dirty(page_offset).await;
 
             let page_buf = page.frame.ppn.get_bytes_array();
             let len = min(buf.len() - buf_cur, PAGE_SIZE - page_offset);
+            for off in (page_offset..page_offset+len).step_by(BLOCK_SIZE) {
+                page.set_dirty(off).await;
+            }
             page_buf[page_offset..page_offset + len].copy_from_slice(&buf[buf_cur..buf_cur + len]);
             buf_cur += len;
             // TODO: maybe bug?

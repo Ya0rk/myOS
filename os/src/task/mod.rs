@@ -11,6 +11,7 @@ mod thread_group;
 mod task;
 pub mod aux;
 
+use async_task::Task;
 pub use fd::{FdTable, Fd};
 // pub use context::TaskContext;
 pub use pid::{KernelStack, Pid, PidAllocator};
@@ -31,6 +32,7 @@ pub use processor::{
     get_current_hart_id, get_current_cpu
 };
 
+use crate::fs::flush_preload;
 use crate::{fs::FileClass, sync::block_on};
 use thread_group::ThreadGroup;
 use crate::fs::OpenFlags;
@@ -51,10 +53,12 @@ use crate::fs::open_file;
 // }
 ///Add init process to the manager
 pub async fn add_initproc() {
-    if let Some(file) = open_file("initproc", OpenFlags::O_RDONLY) {
-        // let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
-        TaskControlBlock::new(file).await;
-    } else {
-        panic!("error: initproc from Abs File!");
-    }
+    let initproc = flush_preload().await;
+    TaskControlBlock::new(&initproc).await;
+    // if let Some(file) = open_file("initproc", OpenFlags::O_RDONLY) {
+    //     // let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
+    //     TaskControlBlock::new(file).await;
+    // } else {
+    //     panic!("error: initproc from Abs File!");
+    // }
 }
