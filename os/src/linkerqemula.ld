@@ -1,7 +1,8 @@
 OUTPUT_ARCH(loongarch64)
 ENTRY(_start)
 
-BASE_ADDRESS = 0x9000000090000000;
+#BASE_ADDRESS = 0x9000000090000000;
+BASE_ADDRESS = 0x9000000000200000;
 
 SECTIONS
 {
@@ -16,6 +17,12 @@ SECTIONS
         *(.text.sigret);
         . = ALIGN(4K);
         esigret = .;
+        . = ALIGN(4K);
+        *(.text.usertrap)
+        . = ALIGN(4K);
+        *(.text.tlb_handler)
+        . = ALIGN(4K);
+        *(.text.kerneltrap)
         *(.text .text.*)
     }
 

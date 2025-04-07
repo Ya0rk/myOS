@@ -1,7 +1,6 @@
-.section .text
+.section .text.usertrap
     .globl __trap_from_user
     .globl __return_to_user
-    .global __trap_from_kernel
     .align 4
 
 # user -> kernel
@@ -110,7 +109,9 @@ __return_to_user:
     csrwr   $sp, 0x502        #将用户栈指针与内核栈指针交换
     ertn
 
-.align 4
+    .section .text.kerneltrap
+    .globl __trap_from_kernel
+    .align 4
 __trap_from_kernel:
     addi.d  $sp, $sp, -264
     st.d    $ra, $sp, 0
