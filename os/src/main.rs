@@ -88,11 +88,9 @@ pub fn rust_main(hart_id: usize) -> ! {
         );
         hal::trap::init();
         task::init_processors();
-        println!("a");
-        block_on(fs::init());
-        println!("b");
+        fs::init();
         spawn_kernel_task(async move {
-            task::add_initproc()
+            task::add_initproc().await
         });
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);

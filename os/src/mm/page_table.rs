@@ -312,7 +312,7 @@ impl PageTable {
         //     ),
         //     None,
         // );
-        println!("aaa");
+        // println!("aaa");
         kernel_page_table.map_kernel_range(
             (stext as usize).into()..(etext as usize).into(),
             PTEFlags::R | PTEFlags::X,

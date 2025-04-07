@@ -270,9 +270,10 @@ impl MemorySpace {
     // }
 
 
-    pub fn new_user_from_elf(elf_file: FileClass) -> (Self, usize, usize, Vec<AuxHeader>) {
+    pub async fn new_user_from_elf(elf_file: FileClass) -> (Self, usize, usize, Vec<AuxHeader>) {
         if let FileClass::File(file) = elf_file {
-            let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
+            // let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
+            let elf_data = file.metadata.inode.read_all().await.unwrap();
             let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
             let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
             memory_space.alloc_heap();
