@@ -3,6 +3,7 @@ use core::fmt::Display;
 use core::future::Ready;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
+use core::time::Duration;
 
 use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
@@ -33,14 +34,14 @@ use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 pub struct TaskControlBlock {
     // 不可变
     pid:            Pid,
-    kernel_stack:   KernelStack,
+    // kernel_stack:   KernelStack,
 
     // 可变
-    tgid:           AtomicUsize, // 线程组group_leader的 pid
-    pgid:           AtomicUsize,
+    tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
+    pgid:           AtomicUsize, // 所属进程组id号
     task_status:    SpinNoIrqLock<TaskStatus>,
 
-    base_size:      Shared<usize>, // 迟早要删
+    // base_size:      Shared<usize>, // 迟早要删
     thread_group:   Shared<ThreadGroup>,
     memory_space:   Shared<MemorySpace>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
@@ -61,7 +62,8 @@ pub struct TaskControlBlock {
     trap_cx:        SyncUnsafeCell<TrapContext>,
     // task_cx:        SyncUnsafeCell<TaskContext>,// 迟早会删
     time_data:      SyncUnsafeCell<TimeData>,
-    child_cleartid: SyncUnsafeCell<Option<usize>>,
+    clear_child_tid:SyncUnsafeCell<Option<usize>>,
+    set_child_tid:  SyncUnsafeCell<Option<usize>>,
 
     exit_code:      AtomicI32,
 }
@@ -81,16 +83,17 @@ impl TaskControlBlock {
         let trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            0,
-            trap_loop as usize,
+            // 0,
         );
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let tgid = pid_handle.0;
-        let kernel_stack = KernelStack::new(&pid_handle);
+
+        // TODO(YJJ):这里好像并不需要kernel stack
+        // let kernel_stack = KernelStack::new(&pid_handle);
         
         // 每个task有自己的kernel stack
-        let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
+        // let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
         // memory_space.insert_framed_area(
         //     kernel_stack_bottom.into(),
         //     kernel_stack_top.into(), 
@@ -106,13 +109,13 @@ impl TaskControlBlock {
         // push a task context which goes to trap_return to the top of kernel stack
         let new_task = Arc::new(Self {
             pid: pid_handle,
-            kernel_stack,
+            // kernel_stack,
             
             // Shared
             pgid: AtomicUsize::new(0),
             tgid: AtomicUsize::new(tgid),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
-            base_size: new_shared(user_sp),
+            // base_size: new_shared(user_sp),
             thread_group: new_shared(ThreadGroup::new()),
             memory_space: new_shared(memory_space),
             parent: new_shared(None),
@@ -132,7 +135,8 @@ impl TaskControlBlock {
             trap_cx: SyncUnsafeCell::new(trap_cx),
             // task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
             time_data: SyncUnsafeCell::new(TimeData::new()),
-            child_cleartid: SyncUnsafeCell::new(None),
+            clear_child_tid: SyncUnsafeCell::new(None),
+            set_child_tid:   SyncUnsafeCell::new(None),
 
             exit_code: AtomicI32::new(0),
         });
@@ -148,12 +152,13 @@ impl TaskControlBlock {
 
         new_task
     }
-    pub fn exec(&self, elf_file: Arc<dyn FileTrait>) {
+    pub async fn exec(&self, elf_file: FileClass) {
         info!("exec start");
-        let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(elf_file);
+        let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(&elf_file).await;
         
+        // TODO(YJJ):这里好像并不需要kernel stack
         // 建立该进程的kernel stack
-        let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
+        // let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
         // memory_space.push_vma(
         //     VmArea::new(
         //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
@@ -179,14 +184,17 @@ impl TaskControlBlock {
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
 
         // initialize trap_cx
-        let trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-            self.kernel_stack.get_top(),
-            trap_loop as usize,
-        );
-        let old_trap_cx = self.get_trap_cx_mut();
-        *old_trap_cx = trap_cx;
+        // let trap_cx = TrapContext::app_init_context(
+        //     entry_point,
+        //     user_sp,
+        //     // self.kernel_stack.get_top(),
+        // );
+        
+        // set trap cx
+        let trap_cx = self.get_trap_cx_mut();
+        trap_cx.set_sepc(entry_point);
+        trap_cx.set_sp(user_sp);
+        trap_cx.set_arg(argc, argv_p, env_p);
 
         // 重置自定义的信号处理
         self.handler.lock().flash_signal_handlers();
@@ -195,7 +203,7 @@ impl TaskControlBlock {
         // 因为我在do_wait4中要获取zombie，也就是自己
         // 后序修改do_wait4逻辑应该就能删除这里
         // info!("[exec] current taskpid = {}", current_task().unwrap().get_pid());
-        self.add_child(current_task().unwrap());
+        // self.add_child(current_task().unwrap());
 
 
         debug!("task.exec.pid={}", self.pid.0);
@@ -219,7 +227,8 @@ impl TaskControlBlock {
         let waker = SyncUnsafeCell::new(None);
         let parent = new_shared(Some(Arc::downgrade(self)));
         let current_path = self.current_path.clone();
-        let child_cleartid = SyncUnsafeCell::new(None);
+        let clear_child_tid = SyncUnsafeCell::new(None);
+        let set_child_tid = SyncUnsafeCell::new(None);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().clone())
@@ -229,12 +238,12 @@ impl TaskControlBlock {
             false => new_shared(self.handler.lock().clone()), // 一个新的副本，子进程可以独立修改
         };
 
-        let kernel_stack = KernelStack::new(&pid);
-        let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
+        // let kernel_stack = KernelStack::new(&pid);
+        // let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
 
         // modify kernel_sp in trap_cx
         let trap_cx = self.get_trap_cx_mut();
-        trap_cx.set_kernel_sp(kernel_stack_top);
+        // trap_cx.set_kernel_sp(kernel_stack_top);
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
         // TODO(YJJ):需要修改为clone和cow
@@ -246,16 +255,17 @@ impl TaskControlBlock {
         //         MapPerm::RW,
         //         VmAreaType::Stack)
         // );
+
         let memory_space = new_shared(child_memory_space);
 
         let new_task = Arc::new(TaskControlBlock {
             pid,
-            kernel_stack,
+            // kernel_stack,
 
             // Shared
             pgid,
             tgid,
-            base_size: self.base_size.clone(),
+            // base_size: self.base_size.clone(),
             thread_group,
             task_status,
             memory_space,
@@ -276,7 +286,8 @@ impl TaskControlBlock {
             trap_cx,
             // task_cx,
             time_data,
-            child_cleartid,
+            clear_child_tid,
+            set_child_tid,
             exit_code,
         });
         // add child
@@ -285,8 +296,8 @@ impl TaskControlBlock {
         new_task.add_thread_group_member(new_task.clone());
 
         // 需要将自己加入？？也是wait的问题？
-        new_task.add_child(new_task.clone());
-        info!("process fork success, new pid = {}", new_task.get_pid());
+        // new_task.add_child(new_task.clone());
+        info!("process fork success, new pid = {}, parent pid = {}", new_task.get_pid(), new_task.get_parent().unwrap().get_pid());
         
         new_task
     }
@@ -309,7 +320,8 @@ impl TaskControlBlock {
         let waker = SyncUnsafeCell::new(None);
         let trap_cx = SyncUnsafeCell::new(*self.get_trap_cx());
         let time_data = SyncUnsafeCell::new(TimeData::new());
-        let child_cleartid = SyncUnsafeCell::new(None);
+        let clear_child_tid = SyncUnsafeCell::new(None);
+        let set_child_tid = SyncUnsafeCell::new(None);
         let exit_code = AtomicI32::new(0);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
@@ -326,7 +338,7 @@ impl TaskControlBlock {
         );
 
         let new_task = Arc::new(TaskControlBlock{
-            kernel_stack: KernelStack::new(&pid),//
+            // kernel_stack: KernelStack::new(&pid),//
             pid,
 
             pgid,
@@ -340,7 +352,7 @@ impl TaskControlBlock {
             sig_stack,
 
             task_status,
-            base_size: self.base_size.clone(),
+            // base_size: self.base_size.clone(),
             thread_group,
             memory_space,
             parent,
@@ -350,14 +362,15 @@ impl TaskControlBlock {
             waker,
             trap_cx,
             time_data,
-            child_cleartid,
+            clear_child_tid,
+            set_child_tid,
             exit_code,
         });
 
         new_task.add_thread_group_member(new_task.clone());
 
         // 这里也要把自己加入自己的child
-        new_task.add_child(new_task.clone());
+        // new_task.add_child(new_task.clone());
 
         new_task
     }
@@ -393,8 +406,8 @@ impl TaskControlBlock {
                 let init_proc = get_init_proc();
                 for (child_pid, child) in 
                     lock_child.
-                    iter().
-                    filter(|(find_pid, _)| **find_pid != pid) // 需要过滤掉自己，因为在process_fork中把自己加入了child
+                    iter()
+                    // filter(|(find_pid, _)| **find_pid != pid) // 需要过滤掉自己，因为在process_fork中把自己加入了child
                 {
                     if child.is_zombie() {
                         info!("[do_exit] child pdi = {} is zmobie", child_pid);
@@ -415,6 +428,7 @@ impl TaskControlBlock {
                 }
                 lock_child.clear();
             }
+            drop(lock_child);
             // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
             match self.get_parent() {
                 Some(parent) => {
@@ -559,6 +573,10 @@ impl TaskControlBlock {
     pub fn get_blocked_mut(&self) -> &mut SigMask {
         unsafe { &mut *self.blocked.get() }
     }
+    /// 设置信号屏蔽字段
+    pub fn set_blocked(&self, mask: SigMask) {
+        unsafe { *self.blocked.get() = mask };
+    }
 
     /// 设置ucontext
     pub fn set_ucontext(&self, addr: usize) {
@@ -598,7 +616,8 @@ impl TaskControlBlock {
 
     /// 将所有子线程设置为zombie
     pub fn kill_all_thread(self: &Arc<Self>) {
-        for (_, thread) in self.thread_group.lock().tasks.iter() {
+        let lock_thread_gp = self.thread_group.lock();
+        for (_, thread) in lock_thread_gp.tasks.iter() {
             thread.upgrade().unwrap().set_zombie();
         }
     }
@@ -612,23 +631,27 @@ impl TaskControlBlock {
     }
 
     /// 将所有子线程设置为stopped挂起
-    pub fn stop_all_thread(self: &Arc<Self>) {
+    pub fn stop_all_thread(self: &Arc<Self>, signo: SigNom) {
         for (_, thread) in self.thread_group.lock().tasks.iter() {
             let thread = thread.upgrade().unwrap();
             thread.set_stopped();
             thread.set_wake_up_signal(SigMask::SIGCONT | SigMask::SIGKILL | SigMask::SIGSTOP);
         }
+        // self.do_notify_parent(signo, SigCode::CLD_STOPPED);
         self.do_notify_parent(SigNom::SIGCHLD, SigCode::CLD_STOPPED);
+
     }
 
     /// 当收到SIGCONT时，将stopped的子线程设置为running
-    pub fn cont_all_thread(self: &Arc<Self>) {
+    pub fn cont_all_thread(self: &Arc<Self>, signo: SigNom) {
         for (_, thread) in self.thread_group.lock().tasks.iter() {
             let thread = thread.upgrade().unwrap();
             thread.set_running();
             self.wake_up();
         }
+        // self.do_notify_parent(signo, SigCode::CLD_CONTINUED);
         self.do_notify_parent(SigNom::SIGCHLD, SigCode::CLD_CONTINUED);
+
     }
 
     /// 获取当前进程的pgid：组id
@@ -636,7 +659,7 @@ impl TaskControlBlock {
         self.pgid.load(core::sync::atomic::Ordering::Relaxed)
     }
     /// 设置当前进程的pgid
-    pub fn set_pgid(&mut self, pgid: usize) {
+    pub fn set_pgid(&self, pgid: usize) {
         self.pgid.store(pgid, core::sync::atomic::Ordering::Relaxed);
     }
 
@@ -705,10 +728,6 @@ impl TaskControlBlock {
     }
 
     // children
-    // /// 获取所有子进程： Vec
-    // pub fn children(&self) -> Vec<Arc<TaskControlBlock>> {
-    //     self.children.lock().clone()
-    // }
     /// 添加子进程
     pub fn add_child(&self, child: Arc<TaskControlBlock>) {
         self.children.lock().insert(child.get_pid(), child);
@@ -795,12 +814,31 @@ impl TaskControlBlock {
         unsafe { *self.waker.get() = Some(waker) }
     }
 
+    // tid
     pub fn get_child_cleartid(&self) -> Option<usize> {
-        unsafe { *self.child_cleartid.get() }
+        unsafe { *self.clear_child_tid.get() }
     }
-    /// 设置child_cleartid，参考：Linux系统编程手册500页
+    /// 设置clear_child_tid，参考：Linux系统编程手册500页
     pub fn set_child_cleartid(&self, ctid: usize) {
-        unsafe { *self.child_cleartid.get() = Some(ctid) };
+        unsafe { *self.clear_child_tid.get() = Some(ctid) };
+    }
+    /// 设置set_child_tid字段
+    pub fn set_child_settid(&self, ctid: usize) {
+        unsafe { *self.set_child_tid.get() = Some(ctid) };
+    }
+
+    /// 获取当前进程所有线程的cpu时间总和
+    pub fn process_cputime(&self) -> Duration {
+        let mut utime = Duration::ZERO;
+        let mut stime = Duration::ZERO;
+        for (_, thread) in self.thread_group.lock().tasks.iter() {
+            if let Some(thread) = thread.upgrade() {
+                let (ut, st) = thread.get_time_data().get_ustime();
+                utime += ut;
+                stime += st;
+            }
+        }
+        utime+stime
     }
 
     pub fn with_mut_memory_space<T>(&self, f: impl FnOnce(&mut MemorySpace) -> T) -> T {

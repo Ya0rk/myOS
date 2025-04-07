@@ -19,13 +19,18 @@ pub use task::{TaskControlBlock, TaskStatus};
 pub use processor::CPU;
 pub use sched::TaskFuture;
 pub use pid::pid_alloc;
-pub use manager::{add_task, remove_task_by_pid, get_task_by_pid, 
+pub use manager::{
+    add_task, remove_task_by_pid, get_task_by_pid, 
     remove_proc_group_member, add_proc_group_member, 
-    new_process_group, get_init_proc};
+    new_process_group, get_init_proc, extract_proc_to_new_group,
+    get_proc_num
+};
 pub use sched::{spawn_user_task, spawn_kernel_task};
-pub use processor::{init_processors, current_task, current_trap_cx, 
+pub use processor::{
+    init_processors, current_task, current_trap_cx, 
     current_user_token, take_current_task, 
-    get_current_hart_id};
+    get_current_hart_id
+};
 
 use crate::{fs::FileClass, sync::block_on};
 use thread_group::ThreadGroup;

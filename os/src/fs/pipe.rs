@@ -130,6 +130,9 @@ impl FileTrait for Pipe {
     fn writable(&self) -> bool {
         self.flags.contains(OpenFlags::O_WRONLY)
     }
+    fn executable(&self) -> bool {
+        false
+    }
     async fn read(&self, buf: UserBuffer) -> SysResult<usize> {
         assert!(self.readable());
         if buf.len() == 0{

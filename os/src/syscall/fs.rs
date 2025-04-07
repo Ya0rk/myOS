@@ -1,10 +1,19 @@
+use core::cell::SyncUnsafeCell;
+use core::ops::Add;
+use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec::Vec;
+use alloc::vec;
 use log::info;
+use lwext4_rust::file;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{ join_path_2_absolute, mkdir, open_file, Dirent, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::ext4::NormalFile;
+use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
+use crate::syscall::ffi::IoVec;
 use crate::task::{current_task, current_user_token, Fd, FdTable};
 use crate::utils::{Errno, SysResult};
+use super::ffi::{FaccessatMode, AT_REMOVEDIR};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
@@ -18,8 +27,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             if !file.writable() {
                 return Err(Errno::EPERM);
             }
-            let file = file.clone();
-
+            // let file = file.clone();
             Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
@@ -39,8 +47,83 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             if !file.readable() {
                 return Err(Errno::EPERM);
             }
-            let file = file.clone();
+            // let file = file.clone();
             Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
+        }
+        _ => Err(Errno::EBADCALL),
+    }
+}
+
+/// system call reads iovcnt buffers from the file associated 
+/// with the file descriptor fd into the buffers described by iov
+/// iov: 指向一个结构体数组，结构体的定义如下：
+/// ```
+/// struct iovec {
+///    void *iov_base;	// 指向数据缓冲区的指针
+///   size_t iov_len;	// 缓冲区的长度
+/// };
+///```
+/// len: 数组的长度
+pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let mut res = 0;
+    if fd >= task.fd_table_len() {
+        return Err(Errno::EBADF);
+    }
+    match task.get_file_by_fd(fd) {
+        Some(file) => {
+            if !file.readable() {
+                return Err(Errno::EPERM);
+            }
+            // 将iov中的结构体一个个取出，转化为UserBuffer
+            for i in 0..iovcnt {
+                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
+                let len = (unsafe { *iov_st }).iov_len;
+                if len == 0 {
+                    continue;
+                }
+                let base = (unsafe { *iov_st }).iov_base;
+                let one = translated_byte_buffer(token, base as *const u8, len);
+                let buffer = UserBuffer::new(one);
+                let read_len = file.read(buffer).await?;
+                res += read_len;
+            }
+            Ok(res)
+        }
+        _ => Err(Errno::EBADCALL),
+    }
+}
+
+/// 和sys_readv相反，将数据从iov中写入到文件中
+/// system call writes iovcnt buffers from the file associated
+/// with the file descriptor fd into the buffers described by iov
+pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let mut res = 0;
+    if fd >= task.fd_table_len() {
+        return Err(Errno::EBADF);
+    }
+    match task.get_file_by_fd(fd) {
+        Some(file) => {
+            if !file.writable() {
+                return Err(Errno::EPERM);
+            }
+            // 将iov中的结构体一个个取出，转化为UserBuffer
+            for i in 0..iovcnt {
+                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
+                let len = (unsafe { *iov_st }).iov_len;
+                if len == 0 {
+                    continue;
+                }
+                let base = (unsafe { *iov_st }).iov_base;
+                let one = translated_byte_buffer(token, base as *const u8, len);
+                let buffer = UserBuffer::new(one);
+                let write_len = file.write(buffer).await?;
+                res += write_len;
+            }
+            Ok(res)
         }
         _ => Err(Errno::EBADCALL),
     }
@@ -364,7 +447,12 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_umount2(target: *const u8, flags: u32) -> SysResult<usize> {
-    UmountFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
+    let ufg = UmountFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
+    if ufg.contains(UmountFlags::MNT_EXPIRE)
+        && (ufg.contains(UmountFlags::MNT_DETACH) || ufg.contains(UmountFlags::MNT_FORCE))
+    {
+        return Err(Errno::EINVAL);
+    }
 
     let token = current_user_token();
     let target = translated_str(token, target);
@@ -435,4 +523,154 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     };
 
     result
+}
+
+
+pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let path = translated_str(token, path);
+    let is_relative = !path.starts_with("/");
+    let base = task.get_current_path();
+
+    if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
+        let file = file_class.file()?;
+        let is_dir = file.is_dir();
+        if is_dir && flags != AT_REMOVEDIR {
+            return Err(Errno::EISDIR);
+        }
+        if flags == AT_REMOVEDIR && !is_dir {
+            return Err(Errno::ENOTDIR);
+        }
+        let child_abs = join_path_2_absolute(base, path);
+        file.get_inode().unlink(&child_abs);
+    }
+    
+    Ok(0)
+}
+
+/// make a new name for a file: a hard link
+pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let old_path = translated_str(token, oldpath);
+    let new_path = translated_str(token, newpath);
+    let cwd = task.get_current_path();
+
+    if olddirfd == AT_FDCWD {
+        if let Some(file_class) = open(&cwd, &old_path, OpenFlags::O_RDWR) {
+            let file = file_class.file()?;
+            let has_same = file.is_child(&new_path);
+            if has_same {
+                return Err(Errno::EEXIST);
+            }
+            file.get_inode().link(&new_path);
+            let new_file = NormalFile::new(
+                file.metadata.flags.read().clone(),
+                file.parent.clone(),
+                file.metadata.inode.clone(),
+                new_path
+            );
+        }
+    }
+    Ok(0)
+}
+
+/// copies data between one file descriptor and another
+pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let src = task.get_file_by_fd(in_fd).ok_or(Errno::EBADF)?;
+    let dest = task.get_file_by_fd(out_fd).ok_or(Errno::EBADF)?;
+    if !src.readable() || !dest.writable() {
+        return Err(Errno::EPERM);
+    }
+    
+    let mut len: usize = 0;
+    let mut buf = vec![0u8; count];
+    let mut new_offset = offset;
+
+    loop {
+        let read_size = src.read_at(new_offset, &mut buf).await?;
+        if read_size == 0 {
+            break;
+        }
+        let write_size = dest.write_at(new_offset, &buf).await?;
+        if read_size != write_size {
+            return Err(Errno::EIO);
+        }
+        new_offset += read_size;
+        len += read_size;
+    }
+
+    // If offset is not NULL, then sendfile() does not modify the file offset of in_fd; 
+    // otherwise the file offset is adjusted to reflect the number of bytes read from in_fd.
+    if offset == 0 {
+        // 重新设置offset：
+        let token = task.get_user_token();
+        src.lseek(len as isize, SEEK_CUR).unwrap();
+        *translated_refmut(token, offset as *mut usize) = new_offset;
+    }
+
+    Ok(len)
+}
+
+/// determine accessibility of a file relative to directory file descriptor
+/// If pathname is a symbolic link, it is dereferenced.
+pub fn sys_faccessat(
+    dirfd: isize,
+    pathname: *const u8,
+    mode: u32,
+    _flags: u32,
+) -> SysResult<usize> {
+    let token = current_user_token();
+    let path = translated_str(token, pathname);
+    let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
+    let abs = if path.starts_with("/") {
+        // 绝对路径，忽略 dirfd
+        path
+    } else if dirfd == AT_FDCWD {
+        // 相对路径，以当前目录为起点
+        let current_path = current_task().unwrap().get_current_path();
+        join_path_2_absolute(current_path, path)
+    } else {
+        // 相对路径，以 fd 对应的目录为起点
+        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE {
+            return Err(Errno::EBADF);
+        }
+        let inode = current_task().unwrap().get_file_by_fd(dirfd as usize).expect("[sys_faccessat] get file by fd failed");
+        let other_cwd = inode.get_name()?;
+        join_path_2_absolute(other_cwd, path)
+    };
+
+    if let Some(file_class) = open_file(abs.as_str(), OpenFlags::O_RDONLY) {
+        let file = file_class.file()?;
+        let inode = file.get_inode();
+        if mode.contains(FaccessatMode::F_OK) {
+            return Ok(0);
+        }
+        if mode.contains(FaccessatMode::R_OK) && !file.readable() {
+            return Err(Errno::EACCES);
+        }
+        if mode.contains(FaccessatMode::W_OK) && !file.writable() {
+            return Err(Errno::EACCES);
+        }
+        if mode.contains(FaccessatMode::X_OK) && !file.executable() {
+            return Err(Errno::EACCES);
+        }
+    } else {
+        return Err(Errno::ENOENT);
+    }
+    Ok(0)
+}
+
+/// repositions the file offset of the open file description
+/// associated with the file descriptor fd to the argument offset
+/// according to the directive whence as follows
+pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+        return Err(Errno::EBADF);
+    }
+    let file = task.get_file_by_fd(fd).unwrap();
+    file.lseek(offset, whence)
 }

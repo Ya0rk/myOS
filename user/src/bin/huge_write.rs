@@ -4,7 +4,7 @@
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{close, get_time, openat, write, OpenFlags};
+use user_lib::{close, get_mtime, openat, write, OpenFlags};
 
 #[no_mangle]
 pub fn main() -> i32 {
@@ -17,13 +17,16 @@ pub fn main() -> i32 {
         panic!("Open test file failed!");
     }
     let f = f as usize;
-    let start = get_time();
-    let size_mb = 1usize;
+    let start = get_mtime();
+    println!("Start writing... time = {}", start);
+    let size_mb = 10usize;
     for _ in 0..1024 * size_mb {
         write(f, &buffer);
     }
     close(f);
-    let time_ms = (get_time() - start) as usize;
+    println!("Write done! time = {}", get_mtime());
+    let time_ms = (get_mtime() - start) as usize;
+    println!("Time cost = {}ms", time_ms);
     let speed_kbs = size_mb * 1000000 / time_ms;
     println!(
         "{}MiB written, time cost = {}ms, write speed = {}KiB/s",

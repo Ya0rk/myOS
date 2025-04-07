@@ -2,6 +2,8 @@ use core::fmt::{self, Display};
 use num_enum::FromPrimitive;
 use zerocopy::{Immutable, IntoBytes};
 
+use crate::sync::timer::get_time_s;
+
 #[derive(IntoBytes, Immutable)]
 #[allow(unused)]
 #[repr(C)]
@@ -46,37 +48,50 @@ impl Utsname {
 #[allow(unused)]
 #[allow(non_camel_case_types)]
 pub enum SysCode {
-    SYSCALL_GETCWD      = 17,
-    SYSCALL_DUP         = 23,
-    SYSCALL_DUP3        = 24,
-    SYSCALL_MKDIRAT     = 34,
-    // SYSCALL_UNLINKAT    = 35,
-    // SYSCALL_LINKAT      = 37,
-    SYSCALL_UMOUNT2     = 39,
-    SYSCALL_MOUNT       = 40,
-    SYSCALL_CHDIR       = 49,
-    SYSCALL_OPENAT      = 56,
-    SYSCALL_CLOSE       = 57,
-    SYSCALL_PIPE2       = 59,
-    SYSCALL_GETDENTS64  = 61,
-    SYSCALL_READ        = 63,
-    SYSCALL_WRITE       = 64,
-    SYSCALL_FSTAT       = 80,
-    SYSCALL_EXIT        = 93,
-    SYSCALL_NANOSLEEP   = 101,
-    SYSCALL_YIELD       = 124,
-    SYSCALL_TIMES       = 153,
-    SYSCALL_UNAME       = 160,
-    SYSCALL_GETTIMEOFDAY= 169,
-    SYSCALL_GETPID      = 172,
-    SYSCALL_GETPPID     = 173,
-    SYSCALL_BRK         = 214,
-    SYSCALL_MUNMAP      = 215,
-    SYSCALL_CLONE       = 220,
-    SYSCALL_EXEC        = 221,
-    SYSCALL_MMAP        = 222,
-    SYSCALL_WAIT4       = 260,
-    GETRANDOM           = 278,
+    SYSCALL_GETCWD    = 17,
+    SYSCALL_DUP       = 23,
+    SYSCALL_DUP3      = 24,
+    SYSCALL_MKDIRAT   = 34,
+    SYSCALL_UNLINKAT  = 35,
+    SYSCALL_LINKAT    = 37,
+    SYSCALL_UMOUNT2   = 39,
+    SYSCALL_MOUNT     = 40,
+    SYSCALL_FACCESSAT = 48,
+    SYSCALL_CHDIR     = 49,
+    SYSCALL_OPENAT    = 56,
+    SYSCALL_CLOSE     = 57,
+    SYSCALL_PIPE2     = 59,
+    SYSCALL_GETDENTS64= 61,
+    SYSCALL_LSEEK     = 62,  
+    SYSCALL_READ      = 63,
+    SYSCALL_WRITE     = 64,
+    SYSCALL_READV     = 65,
+    SYSCALL_WRITEV    = 66,
+    SYSCALL_SENDFILE  = 71,
+    SYSCALL_FSTAT     = 80,
+    SYSCALL_EXIT      = 93,
+    SYSCALL_EXIT_GROUP= 94,
+    SYSCALL_SET_TID_ADDRESS = 96,
+    SYSCALL_NANOSLEEP = 101,
+    SYSCALL_CLOCK_SETTIME = 112,
+    SYSCALL_CLOCK_GETTIME = 113,
+    SYSCALL_YIELD     = 124,
+    SYSCALL_SIGRETURN = 139,
+    SYSCALL_TIMES     = 153,
+    SYSCALL_SETPGID   = 154,
+    SYSCALL_SETSID    = 157,
+    SYSCALL_UNAME     = 160,
+    SYSCALL_GETTIMEOFDAY  = 169,
+    SYSCALL_GETPID    = 172,
+    SYSCALL_GETPPID   = 173,
+    SYSCALL_SYSINFO   = 179,
+    SYSCALL_BRK       = 214,
+    SYSCALL_MUNMAP    = 215,
+    SYSCALL_CLONE     = 220,
+    SYSCALL_EXEC      = 221,
+    SYSCALL_MMAP      = 222,
+    SYSCALL_WAIT4     = 260,
+    GETRANDOM         = 278,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -91,11 +106,25 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_WRITEV => "writev",
+            Self::SYSCALL_READV => "readv",
+            Self::SYSCALL_SYSINFO => "sysinfo",
+            Self::SYSCALL_SIGRETURN => "sigreturn",
+            Self::SYSCALL_SETPGID => "setpgid",
+            Self::SYSCALL_SETSID => "setsid",
+            Self::SYSCALL_LSEEK => "lseek",
+            Self::SYSCALL_FACCESSAT => "faccessat",
+            Self::SYSCALL_SENDFILE => "sendfile",
+            Self::SYSCALL_CLOCK_SETTIME => "clock_settime",
+            Self::SYSCALL_CLOCK_GETTIME => "clock_gettime",
+            Self::SYSCALL_EXIT_GROUP => "exit_group",
+            Self::SYSCALL_SET_TID_ADDRESS => "set_tid_address",
             Self::SYSCALL_GETCWD => "getcwd",
             Self::SYSCALL_DUP => "dup",
             Self::SYSCALL_DUP3 => "dup3",
             Self::SYSCALL_MKDIRAT => "mkdirat",
-            
+            Self::SYSCALL_UNLINKAT => "unlinkat",
+            Self::SYSCALL_LINKAT => "linkat",
             Self::SYSCALL_UMOUNT2 => "umount2",
             Self::SYSCALL_MOUNT => "mount",
             Self::SYSCALL_CHDIR => "chdir",
@@ -193,4 +222,98 @@ bitflags! {
         /// 返回那些因收到SIGCONT信号而恢复执行并且已经停止的子进程信息
         const WCONTINUED = 1 << 3;
     }
+}
+
+/// 允许删除目录（通常与unlinkat等系统调用一起使用）
+pub const AT_REMOVEDIR: u32 = 0x200;
+
+/// 跟随符号链接（即操作符号链接指向的目标文件）
+pub const AT_SYMLINK_FOLLOW: u32 = 0x400;
+
+// 禁止自动挂载文件系统（当使用 *at 系列函数时，不自动挂载路径中的挂载点）
+pub const AT_NO_AUTOMOUNT: u32 = 0x800;
+
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct FaccessatFlags: u32 {
+        /// 不跟随符号链接（即操作符号链接本身而非其指向的目标）
+        const AT_SYMLINK_NOFOLLOW = 0x100;
+        const AT_EACCESS = 0x200;
+        const AT_EMPTY_PATH = 0x1000;
+    }
+    pub struct FaccessatMode: u32 {
+        /// 检查文件是否存在
+        const F_OK = 0;
+        /// 检查文件是否可读
+        const R_OK = 4;
+        /// 检查文件是否可写
+        const W_OK = 2;
+        /// 检查文件是否可执行
+        const X_OK = 1;
+    }
+}
+
+const _F_SIZE: usize = 20 - 2 * size_of::<u64>() - size_of::<u32>();
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct Sysinfo {
+    /// 系统启动以来的秒数
+    pub uptime: i64,
+    /// 1分钟、5分钟和15分钟的系统平均负载
+    pub loads: [u64; 3],
+    /// 总可用主内存大小（单位：mem_unit字节）
+    pub totalram: u64,
+    /// 可用内存大小（单位：mem_unit字节）
+    pub freeram: u64,
+    /// 共享内存大小（单位：mem_unit字节）
+    pub sharedram: u64,
+    /// 缓冲区使用的内存（单位：mem_unit字节）
+    pub bufferram: u64,
+    /// 总交换空间大小（单位：mem_unit字节）
+    pub totalswap: u64,
+    /// 剩余可用交换空间（单位：mem_unit字节）
+    pub freeswap: u64,
+    /// 当前进程数量
+    pub procs: u16,
+    /// 为m68k架构显式填充的字段
+    pub pad: u16,
+    /// 总高端内存大小（单位：mem_unit字节）
+    pub totalhigh: u64,
+    /// 可用高端内存大小（单位：mem_unit字节）
+    pub freehigh: u64,
+    /// 内存单位大小（字节）
+    pub mem_uint: u32,
+    /// 填充字段：libc5曾使用此字段...
+    pub _f: [u8; _F_SIZE],
+}
+
+impl Sysinfo {
+    pub fn new(proc_num: u16) -> Self {
+        Self {
+            uptime: get_time_s() as i64,
+            loads: [0; 3],
+            totalram: 0,
+            freeram: 0,
+            sharedram: 0,
+            bufferram: 0,
+            totalswap: 0,
+            freeswap: 0,
+            procs: proc_num,
+            pad: 0,
+            totalhigh: 0,
+            freehigh: 0,
+            mem_uint: 0,
+            _f: [0; _F_SIZE],
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct IoVec {
+    /// start address of the buffer
+    pub iov_base: usize,
+    /// length of the buffer
+    pub iov_len: usize,
 }

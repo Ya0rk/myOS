@@ -108,7 +108,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `off` - The offset from which to start reading
+    /// * `off` - The offset from which to start reading, page中的偏移
     /// * `buf` - The buffer to read into
     ///
     /// # Returns
@@ -125,7 +125,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `off` - The offset at which to start writing
+    /// * `off` - The offset at which to start writing， page中的偏移
     /// * `buf` - The buffer containing the data to write
     ///
     /// # Returns
@@ -166,6 +166,10 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Ok(0) on success, or an error code.
     fn unlink(&self, _child_name: &str) -> SysResult<usize> {
+        todo!();
+    }
+
+    fn link(&self, _new_path: &str) -> SysResult<usize> {
         todo!();
     }
 

@@ -35,7 +35,6 @@ impl Sstatus {
     #[inline]
     pub fn uie(&self) -> bool {
         unimplemented!()
-
     }
 
     /// Supervisor Interrupt Enable

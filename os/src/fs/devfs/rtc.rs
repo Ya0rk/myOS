@@ -23,6 +23,9 @@ impl FileTrait for DevRtc {
     fn writable(&self) -> bool {
         true
     }
+    fn executable(&self) -> bool {
+        false
+    }
     async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
         let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
         let str = format!("{:?}", time);

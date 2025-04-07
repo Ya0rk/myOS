@@ -22,6 +22,9 @@ impl FileTrait for DevNull {
     fn writable(&self) -> bool {
         true
     }
+    fn executable(&self) -> bool {
+        false
+    }
     async fn read(&self, mut _user_buf: UserBuffer) -> SysResult<usize> {
         // do nothing
         Ok(0)

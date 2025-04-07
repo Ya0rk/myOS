@@ -23,6 +23,9 @@ impl FileTrait for DevZero {
     fn writable(&self) -> bool {
         true
     }
+    fn executable(&self) -> bool {
+        false
+    }
     async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
         Ok(user_buf.clear())
     }
