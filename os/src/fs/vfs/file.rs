@@ -55,6 +55,8 @@ pub trait FileTrait: Send + Sync {
     /// 如果文件可写返回 `true`，否则返回 `false`
     fn writable(&self) -> bool;
 
+    fn executable(&self) -> bool;
+
     /// 从文件中读取数据到用户缓冲区
     ///
     /// 尝试从文件中读取数据并填充到提供的缓冲区中，最多将缓冲区填满。
@@ -68,6 +70,15 @@ pub trait FileTrait: Send + Sync {
     /// 实际读取的字节数
     async fn read(&self, buf: UserBuffer) -> SysResult<usize>;
 
+    /// 从指定偏移量读取数据到用户缓冲区
+    async fn read_at(&self, offset: usize, buf: &mut [u8]) -> SysResult<usize> {
+        let inode = self.get_inode();
+        if offset > inode.size() {
+            return Ok(0);
+        }
+        Ok(inode.read_at(offset, buf).await)
+    }
+
     /// 将用户缓冲区中的数据写入文件
     ///
     /// 尝试将提供的缓冲区中的数据写入文件，最多写入缓冲区中的所有数据。
@@ -80,6 +91,17 @@ pub trait FileTrait: Send + Sync {
     ///
     /// 实际写入的字节数
     async fn write(&self, buf: UserBuffer) -> SysResult<usize>;
+
+    /// 将数据从指定偏移量写入文件，返回实际写入的字节数
+    async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
+        let inode = self.get_inode();
+        // TODO(YJJ): maybe bug,这里size可能是0？
+        if offset > inode.size() {
+            let newsize = offset + buf.len();
+            inode.truncate(newsize);
+        }
+        Ok(inode.write_at(offset, buf).await)
+    }
 
     /// ppoll处理
     // fn poll(&self, events: PollEvents) -> PollEvents;

@@ -12,9 +12,11 @@ use crate::{
     utils::{Errno, SysResult}
 };
 
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{string::ToString, sync::Arc, vec::Vec};
 use alloc::vec;
 use alloc::boxed::Box;
+
+use super::NormalFile;
 
 pub struct Ext4Inode {
     pub metadata : InodeMeta,
@@ -149,7 +151,7 @@ impl InodeTrait for Ext4Inode {
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
-                info!("ssss");
+                // info!("ssss");
                 cache.write(buf, offset).await
             }
         }
@@ -193,11 +195,9 @@ impl InodeTrait for Ext4Inode {
     fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
-            // debug!("lookup new DIR FileWrapper");
             let page_cache = None;
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
-            // debug!("lookup new FILE FileWrapper");
             let page_cache = Some(PageCache::new_bare());
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE, page_cache.clone()))
         } else {
@@ -206,25 +206,35 @@ impl InodeTrait for Ext4Inode {
     }
     /// 获取文件状态
     fn fstat(&self) -> Kstat {
-        // let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
-        // let file_size = self.size();
-        // let st_size = file_size / BLOCK_SIZE;
-        // let ino= self.metadata.ino;
-        Kstat::new()
-
-        // let mut file = self.file.lock();
-        // match file.fstat() {
-        //     Ok(stat) => {
-        //         let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
-        //         as_inode_stat(stat, atime, mtime, ctime)
-        //     }
-        //     Err(_) => Kstat::new()
-        // }
+        let mut file = self.file.lock();
+        match file.fstat() {
+            Ok(stat) => {
+                let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+                as_inode_stat(stat, atime, mtime, ctime)
+            }
+            Err(_) => Kstat::new()
+        }
     }
     /// 删除文件
-    fn unlink(&self, _child_name: &str) -> SysResult<usize> {
-        todo!()
+    fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
+        INODE_CACHE.remove(child_abs_path);
+        // mayby bug? 这个用的parent cnt
+        let mut lock_file = self.file.lock();
+        match lock_file.links_cnt().unwrap() {
+            cnt if cnt <= 1 => {
+                lock_file.file_remove(child_abs_path);
+            }
+            _ => { return Ok(0); }
+        }
+        Ok(0)
     }
+
+    fn link(&self, new_path: &str) -> SysResult<usize> {
+        let mut file = self.file.lock();
+        file.link(new_path);
+        Ok(0)
+    }
+
     fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, > {
         self.metadata.timestamp.lock()
     }

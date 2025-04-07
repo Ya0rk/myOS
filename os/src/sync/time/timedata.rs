@@ -92,4 +92,8 @@ impl TimeData {
     pub fn usedout_timeslice(&self) -> bool {
         time_duration() - self.sched_in_time >= TIME_SLICE_DUATION
     }
+
+    pub fn get_machine_start_time(&self) -> Duration {
+        self.machine_start_time
+    }
 }

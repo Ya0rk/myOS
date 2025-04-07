@@ -20,6 +20,10 @@ fn syscall(id: usize, args: [usize; 6]) -> isize {
     ret
 }
 
+pub fn sys_unlinkat(dirfd: isize, path: &str, flags: u32) -> isize {
+    syscall(SYSCALL_UNLINKAT,[dirfd as usize, path.as_ptr() as usize, flags as usize, 0, 0, 0])
+}
+
 pub fn sys_getcwd(buf: &mut [u8], size: usize) -> isize {
     syscall(SYSCALL_GETCWD, [buf.as_mut_ptr() as usize, size as usize, 0, 0, 0, 0])
 }

@@ -1,6 +1,6 @@
 use core::time::Duration;
 use crate::{hal::arch::set_timer, config::CLOCK_FREQ};
-use super::{time::TimeSepc, yield_now};
+use super::{time::TimeSpec, yield_now};
 
 const TICKS_PER_SEC: usize = 100; // 设置每秒中断次数，可以计算出每次中断的时间间隔
 pub const MSEC_PER_SEC: usize = 1000;
@@ -60,7 +60,7 @@ pub fn set_next_trigger() {
     set_timer(get_time() + CLOCK_FREQ / TICKS_PER_SEC);
 }
 
-pub async fn sleep_for(ts: TimeSepc) {
+pub async fn sleep_for(ts: TimeSpec) {
     let start = get_time_ms();
     let span = ts.tv_sec * 1_000 + ts.tv_nsec / 1_000_000;
     while get_time_ns() - start < span {

@@ -34,8 +34,7 @@ impl TrapContext {
     pub fn app_init_context(
         entry: usize,
         sp: usize,
-        kernel_sp: usize,
-        _trap_loop: usize,
+        // kernel_sp: usize,
     ) -> Self {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
@@ -43,7 +42,7 @@ impl TrapContext {
             user_x: [0; 32],
             sstatus,
             sepc: entry,
-            kernel_sp,
+            kernel_sp: 0,
             kernal_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,
@@ -53,6 +52,14 @@ impl TrapContext {
         cx.set_sp(sp);
         cx
     }
+    /// 设置context参数
+    pub fn set_arg(&mut self, argc: usize, argv: usize, env: usize) {
+        self.user_x[10] = argc;
+        self.user_x[11] = argv;
+        self.user_x[12] = env;
+        self.float_regs = UserFloatRegs::new();
+    }
+
     pub fn set_sp(&mut self, sp: usize) {
         self.user_x[2] = sp;
     }

@@ -1,5 +1,6 @@
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 use async_trait::async_trait;
+use log::info;
 use sbi_spec::pmu::cache_event::NODE;
 use crate::{
     config::PATH_MAX, 
@@ -54,8 +55,14 @@ impl FileTrait for NormalFile {
         self.metadata.flags.read().writable()
     }
 
+    fn executable(&self) -> bool {
+        let stat = self.metadata.inode.fstat();
+        stat.st_mode & 0o111 != 0
+    }
+
     async fn read(&self, mut buf: UserBuffer) -> SysResult<usize> {
         let mut total_read_size = 0usize;
+        info!("read file: {}, offset: {}", self.path, self.metadata.offset());
 
         if self.metadata.inode.size() <= self.metadata.offset() {
             //读取位置超过文件大小，返回结果为EOF

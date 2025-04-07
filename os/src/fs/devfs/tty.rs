@@ -23,6 +23,9 @@ impl FileTrait for DevTty {
     fn writable(&self) -> bool {
         true
     }
+    fn executable(&self) -> bool {
+        false
+    }
     async fn read(&self, user_buf: UserBuffer) -> SysResult<usize> {
         let init_proc = get_init_proc();
         if let Some(tty_device) = init_proc.get_file_by_fd(0) {
