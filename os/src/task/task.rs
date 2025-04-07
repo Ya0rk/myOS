@@ -7,6 +7,7 @@ use core::task::Waker;
 use core::time::Duration;
 use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
+use crate::fs::ext4::NormalFile;
 use crate::hal::arch::shutdown;
 use crate::fs::{init, FileClass, FileTrait};
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
@@ -64,7 +65,7 @@ pub struct TaskControlBlock {
 
 impl TaskControlBlock {
     /// 创建新task,只有initproc会调用
-    pub async fn new(elf_file: FileClass) -> Arc<Self> {
+    pub async fn new(elf_file: &Arc<NormalFile>) -> Arc<Self> {
         // memory_set with elf program headers/trampoline/trap context/user stack
         // let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf(elf_file).await;
