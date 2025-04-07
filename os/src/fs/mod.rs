@@ -79,7 +79,7 @@ impl FileClass {
     }
 }
 
-core::arch::global_asm!(include_str!("preload.S"));
+// core::arch::global_asm!(include_str!("preload.S"));
 
 // os\src\fs\mod.rs
 //将预加载到内存中的程序写入文件根目录

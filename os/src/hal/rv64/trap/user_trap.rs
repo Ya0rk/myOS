@@ -7,7 +7,7 @@ use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, yield_now};
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, executor, get_current_cpu, get_current_hart_id};
-use super::{__return_to_user, set_trap_handler, IndertifyMode};
+use super::{__return_to_user, set_trap_handler, IndertifyMode, TrapContext};
 /// 导入riscv架构相关的包
 #[cfg(target_arch = "riscv64")]
 use riscv::register::{sepc, stval};
@@ -130,19 +130,13 @@ pub async fn user_trap_handler() {
 }
 
 #[no_mangle]
-pub fn user_trap_return() {
+pub fn user_trap_return(trap_cx: &mut TrapContext) {
     // 重新修改stvec设置 user 的trap handler entry
     set_trap_handler(IndertifyMode::User);
-
-    let trap_cx = current_trap_cx();
     trap_cx.float_regs.trap_out_do_with_freg();
-
-    let task = current_task().unwrap();
-
     get_current_cpu().timer_irq_reset();
-    task.get_time_data_mut().set_trap_out_time();
+    
     unsafe { __return_to_user(trap_cx); }
-    task.get_time_data_mut().set_trap_in_time();
 
     trap_cx.float_regs.trap_in_do_with_freg(trap_cx.sstatus);
 }

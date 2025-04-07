@@ -3,8 +3,6 @@ use core::arch::asm;
 
 use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
 
-
-
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct UserFloatRegs {
@@ -128,7 +126,6 @@ impl UserFloatRegs {
         self.need_restore = 1;
     }
 
-    // TODO: 完善信号处理时 是否需要保存浮点寄存器的内容
     #[cfg(target_arch = "riscv64")]
     pub fn save(&mut self) {
         if self.need_save == 0 {

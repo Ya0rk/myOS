@@ -1,32 +1,27 @@
 use core::cell::SyncUnsafeCell;
 use core::fmt::Display;
 use core::future::Ready;
+use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-
 use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
-
 use crate::hal::arch::shutdown;
 use crate::fs::{init, FileClass, FileTrait};
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
-
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
-use crate::sync::{new_shared, Shared, SpinNoIrqLock, TimeData};
+use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
-
 use crate::task::{add_task, current_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task};
-use crate::hal::trap::{trap_loop, TrapContext};
+use crate::hal::trap::TrapContext;
 use alloc::collections::btree_map::BTreeMap;
-
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use log::{debug, info};
-// use riscv::addr::VirtAddr;
 use crate::mm::address::VirtAddr;
 use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 
@@ -146,6 +141,7 @@ impl TaskControlBlock {
         new_task.add_thread_group_member(new_task.clone());
         new_process_group(new_task.get_pgid());
         add_task(&new_task);
+        // new_task.set_task_waker(get_waker().await);
         spawn_user_task(new_task.clone());
         info!("spawn init proc");
 
@@ -234,7 +230,7 @@ impl TaskControlBlock {
         };
         let sig = match flag.contains(CloneFlags::SIGCHLD) {
             true  => self.handler.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
-            false => new_shared(self.handler.lock().clone()), // 一个新的副本，子进程可以独立修改
+            false => new_shared(self.handler.lock().deref().clone()), // 一个新的副本，子进程可以独立修改
         };
 
         // let kernel_stack = KernelStack::new(&pid);
@@ -324,11 +320,11 @@ impl TaskControlBlock {
         let exit_code = AtomicI32::new(0);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
-            false => new_shared(self.fd_table.lock().clone())
+            false => new_shared(self.fd_table.lock().deref().clone())
         };
         let sig = match flag.contains(CloneFlags::SIGCHLD) {
             true  => self.handler.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
-            false => new_shared(self.handler.lock().clone()), // 一个新的副本，子进程可以独立修改
+            false => new_shared(self.handler.lock().deref().clone()), // 一个新的副本，子进程可以独立修改
         };
         
         info!(
