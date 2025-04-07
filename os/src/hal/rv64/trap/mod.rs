@@ -60,7 +60,11 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
             _ => {},
         }
 
-        user_trap_return();
+        let trap_cx = task.get_trap_cx_mut();
+        let task_time = task.get_time_data_mut();
+        task_time.set_sched_out_time();
+        user_trap_return(trap_cx);
+        task_time.set_sched_in_time();
 
         match task.get_status() {
             TaskStatus::Zombie => break,
@@ -80,7 +84,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
             do_signal(&task);
         }
     }
-
+    info!("[trap loop] task pid = {} exit", task.get_pid());
     task.do_exit();
 }
 

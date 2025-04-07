@@ -80,9 +80,6 @@ impl<'a, T: ?Sized, S: MutexOperations> SleepMutexFuture<'a, T, S> {
         if !inner.is_locked {
             // The sleep lock is not yet locked, just granted.
             inner.is_locked = true;
-            // unsafe { &mut *this.grant.inner.get() }
-            //     .0
-            //     .store(true, Ordering::Release);
             this.grant.is_granted.store(true, Ordering::Release);
         } else {
             log::trace!("[SleepMutexFuture::init] wait for lock...");
@@ -153,29 +150,5 @@ impl<'a, T: ?Sized, S: MutexOperations> Drop for SleepMutexGuard<'a, T, S> {
 
         // No waiters, release the lock
         inner.is_locked = false;
-
-        // let queue = unsafe { &mut (*inner.wait_queue.get()) };
-        // if queue.is_none() {
-        //     inner.is_locked = false;
-        //     log::trace!("[SleepMutexGuard::drop] queue is none");
-        //     return;
-        // }
-        // let waiter = match queue.as_mut().unwrap().pop_front() {
-        //     None => {
-        //         // The wait queue is empty
-        //         inner.is_locked = false;
-        //         log::trace!("[SleepMutexGuard::drop] queue is empty");
-        //         return;
-        //     }
-        //     Some(waiter) => waiter,
-        // };
-        // drop(inner);
-        // // Waker should be fetched before we make the grant_inner.0 true
-        // // since it will be invalid after that.
-        // let grant_inner = unsafe { &mut *waiter.inner.get() };
-        // let waker = grant_inner.1.take().unwrap();
-        // grant_inner.0.store(true, Ordering::Release);
-        // waker.wake();
-        // log::trace!("[SleepMutexGuard::drop] grant someone...");
     }
 }
