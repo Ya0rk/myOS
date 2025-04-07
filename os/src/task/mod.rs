@@ -12,6 +12,7 @@ mod task;
 pub mod aux;
 
 pub use fd::{FdTable, Fd};
+use log::info;
 // pub use context::TaskContext;
 pub use pid::{KernelStack, Pid, PidAllocator};
 pub use task::{TaskControlBlock, TaskStatus};
@@ -46,8 +47,9 @@ use crate::fs::open_file;
 // }
 ///Add init process to the manager
 pub fn add_initproc() {
-    if let Some(file) = open_file("initproc", OpenFlags::O_RDONLY) {
-        // let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
+    if let Some(FileClass::File(file)) = open_file("initproc", OpenFlags::O_RDONLY) {
+        let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
+        info!("[add_initproc] elf_data: {:?}", &elf_data[0..64]);
         TaskControlBlock::new(file);
     } else {
         panic!("error: initproc from Abs File!");

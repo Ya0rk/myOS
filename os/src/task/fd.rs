@@ -1,7 +1,8 @@
 // #![allow(unused)]
 use alloc::{sync::Arc, vec::Vec};
 use log::info;
-use crate::{config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, utils::{Errno, SysResult}};
+use lwext4_rust::bindings::O_WRONLY;
+use crate::{config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, mm::memory_space::{MmapFlags, MmapProt}, utils::{Errno, SysResult}};
 
 #[derive(Clone)]
 pub struct FdTable {
@@ -45,6 +46,17 @@ impl Fd {
             self.flags.insert(OpenFlags::O_CLOEXEC);
         }
         self
+    }
+
+    pub fn check_mmap_valid(&self, flags:MmapFlags, prot: MmapProt) -> SysResult {
+        if self.flags.contains(OpenFlags::O_WRONLY) {
+            return Err(Errno::EACCES);
+        }
+        if flags.contains(MmapFlags::MAP_SHARED) && !self.flags.writable() && prot.contains(MmapProt::PROT_WRITE) {
+            return Err(Errno::EACCES);
+        }
+        Ok(())
+
     }
 }
 

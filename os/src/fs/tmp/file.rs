@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use crate::{
     config::PATH_MAX, 
     fs::{ffi::RenameFlags, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
-    mm::UserBuffer, utils::{Errno, SysResult}
+    mm::{UserBuffer, page::Page}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 
@@ -144,5 +144,8 @@ impl FileTrait for TmpFile {
 
     fn is_dir(&self) -> bool {
         self.metadata.inode.is_dir()
+    }
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
+        self.metadata.inode.get_page_cache().unwrap().get_page(offset).await
     }
 }

@@ -1,5 +1,5 @@
 use alloc::{string::String, sync::Arc};
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::UserBuffer, task::get_init_proc, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::{UserBuffer, page::Page}, task::get_init_proc, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -60,6 +60,10 @@ impl FileTrait for DevTty {
         todo!()
     }
     fn is_dir(&self) -> bool {
+        todo!()
+    }
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
+        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
         todo!()
     }
 }

@@ -12,7 +12,7 @@ use crate::mm::page::Page;
 use crate::sync::block_on;
 use crate::task::current_task;
 use crate::utils::{Errno, SysResult};
-use crate::fs::FileClass;
+use crate::fs::{FileClass, FileTrait};
 
 // use crate::{
 //     mm::{PageFaultAccessType, PageTable},
@@ -120,7 +120,7 @@ pub struct VmArea {
     /// Mmap flags.
     pub mmap_flags: MmapFlags,
     /// The underlying file being mapped.
-    pub backed_file: Option<FileClass>,
+    pub backed_file: Option<Arc<dyn FileTrait>>,
     /// Start offset in the file.
     pub offset: usize,
 }
@@ -162,7 +162,7 @@ impl VmArea {
         range_va: Range<VirtAddr>,
         map_perm: MapPerm,
         mmap_flags: MmapFlags,
-        file: Option<FileClass>,
+        file: Option<Arc<dyn FileTrait>>,
         offset: usize,
     ) -> Self {
         let range_va = range_va.start.floor().into()..range_va.end.ceil().into();
@@ -474,13 +474,13 @@ impl VmArea {
                         let offset = self.offset + (vpn - self.start_vpn()) * PAGE_SIZE;
                         let offset_aligned = align_down_by_page(offset);
                         if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
-                            let page = block_on(async { file.get_page_at(offset_aligned).await })?
+                            let page = block_on(async { file.get_page_at(offset_aligned).await }).unwrap()
                                 ;
                             page_table.map(vpn, page.ppn(), self.map_perm.into());
                             self.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         } else {
-                            let page = block_on(async { file.get_page_at(offset_aligned).await })?
+                            let page = block_on(async { file.get_page_at(offset_aligned).await }).unwrap()
                                 ;
                             if access_type.contains(PageFaultAccessType::WRITE) {
                                 let new_page = Page::new();

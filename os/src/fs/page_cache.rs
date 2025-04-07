@@ -34,13 +34,33 @@ impl PageCache {
     }
 
     /// 在page cache中寻找目标页
-    pub fn get_page(
+    pub async fn get_page(
         &self,
         offset: usize,
     ) -> Option<Arc<Page>> {
         let offset_aligned = offset & !(PAGE_SIZE - 1);
         // 从cache中寻找
-        self.pages.read().get(&offset_aligned).cloned()
+        let page = self.pages.read().get(&offset_aligned).cloned();
+        match page {
+            Some(_) => {
+                page
+            }
+            None => {
+                let new_page = self.insert_page(offset_aligned);
+                let buf = new_page.frame.ppn.get_bytes_array();
+                self.inode
+                    .read()
+                    .as_ref()
+                    .unwrap()
+                    .upgrade()
+                    .unwrap()
+                    .read_dirctly(offset_aligned, buf)
+                    .await;
+                // info!("[get_page] read page {:?}", buf);
+                Some(new_page)
+            }
+            
+        }
     }
 
     /// 将page插入cache
@@ -89,30 +109,7 @@ impl PageCache {
         
 
         for ppn in ppn_start..ppn_end {
-            let page = match self.get_page(ppn * PAGE_SIZE){
-                Some(page) => {
-                    // info!("[PageCache] read from cache!");
-                    page
-                }, // cache中找到了page
-                None => {
-                    // info!("[PageCache] read from device! now page cnt: {}", self.pages.read().len());
-                    // cache中没有找到就新建cache page
-                    // 补commit：修复page_cache
-                    // - let temp_page = self.insert_page(offset);
-                    // + let temp_page = self.insert_page(ppn * PAGE_SIZE);
-                    let temp_page = self.insert_page(ppn * PAGE_SIZE);
-                    let array = temp_page.frame.ppn.get_bytes_array();
-                    self.inode
-                        .read()
-                        .as_ref()
-                        .unwrap()
-                        .upgrade()
-                        .unwrap()
-                        .read_dirctly(ppn*PAGE_SIZE, array)
-                        .await;
-                    temp_page
-                }
-            };
+            let page = self.get_page(ppn * PAGE_SIZE).await.unwrap();
 
             let page_buf = page.frame.ppn.get_bytes_array();
             let len = min(buf.len() - buf_cur, PAGE_SIZE - page_offset);
@@ -135,13 +132,7 @@ impl PageCache {
         let mut buf_cur = 0;
 
         for ppn in ppn_start..ppn_end {
-            let page = match self.get_page(ppn * PAGE_SIZE){
-                Some(page) => page, // cache中找到了page
-                None => {
-                    // cache中没有找到就新建cache page
-                    self.insert_page(offset)
-                }
-            };
+            let page = self.get_page(ppn * PAGE_SIZE).await.unwrap();
             page.set_dirty(page_offset).await;
 
             let page_buf = page.frame.ppn.get_bytes_array();
