@@ -102,22 +102,6 @@ impl Display for IndertifyMode {
     }
 }
 
-#[cfg(target_arch = "riscv64")]
-fn set_trap_handler(mode: IndertifyMode) {
-    // unimplemented!()
-    match mode {
-        IndertifyMode::User => {
-            unsafe {
-                stvec::write(__trap_from_user as usize, TrapMode::Direct);
-            }
-        },
-        IndertifyMode::Kernel => {
-            unsafe {
-                stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
-            }
-        },
-    }
-}
 #[cfg(target_arch = "loongarch64")]
 #[inline]
 fn set_trap_handler(mode: IndertifyMode) {

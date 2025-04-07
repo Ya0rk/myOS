@@ -1,7 +1,7 @@
 #![allow(unused)]
 use core::arch::asm;
 use crate::{hal::arch::hart_start_success, mm::VirtAddr};
-use crate::config::{HART_NUM, HART_START_ADDR, KERNEL_ADDR_OFFSET};
+use crate::hal::config::{HART_NUM, HART_START_ADDR, KERNEL_ADDR_OFFSET};
 
 
 pub fn logo() {
