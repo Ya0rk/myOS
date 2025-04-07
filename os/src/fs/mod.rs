@@ -62,21 +62,21 @@ impl FileClass {
             FileClass::Abs(f) => Ok(f.clone()),
         }
     }
-    pub async fn get_page_at(&self, offset: usize) -> Result<Arc<crate::mm::page::Page>, Errno> {
-        match self {
-            FileClass::File(file) => {
-                if let Some(page) = file.metadata.inode.get_page_cache().unwrap().get_page(offset) {
-                    // Ok(page)
-                    Ok(page)
-                }
-                else {
-                    info!("[get_page_at] get page from offset {:#x} failed", offset);
-                    Err(Errno::EINVAL)
-                }
-            },
-            FileClass::Abs(_) => Err(Errno::EINVAL),
-        }
-    }
+    // pub async fn get_page_at(&self, offset: usize) -> Result<Arc<crate::mm::page::Page>, Errno> {
+    //     match self {
+    //         FileClass::File(file) => {
+    //             if let Some(page) = file.metadata.inode.get_page_cache().unwrap().get_page(offset) {
+    //                 // Ok(page)
+    //                 Ok(page)
+    //             }
+    //             else {
+    //                 info!("[get_page_at] get page from offset {:#x} failed", offset);
+    //                 Err(Errno::EINVAL)
+    //             }
+    //         },
+    //         FileClass::Abs(_) => Err(Errno::EINVAL),
+    //     }
+    // }
 }
 
 core::arch::global_asm!(include_str!("preload.S"));

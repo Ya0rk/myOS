@@ -6,7 +6,7 @@ use super::Kstat;
 use crate::hal::arch::console_getchar;
 use crate::utils::Errno;
 use crate::utils::SysResult;
-use crate::mm::UserBuffer;
+use crate::mm::{UserBuffer, page::Page};
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -88,6 +88,10 @@ impl FileTrait for Stdin {
         todo!()
     }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
+        todo!()
+    }
+    
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         todo!()
     }
 }
@@ -178,6 +182,9 @@ impl FileTrait for Stdout {
         todo!()
     }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
+        todo!()
+    }
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         todo!()
     }
 }

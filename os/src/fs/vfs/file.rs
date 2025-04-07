@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
-use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::UserBuffer, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{UserBuffer, page::Page}, utils::SysResult};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -127,6 +127,9 @@ pub trait FileTrait: Send + Sync {
     fn read_dentry(&self) -> Option<Vec<Dirent>> {
         todo!()
     }
+
+    // TODO: 缓存未命中处理
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>>;
 }
 
 // pub trait Ioctl: File {

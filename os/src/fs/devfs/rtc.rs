@@ -2,7 +2,7 @@ use core::{cmp::min, fmt::{Formatter, Debug}};
 use alloc::{format, string::String, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::UserBuffer, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::{UserBuffer, page::Page}, utils::SysResult};
 
 pub struct DevRtc;
 
@@ -56,6 +56,10 @@ impl FileTrait for DevRtc {
         todo!()
     }
     fn is_dir(&self) -> bool {
+        todo!()
+    }
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
+        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
         todo!()
     }
 }

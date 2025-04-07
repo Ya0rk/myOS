@@ -1,4 +1,4 @@
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::UserBuffer, utils::{SysResult, RNG}};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::{UserBuffer, page::Page}, utils::{SysResult, RNG}};
 use alloc::{string::String, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -50,6 +50,10 @@ impl FileTrait for DevRandom {
         todo!()
     }
     fn is_dir(&self) -> bool {
+        todo!()
+    }
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
+        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
         todo!()
     }
 }

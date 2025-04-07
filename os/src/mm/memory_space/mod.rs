@@ -18,7 +18,7 @@ use riscv::register::scause;
 use crate::{config::{
     
     align_down_by_page, is_aligned_to_page, DL_INTERP_OFFSET, MMAP_PRE_ALLOC_PAGES, PAGE_SIZE, USER_ELF_PRE_ALLOC_PAGE_CNT, USER_STACK_PRE_ALLOC_SIZE, USER_STACK_SIZE, U_SEG_FILE_BEG, U_SEG_FILE_END, U_SEG_HEAP_BEG, U_SEG_HEAP_END, U_SEG_SHARE_BEG, U_SEG_SHARE_END, U_SEG_STACK_BEG, U_SEG_STACK_END
-}, fs::FileClass, sync::block_on};
+}, fs::{FileClass, FileTrait}, sync::block_on};
 // use memory::{pte::PTEFlags, PageTable, PhysAddr, VirtAddr, VirtPageNum};
 use super::{page_table::{PTEFlags, PageTable}};
 use super::address::{VirtAddr, VirtPageNum, PhysAddr};
@@ -267,31 +267,33 @@ impl MemorySpace {
     // }
 
 
-    pub fn new_user_from_elf(elf_file: FileClass) -> (Self, usize, usize, Vec<AuxHeader>) {
-        if let FileClass::File(file) = elf_file {
-            let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
-            let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
-            let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
-            memory_space.alloc_heap();
-            (memory_space, entry_point, sp_init, auxv)
-        }
-        else {
-            panic!("File not supported!");
-        }
-
+    pub fn new_user_from_elf(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
+        // if let FileClass::File(file) = elf_file {
+        //     let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
+        //     let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
+        //     let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
+        //     memory_space.alloc_heap();
+        //     (memory_space, entry_point, sp_init, auxv)
+        // }
+        // else {
+        //     panic!("File not supported!");
+        // }
+        let elf_data = block_on( async { elf_file.get_inode().read_all().await } ).unwrap();
+        // info!("[new_user_from_elf] elf_data: {:?}", elf_data);
+        let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
+        let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
+        memory_space.alloc_heap();
+        (memory_space, entry_point, sp_init, auxv)
         
     }
-    pub fn new_user_from_elf_lazily(elf_file: &FileClass) -> (Self, usize, usize, Vec<AuxHeader>) {
-        if let FileClass::File(file) = elf_file {
-            let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
-            let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data);
-            let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
-            memory_space.alloc_heap_lazily();
-            (memory_space, entry_point, sp_init, auxv)
-        }
-        else {
-            panic!("File not supported!");
-        }
+    pub fn new_user_from_elf_lazily(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
+
+        let elf_data = block_on( async { elf_file.get_inode().read_all().await } ).unwrap();
+        let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data);
+        let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
+        memory_space.alloc_heap_lazily();
+        (memory_space, entry_point, sp_init, auxv)
+
 
     }
     /// Include sections in elf and TrapContext and user stack,
@@ -383,7 +385,7 @@ impl MemorySpace {
     /// Return the max end vpn and the first section's va.
     pub fn map_elf(
         &mut self,
-        elf_file: &FileClass,
+        elf_file: Arc<dyn FileTrait>,
         elf: &ElfFile,
         offset: VirtAddr,
     ) -> (VirtPageNum, VirtAddr) {
@@ -444,7 +446,8 @@ impl MemorySpace {
                     let start_offset = ph.offset() as usize;
                     let offset = start_offset + (vpn - vm_area.start_vpn()) * PAGE_SIZE;
                     let offset_aligned = align_down_by_page(offset);
-                    if let Ok(page) = block_on(async { elf_file.get_page_at(offset_aligned).await })
+                    // if let Ok(page) = block_on(async { elf_file.get_page_at(offset_aligned).await })
+                    if let Some(page) = block_on(async { elf_file.get_page_at(offset_aligned).await })
                         // 
                     {
                         if pre_alloc_page_cnt < USER_ELF_PRE_ALLOC_PAGE_CNT {
@@ -495,7 +498,7 @@ impl MemorySpace {
 
     pub fn parse_and_map_elf(
         mut self,
-        elf_file: &FileClass,
+        elf_file: Arc<dyn FileTrait>,
         elf_data: &[u8],
     ) -> (Self, usize, Vec<AuxHeader>) {
         const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
@@ -879,7 +882,7 @@ impl MemorySpace {
         length: usize,
         perm: MapPerm,
         flags: MmapFlags,
-        file: FileClass,
+        file: Arc<dyn FileTrait>,
         offset: usize,
     ) -> SysResult<VirtAddr> {
         debug_assert!(is_aligned_to_page(offset));
@@ -902,7 +905,7 @@ impl MemorySpace {
         let mut range_vpn = vma.range_vpn();
         let length = cmp::min(length, MMAP_PRE_ALLOC_PAGES * PAGE_SIZE);
         for offset_aligned in (offset..offset + length).step_by(PAGE_SIZE) {
-            if let Ok(page) = block_on(async { file.get_page_at(offset_aligned).await }) {
+            if let Some(page) = block_on(async { file.get_page_at(offset_aligned).await }) {
                 let vpn = range_vpn.next().unwrap();
                 if flags.contains(MmapFlags::MAP_PRIVATE) {
                     let (pte_flags, ppn) = {
@@ -1024,7 +1027,7 @@ impl MemorySpace {
     ) -> SysResult<()> {
         log::trace!("[MemorySpace::handle_page_fault] {va:?}");
         let vm_area = self.areas_mut().get_mut(va.align_down()).ok_or_else(|| {
-            log::warn!("[handle_page_fault] no area containing {va:?}");
+            // log::warn!("[handle_page_fault] no area containing {va:?}");
             Errno::EFAULT
         })?;
         vm_area.handle_page_fault(self.page_table_mut(), va.floor(), access_type)?;

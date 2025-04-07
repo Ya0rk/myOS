@@ -4,7 +4,7 @@ use sbi_spec::pmu::cache_event::NODE;
 use crate::{
     config::PATH_MAX, 
     fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
-    mm::UserBuffer, utils::{Errno, SysResult}
+    mm::{UserBuffer, page::Page}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 
@@ -169,5 +169,9 @@ impl FileTrait for NormalFile {
             dir_entrys.push(entry);
         }
         Some(dir_entrys)
+    }
+    
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
+        self.metadata.inode.get_page_cache().unwrap().get_page(offset).await
     }
 }
