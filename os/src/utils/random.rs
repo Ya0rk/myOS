@@ -1,8 +1,5 @@
 #![allow(unused)]
-
-use spin::Mutex;
-
-use crate::mm::UserBuffer;
+use crate::{mm::UserBuffer, sync::SpinNoIrqLock};
 
 const LCG_MULTIPLIER: u64 = 6364136223846793005;
 const LCG_INCREMENT: u64 = 1;
@@ -42,4 +39,4 @@ impl LcgRng {
     }
 }
 
-pub static RNG: Mutex<LcgRng> = Mutex::new(LcgRng::new());
+pub static RNG: SpinNoIrqLock<LcgRng> = SpinNoIrqLock::new(LcgRng::new());

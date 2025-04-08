@@ -1,9 +1,9 @@
 use core::mem::size_of;
-use crate::fs::{open_file, OpenFlags};
+use crate::fs::{open_file, FileClass, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{SigDetails, SigMask, UContext};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
-use crate::sync::{sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
+use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_task_by_pid, spawn_user_task
@@ -128,10 +128,6 @@ pub fn sys_clone(
     let new_pid = new_task.get_pid();
     let child_trap_cx = new_task.get_trap_cx_mut();
 
-    // 子进程不能使用父进程的栈，所以需要手动指定
-    if child_stack != 0 {
-        child_trap_cx.set_sp(child_stack);
-    }
     if flag.contains(CloneFlags::CLONE_SETTLS) {
         child_trap_cx.set_tp(tls);
     }
@@ -157,6 +153,10 @@ pub fn sys_clone(
         new_task.set_child_cleartid(ctid);
     }
 
+    // 子进程不能使用父进程的栈，所以需要手动指定
+    if child_stack != 0 {
+        child_trap_cx.set_sp(child_stack);
+    }
     // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
     // 只需要修改子进程返回值为0即可
     child_trap_cx.user_x[10] = 0;
@@ -174,11 +174,11 @@ pub async fn sys_exec(path: usize) -> SysResult<usize> {
     let token = current_user_token();
     let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
-    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
+    if let Some(FileClass::File(file)) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
         // let all_data = app_inode.file()?.metadata.inode.read_all().await?;
         
         let task = current_task().unwrap();
-        task.exec(app_inode).await;
+        task.exec(file).await;
         Ok(0)
     } else {
         Err(Errno::EBADCALL)

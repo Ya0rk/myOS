@@ -21,7 +21,7 @@ use crate::{
         U_SEG_FILE_END, U_SEG_HEAP_BEG, U_SEG_HEAP_END, U_SEG_SHARE_BEG, U_SEG_SHARE_END, 
         U_SEG_STACK_BEG, U_SEG_STACK_END
     }, 
-    fs::FileClass, sync::block_on
+    fs::{FileTrait, FileClass}, sync::block_on
 };
 // use memory::{pte::PTEFlags, PageTable, PhysAddr, VirtAddr, VirtPageNum};
 use super::{page_table::{PTEFlags, PageTable}};
@@ -270,37 +270,33 @@ impl MemorySpace {
     // }
 
 
-    pub fn new_user_from_elf(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
+    pub async fn new_user_from_elf(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
         // if let FileClass::File(file) = elf_file {
-        //     let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
-        //     let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
-        //     let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
-        //     memory_space.alloc_heap();
-        //     (memory_space, entry_point, sp_init, auxv)
-        // }
-        // else {
-        //     panic!("File not supported!");
-        // }
-        let elf_data = block_on( async { elf_file.get_inode().read_all().await } ).unwrap();
-        // info!("[new_user_from_elf] elf_data: {:?}", elf_data);
+            // let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
+        let elf_data = elf_file.get_inode().read_all().await.unwrap();
         let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
         let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
         memory_space.alloc_heap();
         (memory_space, entry_point, sp_init, auxv)
+        // }
+        // else {
+        //     panic!("File not supported!");
+        // }
+
         
     }
-    pub async fn new_user_from_elf_lazily(elf_file: &FileClass) -> (Self, usize, usize, Vec<AuxHeader>) {
-        if let FileClass::File(file) = elf_file {
+    pub async fn new_user_from_elf_lazily(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
+        // if let FileClass::File(file) = elf_file {
             // let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
-            let elf_data  = file.metadata.inode.read_all().await.expect("[new_user_from_elf_lazily] read elf file failed");
+            let elf_data  = elf_file.get_inode().read_all().await.expect("[new_user_from_elf_lazily] read elf file failed");
             let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data);
             let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
             memory_space.alloc_heap_lazily();
             (memory_space, entry_point, sp_init, auxv)
-        }
-        else {
-            panic!("File not supported!");
-        }
+        // }
+        // else {
+        //     panic!("File not supported!");
+        // }
 
     }
     /// Include sections in elf and TrapContext and user stack,
