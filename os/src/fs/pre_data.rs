@@ -24,7 +24,7 @@ pub async fn flush_preload() -> Arc<NormalFile> {
     if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
         // v.push(data);
         let buf = UserBuffer::new(v);
-        initproc.metadata.inode.write_at(0, &data).await;
+        initproc.metadata.inode.write_directly(0, &data).await;
         // info!("[flush_preload] write initproc to file");
         return initproc;
     }
