@@ -9,6 +9,9 @@ use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_task_by_pid, spawn_user_task
 };
 use crate::utils::{Errno, SysResult, RNG};
+use alloc::ffi::CString;
+use alloc::string::String;
+use alloc::vec::Vec;
 use log::{debug, info};
 use lwext4_rust::bindings::true_;
 use zerocopy::IntoBytes;
@@ -169,16 +172,33 @@ pub fn sys_clone(
     Ok(new_pid as usize)
 }
 
-pub async fn sys_exec(path: usize) -> SysResult<usize> {
+pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize> {
     // info!("[sys_exec] start");
     let token = current_user_token();
     let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
+    let mut args: Vec<String> = Vec::new();
+    if argv != 0 {
+        let argv = translated_ref(token, argv as *const &[usize]);
+        for str_addr in argv.iter() {
+            let arg_entry = translated_str(token, *str_addr as *const u8);
+            args.push(arg_entry);
+        }
+    }
+    let mut envs: Vec<String> = Vec::new();
+    if env != 0 {
+        let env = translated_ref(token, env as *const &[usize]);
+        for str_addr in env.iter() {
+            let env_entry = translated_str(token, *str_addr as *const u8);
+            envs.push(env_entry);
+        }
+    }
+    
     if let Some(FileClass::File(file)) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
         // let all_data = app_inode.file()?.metadata.inode.read_all().await?;
         
-        let task = current_task().unwrap();
-        task.exec(file).await;
+        let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
+        task.execve(file, args, envs).await;
         Ok(0)
     } else {
         Err(Errno::EBADCALL)

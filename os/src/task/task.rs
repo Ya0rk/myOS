@@ -150,8 +150,9 @@ impl TaskControlBlock {
 
         new_task
     }
-    pub async fn exec(&self, elf_file: Arc<dyn FileTrait>) {
-        info!("exec start");
+    pub async fn execve(&self, elf_file: Arc<dyn FileTrait>, argv: Vec<String>, env: Vec<String>) {
+        info!("execve start");
+        info!("[execve] argv:{:?}, env:{:?}", argv, env);
         let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(elf_file).await;
         
         // TODO(YJJ):这里好像并不需要kernel stack
@@ -163,7 +164,7 @@ impl TaskControlBlock {
         //         MapPerm::RW,
         //         VmAreaType::Stack)
         // );
-        info!("exec memory_set created");
+        info!("execve memory_set created");
         
         // 终止所有子线程
         for (_, weak_task) in self.thread_group.lock().tasks.iter() {
@@ -179,7 +180,7 @@ impl TaskControlBlock {
         unsafe { memory_space.switch_page_table() };
         let mut mem = self.memory_space.lock();
         *mem = memory_space;
-        let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
+        let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), argv, env, auxv);
 
         // initialize trap_cx
         // let trap_cx = TrapContext::app_init_context(
