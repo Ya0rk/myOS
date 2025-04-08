@@ -1,5 +1,5 @@
 use core::mem::size_of;
-use crate::fs::{open_file, FileClass, OpenFlags};
+use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{SigDetails, SigMask, UContext};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
@@ -174,14 +174,17 @@ pub fn sys_clone(
 
 pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize> {
     // info!("[sys_exec] start");
-    let token = current_user_token();
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
     let path = translated_str(token, path as *const u8);
     debug!("sys_exec: path = {:?}", path);
     let mut args: Vec<String> = Vec::new();
     if argv != 0 {
         let argv = translated_ref(token, argv as *const &[usize]);
+        info!("argv:{:?}", argv);
         for str_addr in argv.iter() {
             let arg_entry = translated_str(token, *str_addr as *const u8);
+            info!("arg_entry:{}", arg_entry);
             args.push(arg_entry);
         }
     }
@@ -193,8 +196,8 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
             envs.push(env_entry);
         }
     }
-    
-    if let Some(FileClass::File(file)) = open_file(path.as_str(), OpenFlags::O_RDONLY) {
+    let cwd = task.get_current_path();
+    if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         // let all_data = app_inode.file()?.metadata.inode.read_all().await?;
         
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();

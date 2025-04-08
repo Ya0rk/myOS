@@ -1,6 +1,7 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
 MODE := release
+# IMG := sdcard
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
@@ -8,9 +9,15 @@ APPS := ../user/src/bin/*
 
 # fs image
 FS = lwext4_rust
-FS_IMG := ../$(FS)/ext4.img
-# FS_IMG := ../sdcard-rv.img
 
+# ifeq ($(MODE), release)
+# 	MODE_ARG := --release
+# endif
+# ifeq ($(MODE), debug)
+# 	MODE_ARG :=
+# endif
+FS_IMG := ../sdcard-rv.img
+FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 2
 
@@ -174,12 +181,10 @@ LAgdb:
 PHONY += LAgdb
 
 # TEMP - 从官方sdcard镜像启动
-rv-tb-build:
-	env $(KERNEL_BIN) initproc
+rv-tb-build: env $(KERNEL_BIN) initproc 
 PHONY += rv-tb-build
 
-rv-tb-run:
-	qemu-version-check build
+rv-tb-run: rv-tb-build
 	$(QEMU_NAME) $(QEMU_ARGS)
 PHONY += rv-tb-run
 

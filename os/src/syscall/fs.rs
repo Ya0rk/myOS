@@ -202,9 +202,9 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
         info!("[sys_openat] other cwd = {}", other_cwd);
         join_path_2_absolute(other_cwd, path)
     };
-
+    let cwd = task.get_current_path();
     // 检查路径是否有效并打开文件
-    if let Some(inode) = open_file(target_path.as_str(), flags) {
+    if let Some(inode) = open(cwd.as_str() , target_path.as_str(), flags) {
         let fd = task.alloc_fd(Fd::new(inode.file()?, flags));
         info!("[sys_openat] alloc fd finished, new fd = {}", fd);
         if fd > RLIMIT_NOFILE {
