@@ -66,7 +66,7 @@ impl Kstat {
 
 /// 将 ext4_inode_stat 转换为 Kstat
 #[allow(unused)]
-pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeSpec, ctime: TimeSpec) -> Kstat {
+pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeSpec, ctime: TimeSpec, size: usize) -> Kstat {
     Kstat {
         st_dev: stat.st_dev as u32,
         st_ino: stat.st_ino as u64,
@@ -76,7 +76,7 @@ pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeS
         st_gid: stat.st_gid,
         st_rdev: 0, // 如果需要，可以根据具体情况设置
         __pad: 0,   // 填充字段
-        st_size: stat.st_size as i64,
+        st_size: size as i64,
         st_blksize: BLOCK_SIZE as i64,
         __pad2: 0,  // 填充字段
         st_blocks: stat.st_blocks as u64,

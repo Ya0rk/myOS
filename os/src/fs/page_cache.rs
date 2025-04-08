@@ -4,7 +4,7 @@ use alloc::{collections::btree_map::BTreeMap, sync::{Arc, Weak}};
 use hashbrown::HashSet;
 use log::info;
 use spin::RwLock;
-use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::SleepLock, utils::{Errno, SysResult}};
+use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::{yield_now, SleepLock}, task::get_current_cpu, utils::{Errno, SysResult}};
 use super::InodeTrait;
 use crate::mm::page::*;
 
@@ -88,7 +88,7 @@ impl PageCache {
                     let start_offset = idx * BLOCK_SIZE;
                     let start = page_addr_aligned + start_offset;
                     let buf = &page.frame.ppn.get_bytes_array()[start_offset..start_offset + BLOCK_SIZE].to_vec();
-                    inode.clone().write_back(start, BLOCK_SIZE, buf)?;
+                    inode.clone().write_directly(start, buf).await;
                 }
                 dirty_blocks.clear();
             }
@@ -117,7 +117,10 @@ impl PageCache {
             buf_cur += len;
             // TODO: maybe bug?
             page_offset = 0;
-            
+            // 这里需要yield一下，防止cpu占用过高
+            if get_current_cpu().timer_irq_cnt() >= 2 {
+                yield_now().await;
+            }
         }
         buf_cur
     }
@@ -138,10 +141,18 @@ impl PageCache {
 
             let page_buf = page.frame.ppn.get_bytes_array();
             let len = min(buf.len() - buf_cur, PAGE_SIZE - page_offset);
+            for off in (page_offset..page_offset+len).step_by(BLOCK_SIZE) {
+                page.set_dirty(off).await;
+            }
             page_buf[page_offset..page_offset + len].copy_from_slice(&buf[buf_cur..buf_cur + len]);
             buf_cur += len;
             // TODO: maybe bug?
             page_offset = 0;
+            // 这里需要yield一下，防止cpu占用过高
+            if get_current_cpu().timer_irq_cnt() >= 2 {
+                info!("[PageCache] yield now!");
+                yield_now().await;
+            }
         }
 
         buf_cur

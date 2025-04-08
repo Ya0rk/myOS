@@ -87,6 +87,16 @@ impl FileTrait for NormalFile {
 
     async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
         let mut total_write_size = 0usize;
+        let file_size = self.metadata.inode.size();
+        let offset = self.metadata.offset();
+        // TODO(YJJ): 如果不检测 maybe bug???
+        if buf.len() > file_size - offset {
+            // info!("[write] file size = {}", file_size);
+            // info!("[write] buf size = {}, offset = {}", buf.len(), offset);
+            // self.metadata.inode.truncate(offset + buf.len());
+            self.metadata.inode.set_size(buf.len() + offset).expect("[write_at]: set size fail!");
+            // info!("[write] set size = {}", self.metadata.inode.size());
+        }
         for slice in buf.buffers.iter() {
             let old_offset = self.metadata.offset();
             let write_size = self.metadata.inode.write_at(old_offset, *slice).await;

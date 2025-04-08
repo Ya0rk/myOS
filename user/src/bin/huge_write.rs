@@ -19,7 +19,7 @@ pub fn main() -> i32 {
     let f = f as usize;
     let start = get_mtime();
     println!("Start writing... time = {}", start);
-    let size_mb = 10usize;
+    let size_mb = 20usize;
     for _ in 0..1024 * size_mb {
         write(f, &buffer);
     }

@@ -5,6 +5,7 @@ use lwext4_rust::{
     bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET},
     Ext4File, InodeTypes
 };
+use riscv::register::mstatus::set_fs;
 use crate::{
     fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType},
     page_cache::PageCache, stat::as_inode_stat, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
@@ -64,6 +65,7 @@ impl InodeTrait for Ext4Inode {
         let size = lock_file.file_size() as usize;
         lock_file.file_close().expect("[ext4Inode new]: file close fail!");
         size
+        // self.metadata.size.load(Ordering::Relaxed)
     }
 
     fn set_size(&self, new_size: usize) -> SysResult {
@@ -118,6 +120,7 @@ impl InodeTrait for Ext4Inode {
             }
             // 有cache就从cache中找
             Some(cache) => {
+                info!("bbbb");
                 cache.read(buf, offset).await
             }
         }
@@ -139,10 +142,11 @@ impl InodeTrait for Ext4Inode {
     /// 写入文件
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         // let file_size = self.size();
-        // TODO(YJJ): 如果不检测 maybe bug???
+        // // TODO(YJJ): 如果不检测 maybe bug???
         // if buf.len() > file_size - offset {
         //     info!("[write_at] file size = {}", file_size);
-        //     self.truncate(offset + buf.len());
+        //     // self.truncate(offset + buf.len());
+        //     self.set_size(buf.len() + offset).expect("[write_at]: set size fail!");
         // }
 
         match &self.page_cache {
@@ -158,6 +162,11 @@ impl InodeTrait for Ext4Inode {
     }
 
     async fn write_directly(&self, offset: usize, buf: &[u8]) -> usize {
+        let file_size = self.size();
+        if file_size < offset + buf.len() {
+            // info!("[]write_at] buflen = {}", buf.len());
+            self.set_size(buf.len() + offset).expect("[write_directly]: set size fail!");
+        }
         let mut file = self.file.lock();
         let path = file.get_path();
         let path = path.to_str().unwrap();
@@ -185,6 +194,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 读取文件所有内容
     async fn read_all(&self) -> SysResult<Vec<u8>> {
+        // info!("[read_all] read all file, size = {}", self.size());
         let mut buf = vec![0; self.size()];
         self.read_at(0, &mut buf).await;
         Ok(buf)
@@ -206,11 +216,17 @@ impl InodeTrait for Ext4Inode {
     }
     /// 获取文件状态
     fn fstat(&self) -> Kstat {
+        let size = match self.metadata.size.load(Ordering::Relaxed) {
+            0 => self.size(),
+            size => size
+        };
+        // info!("[Ext4Inode] fstat size = {}", size);
         let mut file = self.file.lock();
+        // let size = self.size();
         match file.fstat() {
             Ok(stat) => {
                 let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
-                as_inode_stat(stat, atime, mtime, ctime)
+                as_inode_stat(stat, atime, mtime, ctime, size)
             }
             Err(_) => Kstat::new()
         }
