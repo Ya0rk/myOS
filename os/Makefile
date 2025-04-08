@@ -8,7 +8,8 @@ APPS := ../user/src/bin/*
 
 # fs image
 FS = lwext4_rust
-FS_IMG := ../$(FS)/ext4.img
+# FS_IMG := ../$(FS)/ext4.img
+FS_IMG := ../sdcard-rv.img
 
 # cpu hart
 CPUS ?= 2
@@ -171,6 +172,16 @@ LAgdb:
 		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
 		-s -S
 PHONY += LAgdb
+
+# TEMP - 从官方sdcard镜像启动
+rv-tb-build:
+	env $(KERNEL_BIN) initproc
+PHONY += rv-tb-build
+
+rv-tb-run:
+	qemu-version-check build
+	$(QEMU_NAME) $(QEMU_ARGS)
+PHONY += rv-tb-run
 
 
 .PHONY: $(PHONY)
