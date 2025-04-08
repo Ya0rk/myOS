@@ -12,6 +12,8 @@ pub async fn flush_preload() -> Arc<NormalFile> {
     extern "C" {
         fn initproc_start();
         fn initproc_end();
+        fn user_shell_start();
+        fn user_shell_end();
     }
 
     // println!("aaa");
@@ -26,6 +28,18 @@ pub async fn flush_preload() -> Arc<NormalFile> {
         // info!("[flush_preload] write initproc to file");
         return initproc;
     }
+    else {
+        panic!("[flush_preload] open initproc failed");
+    }    
+    if let Some(FileClass::File(user_shell)) = open_file("user_shell", OpenFlags::O_CREAT) {
+        // v.push(data);
+        let buf = UserBuffer::new(v);
+        user_shell.metadata.inode.write_at(0, &data).await;
+        // info!("[flush_preload] write initproc to file");
+        return user_shell;
+    }
+    else {
+        panic!("[flush_preload] open user_shell failed");
+    }
     // info!("[flush_preload] open initproc failed");
-    panic!("[flush_preload] open initproc failed");
 }
