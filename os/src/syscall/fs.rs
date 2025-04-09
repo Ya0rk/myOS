@@ -649,11 +649,11 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let mut new_offset = offset;
 
     loop {
-        let read_size = src.read_at(new_offset, &mut buf).await?;
+        let read_size = src.get_inode().read_at(new_offset, &mut buf).await;
         if read_size == 0 {
             break;
         }
-        let write_size = dest.write_at(new_offset, &buf).await?;
+        let write_size = dest.get_inode().write_at(new_offset, &buf).await;
         if read_size != write_size {
             return Err(Errno::EIO);
         }
