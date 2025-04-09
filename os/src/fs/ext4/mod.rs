@@ -22,6 +22,7 @@ lazy_static! {
 }
 
 pub fn root_inode() -> Arc<dyn InodeTrait> {
+    log::info!("want to get root_inode");
     SUPER_BLOCK.root_inode()
 }
 

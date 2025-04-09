@@ -46,10 +46,11 @@ use crate::fs::open_file;
 // }
 ///Add init process to the manager
 pub fn add_initproc() {
-    if let Some(file) = open_file("initproc", OpenFlags::O_RDONLY) {
-        // let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
-        TaskControlBlock::new(file);
-    } else {
-        panic!("error: initproc from Abs File!");
-    }
+    // if let Some(file) = open_file("initproc", OpenFlags::O_RDONLY) {
+    //     // let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
+    //     TaskControlBlock::new(file);
+    // } else {
+    //     panic!("error: initproc from Abs File!");
+    // }
+    TaskControlBlock::new();
 }
