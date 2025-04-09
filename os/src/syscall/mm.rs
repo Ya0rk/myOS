@@ -1,6 +1,9 @@
 use log::info;
-
-use crate::{config::{align_up_by_page, is_aligned_to_page, PAGE_MASK}, mm::{memory_space::{vm_area::{MapPerm, VmArea}, MemorySpace, MmapFlags, MmapProt}, MapPermission}, utils::{Errno, SysResult}};
+use crate::{
+    config::{align_up_by_page, is_aligned_to_page, PAGE_MASK},
+    mm::{memory_space::{vm_area::{MapPerm, VmArea}, MemorySpace, MmapFlags, MmapProt}, MapPermission},
+    utils::{Errno, SysResult}
+};
 use crate::task::{current_task};
 
 pub fn sys_brk(new_brk: *const u8) -> SysResult<usize> {
