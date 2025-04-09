@@ -5,7 +5,7 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
+use super::{add_proc_group_member, FdInfo, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::shutdown;
@@ -767,19 +767,23 @@ impl TaskControlBlock {
         self.fd_table.lock().table[fd].is_none()
     }
     /// 将fd作为index获取文件描述符
-    pub fn get_fd(&self, fd: usize) -> Fd {
+    pub fn get_fd(&self, fd: usize) -> FdInfo {
         self.fd_table.lock().get_fd(fd).unwrap()
     }
     /// 分配fd
-    pub fn alloc_fd(&self, fd: Fd) -> usize{
+    pub fn alloc_fd(&self, fd: FdInfo) -> usize{
         self.fd_table.lock().alloc_fd(fd).expect("task alloc fd fail")
+    }
+    /// 为以前分配了Fd的file，分配一个大于than的新fd
+    pub fn alloc_fd_than(&self, fd: FdInfo, than: usize) -> usize{
+        self.fd_table.lock().alloc_fd_than(fd, than).expect("task alloc fd fail")
     }
     /// 删除fd
     pub fn remove_fd(&self, fd: usize) {
         self.fd_table.lock().remove(fd).expect("task remove fd fail")
     }
     /// 在指定位置设置fd
-    pub fn put_fd_in(&self, fd: Fd, idx: usize) {
+    pub fn put_fd_in(&self, fd: FdInfo, idx: usize) {
         self.fd_table.lock().put_in(fd, idx).expect("task [put fd in] fail")
     }
 

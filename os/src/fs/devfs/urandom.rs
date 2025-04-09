@@ -1,4 +1,4 @@
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::{UserBuffer, page::Page}, utils::{SysResult, RNG}};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::{SysResult, RNG}};
 use alloc::{string::String, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -13,6 +13,9 @@ impl DevRandom {
 
 #[async_trait]
 impl FileTrait for DevRandom {
+    fn set_flags(&self, _flags: OpenFlags) {
+        todo!()
+    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }

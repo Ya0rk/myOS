@@ -178,7 +178,7 @@ impl InodeTrait for Ext4Inode {
         r.map_err(|_| Errno::EIO).unwrap()
     }
 
-    /// 截断文件
+    /// 改变文件size
     fn truncate(&self, size: usize) -> usize {
         let mut file = self.file.lock();
 

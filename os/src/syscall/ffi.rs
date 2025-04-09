@@ -57,8 +57,10 @@ pub enum SysCode {
     SYSCALL_LINKAT    = 37,
     SYSCALL_UMOUNT2   = 39,
     SYSCALL_MOUNT     = 40,
+    SYSCALL_FTRUNCATE64 = 46,
     SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR     = 49,
+    SYSCALL_FCHMODAT  = 53,
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
     SYSCALL_PIPE2     = 59,
@@ -68,7 +70,12 @@ pub enum SysCode {
     SYSCALL_WRITE     = 64,
     SYSCALL_READV     = 65,
     SYSCALL_WRITEV    = 66,
+    SYSCALL_PREAD64   = 67,
+    SYSCALL_PWRITE64  = 68,
     SYSCALL_SENDFILE  = 71,
+    // SYSCALL_PSELECT   = 72, // todo in io.rs
+    // SYSCALL_PPOLL     = 73,
+    SYSCALL_FSTATAT   = 79,
     SYSCALL_FSTAT     = 80,
     SYSCALL_EXIT      = 93,
     SYSCALL_EXIT_GROUP= 94,
@@ -107,6 +114,11 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_FSTATAT => "fstatat",
+            Self::SYSCALL_PREAD64 => "pread64",
+            Self::SYSCALL_PWRITE64 => "pwrite64",
+            Self::SYSCALL_FCHMODAT => "fchmodat",
+            Self::SYSCALL_FTRUNCATE64 => "ftruncate64",
             Self::SYSCALL_FCNTL => "fcntl",
             Self::SYSCALL_WRITEV => "writev",
             Self::SYSCALL_READV => "readv",
@@ -320,16 +332,31 @@ pub struct IoVec {
     pub iov_len: usize,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
-#[allow(non_camel_case_types)]
-#[repr(isize)]
-pub enum FcntlOp {
-    F_DUPFD = 0,
-    F_DUPFD_CLOEXEC = 1030,
-    F_GETFD = 1,
-    F_SETFD = 2,
-    F_GETFL = 3,
-    F_SETFL = 4,
-    #[default]
-    F_UNIMPL,
+
+bitflags! {
+    #[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
+    pub struct FcntlFlags: u32 {
+        /// 复制文件描述符，跟dup()函数功能一样
+        const F_DUPFD = 0;
+        /// 设置close-on-exec标志
+        const F_DUPFD_CLOEXEC = 1030;
+        /// 获取文件描述符标志
+        const F_GETFD = 1;
+        /// 设置文件描述符标志
+        const F_SETFD = 2;
+        /// 获取文件状态
+        const F_GETFL = 3;
+        /// 设置文件状态
+        const F_SETFL = 4;
+    }
+
+    #[derive(PartialEq, Eq, Debug)]
+    pub struct FcntlArgFlags: u32 {
+        const FD_CLOEXEC = 1;
+        const AT_EMPTY_PATH = 1 << 0;
+        const AT_SYMLINK_NOFOLLOW = 1 << 8;
+        const AT_EACCESS = 1 << 9;
+        const AT_NO_AUTOMOUNT = 1 << 11;
+        const AT_DUMMY = 1 << 12;
+    }
 }
