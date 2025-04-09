@@ -20,6 +20,7 @@ use user_lib::{chdir, exec, fork, getcwd, mkdir, waitpid};
 pub fn main() -> i32 {
     println!("Rust user shell");
     let mut line: String = String::new();
+    chdir(&conert_str2byte("musl/basic"));
     print!(">> ");
     loop {
         let c = getchar();

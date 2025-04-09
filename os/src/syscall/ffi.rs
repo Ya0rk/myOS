@@ -51,6 +51,7 @@ pub enum SysCode {
     SYSCALL_GETCWD    = 17,
     SYSCALL_DUP       = 23,
     SYSCALL_DUP3      = 24,
+    SYSCALL_FCNTL     = 25,
     SYSCALL_MKDIRAT   = 34,
     SYSCALL_UNLINKAT  = 35,
     SYSCALL_LINKAT    = 37,
@@ -106,6 +107,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_FCNTL => "fcntl",
             Self::SYSCALL_WRITEV => "writev",
             Self::SYSCALL_READV => "readv",
             Self::SYSCALL_SYSINFO => "sysinfo",
@@ -316,4 +318,18 @@ pub struct IoVec {
     pub iov_base: usize,
     /// length of the buffer
     pub iov_len: usize,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
+#[allow(non_camel_case_types)]
+#[repr(isize)]
+pub enum FcntlOp {
+    F_DUPFD = 0,
+    F_DUPFD_CLOEXEC = 1030,
+    F_GETFD = 1,
+    F_SETFD = 2,
+    F_GETFL = 3,
+    F_SETFL = 4,
+    #[default]
+    F_UNIMPL,
 }

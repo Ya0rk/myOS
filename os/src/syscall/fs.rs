@@ -204,7 +204,8 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     };
 
     // 检查路径是否有效并打开文件
-    if let Some(inode) = open_file(target_path.as_str(), flags) {
+    let cwd = task.get_current_path();
+    if let Some(inode) = open(cwd.as_str(), target_path.as_str(), flags) {
         let fd = task.alloc_fd(Fd::new(inode.file()?, flags));
         info!("[sys_openat] alloc fd finished, new fd = {}", fd);
         if fd > RLIMIT_NOFILE {
@@ -515,7 +516,8 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     };
 
     // 检查路径是否有效
-    let result = if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
+    let cwd = task.get_current_path();
+    let result = if let Some(_) = open(&cwd, new_path.as_str(), OpenFlags::O_RDONLY) {
         task.set_current_path(new_path); // 更新当前路径
         Ok(0) // 成功
     } else {
@@ -622,7 +624,8 @@ pub fn sys_faccessat(
     mode: u32,
     _flags: u32,
 ) -> SysResult<usize> {
-    let token = current_user_token();
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
     let path = translated_str(token, pathname);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
     let abs = if path.starts_with("/") {
@@ -642,7 +645,8 @@ pub fn sys_faccessat(
         join_path_2_absolute(other_cwd, path)
     };
 
-    if let Some(file_class) = open_file(abs.as_str(), OpenFlags::O_RDONLY) {
+    let cwd = task.get_current_path();
+    if let Some(file_class) = open(&cwd, abs.as_str(), OpenFlags::O_RDONLY) {
         let file = file_class.file()?;
         let inode = file.get_inode();
         if mode.contains(FaccessatMode::F_OK) {
