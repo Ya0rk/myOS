@@ -144,7 +144,7 @@ impl InodeTrait for TmpInode {
         size
     }
     /// 同步文件
-    fn sync(&self) {
+    async fn sync(&self) {
         todo!()
     }
     /// 读取文件所有内容

@@ -192,83 +192,6 @@ impl MemorySpace {
         self.page_table().token()
     }
 
-    // pub fn new_kernel() -> Self {
-    //     let mut memory_space = Self::new();
-    //     log::debug!("kernel satp : {:#x}", memory_set.page_table().token());
-    //     // map trampoline
-    //     // memory_set.map_trampoline();
-    //     // map kernel sections
-    //     println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
-    //     println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
-    //     println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
-    //     println!(
-    //         ".bss [{:#x}, {:#x})",
-    //         sbss_with_stack as usize, ebss as usize
-    //     );
-    //     println!("mapping .text section");
-    //     memory_space.push_vma(
-    //         VmArea::new(
-    //             VirtAddr::from_usize_range((stext as usize).into()..(etext as usize).into()),
-    //             MapPerm::RX,
-    //             VmAreaType::Elf,
-    //         )
-    //     );
-    //     println!("mapping .rodata section");
-    //     memory_set.push(
-    //         MapArea::new(
-    //             (srodata as usize).into(),
-    //             (erodata as usize).into(),
-    //             MapType::Direct,
-    //             MapPermission::R,
-    //         ),
-    //         None,
-    //     );
-    //     println!("mapping .data section");
-    //     memory_set.push(
-    //         MapArea::new(
-    //             (sdata as usize).into(),
-    //             (edata as usize).into(),
-    //             MapType::Direct,
-    //             MapPermission::R | MapPermission::W,
-    //         ),
-    //         None,
-    //     );
-    //     println!("mapping .bss section");
-    //     memory_set.push(
-    //         MapArea::new(
-    //             (sbss_with_stack as usize).into(),
-    //             (ebss as usize).into(),
-    //             MapType::Direct,
-    //             MapPermission::R | MapPermission::W,
-    //         ),
-    //         None,
-    //     );
-    //     println!("mapping physical memory");
-    //     memory_set.push(
-    //         MapArea::new(
-    //             (ekernel as usize).into(),
-    //             MEMORY_END.into(),
-    //             MapType::Direct,
-    //             MapPermission::R | MapPermission::W,
-    //         ),
-    //         None,
-    //     );
-    //     println!("mapping memory-mapped registers");
-    //     for pair in MMIO {
-    //         memory_set.push(
-    //             MapArea::new(
-    //                 ((*pair).0 + KERNEL_ADDR_OFFSET).into(),
-    //                 ((*pair).0 + KERNEL_ADDR_OFFSET + (*pair).1).into(),
-    //                 MapType::Direct,
-    //                 MapPermission::R | MapPermission::W,
-    //             ),
-    //             None,
-    //         );
-    //     }
-    //     println!("kernel memory set initialized");
-    //     memory_set
-    // }
-
 
     pub async fn new_user_from_elf(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
         // if let FileClass::File(file) = elf_file {
@@ -287,7 +210,7 @@ impl MemorySpace {
     }
     pub async fn new_user_from_elf_lazily(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
         // if let FileClass::File(file) = elf_file {
-            // let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();
+            // let elf_data = block_on( async { elf_file.get_inode().read_all().await } ).unwrap();
             let elf_data  = elf_file.get_inode().read_all().await.expect("[new_user_from_elf_lazily] read elf file failed");
             let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data);
             let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();

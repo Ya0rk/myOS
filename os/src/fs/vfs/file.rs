@@ -79,13 +79,13 @@ pub trait FileTrait: Send + Sync {
     async fn read(&self, buf: UserBuffer) -> SysResult<usize>;
 
     /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_sendfile)
-    async fn read_at(&self, offset: usize, buf: &mut [u8]) -> SysResult<usize> {
-        let inode = self.get_inode();
-        if offset > inode.size() {
-            return Ok(0);
-        }
-        Ok(inode.read_at(offset, buf).await)
-    }
+    // async fn read_at(&self, offset: usize, buf: &mut [u8]) -> SysResult<usize> {
+    //     let inode = self.get_inode();
+    //     if offset > inode.size() {
+    //         return Ok(0);
+    //     }
+    //     Ok(inode.read_at(offset, buf).await)
+    // }
 
     /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
     async fn pread(&self, mut buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize>{
@@ -106,15 +106,16 @@ pub trait FileTrait: Send + Sync {
     async fn write(&self, buf: UserBuffer) -> SysResult<usize>;
 
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_sendfile)
-    async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
-        let inode = self.get_inode();
-        // TODO(YJJ): maybe bug,这里size可能是0？
-        if offset > inode.size() {
-            let newsize = offset + buf.len();
-            inode.truncate(newsize);
-        }
-        Ok(inode.write_at(offset, buf).await)
-    }
+    // async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
+    //     let inode = self.get_inode();
+    //     // TODO(YJJ): maybe bug,这里size可能是0？
+    //     if offset > inode.size() {
+    //         let newsize = offset + buf.len();
+    //         inode.set_size(newsize);
+    //         // inode.truncate(newsize);
+    //     }
+    //     Ok(inode.write_at(offset, buf).await)
+    // }
 
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
     async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
