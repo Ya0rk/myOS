@@ -1,7 +1,7 @@
 use log::{debug, error, info, warn};
 use lwext4_rust::KernelDevOp;
 
-use crate::drivers::BlockDriver;
+use crate::{drivers::BlockDriver, utils::logger};
 
 use super::{BlockDeviceImpl, DevResult};
 
@@ -17,6 +17,7 @@ pub struct Disk {
 impl Disk {
     /// Create a new disk.
     pub fn new(dev: BlockDeviceImpl) -> Self {
+        log::info!("create a new disk");
         assert_eq!(BLOCK_SIZE, dev.block_size());
         Self {
             block_id: 0,

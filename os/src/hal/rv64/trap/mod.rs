@@ -118,6 +118,9 @@ fn set_trap_handler(mode: IndertifyMode) {
         },
     }
 }
+/// 应当注意到这个函数的功能并不正确，__trap_from_user应当为虚拟页号而不是函数指针。
+/// 需要去修改链接器，保证其为页面对齐的
+/// 信息来自loongarch手册关于csr eentry 
 #[cfg(target_arch = "loongarch64")]
 #[inline]
 fn set_trap_handler(mode: IndertifyMode) {

@@ -53,6 +53,8 @@ extern "C" {
     fn sbss_with_stack();
     fn ebss();
     fn ekernel();
+    fn initproc_start();
+    fn initproc_end();
 }
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -280,9 +282,24 @@ impl MemorySpace {
         else {
             panic!("File not supported!");
         }
-
-        
     }
+        
+
+    pub fn new_user_from_ram() -> (Self, usize, usize, Vec<AuxHeader>) {
+        let elf_data = unsafe {
+            let data = core::slice::from_raw_parts_mut(
+                initproc_start as *mut u8,
+                initproc_end as usize - initproc_start as usize,
+            ) as &'static mut [u8];
+            println!("initproc start at {:#x}, end at {:#x}", initproc_start as usize, initproc_end as usize);
+            data.to_vec()
+        };
+        let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
+        let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
+        memory_space.alloc_heap();
+        (memory_space, entry_point, sp_init, auxv)
+    }
+
     pub fn new_user_from_elf_lazily(elf_file: &FileClass) -> (Self, usize, usize, Vec<AuxHeader>) {
         if let FileClass::File(file) = elf_file {
             let elf_data = block_on( async { file.metadata.inode.read_all().await } ).unwrap();

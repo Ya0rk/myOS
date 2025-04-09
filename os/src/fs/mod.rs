@@ -274,7 +274,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         "[open] cwd={}, path={}, parent={}, child={}, abs={}",
         cwd, path, parent_path, child_name, &abs_path
     );
-
+    info!("s load parent");
     let (parent_inode, _) = if INODE_CACHE.has_inode(parent_path) {
         (INODE_CACHE.get(parent_path).unwrap(), child_name)
     } else {

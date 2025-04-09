@@ -140,6 +140,19 @@ gdbclient:
 	@riscv64-unknown-elf-gdb -ex 'file $(KERNEL_ELF)' -ex 'set arch riscv:rv64' -ex 'target remote localhost:1234'
 PHONY += gdbclient
 
+LArc:
+	cargo build --target loongarch64-unknown-none
+	qemu-system-loongarch64 \
+		-M virt \
+		-m 1G \
+		-smp 1 \
+		-kernel ./target/loongarch64-unknown-none/debug/os \
+		-vga none \
+		-nographic \
+		-drive file=$(FS_IMG),if=none,format=raw,id=mydev \
+		-device ahci,id=ahci0 \
+		-device ide-hd,drive=mydev,bus=ahci0.0  
+PHONY += LArc
 
 # 龙芯架构的启动方式
 LA:
@@ -151,7 +164,9 @@ LA:
 		-kernel ./target/loongarch64-unknown-none/debug/os \
 		-vga none \
 		-nographic \
-		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors
+		-drive file=$(FS_IMG),if=none,format=raw,id=mydev \
+		-device virtio-blk-pci,drive=mydev,id=virtio-disk0 
+
 PHONY += LA
 
 LAgdbclient:
@@ -171,6 +186,8 @@ LAgdb:
 		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
 		-s -S
 PHONY += LAgdb
+
+
 
 
 .PHONY: $(PHONY)

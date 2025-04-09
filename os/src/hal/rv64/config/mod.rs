@@ -28,7 +28,7 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 #[cfg(target_arch = "riscv64")]
 pub const KERNEL_ADDR_OFFSET: usize = 0xffff_ffc0_0000_0000;
 #[cfg(target_arch = "loongarch64")]
-pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_9000_0000;
+pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
 pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_ADDR_OFFSET >> PAGE_SIZE_BITS;
 pub const USER_SPACE_TOP: usize = 0x30_0000_0000;
@@ -128,3 +128,5 @@ pub fn is_aligned_to_page(addr: usize) -> bool {
     (addr & PAGE_MASK) == 0
 }
 pub const PIPE_BUFFER_SIZE: usize = 0x10000;
+
+pub const VIRTIO0: usize = 0x10001000 + KERNEL_ADDR_OFFSET;

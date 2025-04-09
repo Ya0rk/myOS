@@ -1,4 +1,4 @@
-pub const UART_ADDR: usize = 0x0_1FE0_01E0 | 0x9000_0000_0000_0000;
+pub const UART_ADDR: usize = 0x0_1FE0_01E0;
 
 
 pub const TICKS_PER_SEC: usize = 100;
@@ -29,8 +29,8 @@ const MB: usize = 1024 * KB;
 pub const USER_STACK_SIZE: usize = 64 * KB;
 pub const KERNEL_STACK_SIZE: usize = 64 * KB;
 pub const KERNEL_HEAP_SIZE: usize = 0x20_0000;
-pub const PAGE_SIZE: usize = 0x1000;
-pub const PAGE_SIZE_BITS: usize = 12;
+pub const PAGE_SIZE: usize = 0x4000;
+pub const PAGE_SIZE_BITS: usize = 14;
 
 
 pub const PAGE_MASK: usize = PAGE_SIZE - 1;
@@ -42,7 +42,7 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
 
 // #[cfg(target_arch = "loongarch64")]
-pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0020_0000;
+pub const KERNEL_ADDR_OFFSET: usize = 0x9000_000;
 // When directly map: vpn = ppn + kernel direct offset
 pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_ADDR_OFFSET >> PAGE_SIZE_BITS;
 pub const USER_SPACE_TOP: usize = 0x9000_0030_0000_0000;
@@ -142,3 +142,5 @@ pub fn is_aligned_to_page(addr: usize) -> bool {
     (addr & PAGE_MASK) == 0
 }
 pub const PIPE_BUFFER_SIZE: usize = 0x10000;
+
+pub const VIRTIO0: usize = 0 + KERNEL_ADDR_OFFSET;
