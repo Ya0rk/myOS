@@ -1,8 +1,6 @@
 use core::arch::asm;
 // use riscv::register::sstatus::FS;
-
 use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
-
 
 
 #[repr(C)]
@@ -173,7 +171,8 @@ impl UserFloatRegs {
     }
     #[cfg(target_arch = "loongarch64")]
     pub fn save(&mut self) {
-
+        // TODO(YJJ)：后续实现检测dirty然后保存和恢复等操作
+        return;
     }
 
     /// Restore mem -> reg
@@ -225,6 +224,7 @@ impl UserFloatRegs {
     }
     #[cfg(target_arch = "loongarch64")]
     pub fn restore(&mut self) {
-        unimplemented!()
+        // TODO(YJJ)：后续实现检测dirty然后保存和恢复等操作
+        return;
     }
 }
