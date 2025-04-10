@@ -292,10 +292,10 @@ impl InodeTrait for Ext4Inode {
     }
 }
 
-impl Drop for Ext4Inode {
-    fn drop(&mut self) {
-        let mut file = self.file.lock();
-        // debug!("Drop struct FileWrapper {:?}", file.get_path());
-        file.file_close().expect("failed to close fd");
-    }
-}
+// impl Drop for Ext4Inode {
+//     fn drop(&mut self) {
+//         let mut file = self.file.lock();
+//         // debug!("Drop struct FileWrapper {:?}", file.get_path());
+//         file.file_close().expect("failed to close fd");
+//     }
+// }

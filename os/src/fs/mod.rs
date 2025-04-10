@@ -11,7 +11,7 @@ mod ffi;
 mod path;
 pub mod pre_data;
 pub mod ext4;
-pub mod tmp;
+// pub mod tmp;
 
 pub use ext4::{root_inode,ls};
 pub use ffi::{OpenFlags, UmountFlags, MountFlags};
