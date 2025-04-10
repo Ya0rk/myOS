@@ -8,12 +8,12 @@ use log::info;
 use lwext4_rust::file;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::ext4::NormalFile;
-use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileClass, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
-use crate::syscall::ffi::IoVec;
-use crate::task::{current_task, current_user_token, Fd, FdTable};
+use crate::syscall::ffi::{FcntlArgFlags, IoVec};
+use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{Errno, SysResult};
-use super::ffi::{FaccessatMode, AT_REMOVEDIR};
+use super::ffi::{FaccessatMode, FcntlFlags, AT_REMOVEDIR};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
@@ -129,6 +129,64 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
     }
 }
 
+/// dirfd：目录文件描述符，指定相对路径的基准目录
+/// 
+/// 可以是打开的目录文件描述符
+/// 
+/// 特殊值 AT_FDCWD 表示当前工作目录
+/// ```
+/// pathname：目标文件的路径名,可以是绝对路径或相对于 dirfd 的相对路径
+/// statbuf：用于存储文件状态信息的结构体指针
+/// flags：控制函数行为的标志位
+/// - AT_SYMLINK_NOFOLLOW：不跟随符号链接（类似 lstat）
+/// - AT_EMPTY_PATH：当 pathname 为空字符串时，操作 dirfd 本身
+/// ```
+pub fn sys_fstatat(
+    dirfd: isize, 
+    pathname: *const u8, 
+    statbuf: *const u8, 
+    flags: u32
+) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let path = translated_str(token, pathname);
+    let cwd = task.get_current_path();
+
+    // 计算目标路径
+    let target_path = if path.starts_with("/") {
+        // 绝对路径，忽略 dirfd
+        path
+    } else if dirfd == AT_FDCWD {
+        // 相对路径，以当前目录为起点
+        join_path_2_absolute(cwd.clone(), path)
+    } else {
+        // 相对路径，以 dirfd 对应的目录为起点
+        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
+            return Err(Errno::EBADF);
+        }
+        let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_fstatat] not found fd");
+        let other_cwd = inode.get_name()?;
+        join_path_2_absolute(other_cwd, path)
+    };
+
+    let mut buffer = UserBuffer::new(
+        translated_byte_buffer(
+            token, 
+            statbuf, 
+            core::mem::size_of::<Kstat>()
+    ));
+    let mut tempstat: Kstat = Kstat::new();
+    // 检查路径是否有效并打开文件
+    match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
+        Some(FileClass::File(file)) => {
+            file.fstat(&mut tempstat)?;
+            buffer.write(tempstat.as_bytes());
+            return Ok(0);
+        }
+        _ => return Err(Errno::EBADCALL),
+    }
+}
+
 /// 功能：获取文件状态；用来将参数fd 所指向的文件状态复制到参数kst 所指向的结构中
 /// 
 /// 输入：
@@ -148,7 +206,6 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
         return Err(Errno::EFAULT);
     }
     
-
     let token = task.get_user_token();
     let mut buffer = UserBuffer::new(
         translated_byte_buffer(
@@ -204,8 +261,9 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     };
 
     // 检查路径是否有效并打开文件
-    if let Some(inode) = open_file(target_path.as_str(), flags) {
-        let fd = task.alloc_fd(Fd::new(inode.file()?, flags));
+    let cwd = task.get_current_path();
+    if let Some(inode) = open(cwd.as_str(), target_path.as_str(), flags) {
+        let fd = task.alloc_fd(FdInfo::new(inode.file()?, flags));
         info!("[sys_openat] alloc fd finished, new fd = {}", fd);
         if fd > RLIMIT_NOFILE {
             return Err(Errno::EMFILE);
@@ -244,8 +302,8 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     let (read_fd, write_fd) = {
         let (read, write) = Pipe::new();
         (
-            task.alloc_fd(Fd::new(read, flags)),
-            task.alloc_fd(Fd::new(write, flags)),
+            task.alloc_fd(FdInfo::new(read, flags)),
+            task.alloc_fd(FdInfo::new(write, flags)),
         )
     };
     info!("alloc read_fd = {}, write_fd = {}", read_fd, write_fd);
@@ -515,7 +573,8 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     };
 
     // 检查路径是否有效
-    let result = if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
+    let cwd = task.get_current_path();
+    let result = if let Some(_) = open(&cwd, new_path.as_str(), OpenFlags::O_RDONLY) {
         task.set_current_path(new_path); // 更新当前路径
         Ok(0) // 成功
     } else {
@@ -590,11 +649,11 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let mut new_offset = offset;
 
     loop {
-        let read_size = src.read_at(new_offset, &mut buf).await?;
+        let read_size = src.get_inode().read_at(new_offset, &mut buf).await;
         if read_size == 0 {
             break;
         }
-        let write_size = dest.write_at(new_offset, &buf).await?;
+        let write_size = dest.get_inode().write_at(new_offset, &buf).await;
         if read_size != write_size {
             return Err(Errno::EIO);
         }
@@ -622,7 +681,8 @@ pub fn sys_faccessat(
     mode: u32,
     _flags: u32,
 ) -> SysResult<usize> {
-    let token = current_user_token();
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
     let path = translated_str(token, pathname);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
     let abs = if path.starts_with("/") {
@@ -642,7 +702,8 @@ pub fn sys_faccessat(
         join_path_2_absolute(other_cwd, path)
     };
 
-    if let Some(file_class) = open_file(abs.as_str(), OpenFlags::O_RDONLY) {
+    let cwd = task.get_current_path();
+    if let Some(file_class) = open(&cwd, abs.as_str(), OpenFlags::O_RDONLY) {
         let file = file_class.file()?;
         let inode = file.get_inode();
         if mode.contains(FaccessatMode::F_OK) {
@@ -673,4 +734,132 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     }
     let file = task.get_file_by_fd(fd).unwrap();
     file.lseek(offset, whence)
+}
+
+/// TODO(YJJ): 有待完善
+/// 用于修改某个文件描述符的属性
+/// 第1个参数fd为待修改属性的文件描述符，第2个参数cmd为对应的操作命令，第3个参数为cmd的参数
+pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
+    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+        return Err(Errno::EBADF);
+    }
+    
+    match cmd {
+        // F_SETFL：设置文件状态标志。它首先从参数arg中获取标志，然后设置文件描述符的标志。
+        FcntlFlags::F_SETFL => {
+            if let Some(file) = task.get_file_by_fd(fd) {
+                file.set_flags(OpenFlags::from_bits(arg as i32).ok_or(Errno::EINVAL)?);
+            }
+            return Ok(0);
+        }
+        // Currently, only one such flag is defined: FD_CLOEXEC (value: 1)
+        // todo  Ok(file.available() as isize);
+        // F_GETFD和F_GETFL：获取文件描述符的标志。它首先从文件描述符表中获取文件描述符的信息，
+        // 然后返回文件描述符的标志。
+        FcntlFlags::F_GETFD | FcntlFlags::F_GETFL => {
+            // Return (as the function result) the file descriptor flags; arg is ignored.
+            if let Some(file) = task.get_file_by_fd(fd) {
+                let flags = file.get_flags();
+                if flags.contains(OpenFlags::O_CLOEXEC) && cmd == FcntlFlags::F_GETFD {
+                    return Ok(FcntlArgFlags::bits(&FcntlArgFlags::FD_CLOEXEC) as usize);
+                } else {
+                    return Ok(OpenFlags::bits(&flags) as usize);
+                }
+            }
+            return Err(Errno::EBADF);
+        }
+        // F_SETFD：设置文件描述符的标志。它首先从参数arg中获取标志，然后设置文件描述符的标志。
+        FcntlFlags::F_SETFD => {
+            // Set the file descriptor flags to the value specified by arg.
+            if let Some(file) = task.get_file_by_fd(fd) {
+                let new_flags = FcntlArgFlags::from_bits(arg as u32).ok_or(Errno::EINVAL)?;
+                // }
+            }
+            return Ok(0);
+        }
+        // F_DUPFD：复制文件描述符。它首先从文件描述符表中获取文件，然后分配一个新的文件描述符，
+        // 并将文件放入新的文件描述符中
+        FcntlFlags::F_DUPFD => {
+            if let Some(file) = task.get_file_by_fd(fd) {
+                let flags = file.get_flags();
+                let newfd = task.alloc_fd_than(FdInfo::new(file, flags), arg as usize);
+                return Ok(newfd);
+            }
+            return Err(Errno::EBADF);
+        }
+        // F_DUPFD_CLOEXEC：复制文件描述符，并设置新文件描述符的CLOEXEC标志。
+        // 这意味着当执行新的程序时，这个文件描述符将被关闭。
+        FcntlFlags::F_DUPFD_CLOEXEC => {
+            if let Some(file) = task.get_file_by_fd(fd) {
+                let flags = file.get_flags();
+                let newfd = task.alloc_fd_than(FdInfo::new(file, flags), arg as usize);
+                return Ok(newfd);
+            }
+            return Err(Errno::EBADF);
+        }
+        _ => return Err(Errno::EINVAL),
+    }
+}
+
+/// 改变文件大小
+/// 返回值：0、-1
+pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+        return Err(Errno::EBADF);
+    }
+    let file = task.get_file_by_fd(fd).unwrap();
+    file.get_inode().truncate(length);
+    Ok(0)
+}
+
+/// 可更改现有文件的访问权限
+pub fn sys_fchmodat() -> SysResult<usize> {
+    return Ok(0);
+}
+
+/// 从描述符为fd的文件中，从offset位置开始，读取count个字节存入buf中。
+/// 如果读取成功，将返回读取的字节数
+pub async fn sys_pread64(
+    fd: usize,
+    buf: usize,
+    count: usize,
+    offset: usize,
+) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+        return Err(Errno::EBADF);
+    }
+    let file = task.get_file_by_fd(fd).unwrap();
+    if !file.readable() {
+        return Err(Errno::EPERM);
+    }
+    let token = task.get_user_token();
+    let buffer = translated_byte_buffer(token, buf as *const u8, count);
+    let user_buffer = UserBuffer::new(buffer);
+    file.pread(user_buffer, offset, count).await
+}
+
+/// 在指定偏移量处向文件描述符写入数据的系统调用
+/// pwrite64的行为类似于先执行lseek再执行write，但它是一个原子操作，不会被其他线程的文件操作中断
+pub async fn sys_pwrite64(
+    fd: usize,
+    buf: usize,
+    count: usize,
+    offset: usize,
+) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+        return Err(Errno::EBADF);
+    }
+    let file = task.get_file_by_fd(fd).unwrap();
+    if !file.writable() {
+        return Err(Errno::EPERM);
+    }
+    let token = task.get_user_token();
+    let buffer = translated_byte_buffer(token, buf as *const u8, count);
+    let user_buffer = UserBuffer::new(buffer);
+    file.pwrite(user_buffer, offset, count).await
 }

@@ -1,7 +1,8 @@
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::{UserBuffer, page::Page}, utils::SysResult};
-use alloc::{string::String, sync::Arc};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
+use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
+use log::info;
 
 pub struct DevNull;
 
@@ -13,6 +14,9 @@ impl DevNull {
 
 #[async_trait]
 impl FileTrait for DevNull {
+    fn set_flags(&self, _flags: OpenFlags) {
+        todo!()
+    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
@@ -28,6 +32,13 @@ impl FileTrait for DevNull {
     async fn read(&self, mut _user_buf: UserBuffer) -> SysResult<usize> {
         // do nothing
         Ok(0)
+    }
+    /// 填满0
+    async fn pread(&self, mut user_buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+        info!("[pread] from nullfs, fill 0");
+        let zero: Vec<u8> = (0..user_buf.buffers.len()).map(|_| 0).collect();
+        user_buf.write(&zero);
+        Ok(len)
     }
     async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
         // do nothing

@@ -2,7 +2,7 @@ use core::{cmp::min, fmt::{Formatter, Debug}};
 use alloc::{format, string::String, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::{UserBuffer, page::Page}, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
 
 pub struct DevRtc;
 
@@ -14,6 +14,9 @@ impl DevRtc {
 
 #[async_trait]
 impl FileTrait for DevRtc {
+    fn set_flags(&self, _flags: OpenFlags) {
+        todo!()
+    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }

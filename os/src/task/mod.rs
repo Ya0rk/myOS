@@ -12,7 +12,7 @@ mod task;
 pub mod aux;
 
 use async_task::Task;
-pub use fd::{FdTable, Fd};
+pub use fd::{FdTable, FdInfo};
 use log::info;
 // pub use context::TaskContext;
 pub use pid::{KernelStack, Pid, PidAllocator};
