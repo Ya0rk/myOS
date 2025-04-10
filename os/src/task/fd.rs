@@ -6,25 +6,25 @@ use crate::{config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, mm
 
 #[derive(Clone)]
 pub struct FdTable {
-    pub table: Vec<Fd>, // 将fd作为下标idx
+    pub table: Vec<FdInfo>, // 将fd作为下标idx
 }
 
 #[derive(Clone)]
-pub struct Fd {
+pub struct FdInfo {
     pub file: Option<Arc<dyn FileTrait + Send + Sync>>,
     pub flags: OpenFlags,
 }
 
-impl Fd {
+impl FdInfo {
     pub fn new(fd: Arc<dyn FileTrait + Send + Sync>, flags: OpenFlags) -> Self {
-        Fd {
+        FdInfo {
             file: Some(fd),
             flags,
         }
     }
 
     pub fn new_bare() -> Self {
-        Fd {
+        FdInfo {
             file: None,
             flags: OpenFlags::empty(),
         }
@@ -63,9 +63,9 @@ impl Fd {
 impl FdTable {
     pub fn new() -> Self {
         // 自带三个文件描述符，分别是标准输入、标准输出、标准错误
-        let stdin  = Fd::new(Arc::new(Stdin), OpenFlags::O_RDONLY);
-        let stdout = Fd::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
-        let stderr = Fd::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
+        let stdin  = FdInfo::new(Arc::new(Stdin), OpenFlags::O_RDONLY);
+        let stdout = FdInfo::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
+        let stderr = FdInfo::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
         let mut fd_table = Vec::new();
         fd_table.push(stdin);
         fd_table.push(stdout);
@@ -76,7 +76,7 @@ impl FdTable {
     }
 
     /// 找到一个空位分配fd，返回fd的下标就是新fd
-    pub fn alloc_fd(&mut self, fd: Fd) -> SysResult<usize> {
+    pub fn alloc_fd(&mut self, fd: FdInfo) -> SysResult<usize> {
         // 先判断是否有没有使用的空闲fd， 用idx作为数组下标
         if let Some(valid_idx) = (0..self.table_len()).find(|idx| self.table[*idx].is_none()) {
             self.put_in(fd, valid_idx)?;
@@ -91,13 +91,29 @@ impl FdTable {
         }
     }
 
+    /// 分配一个大于than的fd
+    pub fn alloc_fd_than(&mut self, fd: FdInfo, than: usize) -> SysResult<usize> {
+        // 先判断是否有没有使用的空闲fd， 用idx作为数组下标
+        if let Some(valid_idx) = (than..self.table_len()).find(|idx| self.table[*idx].is_none()) {
+            self.put_in(fd, valid_idx)?;
+            Ok(valid_idx)
+        } else {
+            // 在最后加入
+            // info!("before len = {}", self.table_len());
+            let new_fd = self.table_len();
+            self.put_in(fd, new_fd)?;
+            // info!("after len = {}", self.table_len());
+            Ok(new_fd)
+        }
+    }
+
     // 在指定位置加入Fd
-    pub fn put_in(&mut self, fd: Fd, idx: usize) -> SysResult {
+    pub fn put_in(&mut self, fd: FdInfo, idx: usize) -> SysResult {
         if idx > RLIMIT_NOFILE {
             return Err(Errno::EMFILE);
         }
         if idx >= self.table_len() {
-            self.table.resize(idx + 1, Fd::new_bare());
+            self.table.resize(idx + 1, FdInfo::new_bare());
         }
         self.table[idx] = fd;
         Ok(())
@@ -123,7 +139,7 @@ impl FdTable {
         Ok(self.table[idx].file.as_ref().map(|fd| fd.clone()))
     }
 
-    pub fn get_fd(&self, idx: usize) -> SysResult<Fd> {
+    pub fn get_fd(&self, idx: usize) -> SysResult<FdInfo> {
         if idx >= self.table_len() {
             return Err(Errno::EBADF);
         }

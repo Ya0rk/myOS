@@ -1,15 +1,14 @@
 use core::arch::asm;
 // use riscv::register::sstatus::FS;
-
 use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
-
 
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct UserFloatRegs {
-    f: [f64; 32], // 50-81
-    fcsr: u32,
+    f: [f64; 32], // 57-88
+    fcsr: u32,    // 89
+    fcc: u8,      // 89+4
     need_save: u8,
     need_restore: u8,
     dirty: u8,
@@ -19,14 +18,14 @@ pub struct UserFloatRegs {
 #[derive(Clone, Copy)]
 pub struct TrapContext {
     /* 0-31 */ pub user_x: [usize; 32], 
-    /*  32  */ pub sstatus: Sstatus,
+    /*  32  */ pub sstatus: PrMd,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
     /*  35  */ pub kernal_ra: usize,
-    /* 36-47*/ pub kernel_s: [usize; 12],
-    /*  48  */ pub kernel_fp: usize,
-    /*  49  */ pub kernel_tp: usize,
-    /*  50  */ pub float_regs: UserFloatRegs,
+    /* 36-53*/ pub kernel_s: [usize; 18], // 保存callee saved寄存器(s0-s8 r12-r20)
+    /*  54  */ pub kernel_fp: usize,
+    /*  55  */ pub kernel_tp: usize,
+    /*  56  */ pub float_regs: UserFloatRegs,
 }
 
 impl TrapContext {
@@ -172,7 +171,8 @@ impl UserFloatRegs {
     }
     #[cfg(target_arch = "loongarch64")]
     pub fn save(&mut self) {
-
+        // TODO(YJJ)：后续实现检测dirty然后保存和恢复等操作
+        return;
     }
 
     /// Restore mem -> reg
@@ -224,6 +224,7 @@ impl UserFloatRegs {
     }
     #[cfg(target_arch = "loongarch64")]
     pub fn restore(&mut self) {
-        unimplemented!()
+        // TODO(YJJ)：后续实现检测dirty然后保存和恢复等操作
+        return;
     }
 }

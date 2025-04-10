@@ -61,27 +61,11 @@ impl FileClass {
             FileClass::Abs(f) => Ok(f.clone()),
         }
     }
-    // pub async fn get_page_at(&self, offset: usize) -> Result<Arc<crate::mm::page::Page>, Errno> {
-    //     match self {
-    //         FileClass::File(file) => {
-    //             if let Some(page) = file.metadata.inode.get_page_cache().unwrap().get_page(offset) {
-    //                 // Ok(page)
-    //                 Ok(page)
-    //             }
-    //             else {
-    //                 info!("[get_page_at] get page from offset {:#x} failed", offset);
-    //                 Err(Errno::EINVAL)
-    //             }
-    //         },
-    //         FileClass::Abs(_) => Err(Errno::EINVAL),
-    //     }
-    // }
 }
 
 // os\src\fs\mod.rs
 
 pub fn init() {
-    // flush_preload().await;
     create_init_files();
 }
 
@@ -193,32 +177,6 @@ pub async fn create_init_files() -> SysResult {
     Ok(())
 }
 
-fn create_file(
-    abs_path: String,
-    parent_path: &str,
-    child_name: &str,
-    flags: OpenFlags,
-) -> Option<FileClass> {
-    println!(
-        "[create_file],flags={:?},abs_path={},parent_path={},child_name={}",
-        flags, abs_path, parent_path, child_name
-    );
-
-    // 一定能找到,因为除了RootInode外都有父结点
-    let parent_dir = INODE_CACHE.get(parent_path).unwrap();
-    return parent_dir
-        .do_create(&abs_path, flags.node_type())
-        .map(|vfile| {
-            let osinode = NormalFile::new(
-                flags,
-                Some(Arc::downgrade(&parent_dir)),
-                vfile,
-                abs_path,
-            );
-            FileClass::File(Arc::new(osinode))
-        });
-}
-
 pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
     open(&"/", path, flags)
 }
@@ -232,12 +190,9 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     // 目标文件的路径
     let abs_path = new_path.get();
 
+    // 处理设备文件
     if find_device(&abs_path) {
-        // info!("bbb");
-        if let Some(device) = open_device_file(&abs_path) {
-            return Some(FileClass::Abs(device));
-        }
-        return None;
+        return open_device_file(&abs_path).map(FileClass::Abs);
     }
 
     let (parent_path, child_name) = new_path.split_with("/");
@@ -248,16 +203,15 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         cwd, path, parent_path, child_name, &abs_path
     );
 
-    let (parent_inode, _) = if INODE_CACHE.has_inode(parent_path) {
-        (INODE_CACHE.get(parent_path).unwrap(), child_name)
+    let parent_inode = if INODE_CACHE.has_inode(parent_path) {
+        INODE_CACHE.get(parent_path).unwrap()
+    } else if cwd == "/" {
+        root_inode()
     } else {
-        if cwd == "/" {
-            (root_inode(), path)
-        } else {
-            (root_inode().walk(cwd).unwrap(), path)
-        }
+        root_inode().walk(cwd).unwrap()
     };
 
+    // 对于已有的文件，已经存在他的inode，可以直接打开，返回fileclass
     if let Some(inode) = parent_inode.walk(&abs_path) { 
         return inode.do_open(
             Some(Arc::downgrade(&parent_inode)),
@@ -266,6 +220,8 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         );
     }
 
+    // 如果没有找到inode，说明文件不存在，需要创建inode
+    // 并打开文件，然后返回fileclass
     if flags.contains(OpenFlags::O_CREAT) {
         info!("[vfs open] create");
         return create_file(abs_path.clone(), parent_path, child_name, flags);
@@ -279,7 +235,6 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
 /// - path: 文件夹目录（绝对路径）
 /// - mode: 创建模式
 pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
-    // info!("open() abs_path is {}", path);
 
     // 查看当前路径是否是设备
     if find_device(path) {
@@ -318,4 +273,30 @@ pub fn mkdir(path: &str, mode: usize) -> Option<FileClass> {
     
     return create_file(path.to_string(), &parent_path, &child_name, OpenFlags::O_DIRECTORY);
 
+}
+
+fn create_file(
+    abs_path: String,
+    parent_path: &str,
+    child_name: &str,
+    flags: OpenFlags,
+) -> Option<FileClass> {
+    println!(
+        "[create_file],flags={:?},abs_path={},parent_path={},child_name={}",
+        flags, abs_path, parent_path, child_name
+    );
+
+    // 一定能找到,因为除了RootInode外都有父结点
+    let parent_dir = INODE_CACHE.get(parent_path).unwrap();
+    return parent_dir
+        .do_create(&abs_path, flags.node_type())
+        .map(|vfile| {
+            let osinode = NormalFile::new(
+                flags,
+                Some(Arc::downgrade(&parent_dir)),
+                vfile,
+                abs_path,
+            );
+            FileClass::File(Arc::new(osinode))
+        });
 }

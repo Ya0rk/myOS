@@ -18,7 +18,7 @@ __trap_from_user:
     csrrw sp, sscratch, sp
 
     # 现在sp->*TrapContext in kernel space, sscratch->user stack
-    sd x1, 1*8(sp)
+    sd x1, 1*8(sp) # 保存返回地址ra
 
     # 保存x3~x31(x4 is tp)
     .set n, 3
