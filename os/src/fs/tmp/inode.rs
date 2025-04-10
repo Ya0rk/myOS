@@ -194,9 +194,9 @@ impl InodeTrait for TmpInode {
     fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, > {
         self.metadata.timestamp.lock()
     }
-    fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
-        self.file.lock()
-    }
+    // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
+    //     self.file.lock()
+    // }
     fn is_dir(&self) -> bool {
         self.metadata.file_type.is_dir()
     }
