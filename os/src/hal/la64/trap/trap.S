@@ -4,7 +4,7 @@
     .global __trap_from_kernel
     .align 4
 
-FP_START = 32
+FP_START = 56
 .altmacro
 .macro SAVE_GP n
     st.d $r\n, $sp, \n*8
@@ -52,12 +52,19 @@ __trap_from_user:
         SAVE_GP %n
         .set n, n+1
     .endr
+
+    # 保存浮点数寄存器(TODO(YJJ):后续可以优化，判断为dirty才保存和恢复)
     .set n, 0
-=========================================
-    # we can use t0/t1/t2 freely, because they have been saved in TrapContext
+    .set m, FP_START
+    .rept 32
+        SAVE_FP %n, %m
+        .set n, n+1
+        .set m, m+1
+    .endr
+
     # 保存fscr寄存器
     movfcsr2gr $t0, $fcsr0
-    st.w $t0, $sp, 84*8
+    st.w $t0, $sp, 89*8
 
     # save FCC
     movcf2gr $t0, $fcc7
@@ -76,8 +83,8 @@ __trap_from_user:
     slli.w $t0, $t0, 1
     movcf2gr $t0, $fcc0
     # 保存 fcc寄存器
-    st.b $t0, $sp, 82*8+4
-==========================================
+    st.b $t0, $sp, 89*8+4
+
     # 保存sstatus寄存器
     csrrd $t0, CSR_PRMD
     st.d $t0, $sp, 32*8
@@ -129,18 +136,46 @@ __trap_from_user:
 __return_to_user:
     # a0: *TrapContext in user space(Constant),
 
+    # 将a0赋值给sp，现在sp指向TrapContext
     move $sp, $a0
+    # 将a0与CSR_SAVE交换，其实是想写入CSR_SAVE
     csrwr  $a0, CSR_SAVE
     # now sp points to TrapContext in user space, start restoring based on it
 
-=======================================-
-    # restore FCSR
-    ld.w $t0, $sp, 64*8
+    # 保存kernel寄存器(这些寄存器是callee saved)
+    # s0-s8 r12-r20
+    st.d $s0, $sp, 36*8
+    st.d $s1, $sp, 37*8
+    st.d $s2, $sp, 38*8
+    st.d $s3, $sp, 39*8
+    st.d $s4, $sp, 40*8
+    st.d $s5, $sp, 41*8
+    st.d $s6, $sp, 42*8
+    st.d $s7, $sp, 43*8
+    st.d $s8, $sp, 44*8
+    st.d $r12, $sp, 45*8
+    st.d $r13, $sp, 46*8
+    st.d $r14, $sp, 47*8
+    st.d $r15, $sp, 48*8
+    st.d $r16, $sp, 49*8
+    st.d $r17, $sp, 50*8
+    st.d $r18, $sp, 51*8
+    st.d $r19, $sp, 52*8
+    st.d $r20, $sp, 53*8
+
+    # 保存sp
+    st.d $sp, $sp, 34*8
+    # 保存fp
+    st.d $fp, $a0, 54*8
+    # 保存线程指针tp
+    st.d $tp, $a0, 55*8
+
+    # 恢复 FCSR
+    ld.w $t0, $sp, 89*8
     movgr2fcsr $fcsr0, $t0
 
-
-    # restore FCC
-    ld.b $t0, $sp, 64*8+4
+    # 恢复 FCC
+    ld.b $t0, $sp, 89*8+4
     movgr2cf $fcc0, $t0
     srli.w $t0, $t0, 1
     movgr2cf $fcc1, $t0
@@ -156,7 +191,6 @@ __return_to_user:
     movgr2cf $fcc6, $t0
     srli.w $t0, $t0, 1
     movgr2cf $fcc7, $t0
-===========================================-
 
     # 恢复 CSR_PRMD/CSR_ERA
     ld.d $t0, $sp, 32*8
@@ -173,8 +207,7 @@ __return_to_user:
         .set n, n+1
     .endr
 
-=====================================
-    # 恢复浮点寄存器，后序要更改，只有在dirty才恢复
+    # 恢复浮点寄存器，(TODO:YJJ)后序要更改，只有在dirty才恢复
     .set n, 0
     .set m, FP_START
     .rept 32
@@ -182,7 +215,6 @@ __return_to_user:
         .set n, n+1
         .set m, m+1
     .endr
-=======================================
 
     # 修改栈指针，返回用户栈
     ld.d $sp, $sp, 3*8
@@ -191,86 +223,86 @@ __return_to_user:
 .align 4
 __trap_from_kernel:
     # 这里只需要保存caller saved寄存器
-    addi.d  $sp, $sp, -264
-    st.d    $ra, $sp, 0
-    st.d    $tp, $sp, 8
-    # st.d    $sp, $sp, 16
-    st.d    $a0, $sp, 24
-    st.d    $a1, $sp, 32
-    st.d    $a2, $sp, 40
-    st.d    $a3, $sp, 48
-    st.d    $a4, $sp, 56
-    st.d    $a5, $sp, 64
-    st.d    $a6, $sp, 72
-    st.d    $a7, $sp, 80
-    st.d    $t0, $sp, 88
-    st.d    $t1, $sp, 96
-    st.d    $t2, $sp, 104
-    st.d    $t3, $sp, 112
-    st.d    $t4, $sp, 120
-    st.d    $t5, $sp, 128
-    st.d    $t6, $sp, 136
-    st.d    $t7, $sp, 144
-    st.d    $t8, $sp, 152
-    st.d    $r21, $sp,160
-    st.d    $fp, $sp, 168
-    st.d    $s0, $sp, 176
-    st.d    $s1, $sp, 184
-    st.d    $s2, $sp, 192
-    st.d    $s3, $sp, 200
-    st.d    $s4, $sp, 208
-    st.d    $s5, $sp, 216
-    st.d    $s6, $sp, 224
-    st.d    $s7, $sp, 232
-    st.d    $s8, $sp, 240
-    csrrd   $t0, 0x1        #读取prmd
-    csrrd   $t1, 0x6        #返回地址
-    st.d    $t0, $sp, 248
-    st.d    $t1, $sp, 256
+    addi.d  $sp, $sp, -34*8
+    st.d    $ra, $sp, 1*8
+    st.d    $tp, $sp, 2*8
+    st.d    $a0, $sp, 4*8
+    st.d    $a1, $sp, 5*8
+    st.d    $a2, $sp, 6*8
+    st.d    $a3, $sp, 7*8
+    st.d    $a4, $sp, 9*8
+    st.d    $a5, $sp, 10*8
+    st.d    $a6, $sp, 11*8
+    st.d    $a7, $sp, 12*8
+    st.d    $t0, $sp, 13*8
+    st.d    $t1, $sp, 14*8
+    st.d    $t2, $sp, 15*8
+    st.d    $t3, $sp, 16*8
+    st.d    $t4, $sp, 17*8
+    st.d    $t5, $sp, 18*8
+    st.d    $t6, $sp, 19*8
+    st.d    $t7, $sp, 20*8
+    st.d    $t8, $sp, 21*8
+    st.d    $r21, $sp,22*8
+    # st.d    $fp, $sp, 168
+    st.d    $s0, $sp, 23*8
+    st.d    $s1, $sp, 24*8
+    st.d    $s2, $sp, 25*8
+    st.d    $s3, $sp, 26*8
+    st.d    $s4, $sp, 27*8
+    st.d    $s5, $sp, 28*8
+    st.d    $s6, $sp, 29*8
+    st.d    $s7, $sp, 30*8
+    st.d    $s8, $sp, 31*8
 
+    csrrd   $t0, 0x1        #读取prmd
+    st.d    $t0, $sp, 32*8
+
+    csrrd   $t1, 0x6        #返回地址
+    st.d    $t1, $sp, 33*8
+
+    # 跳转到kernel_trap_handler
     la.abs  $t0, kernel_trap_handler
-    # call the C trap handler in trap.c
     jirl    $ra, $t0, 0
 
-    # restore register
-    ld.d    $t0, $sp, 248
-    ld.d    $t1, $sp, 256
+    # 恢复prmd
+    ld.d    $t0, $sp, 32*8
     csrwr   $t0, 0x1
+
+    ld.d    $t1, $sp, 33*8
     csrwr   $t1, 0x6
 
-    ld.d    $ra, $sp, 0
-    ld.d    $tp, $sp, 8
-    # ld.d    $sp, $sp, 16
-    ld.d    $a0, $sp, 24
-    ld.d    $a1, $sp, 32
-    ld.d    $a2, $sp, 40
-    ld.d    $a3, $sp, 48
-    ld.d    $a4, $sp, 56
-    ld.d    $a5, $sp, 64
-    ld.d    $a6, $sp, 72
-    ld.d    $a7, $sp, 80
-    ld.d    $t0, $sp, 88
-    ld.d    $t1, $sp, 96
-    ld.d    $t2, $sp, 104
-    ld.d    $t3, $sp, 112
-    ld.d    $t4, $sp, 120
-    ld.d    $t5, $sp, 128
-    ld.d    $t6, $sp, 136
-    ld.d    $t7, $sp, 144
-    ld.d    $t8, $sp, 152
-    ld.d    $r21, $sp,160
-    ld.d    $fp, $sp, 168
-    ld.d    $s0, $sp, 176
-    ld.d    $s1, $sp, 184
-    ld.d    $s2, $sp, 192
-    ld.d    $s3, $sp, 200
-    ld.d    $s4, $sp, 208
-    ld.d    $s5, $sp, 216
-    ld.d    $s6, $sp, 224
-    ld.d    $s7, $sp, 232
-    ld.d    $s8, $sp, 240
+    ld.d    $ra, $sp, 1*8
+    ld.d    $tp, $sp, 2*8
+    ld.d    $a0, $sp, 4*8
+    ld.d    $a1, $sp, 5*8
+    ld.d    $a2, $sp, 6*8
+    ld.d    $a3, $sp, 7*8
+    ld.d    $a4, $sp, 9*8
+    ld.d    $a5, $sp, 10*8
+    ld.d    $a6, $sp, 11*8
+    ld.d    $a7, $sp, 12*8
+    ld.d    $t0, $sp, 13*8
+    ld.d    $t1, $sp, 14*8
+    ld.d    $t2, $sp, 15*8
+    ld.d    $t3, $sp, 16*8
+    ld.d    $t4, $sp, 17*8
+    ld.d    $t5, $sp, 18*8
+    ld.d    $t6, $sp, 19*8
+    ld.d    $t7, $sp, 20*8
+    ld.d    $t8, $sp, 21*8
+    ld.d    $r21, $sp,22*8
+    ld.d    $s0, $sp, 23*8
+    ld.d    $s1, $sp, 24*8
+    ld.d    $s2, $sp, 25*8
+    ld.d    $s3, $sp, 26*8
+    ld.d    $s4, $sp, 27*8
+    ld.d    $s5, $sp, 28*8
+    ld.d    $s6, $sp, 29*8
+    ld.d    $s7, $sp, 30*8
+    ld.d    $s8, $sp, 31*8
 
-    addi.d  $sp, $sp, 264
+    addi.d  $sp, $sp, 34*8
     ertn
 
 .section .text.sigret
