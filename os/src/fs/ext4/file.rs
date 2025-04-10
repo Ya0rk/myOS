@@ -146,8 +146,9 @@ impl FileTrait for NormalFile {
             return Err(Errno::ENAMETOOLONG);
         }
 
-        let mut ext4file = self.metadata.inode.get_ext4file();
-        ext4file.file_rename(&old_path, &new_path).unwrap();
+        // let mut ext4file = self.metadata.inode.get_ext4file();
+        // ext4file.file_rename(&old_path, &new_path).unwrap();
+        self.metadata.inode.rename(&old_path, &new_path);
         self.path = new_path;
         
         Ok(0)
@@ -163,29 +164,44 @@ impl FileTrait for NormalFile {
         self.metadata.inode.is_dir()
     }
 
-    fn read_dentry(&self) -> Option<Vec<Dirent>> {
+    fn read_dentry(&self, mut ub: UserBuffer, len: usize) -> usize {
         if !self.is_dir() {
-            return None;
+            return 0;
         }
 
-        let ext4_file = self.metadata.inode.get_ext4file();
-        let dirs = ext4_file.read_dir_from(0).unwrap();
-        let mut dir_entrys = Vec::new();
+        // let ext4_file = self.metadata.inode.get_ext4file();
+        // let dirs = ext4_file.read_dir_from(0).unwrap();
+        // let mut dir_entrys = Vec::new();
 
-        for dir in dirs {
-            let (d_ino, d_off, d_reclen, d_type, d_name) = (
-                dir.d_ino,
-                dir.d_off,
-                dir.d_reclen,
-                dir.d_type,
-                dir.d_name
-            );
+        // for dir in dirs {
+        //     let (d_ino, d_off, d_reclen, d_type, d_name) = (
+        //         dir.d_ino,
+        //         dir.d_off,
+        //         dir.d_reclen,
+        //         dir.d_type,
+        //         dir.d_name
+        //     );
 
-            let entry = Dirent::new(d_name, d_off, d_ino, d_type, d_reclen);
-            self.metadata.set_offset(d_off as usize);
-            dir_entrys.push(entry);
-        }
-        Some(dir_entrys)
+        //     let entry = Dirent::new(d_name, d_off, d_ino, d_type, d_reclen);
+        //     self.metadata.set_offset(d_off as usize);
+        //     dir_entrys.push(entry);
+        // }
+        // Some(dir_entrys)
+        let dentrys = self.metadata.inode.read_dentry();
+        let dentrys = match dentrys {
+            Some(x) => x,
+            _ => return 0,
+        };
+        let mut res = 0;
+        let one_den_len = size_of::<Dirent>();
+        for den in dentrys {
+            if res + one_den_len > len {
+                break;
+            }
+            ub.write_at(res, den.as_bytes());
+            res += one_den_len;
+        };
+        res
     }
     
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
