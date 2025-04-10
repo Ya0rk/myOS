@@ -183,17 +183,6 @@ pub trait InodeTrait: Send + Sync {
         todo!();
     }
 
-    /// 将数据写回
-    /// 
-    /// offset：数据开始的地址
-    /// 
-    /// len : 长度
-    /// 
-    /// buf: 数据存在的位置
-    // fn write_back(self: Arc<Self>, _offset: usize, _len: usize, _buf: &[u8]) -> SysResult {
-    //     todo!();
-    // }
-
     /// 获取时间戳，用于修改或访问
     fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, >;
 

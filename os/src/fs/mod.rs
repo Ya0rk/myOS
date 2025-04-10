@@ -7,14 +7,14 @@ mod pipe;
 mod stat;
 mod stdio;
 mod vfs;
-mod ffi;
 mod path;
 pub mod pre_data;
 pub mod ext4;
 pub mod tmp;
+pub mod ffi;
 
 pub use ext4::{root_inode,ls};
-pub use ffi::{OpenFlags, UmountFlags, MountFlags};
+pub use ffi::*;
 pub use path::{Path, path_test, join_path_2_absolute};
 pub use dirent::Dirent;
 pub use inode_cache::*;

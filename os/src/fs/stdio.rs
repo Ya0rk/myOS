@@ -25,9 +25,6 @@ pub struct Stdout;
 
 #[async_trait]
 impl FileTrait for Stdin {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn readable(&self) -> bool {
         true
     }
@@ -153,9 +150,6 @@ impl FileTrait for Stdin {
 
 #[async_trait]
 impl FileTrait for Stdout {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn readable(&self) -> bool {
         false
     }

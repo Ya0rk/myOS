@@ -43,9 +43,6 @@ impl TmpFile {
 // 为 OSInode 实现 File Trait
 #[async_trait]
 impl FileTrait for TmpFile {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn get_flags(&self) -> OpenFlags {
         self.metadata.flags.read().clone()
     }

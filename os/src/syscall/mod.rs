@@ -3,11 +3,13 @@ mod process;
 mod ffi;
 mod mm;
 mod io;
+mod net;
 
 use fs::*;
 use mm::{sys_brk, sys_mmap, sys_munmap};
 use process::*;
 use io::*;
+use net::*;
 use ffi::SysCode;
 pub use ffi::CloneFlags;
 
@@ -65,6 +67,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_PREAD64 => sys_pread64(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
         SysCode::SYSCALL_PWRITE64 => sys_pwrite64(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
         SysCode::SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *const u8, args[2] as *const u8, args[3] as u32),
+        // SysCode::SYSCALL_SOCKET => sys_socket(args[0] as usize, args[1] as usize, args[2] as usize),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

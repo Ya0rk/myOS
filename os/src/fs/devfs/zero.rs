@@ -1,4 +1,4 @@
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
 use log::info;
 use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
 use async_trait::async_trait;
@@ -15,9 +15,6 @@ impl DevZero {
 
 #[async_trait]
 impl FileTrait for DevZero {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
@@ -46,7 +43,7 @@ impl FileTrait for DevZero {
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("/dev/zero".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()

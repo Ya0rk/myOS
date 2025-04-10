@@ -1,4 +1,4 @@
-use alloc::{string::String, sync::Arc};
+use alloc::{string::{String, ToString}, sync::Arc};
 use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, task::get_init_proc, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -14,9 +14,6 @@ impl DevTty {
 
 #[async_trait]
 impl FileTrait for DevTty {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
@@ -47,7 +44,7 @@ impl FileTrait for DevTty {
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("/dev/tty".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()

@@ -42,7 +42,7 @@ pub fn main() -> i32 {
                         }
                         "mkdir" => {
                             if parts.len() > 1 {
-                                println!("chdir to {}", parts[1]);
+                                println!("mkdir {}", parts[1]);
                                 let byte_slice: &[u8] = &conert_str2byte(parts[1]);
                                 mkdir(byte_slice, 0);
                             } else {

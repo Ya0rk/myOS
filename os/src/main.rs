@@ -38,6 +38,7 @@ pub mod sync;
 pub mod utils;
 pub mod syscall;
 pub mod drivers;
+pub mod net;
 // pub mod arch;
 pub mod signal;
 pub mod hal;
