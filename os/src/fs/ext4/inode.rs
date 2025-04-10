@@ -7,13 +7,12 @@ use lwext4_rust::{
 };
 use riscv::register::mstatus::set_fs;
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType},
-    page_cache::PageCache, stat::as_inode_stat, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
+    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, page_cache::PageCache, stat::as_inode_stat, Dirent, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
     sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
     utils::{Errno, SysResult}
 };
 
-use alloc::{string::ToString, sync::Arc, vec::Vec};
+use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
 use alloc::vec;
 use alloc::boxed::Box;
 
@@ -260,10 +259,43 @@ impl InodeTrait for Ext4Inode {
     fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, > {
         self.metadata.timestamp.lock()
     }
-    fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
-        self.file.lock()
-    }
+    // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
+    //     self.file.lock()
+    // }
     fn is_dir(&self) -> bool {
         self.metadata.file_type.is_dir()
+    }
+
+    fn rename(&self, old_path: &String, new_path: &String) {
+        let mut ext4file = self.file.lock();
+        ext4file.file_rename(&old_path, &new_path);
+    }
+
+    fn read_dentry(&self) -> Option<Vec<Dirent>>{
+        let ext4_file = self.file.lock();
+        let dirs = ext4_file.read_dir_from(0).unwrap();
+        let mut dir_entrys = Vec::new();
+
+        for dir in dirs {
+            let (d_ino, d_off, d_reclen, d_type, d_name) = (
+                dir.d_ino,
+                dir.d_off,
+                dir.d_reclen,
+                dir.d_type,
+                dir.d_name
+            );
+
+            let entry = Dirent::new(d_name, d_off, d_ino, d_type, d_reclen);
+            dir_entrys.push(entry);
+        }
+        Some(dir_entrys)
+    }
+}
+
+impl Drop for Ext4Inode {
+    fn drop(&mut self) {
+        let mut file = self.file.lock();
+        // debug!("Drop struct FileWrapper {:?}", file.get_path());
+        file.file_close().expect("failed to close fd");
     }
 }

@@ -1,6 +1,6 @@
 use core::sync::atomic::AtomicUsize;
 use crate::{
-    fs::{ext4::NormalFile, ffi::InodeType, page_cache::PageCache, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
+    fs::{ext4::NormalFile, ffi::InodeType, page_cache::PageCache, Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
     utils::SysResult
 };
@@ -197,13 +197,19 @@ pub trait InodeTrait: Send + Sync {
     /// 获取时间戳，用于修改或访问
     fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, >;
 
-    /// 获取lwext4的ext4file
-    fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
+    // /// 获取lwext4的ext4file
+    // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
 
     fn is_dir(&self) -> bool;
 
     /// get page cache from ext4 file
     fn get_page_cache(&self) -> Option<Arc<PageCache>>;
+
+    /// 更改名字
+    fn rename(&self, old_path: &String, new_path: &String);
+
+    /// 获得目录项
+    fn read_dentry(&self) -> Option<Vec<Dirent>>;
 }
 
 impl dyn InodeTrait {

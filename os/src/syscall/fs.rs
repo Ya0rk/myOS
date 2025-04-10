@@ -349,21 +349,21 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
     let token = task.get_user_token();
     let mut buffer = UserBuffer::new(translated_byte_buffer(token, buf, len));
     let file = task.get_file_by_fd(fd).unwrap();
-    let dentrys = match file.read_dentry() {
-        Some(dir_entrys) => dir_entrys,
-        _ => return Err(Errno::EINVAL),
-    };
+    // let dentrys = match file.read_dentry() {
+    //     Some(dir_entrys) => dir_entrys,
+    //     _ => return Err(Errno::EINVAL),
+    // };
 
-    let mut res = 0;
-    let one_den_len = size_of::<Dirent>();
-    for den in dentrys {
-        if res + one_den_len > len {
-            break;
-        }
-        buffer.write_at(res, den.as_bytes());
-        res += one_den_len;
-    }
-
+    // let mut res = 0;
+    // let one_den_len = size_of::<Dirent>();
+    // for den in dentrys {
+    //     if res + one_den_len > len {
+    //         break;
+    //     }
+    //     buffer.write_at(res, den.as_bytes());
+    //     res += one_den_len;
+    // }
+    let res = file.read_dentry(buffer, len);
     Ok(res)
 }
 
