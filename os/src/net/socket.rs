@@ -2,20 +2,20 @@ use alloc::sync::Arc;
 use async_trait::async_trait;
 use crate::{fs::FileTrait, utils::{Errno, SysResult}};
 use alloc::boxed::Box;
-use super::{addr::DomainType, SockClass, SocketType};
+use super::{addr::{DomainType, Sock}, tcp::TcpSocket, udp::UdpSocket, SockClass, SocketType};
 use smoltcp::socket::tcp;
 pub type TcpState = tcp::State;
 
 pub struct SockMeta {
-    pub family: u16,
+    pub domain: Sock,
     pub recv_buf_size: usize,
     pub send_buf_size: usize,
 }
 
 impl SockMeta {
-    pub fn new(family: u16, recv_buf_size: usize, send_buf_size: usize) -> Self {
+    pub fn new(domain: Sock, recv_buf_size: usize, send_buf_size: usize) -> Self {
         Self {
-            family,
+            domain,
             recv_buf_size,
             send_buf_size,
         }
@@ -45,10 +45,12 @@ impl dyn Socket {
             DomainType::Inet4 | DomainType::Inet6 => {
                 if type_.contains(SocketType::SOCK_STREAM) {
                     // 创建 TCP 套接字
-                    todo!()
+                    let sockclass = SockClass::Tcp(Arc::new(TcpSocket::new()));
+                    Ok(sockclass)
                 } else if type_.contains(SocketType::SOCK_DGRAM) {
                     // 创建 UDP 套接字
-                    todo!()
+                    let sockclass = SockClass::Udp(Arc::new(UdpSocket::new()));
+                    Ok(sockclass)
                 } else {
                     return Err(Errno::EINVAL);
                 }

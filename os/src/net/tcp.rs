@@ -1,27 +1,62 @@
 use alloc::string::String;
 use alloc::sync::Arc;
+use alloc::vec;
 use async_trait::async_trait;
+use lwext4_rust::bindings::BUFSIZ;
 use smoltcp::iface::SocketHandle;
+use smoltcp::socket::tcp;
 use smoltcp::wire::IpEndpoint;
 use crate::fs::FileMeta;
 use crate::fs::FileTrait;
 use crate::fs::RenameFlags;
 use crate::mm::UserBuffer;
+use crate::net::addr::Sock;
+use crate::net::SOCKET_SET;
 use crate::utils::SysResult;
 use super::addr::DomainType;
 use super::Socket;
 use super::TcpState;
 use super::SockMeta;
+use super::BUFF_SIZE;
 use alloc::boxed::Box;
 
 /// TCP 是一种面向连接的字节流套接字
 pub struct TcpSocket {
     pub handle: SocketHandle,
-    pub filemeta: FileMeta,
     pub sockmeta: SockMeta,
-    pub local_end: IpEndpoint,
-    pub remote_end: IpEndpoint,
+    pub local_end: Option<IpEndpoint>,
+    pub remote_end: Option<IpEndpoint>,
     pub state: TcpState,
+}
+
+impl TcpSocket {
+    pub fn new() -> Self {
+        let socket = Self::new_sock();
+        let handle = SOCKET_SET.lock().add(socket);
+        let sockmeta = SockMeta::new(
+            Sock::Tcp,
+            BUFF_SIZE,
+            BUFF_SIZE,
+        );
+
+        Self {
+            handle,
+            sockmeta,
+            local_end: None,
+            remote_end: None,
+            state: TcpState::Established,
+        }
+    }
+
+    fn new_sock() -> tcp::Socket<'static> {
+        let recv_buf = tcp::SocketBuffer::new(
+            vec![0; BUFF_SIZE]
+        );
+        let send_buf = tcp::SocketBuffer::new(
+            vec![0; BUFF_SIZE]
+        );
+        tcp::Socket::new(recv_buf, send_buf)
+    }
 }
 
 #[async_trait]

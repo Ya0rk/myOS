@@ -3,10 +3,18 @@ use super::{AF_INET6, AF_UNIX};
 
 /// 协议簇类型
 pub enum DomainType {
-    Unspec = 0,
-    Unix = 1,
-    Inet4 = 2,
-    Inet6 = 10,
+    Unspec,
+    Unix,
+    Inet4,
+    Inet6,
+}
+
+#[derive(Clone, Copy)]
+pub enum Sock {
+    Tcp,
+    Udp,
+    Unix,
+    Unspec,
 }
 
 #[derive(Debug, Clone, Copy)]

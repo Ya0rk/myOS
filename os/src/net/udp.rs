@@ -1,7 +1,7 @@
-use alloc::{string::String, sync::Arc};
-use smoltcp::iface::SocketHandle;
+use alloc::{string::String, sync::Arc, vec};
+use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer};
 use crate::{fs::{FileMeta, RenameFlags}, utils::SysResult};
-use super::{addr::DomainType, SockMeta, Socket};
+use super::{addr::{DomainType, Sock}, SockMeta, Socket, BUFF_SIZE, META_SIZE, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
@@ -10,8 +10,38 @@ use async_trait::async_trait;
 /// UDP 是一种无连接的报文套接字
 pub struct UdpSocket {
     pub handle: SocketHandle,
-    pub filemeta: FileMeta,
     pub sockmeta: SockMeta,
+}
+
+impl UdpSocket {
+    pub fn new() -> Self {
+        let socket = Self::new_socket();
+        let handle = SOCKET_SET.lock().add(socket);
+        
+        Self {
+            handle,
+            sockmeta: SockMeta::new(
+                Sock::Udp,
+                BUFF_SIZE,
+                BUFF_SIZE,
+            ),
+        }
+    }
+
+    fn new_socket() -> udp::Socket<'static> {
+        let recv_buf = PacketBuffer::new(
+            vec![PacketMetadata::EMPTY; META_SIZE],
+            vec![0; BUFF_SIZE], 
+        );
+        let send_buf = PacketBuffer::new(
+            vec![PacketMetadata::EMPTY; META_SIZE],
+            vec![0; BUFF_SIZE], 
+        );
+        udp::Socket::new(
+            recv_buf,
+            send_buf,
+        )
+    }
 }
 
 #[async_trait]

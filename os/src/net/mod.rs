@@ -1,12 +1,14 @@
 mod tcp;
 mod udp;
 mod unix;
+mod manager;
 pub mod ffi;
 pub mod socket;
 pub mod addr;
 
 pub use socket::*;
 pub use ffi::*;
+pub use manager::*;
 
 use alloc::sync::Arc;
 use crate::fs::FileTrait;

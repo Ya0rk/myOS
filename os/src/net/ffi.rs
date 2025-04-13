@@ -1,6 +1,11 @@
+use crate::config::KB;
+
 pub const AF_UNIX: u16 = 1;
 pub const AF_INET: u16 = 2;
 pub const AF_INET6: u16 = 10;
+pub const META_SIZE: usize = 1 * KB;
+pub const BUFF_SIZE: usize = 512 * KB;
+pub const PORT_RANGE: usize = 65535 - 32768;
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]
