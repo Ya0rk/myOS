@@ -11,35 +11,25 @@ use async_trait::async_trait;
 /// UDP 是一种无连接的报文套接字
 pub struct UdpSocket {
     pub handle: SocketHandle,
-    pub sockmeta: SockMeta,
-    pub inner: SpinNoIrqLock<UdpSockInner>,
-}
-
-struct UdpSockInner {
-    pub port: Option<Port>,
-    pub local_end: Option<IpEndpoint>,
-    pub remote_end: Option<IpEndpoint>,
+    pub sockmeta: SpinNoIrqLock<SockMeta>,
 }
 
 impl UdpSocket {
     pub fn new() -> Self {
         let socket = Self::new_socket();
         let handle = SOCKET_SET.lock().add(socket);
-        let inner = SpinNoIrqLock::new(UdpSockInner {
-            port: None,
-            local_end: None,
-            remote_end: None,
-        });
+        let sockmeta = SpinNoIrqLock::new(
+            SockMeta::new(
+                Sock::Udp,
+                BUFF_SIZE,
+                BUFF_SIZE,
+            )
+        );
         // TODO(YJJ): maybe bug
         // NET_DEV.lock().poll();
         Self {
             handle,
-            sockmeta: SockMeta::new(
-                Sock::Udp,
-                BUFF_SIZE,
-                BUFF_SIZE,
-            ),
-            inner
+            sockmeta,
         }
     }
 
@@ -61,14 +51,11 @@ impl UdpSocket {
 
 #[async_trait]
 impl Socket for UdpSocket {
-    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
-        unimplemented!()
-    }
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
         NET_DEV.lock().poll();
         let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
-        let mut inner = self.inner.lock();
-        if inner.port.is_some() {
+        let mut sockmeta = self.sockmeta.lock();
+        if sockmeta.port.is_some() {
             return Err(Errno::EADDRINUSE);
         }
         let mut p: Port;
@@ -85,14 +72,14 @@ impl Socket for UdpSocket {
             port_manager.udp_used_ports.set(endpoint.port as usize, true);
         }
         drop(port_manager);
-        inner.port = Some(p);
+        sockmeta.port = Some(p);
 
         let mut binding = SOCKET_SET.lock();
         let socket = binding.get_mut::<udp::Socket>(self.handle);
         match socket.bind(endpoint) {
             Ok(_) => {
                 info!("[bind] bind to port: {}", endpoint.port);
-                inner.local_end = Some(endpoint);
+                sockmeta.local_end = Some(endpoint);
             }
             Err(_) => {
                 return Err(Errno::EADDRINUSE);
@@ -101,10 +88,13 @@ impl Socket for UdpSocket {
 
         Ok(())
     }
-    fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
+    fn listen(&self, _backlog: usize) -> SysResult<()> {
+        Err(Errno::EOPNOTSUPP)
+    }
+    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
         unimplemented!()
     }
-    fn listen(&self, _backlog: usize) -> SysResult<()> {
+    fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
     fn set_recv_buf_size(&self, _size: usize) -> SysResult<()> {

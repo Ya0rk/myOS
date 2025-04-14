@@ -95,6 +95,7 @@ pub enum SysCode {
     SYSCALL_SYSINFO   = 179,
     SYSCALL_SOCKET    = 198,
     SYSCALL_BIND      = 200,
+    SYSCALL_LISTEN    = 201,
     SYSCALL_BRK       = 214,
     SYSCALL_MUNMAP    = 215,
     SYSCALL_CLONE     = 220,
@@ -116,6 +117,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_LISTEN => "listen",
             Self::SYSCALL_BIND => "bind",
             Self::SYSCALL_SOCKET => "socket",
             Self::SYSCALL_FSTATAT => "fstatat",

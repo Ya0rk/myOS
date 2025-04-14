@@ -96,6 +96,7 @@ impl PortManager {
     }
 }
 
+#[derive(Clone)]
 pub struct Port {
     pub port: u16,
     pub domain: Sock,

@@ -44,3 +44,16 @@ pub fn sys_bind(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> 
 
     Ok(0)
 }
+
+/// 监听来自客户端的tcp socket的连接请求
+/// The sockfd argument is a file descriptor that refers to a socket
+/// of type SOCK_STREAM or SOCK_SEQPACKET.
+/// The backlog argument defines the maximum length to which the queue of pending connections for sockfd may grow.
+pub fn sys_listen(sockfd: usize, backlog: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+    socket.listen(backlog)?;
+
+    Ok(0)
+}

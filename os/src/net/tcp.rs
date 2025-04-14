@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use log::info;
 use lwext4_rust::bindings::BUFSIZ;
 use smoltcp::iface::SocketHandle;
+use smoltcp::socket;
 use smoltcp::socket::tcp;
 use smoltcp::wire::IpEndpoint;
 use spin::Spin;
@@ -31,38 +32,26 @@ use alloc::boxed::Box;
 /// TCP 是一种面向连接的字节流套接字
 pub struct TcpSocket {
     pub handle: SocketHandle,
-    pub sockmeta: SockMeta,
-    pub inner: SpinNoIrqLock<TcpSockInner>,
-    pub state: TcpState,
-}
-
-struct TcpSockInner {
-    pub port: Option<Port>,
-    pub local_end: Option<IpEndpoint>,
-    pub remote_end: Option<IpEndpoint>,
+    pub sockmeta: SpinNoIrqLock<SockMeta>,
+    pub state: SpinNoIrqLock<TcpState>,
 }
 
 impl TcpSocket {
     pub fn new() -> Self {
         let socket = Self::new_sock();
         let handle = SOCKET_SET.lock().add(socket);
-        let sockmeta = SockMeta::new(
-            Sock::Tcp,
-            BUFF_SIZE,
-            BUFF_SIZE,
-        );
-        let inner = SpinNoIrqLock::new(TcpSockInner {
-            port: None,
-            local_end: None,
-            remote_end: None,
-        });
+        let sockmeta = SpinNoIrqLock::new(
+            SockMeta::new(
+                Sock::Tcp,
+                BUFF_SIZE,
+                BUFF_SIZE,
+        ));
         // TODO(YJJ): maybe bug
         // NET_DEV.lock().poll();
         Self {
             handle,
             sockmeta,
-            inner,
-            state: TcpState::Established,
+            state: SpinNoIrqLock::new(TcpState::Established),
         }
     }
 
@@ -79,13 +68,10 @@ impl TcpSocket {
 
 #[async_trait]
 impl Socket for TcpSocket {
-    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
-        unimplemented!()
-    }
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
         let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
-        let mut inner = self.inner.lock();
-        if inner.local_end.is_some() {
+        let mut sockmeta = self.sockmeta.lock();
+        if sockmeta.local_end.is_some() {
             info!("[bind] The socket is already bound to an address.");
             return Err(Errno::EINVAL);
         }
@@ -105,24 +91,51 @@ impl Socket for TcpSocket {
         }
         
         drop(port_manager);
-        inner.local_end = Some(endpoint);
-        inner.port = Some(p);
-        drop(inner);
+        sockmeta.local_end = Some(endpoint);
+        sockmeta.port = Some(p);
+        drop(sockmeta);
 
         info!("[bind] bind to port: {}", endpoint.port);
         Ok(())
     }
+    fn listen(&self, backlog: usize) -> SysResult<()> {
+        info!("[tcp listen] backlog: {}", backlog);
+        let sockmeta = self.sockmeta.lock();
+        let p = sockmeta.port.clone();
+        let local_end = sockmeta.local_end;
+        if p.is_none() || local_end.is_none() {
+            info!("[tcp listen] The socket is not bound to an address.");
+            return Err(Errno::EINVAL);
+        }
+
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<tcp::Socket>(self.handle);
+        match socket.listen(local_end.unwrap()) {
+            Ok(_) => {
+                info!("[tcp listen] Listening on port: {}", p.unwrap().port);
+                *self.state.lock() = TcpState::Listen;
+            }
+            Err(_) => {
+                info!("[tcp listen] Failed to listen on port: {}", p.unwrap().port);
+                return Err(Errno::EINVAL);
+            }
+        }
+
+        Ok(())
+    }
+    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
+        unimplemented!()
+    }
     fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
-    fn listen(&self, _backlog: usize) -> SysResult<()> {
-        unimplemented!()
+    fn set_recv_buf_size(&self, size: usize) -> SysResult<()> {
+        self.sockmeta.lock().recv_buf_size = size;
+        Ok(())
     }
-    fn set_recv_buf_size(&self, _size: usize) -> SysResult<()> {
-        unimplemented!()
-    }
-    fn set_send_buf_size(&self, _size: usize) -> SysResult<()> {
-        unimplemented!()
+    fn set_send_buf_size(&self, size: usize) -> SysResult<()> {
+        self.sockmeta.lock().send_buf_size = size;
+        Ok(())
     }
 }
 

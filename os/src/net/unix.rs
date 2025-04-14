@@ -1,6 +1,6 @@
 use alloc::{string::String, sync::Arc};
 use smoltcp::iface::SocketHandle;
-use crate::{fs::{FileMeta, InodeTrait, Kstat, Page, RenameFlags}, utils::SysResult};
+use crate::{fs::{FileMeta, InodeTrait, Kstat, Page, RenameFlags}, sync::SpinNoIrqLock, utils::SysResult};
 use super::{addr::SockAddr, SockMeta, Socket};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
@@ -9,7 +9,8 @@ use async_trait::async_trait;
 
 /// UnixSocket 是一种本地通信的字节流套接字
 pub struct UnixSocket {
-    pub filemeta: FileMeta,   
+    pub filemeta: FileMeta,
+    pub sockmeta: SpinNoIrqLock<SockMeta>,
 }
 
 #[async_trait]
