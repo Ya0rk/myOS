@@ -1,7 +1,8 @@
 use alloc::{string::String, sync::Arc, vec};
-use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer};
-use crate::{fs::{FileMeta, RenameFlags}, utils::SysResult};
-use super::{addr::{SockAddr, Sock}, SockMeta, Socket, BUFF_SIZE, META_SIZE, SOCKET_SET};
+use log::info;
+use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer, wire::IpEndpoint};
+use crate::{fs::{FileMeta, RenameFlags}, sync::SpinNoIrqLock, utils::{Errno, SysResult}};
+use super::{addr::{Sock, SockAddr}, alloc_port, Port, SockMeta, Socket, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
@@ -11,13 +12,26 @@ use async_trait::async_trait;
 pub struct UdpSocket {
     pub handle: SocketHandle,
     pub sockmeta: SockMeta,
+    pub inner: SpinNoIrqLock<UdpSockInner>,
+}
+
+struct UdpSockInner {
+    pub port: Option<Port>,
+    pub local_end: Option<IpEndpoint>,
+    pub remote_end: Option<IpEndpoint>,
 }
 
 impl UdpSocket {
     pub fn new() -> Self {
         let socket = Self::new_socket();
         let handle = SOCKET_SET.lock().add(socket);
-        
+        let inner = SpinNoIrqLock::new(UdpSockInner {
+            port: None,
+            local_end: None,
+            remote_end: None,
+        });
+        // TODO(YJJ): maybe bug
+        // NET_DEV.lock().poll();
         Self {
             handle,
             sockmeta: SockMeta::new(
@@ -25,6 +39,7 @@ impl UdpSocket {
                 BUFF_SIZE,
                 BUFF_SIZE,
             ),
+            inner
         }
     }
 
@@ -49,8 +64,42 @@ impl Socket for UdpSocket {
     async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
         unimplemented!()
     }
-    fn bind(&self, _addr: &SockAddr) -> SysResult<()> {
-        unimplemented!()
+    fn bind(&self, addr: &SockAddr) -> SysResult<()> {
+        NET_DEV.lock().poll();
+        let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        let mut inner = self.inner.lock();
+        if inner.port.is_some() {
+            return Err(Errno::EADDRINUSE);
+        }
+        let mut p: Port;
+        let mut port_manager = PORT_MANAGER.lock();
+
+        if endpoint.port == 0 {
+            p = alloc_port(Sock::Udp)?;
+            endpoint.port = p.port;
+        } else {
+            if port_manager.udp_used_ports.get(endpoint.port as usize).unwrap() {
+                return Err(Errno::EADDRINUSE);
+            }
+            p = Port::new(Sock::Udp, endpoint.port);
+            port_manager.udp_used_ports.set(endpoint.port as usize, true);
+        }
+        drop(port_manager);
+        inner.port = Some(p);
+
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<udp::Socket>(self.handle);
+        match socket.bind(endpoint) {
+            Ok(_) => {
+                info!("[bind] bind to port: {}", endpoint.port);
+                inner.local_end = Some(endpoint);
+            }
+            Err(_) => {
+                return Err(Errno::EADDRINUSE);
+            }
+        }
+
+        Ok(())
     }
     fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()

@@ -25,6 +25,7 @@ use super::Socket;
 use super::TcpState;
 use super::SockMeta;
 use super::BUFF_SIZE;
+use super::NET_DEV;
 use alloc::boxed::Box;
 
 /// TCP 是一种面向连接的字节流套接字
@@ -55,7 +56,8 @@ impl TcpSocket {
             local_end: None,
             remote_end: None,
         });
-
+        // TODO(YJJ): maybe bug
+        // NET_DEV.lock().poll();
         Self {
             handle,
             sockmeta,
