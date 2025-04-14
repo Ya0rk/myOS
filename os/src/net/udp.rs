@@ -1,7 +1,7 @@
 use alloc::{string::String, sync::Arc, vec};
 use log::info;
 use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer, wire::IpEndpoint};
-use crate::{fs::{FileMeta, RenameFlags}, sync::SpinNoIrqLock, utils::{Errno, SysResult}};
+use crate::{fs::{FileMeta, RenameFlags}, sync::SpinNoIrqLock, syscall::ShutHow, utils::{Errno, SysResult}};
 use super::{addr::{Sock, SockAddr}, alloc_port, Port, SockMeta, Socket, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
@@ -102,6 +102,13 @@ impl Socket for UdpSocket {
     }
     fn set_send_buf_size(&self, _size: usize) -> SysResult<()> {
         unimplemented!()
+    }
+    fn shutdown(&self, how: ShutHow) -> SysResult<()> {
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<udp::Socket>(self.handle);
+        socket.close();
+        NET_DEV.lock().poll();
+        Ok(())
     }
 }
 

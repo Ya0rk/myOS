@@ -1,6 +1,7 @@
 use alloc::{string::String, sync::Arc};
+use log::info;
 use smoltcp::iface::SocketHandle;
-use crate::{fs::{FileMeta, InodeTrait, Kstat, Page, RenameFlags}, sync::SpinNoIrqLock, utils::SysResult};
+use crate::{fs::{FileMeta, InodeTrait, Kstat, Page, RenameFlags}, sync::SpinNoIrqLock, syscall::ShutHow, utils::SysResult};
 use super::{addr::SockAddr, SockMeta, Socket};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
@@ -31,6 +32,10 @@ impl Socket for UnixSocket {
         unimplemented!()
     }
     fn set_send_buf_size(&self, _size: usize) -> SysResult<()> {
+        unimplemented!()
+    }
+    fn shutdown(&self, how: ShutHow) -> SysResult<()> {
+        info!("[unix socket] shutdown: {:?}, not implemented!", how);
         unimplemented!()
     }
 }

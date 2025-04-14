@@ -96,6 +96,7 @@ pub enum SysCode {
     SYSCALL_SOCKET    = 198,
     SYSCALL_BIND      = 200,
     SYSCALL_LISTEN    = 201,
+    SYSCALL_SHUTDOWN  = 210,
     SYSCALL_BRK       = 214,
     SYSCALL_MUNMAP    = 215,
     SYSCALL_CLONE     = 220,
@@ -117,6 +118,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SHUTDOWN => "shutdown",
             Self::SYSCALL_LISTEN => "listen",
             Self::SYSCALL_BIND => "bind",
             Self::SYSCALL_SOCKET => "socket",
@@ -364,5 +366,23 @@ bitflags! {
         const AT_EACCESS = 1 << 9;
         const AT_NO_AUTOMOUNT = 1 << 11;
         const AT_DUMMY = 1 << 12;
+    }
+
+    #[derive(PartialEq, Eq, Debug, Clone, Copy)]
+    #[repr(C)]
+    pub struct ShutHow: u8 {
+        /// 关闭接收端 (SHUT_RD)
+        /// - 后续不能再接收数据
+        const SHUT_RD = 0;
+
+        /// 关闭发送端 (SHUT_WR)
+        /// - 后续不能再发送数据
+        /// - 会发送FIN包给对端
+        const SHUT_WR = 1;
+
+        /// 同时关闭收发端 (SHUT_RDWR)
+        /// - 完全关闭连接
+        /// - 相当于先SHUT_RD再SHUT_WR
+        const SHUT_RDWR = 2;
     }
 }

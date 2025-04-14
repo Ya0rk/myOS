@@ -1,8 +1,14 @@
 use alloc::sync::Arc;
 use async_trait::async_trait;
-use crate::{fs::FileTrait, utils::{Errno, SysResult}};
+use crate::{
+    fs::FileTrait, syscall::ShutHow, 
+    utils::{Errno, SysResult}
+};
 use alloc::boxed::Box;
-use super::{addr::{Sock, SockAddr}, tcp::TcpSocket, udp::UdpSocket, Port, SockClass, SocketType, AF_INET, AF_INET6};
+use super::{
+    addr::{Sock, SockAddr}, 
+    tcp::TcpSocket, udp::UdpSocket, Port, SockClass, SocketType, AF_INET, AF_INET6
+};
 use smoltcp::{socket::tcp, wire::IpEndpoint};
 pub type TcpState = tcp::State;
 
@@ -11,6 +17,7 @@ pub struct SockMeta {
     pub recv_buf_size: usize,
     pub send_buf_size: usize,
     pub port: Option<Port>,
+    pub shuthow: Option<ShutHow>,
     pub local_end: Option<IpEndpoint>,
     pub remote_end: Option<IpEndpoint>,
 }
@@ -22,6 +29,7 @@ impl SockMeta {
             recv_buf_size,
             send_buf_size,
             port: None,
+            shuthow: None,
             local_end: None,
             remote_end: None,
         }
@@ -43,6 +51,8 @@ pub trait Socket: FileTrait {
     fn set_recv_buf_size(&self, size: usize) -> SysResult<()>;
 
     fn set_send_buf_size(&self, size: usize) -> SysResult<()>;
+
+    fn shutdown(&self, how: ShutHow) -> SysResult<()>;
 }
 
 impl dyn Socket {

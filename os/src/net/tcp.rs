@@ -18,6 +18,7 @@ use crate::net::alloc_port;
 use crate::net::PORT_MANAGER;
 use crate::net::SOCKET_SET;
 use crate::sync::SpinNoIrqLock;
+use crate::syscall::ShutHow;
 use crate::utils::Errno;
 use crate::utils::SysResult;
 use super::addr::SockAddr;
@@ -51,7 +52,7 @@ impl TcpSocket {
         Self {
             handle,
             sockmeta,
-            state: SpinNoIrqLock::new(TcpState::Established),
+            state: SpinNoIrqLock::new(TcpState::Closed),
         }
     }
 
@@ -101,22 +102,18 @@ impl Socket for TcpSocket {
     fn listen(&self, backlog: usize) -> SysResult<()> {
         info!("[tcp listen] backlog: {}", backlog);
         let sockmeta = self.sockmeta.lock();
-        let p = sockmeta.port.clone();
-        let local_end = sockmeta.local_end;
-        if p.is_none() || local_end.is_none() {
-            info!("[tcp listen] The socket is not bound to an address.");
-            return Err(Errno::EINVAL);
-        }
+        let p = sockmeta.port.clone().ok_or(Errno::EINVAL)?;
+        let local_end = sockmeta.local_end.ok_or(Errno::EINVAL)?;
 
         let mut binding = SOCKET_SET.lock();
         let socket = binding.get_mut::<tcp::Socket>(self.handle);
-        match socket.listen(local_end.unwrap()) {
+        match socket.listen(local_end) {
             Ok(_) => {
-                info!("[tcp listen] Listening on port: {}", p.unwrap().port);
+                info!("[tcp listen] Listening on port: {}", p.port);
                 *self.state.lock() = TcpState::Listen;
             }
             Err(_) => {
-                info!("[tcp listen] Failed to listen on port: {}", p.unwrap().port);
+                info!("[tcp listen] Failed to listen on port: {}", p.port);
                 return Err(Errno::EINVAL);
             }
         }
@@ -135,6 +132,27 @@ impl Socket for TcpSocket {
     }
     fn set_send_buf_size(&self, size: usize) -> SysResult<()> {
         self.sockmeta.lock().send_buf_size = size;
+        Ok(())
+    }
+    fn shutdown(&self, how: ShutHow) -> SysResult<()> {
+        let mut sockmeta = self.sockmeta.lock();
+        if *self.state.lock() == TcpState::Closed {
+            return Err(Errno::ENOTCONN);
+        }
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<tcp::Socket>(self.handle);
+        let cur_shuthow = sockmeta.shuthow;
+        match cur_shuthow {
+            Some(now) => sockmeta.shuthow = Some(now | how),
+            None => sockmeta.shuthow = Some(how),
+        }
+        match how {
+            ShutHow::SHUT_RD | ShutHow::SHUT_WR => socket.close(),
+            ShutHow::SHUT_RDWR => socket.abort(),
+            _ => info!("[shutdown] Invalid shutdown type"),
+        }
+        drop(binding);
+        NET_DEV.lock().poll();
         Ok(())
     }
 }

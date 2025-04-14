@@ -6,6 +6,8 @@ use crate::{
     utils::{Errno, SysResult}
 };
 
+use super::ffi::ShutHow;
+
 
 /// domain：即协议域，又称为协议族（family）, 协议族决定了socket的地址类型
 /// 常用的协议族有，AF_INET、AF_INET6、AF_LOCAL（或称AF_UNIX，Unix域socket）、AF_ROUTE等
@@ -54,6 +56,16 @@ pub fn sys_listen(sockfd: usize, backlog: usize) -> SysResult<usize> {
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket();
     socket.listen(backlog)?;
+
+    Ok(0)
+}
+
+pub fn sys_shutdown(sockfd: usize, how: u8) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+    let how = ShutHow::from_bits(how).ok_or(Errno::EINVAL)?;
+    socket.shutdown(how)?;
 
     Ok(0)
 }
