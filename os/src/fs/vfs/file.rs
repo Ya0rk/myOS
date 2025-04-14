@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
-use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{UserBuffer, page::Page}, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, net::Socket, utils::SysResult};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -53,6 +53,9 @@ pub trait FileTrait: Send + Sync {
     // TODO: 缓存未命中处理
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>>;
 
+    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
+        unimplemented!("not support!");
+    }
     fn set_flags(&self, flags: OpenFlags){
         unimplemented!("not support!");
     }

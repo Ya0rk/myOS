@@ -5,10 +5,12 @@ mod manager;
 pub mod ffi;
 pub mod socket;
 pub mod addr;
+pub mod dev;
 
 pub use socket::*;
 pub use ffi::*;
 pub use manager::*;
+pub use dev::*;
 
 use alloc::sync::Arc;
 use crate::fs::FileTrait;

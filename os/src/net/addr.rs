@@ -1,12 +1,20 @@
+use core::intrinsics::unlikely;
+
+use log::info;
+use smoltcp::wire::{IpAddress, IpEndpoint};
+
+use crate::utils::{Errno, SysResult};
+
 use super::{AF_INET6, AF_UNIX};
 
 
 /// 协议簇类型
-pub enum DomainType {
+#[derive(Debug, Clone, Copy)]
+pub enum SockAddr {
     Unspec,
-    Unix,
-    Inet4,
-    Inet6,
+    Unix(SockUnix),
+    Inet4(Ipv4),
+    Inet6(Ipv6),
 }
 
 #[derive(Clone, Copy)]
@@ -54,13 +62,81 @@ pub struct SockUnix {
     pub path: [u8; 108],
 }
 
-impl From<u16> for DomainType {
-    fn from(value: u16) -> Self {
+impl SockAddr {
+    pub fn from(addr: usize, addrlen: usize) -> Self {
+        if unlikely(addr == 0 || addrlen < core::mem::size_of::<u16>()) {
+            info!("[sockaddr from] transfer error, addr: {}, addrlen: {}", addr, addrlen);
+            return SockAddr::Unspec;
+        }
+
+        let family = unsafe { *(addr as *const u16) };
+        match family {
+            AF_UNIX => Self::parse_unix(addr, addrlen),
+            AF_INET => Self::parse_ipv4(addr, addrlen),
+            AF_INET6 => Self::parse_ipv6(addr, addrlen),
+            _ => SockAddr::Unspec
+        }
+    }
+
+    fn parse_unix(addr: usize, addrlen: usize) -> Self {
+        if unlikely(addrlen < core::mem::size_of::<SockUnix>()) {
+            info!("[sockaddr from] UNIX socket address too short");
+            return SockAddr::Unspec;
+        }
+        let addr = unsafe { *(addr as *const SockUnix) };
+        unsafe { SockAddr::Unix(addr) }
+    }
+
+    fn parse_ipv4(addr: usize, addrlen: usize) -> Self {
+        if unlikely(addrlen < core::mem::size_of::<Ipv4>()) {
+            info!("[sockaddr from] IPv4 socket address too short");
+            return SockAddr::Unspec;
+        }
+        let addr = unsafe { *(addr as *const Ipv4) };
+        unsafe { SockAddr::Inet4(addr) }
+    }
+
+    fn parse_ipv6(addr: usize, addrlen: usize) -> Self {
+        if unlikely(addrlen < core::mem::size_of::<Ipv6>()) {
+            info!("[sockaddr from] IPv6 socket address too short");
+            return SockAddr::Unspec;
+        }
+        let addr = unsafe { *(addr as *const Ipv6) };
+        unsafe { SockAddr::Inet6(addr) }
+    }
+}
+
+impl TryFrom<SockAddr> for IpEndpoint {
+    type Error = Errno;
+
+    fn try_from(value: SockAddr) -> Result<Self, Self::Error> {
         match value {
-            AF_UNIX => DomainType::Unix,
-            AF_INET => DomainType::Inet4,
-            AF_INET6 => DomainType::Inet6,
-            _ => DomainType::Unspec
+            SockAddr::Inet4(addr) => {
+                let ip = core::net::Ipv4Addr::new(
+                    addr.addr[0],
+                    addr.addr[1],
+                    addr.addr[2],
+                    addr.addr[3],
+                );
+                let port = addr.port;
+                Ok(IpEndpoint::new(ip.into(), port))
+            }
+            SockAddr::Inet6(addr) => {
+                let ip = core::net::Ipv6Addr::new(
+                    u16::from_be_bytes([addr.addr[0], addr.addr[1]]),
+                    u16::from_be_bytes([addr.addr[2], addr.addr[3]]),
+                    u16::from_be_bytes([addr.addr[4], addr.addr[5]]),
+                    u16::from_be_bytes([addr.addr[6], addr.addr[7]]),
+                    u16::from_be_bytes([addr.addr[8], addr.addr[9]]),
+                    u16::from_be_bytes([addr.addr[10], addr.addr[11]]),
+                    u16::from_be_bytes([addr.addr[12], addr.addr[13]]),
+                    u16::from_be_bytes([addr.addr[14], addr.addr[15]]),
+                );
+                let port = addr.port;
+                Ok(IpEndpoint::new(ip.into(), port))
+            }
+            SockAddr::Unix(addr) => todo!(),
+            _ => return Err(Errno::EINVAL),
         }
     }
 }

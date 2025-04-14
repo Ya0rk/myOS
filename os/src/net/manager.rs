@@ -3,7 +3,7 @@ use bitvec_rs::BitVec;
 use hashbrown::HashSet;
 use log::info;
 use smoltcp::iface::SocketSet;
-use crate::{sync::SpinNoIrqLock, utils::RNG};
+use crate::{sync::SpinNoIrqLock, utils::{Errno, SysResult, RNG}};
 use super::{addr::Sock, PORT_RANGE};
 
 lazy_static! {
@@ -29,29 +29,29 @@ impl PortManager {
             udp_used_ports: BitVec::from_elem(65536, false),
         }
     }
-    pub fn alloc(&mut self, domain: Sock) -> u16 {
+    fn alloc(&mut self, domain: Sock) -> SysResult<u16> {
         if let Some(port) = self.recycled.pop_front() {
             info!("[port alloc] recycled port: {}", port);
             self.mark_used(domain, port);
-            return port;
+            return Ok(port);
         }
 
         let chance = self.end - self.start - self.recycled.len() as u16;
         for _ in 0..chance {
             let random_port = self.start + (RNG.lock().next() % PORT_RANGE as u32) as u16;
             if self.try_mark_used(&domain, random_port) {
-                return random_port;
+                return Ok(random_port);
             }
         }
 
         for port in self.start..=self.end {
             if self.try_mark_used(&domain, port) {
-                return port;
+                return Ok(port);
             }
         }
-        panic!("no available port");
+        Err(Errno::EADDRINUSE)
     }
-    pub fn dealloc(&mut self, domain: Sock, port: u16) {
+    fn dealloc(&mut self, domain: Sock, port: u16) {
         info!("[port dealloc] port: {}", port);
         assert!(port >= self.start && port <= self.end, "port {} is out of range", port);
         self.recycled.push_back(port);
@@ -102,8 +102,7 @@ pub struct Port {
 }
 
 impl Port {
-    pub fn new(domain: Sock) -> Self {
-        let port = PORT_MANAGER.lock().alloc(domain);
+    pub fn new(domain: Sock, port: u16) -> Self {
         Port { port, domain }
     }
 }
@@ -118,4 +117,9 @@ impl Drop for Port {
     fn drop(&mut self) {
         PORT_MANAGER.lock().dealloc(self.domain, self.port);
     }
+}
+
+pub fn alloc_port(domain: Sock) -> SysResult<Port> {
+    let port = PORT_MANAGER.lock().alloc(domain)?;
+    Ok(Port { port, domain })
 }

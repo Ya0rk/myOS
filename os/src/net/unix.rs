@@ -1,7 +1,7 @@
 use alloc::{string::String, sync::Arc};
 use smoltcp::iface::SocketHandle;
 use crate::{fs::{FileMeta, InodeTrait, Kstat, Page, RenameFlags}, utils::SysResult};
-use super::{addr::DomainType, SockMeta, Socket};
+use super::{addr::SockAddr, SockMeta, Socket};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
@@ -14,13 +14,13 @@ pub struct UnixSocket {
 
 #[async_trait]
 impl Socket for UnixSocket {
-    async fn accept(&self, _addr: Option<&mut DomainType>) -> SysResult<Arc<dyn Socket>> {
+    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
         unimplemented!()
     }
-    fn bind(&self, _addr: &DomainType) -> SysResult<()> {
+    fn bind(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
-    fn connect(&self, _addr: &DomainType) -> SysResult<()> {
+    fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
     fn listen(&self, _backlog: usize) -> SysResult<()> {
@@ -36,6 +36,9 @@ impl Socket for UnixSocket {
 
 #[async_trait]
 impl FileTrait for UnixSocket {
+    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
+        self
+    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         unimplemented!()
     }

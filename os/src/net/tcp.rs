@@ -2,18 +2,25 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
 use async_trait::async_trait;
+use log::info;
 use lwext4_rust::bindings::BUFSIZ;
 use smoltcp::iface::SocketHandle;
 use smoltcp::socket::tcp;
 use smoltcp::wire::IpEndpoint;
+use spin::Spin;
 use crate::fs::FileMeta;
 use crate::fs::FileTrait;
 use crate::fs::RenameFlags;
 use crate::mm::UserBuffer;
 use crate::net::addr::Sock;
+use crate::net::alloc_port;
+use crate::net::PORT_MANAGER;
 use crate::net::SOCKET_SET;
+use crate::sync::SpinNoIrqLock;
+use crate::utils::Errno;
 use crate::utils::SysResult;
-use super::addr::DomainType;
+use super::addr::SockAddr;
+use super::Port;
 use super::Socket;
 use super::TcpState;
 use super::SockMeta;
@@ -24,9 +31,14 @@ use alloc::boxed::Box;
 pub struct TcpSocket {
     pub handle: SocketHandle,
     pub sockmeta: SockMeta,
+    pub inner: SpinNoIrqLock<TcpSockInner>,
+    pub state: TcpState,
+}
+
+struct TcpSockInner {
+    pub port: Option<Port>,
     pub local_end: Option<IpEndpoint>,
     pub remote_end: Option<IpEndpoint>,
-    pub state: TcpState,
 }
 
 impl TcpSocket {
@@ -38,12 +50,16 @@ impl TcpSocket {
             BUFF_SIZE,
             BUFF_SIZE,
         );
+        let inner = SpinNoIrqLock::new(TcpSockInner {
+            port: None,
+            local_end: None,
+            remote_end: None,
+        });
 
         Self {
             handle,
             sockmeta,
-            local_end: None,
-            remote_end: None,
+            inner,
             state: TcpState::Established,
         }
     }
@@ -61,13 +77,40 @@ impl TcpSocket {
 
 #[async_trait]
 impl Socket for TcpSocket {
-    async fn accept(&self, _addr: Option<&mut DomainType>) -> SysResult<Arc<dyn Socket>> {
+    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
         unimplemented!()
     }
-    fn bind(&self, _addr: &DomainType) -> SysResult<()> {
-        unimplemented!()
+    fn bind(&self, addr: &SockAddr) -> SysResult<()> {
+        let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        let mut inner = self.inner.lock();
+        if inner.local_end.is_some() {
+            info!("[bind] The socket is already bound to an address.");
+            return Err(Errno::EINVAL);
+        }
+        let mut p: Port;
+        let mut port_manager = PORT_MANAGER.lock();
+
+        if endpoint.port == 0 {
+            p = alloc_port(Sock::Tcp)?;
+            endpoint.port = p.port;
+        } else {
+            if port_manager.tcp_used_ports.get(endpoint.port as usize).unwrap() {
+                info!("[bind] The port {} is already in use.", endpoint.port);
+                return Err(Errno::EADDRINUSE);
+            }
+            p = Port::new(Sock::Tcp, endpoint.port);
+            port_manager.tcp_used_ports.set(endpoint.port as usize, true);
+        }
+        
+        drop(port_manager);
+        inner.local_end = Some(endpoint);
+        inner.port = Some(p);
+        drop(inner);
+
+        info!("[bind] bind to port: {}", endpoint.port);
+        Ok(())
     }
-    fn connect(&self, _addr: &DomainType) -> SysResult<()> {
+    fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
     fn listen(&self, _backlog: usize) -> SysResult<()> {
@@ -83,6 +126,9 @@ impl Socket for TcpSocket {
 
 #[async_trait]
 impl FileTrait for TcpSocket {
+    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
+        self
+    }
     fn get_inode(&self) -> Arc<dyn crate::fs::InodeTrait> {
         unimplemented!()
     }

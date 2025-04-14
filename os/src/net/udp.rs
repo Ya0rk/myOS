@@ -1,7 +1,7 @@
 use alloc::{string::String, sync::Arc, vec};
 use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer};
 use crate::{fs::{FileMeta, RenameFlags}, utils::SysResult};
-use super::{addr::{DomainType, Sock}, SockMeta, Socket, BUFF_SIZE, META_SIZE, SOCKET_SET};
+use super::{addr::{SockAddr, Sock}, SockMeta, Socket, BUFF_SIZE, META_SIZE, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
@@ -46,13 +46,13 @@ impl UdpSocket {
 
 #[async_trait]
 impl Socket for UdpSocket {
-    async fn accept(&self, _addr: Option<&mut DomainType>) -> SysResult<Arc<dyn Socket>> {
+    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
         unimplemented!()
     }
-    fn bind(&self, _addr: &DomainType) -> SysResult<()> {
+    fn bind(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
-    fn connect(&self, _addr: &DomainType) -> SysResult<()> {
+    fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
     fn listen(&self, _backlog: usize) -> SysResult<()> {
@@ -68,6 +68,9 @@ impl Socket for UdpSocket {
 
 #[async_trait]
 impl FileTrait for UdpSocket {
+    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
+        self
+    }
     fn get_inode(&self) -> Arc<dyn crate::fs::InodeTrait> {
         unimplemented!()
     }

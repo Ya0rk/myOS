@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use async_trait::async_trait;
 use crate::{fs::FileTrait, utils::{Errno, SysResult}};
 use alloc::boxed::Box;
-use super::{addr::{DomainType, Sock}, tcp::TcpSocket, udp::UdpSocket, SockClass, SocketType};
+use super::{addr::{Sock, SockAddr}, tcp::TcpSocket, udp::UdpSocket, SockClass, SocketType, AF_INET, AF_INET6};
 use smoltcp::socket::tcp;
 pub type TcpState = tcp::State;
 
@@ -26,11 +26,11 @@ impl SockMeta {
 #[async_trait]
 pub trait Socket: FileTrait {
 
-    async fn accept(&self, addr: Option<&mut DomainType>) -> SysResult<Arc<dyn Socket>>;
+    async fn accept(&self, addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>>;
 
-    fn bind(&self, addr: &DomainType) -> SysResult<()>;
+    fn bind(&self, addr: &SockAddr) -> SysResult<()>;
 
-    fn connect(&self, addr: &DomainType) -> SysResult<()>;
+    fn connect(&self, addr: &SockAddr) -> SysResult<()>;
 
     fn listen(&self, backlog: usize) -> SysResult<()>;
 
@@ -40,9 +40,9 @@ pub trait Socket: FileTrait {
 }
 
 impl dyn Socket {
-    pub fn new(family: DomainType, type_: SocketType) -> SysResult<SockClass> {
+    pub fn new(family: u16, type_: SocketType) -> SysResult<SockClass> {
         match family {
-            DomainType::Inet4 | DomainType::Inet6 => {
+            AF_INET | AF_INET6 => {
                 if type_.contains(SocketType::SOCK_STREAM) {
                     // 创建 TCP 套接字
                     let sockclass = SockClass::Tcp(Arc::new(TcpSocket::new()));
@@ -55,11 +55,11 @@ impl dyn Socket {
                     return Err(Errno::EINVAL);
                 }
             }
-            DomainType::Unix => {
+            AF_UNIX => {
                 // 创建 Unix 套接字
                 todo!()
             }
-            DomainType::Unspec => {
+            _ => {
                 return Err(Errno::EAFNOSUPPORT);
             }
         }
