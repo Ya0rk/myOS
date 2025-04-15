@@ -57,13 +57,19 @@ impl InodeTrait for Ext4Inode {
 
     /// 获取文件大小
     fn size(&self) -> usize {
+        // {info!("want to get size of {:?}", self.file.lock().file_path);}
         let mut lock_file = self.file.lock();
         let binding = lock_file.get_path();
         let path = binding.to_str().unwrap();
-        lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
-        let size = lock_file.file_size() as usize;
-        lock_file.file_close().expect("[ext4Inode new]: file close fail!");
-        size
+        if path == "/" || path == "/mnt" || path == "/lost+found"{
+            lock_file.file_size() as usize
+        } else {
+            lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
+            let size = lock_file.file_size() as usize;
+            lock_file.file_close().expect("[ext4Inode new]: file close fail!");
+            {info!("get size !");}
+            size
+        }
         // self.metadata.size.load(Ordering::Relaxed)
     }
 
@@ -203,13 +209,17 @@ impl InodeTrait for Ext4Inode {
     /// 如果存在就创建一个inode
     fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
+        // info!("{} walk path is {}", file.file_path.to_str().unwrap(), path);
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
+            info!("is a dir");
             let page_cache = None;
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
+            info!("is a file");
             let page_cache = Some(PageCache::new_bare());
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE, page_cache.clone()))
         } else {
+            info!("is nothing");
             None
         }
     }
@@ -219,7 +229,7 @@ impl InodeTrait for Ext4Inode {
             0 => self.size(),
             size => size
         };
-        // info!("[Ext4Inode] fstat size = {}", size);
+        info!("[Ext4Inode] fstat size = {}", size);
         let mut file = self.file.lock();
         // let size = self.size();
         match file.fstat() {
@@ -265,7 +275,7 @@ impl InodeTrait for Ext4Inode {
         ext4file.file_rename(&old_path, &new_path);
     }
 
-    fn read_dentry(&self) -> Option<Vec<Dirent>>{
+    fn read_dents(&self) -> Option<Vec<Dirent>>{
         let ext4_file = self.file.lock();
         let dirs = ext4_file.read_dir_from(0).unwrap();
         let mut dir_entrys = Vec::new();
