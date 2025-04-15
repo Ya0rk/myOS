@@ -25,6 +25,12 @@ pub enum Sock {
     Unspec,
 }
 
+#[derive(Clone, Copy)]
+pub enum IpType {
+    Ipv4,
+    Ipv6,
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Ipv4 {
@@ -112,6 +118,7 @@ impl TryFrom<SockAddr> for IpEndpoint {
     fn try_from(value: SockAddr) -> Result<Self, Self::Error> {
         match value {
             SockAddr::Inet4(addr) => {
+                // 构造大端序的ipv4地址
                 let ip = core::net::Ipv4Addr::new(
                     addr.addr[0],
                     addr.addr[1],
@@ -122,6 +129,7 @@ impl TryFrom<SockAddr> for IpEndpoint {
                 Ok(IpEndpoint::new(ip.into(), port))
             }
             SockAddr::Inet6(addr) => {
+                // 构造大端序的ipv6地址
                 let ip = core::net::Ipv6Addr::new(
                     u16::from_be_bytes([addr.addr[0], addr.addr[1]]),
                     u16::from_be_bytes([addr.addr[2], addr.addr[3]]),

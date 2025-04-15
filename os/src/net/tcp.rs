@@ -1,3 +1,5 @@
+use core::cell::UnsafeCell;
+
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -7,6 +9,8 @@ use lwext4_rust::bindings::BUFSIZ;
 use smoltcp::iface::SocketHandle;
 use smoltcp::socket;
 use smoltcp::socket::tcp;
+use smoltcp::socket::tcp::ConnectError;
+use smoltcp::wire::IpAddress;
 use smoltcp::wire::IpEndpoint;
 use spin::Spin;
 use crate::fs::FileMeta;
@@ -17,11 +21,14 @@ use crate::net::addr::Sock;
 use crate::net::alloc_port;
 use crate::net::PORT_MANAGER;
 use crate::net::SOCKET_SET;
+use crate::sync::yield_now;
 use crate::sync::SpinNoIrqLock;
 use crate::syscall::ShutHow;
 use crate::utils::Errno;
 use crate::utils::SysResult;
+use super::addr::IpType;
 use super::addr::SockAddr;
+use super::NetDev;
 use super::Port;
 use super::Socket;
 use super::TcpState;
@@ -37,13 +44,16 @@ pub struct TcpSocket {
     pub state: SpinNoIrqLock<TcpState>,
 }
 
+unsafe impl Sync for TcpSocket {}
+
 impl TcpSocket {
-    pub fn new() -> Self {
+    pub fn new(iptype: IpType) -> Self {
         let socket = Self::new_sock();
         let handle = SOCKET_SET.lock().add(socket);
         let sockmeta = SpinNoIrqLock::new(
             SockMeta::new(
                 Sock::Tcp,
+                iptype,
                 BUFF_SIZE,
                 BUFF_SIZE,
         ));
@@ -65,12 +75,83 @@ impl TcpSocket {
         );
         tcp::Socket::new(recv_buf, send_buf)
     }
+
+    fn do_connect(&self, remote_point: IpEndpoint) -> SysResult<TcpState> {
+        let local_end = self.whit_sockmeta(|sockmeta| {
+            sockmeta.remote_end = Some(remote_point);
+            sockmeta.local_end.unwrap()
+        });
+
+        let res = self.with_socket(|socket| {
+            let mut binding = NET_DEV.lock();
+            let context = binding.iface.context();
+            match socket.connect(
+            context,
+            local_end,
+            remote_point,
+            ) {
+                Err(ConnectError::InvalidState) => return Err(Errno::EISCONN),
+                Err(ConnectError::Unaddressable) => return Err(Errno::EADDRNOTAVAIL),
+                _ => return Ok(()),
+            }
+        });
+        match res {
+            Err(e) => {
+                info!("[do_connect] tcp connect err");
+                return Err(e);
+            }
+            _ => {}
+        }
+
+        let stat = self.with_socket(|socket| socket.state());
+
+        Ok(stat)
+    }
+
+    fn check_addr(&self, mut endpoint: IpEndpoint) -> SysResult<()> {
+        let mut sockmeta = self.sockmeta.lock();
+        match sockmeta.domain {
+            Sock::Tcp => {
+                if endpoint.addr.is_unspecified() {
+                    match sockmeta.iptype {
+                        IpType::Ipv4 => endpoint.addr = IpAddress::v4(127, 0, 0, 1),
+                        IpType::Ipv6 => endpoint.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1),
+                    }
+                }
+
+                
+            }
+            _ => return Err(Errno::EAFNOSUPPORT),
+        }
+        Ok(())
+    }
+}
+
+// 这里是一些闭包函数实现
+impl TcpSocket {
+    /// 对SOCKET_SET进行加锁，获取socket句柄，然后在回调中使用
+    fn with_socket<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut tcp::Socket<'_>) -> R,
+    {
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<tcp::Socket>(self.handle);
+        f(socket)
+    }
+
+    fn whit_sockmeta<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut SockMeta) -> R,
+    {
+        let mut sockmeta = self.sockmeta.lock();
+        f(&mut sockmeta)
+    }
 }
 
 #[async_trait]
 impl Socket for TcpSocket {
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
-        let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        let mut local_point = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
         let mut sockmeta = self.sockmeta.lock();
         if sockmeta.local_end.is_some() {
             info!("[bind] The socket is already bound to an address.");
@@ -79,24 +160,24 @@ impl Socket for TcpSocket {
         let mut p: Port;
         let mut port_manager = PORT_MANAGER.lock();
 
-        if endpoint.port == 0 {
+        if local_point.port == 0 {
             p = alloc_port(Sock::Tcp)?;
-            endpoint.port = p.port;
+            local_point.port = p.port;
         } else {
-            if port_manager.tcp_used_ports.get(endpoint.port as usize).unwrap() {
-                info!("[bind] The port {} is already in use.", endpoint.port);
+            if port_manager.tcp_used_ports.get(local_point.port as usize).unwrap() {
+                info!("[bind] The port {} is already in use.", local_point.port);
                 return Err(Errno::EADDRINUSE);
             }
-            p = Port::new(Sock::Tcp, endpoint.port);
-            port_manager.tcp_used_ports.set(endpoint.port as usize, true);
+            p = Port::new(Sock::Tcp, local_point.port);
+            port_manager.tcp_used_ports.set(local_point.port as usize, true);
         }
         
         drop(port_manager);
-        sockmeta.local_end = Some(endpoint);
+        sockmeta.local_end = Some(local_point);
         sockmeta.port = Some(p);
         drop(sockmeta);
 
-        info!("[bind] bind to port: {}", endpoint.port);
+        info!("[bind] bind to port: {}", local_point.port);
         Ok(())
     }
     fn listen(&self, backlog: usize) -> SysResult<()> {
@@ -123,8 +204,36 @@ impl Socket for TcpSocket {
     async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
         unimplemented!()
     }
-    fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
-        unimplemented!()
+    async fn connect(&self, addr: &SockAddr) -> SysResult<()> {
+        let mut remote_endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        self.check_addr(remote_endpoint)?;
+        // yield_now().await;
+
+        loop {
+            NET_DEV.lock().poll();
+            let state = self.do_connect(remote_endpoint)?;
+            match state {
+                TcpState::Established => {
+                    info!("[tcp connect] Connected to: {}", remote_endpoint);
+                    break;
+                }
+                TcpState::SynSent => {
+                    info!("[tcp connect] Connection in progress...");
+                    yield_now().await;
+                }
+                TcpState::Closed => {
+                    info!("[tcp connect] Connection closed, try again...");
+                    self.do_connect(remote_endpoint);
+                    yield_now().await;
+                }
+                _ => {
+                    info!("[tcp connect] Waiting for connection...");
+                    yield_now().await;
+                }
+            }
+        }
+
+        Ok(())
     }
     fn set_recv_buf_size(&self, size: usize) -> SysResult<()> {
         self.sockmeta.lock().recv_buf_size = size;

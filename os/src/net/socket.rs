@@ -6,7 +6,7 @@ use crate::{
 };
 use alloc::boxed::Box;
 use super::{
-    addr::{Sock, SockAddr}, 
+    addr::{IpType, Sock, SockAddr}, 
     tcp::TcpSocket, udp::UdpSocket, Port, SockClass, SocketType, AF_INET, AF_INET6
 };
 use smoltcp::{socket::tcp, wire::IpEndpoint};
@@ -14,6 +14,7 @@ pub type TcpState = tcp::State;
 
 pub struct SockMeta {
     pub domain: Sock,
+    pub iptype: IpType,
     pub recv_buf_size: usize,
     pub send_buf_size: usize,
     pub port: Option<Port>,
@@ -23,9 +24,10 @@ pub struct SockMeta {
 }
 
 impl SockMeta {
-    pub fn new(domain: Sock, recv_buf_size: usize, send_buf_size: usize) -> Self {
+    pub fn new(domain: Sock, iptype: IpType, recv_buf_size: usize, send_buf_size: usize) -> Self {
         Self {
             domain,
+            iptype,
             recv_buf_size,
             send_buf_size,
             port: None,
@@ -44,7 +46,7 @@ pub trait Socket: FileTrait {
 
     fn bind(&self, addr: &SockAddr) -> SysResult<()>;
 
-    fn connect(&self, addr: &SockAddr) -> SysResult<()>;
+    async fn connect(&self, addr: &SockAddr) -> SysResult<()>;
 
     fn listen(&self, backlog: usize) -> SysResult<()>;
 
@@ -56,28 +58,24 @@ pub trait Socket: FileTrait {
 }
 
 impl dyn Socket {
-    pub fn new(family: u16, type_: SocketType) -> SysResult<SockClass> {
+    pub fn new(family: u16, socket_type: SocketType) -> SysResult<SockClass> {
         match family {
-            AF_INET | AF_INET6 => {
-                if type_.contains(SocketType::SOCK_STREAM) {
-                    // 创建 TCP 套接字
-                    let sockclass = SockClass::Tcp(Arc::new(TcpSocket::new()));
-                    Ok(sockclass)
-                } else if type_.contains(SocketType::SOCK_DGRAM) {
-                    // 创建 UDP 套接字
-                    let sockclass = SockClass::Udp(Arc::new(UdpSocket::new()));
-                    Ok(sockclass)
-                } else {
-                    return Err(Errno::EINVAL);
-                }
+            AF_INET =>  Self::new_socket(IpType::Ipv4, socket_type),
+            AF_INET6 => Self::new_socket(IpType::Ipv6, socket_type),
+            AF_UNIX => todo!(),
+            _ => return Err(Errno::EAFNOSUPPORT),
+        }
+    }
+
+    fn new_socket(ip_type: IpType, socket_type: SocketType) -> SysResult<SockClass> {
+        match socket_type {
+            ty if ty.contains(SocketType::SOCK_STREAM) => {
+                Ok(SockClass::Tcp(Arc::new(TcpSocket::new(ip_type))))
             }
-            AF_UNIX => {
-                // 创建 Unix 套接字
-                todo!()
+            ty if ty.contains(SocketType::SOCK_DGRAM) => {
+                Ok(SockClass::Udp(Arc::new(UdpSocket::new(ip_type))))
             }
-            _ => {
-                return Err(Errno::EAFNOSUPPORT);
-            }
+            _ => Err(Errno::EINVAL),
         }
     }
 }

@@ -69,3 +69,33 @@ pub fn sys_shutdown(sockfd: usize, how: u8) -> SysResult<usize> {
 
     Ok(0)
 }
+
+/// tcp客户端连接到tcp服务器
+/// The connect() system call connects the socket referred to by the
+/// file descriptor sockfd to the address specified by addr.  The
+/// addrlen argument specifies the size of addr.  The format of the
+/// address in addr is determined by the address space of the socket
+/// sockfd; see socket(2) for further details.
+/// 
+/// If the socket sockfd is of type SOCK_DGRAM, then addr is the
+/// address to which datagrams are sent by default, and the only
+/// address from which datagrams are received.  If the socket is of
+/// type SOCK_STREAM or SOCK_SEQPACKET, this call attempts to make a
+/// connection to the socket that is bound to the address specified by
+/// addr.
+pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+    let sockaddr = SockAddr::from(addr, addrlen);
+    match sockaddr {
+        SockAddr::Unspec => {
+            info!("[sys_connect] invalid sockaddr");
+            return Err(Errno::EINVAL);
+        }
+        _ => {}
+    }
+    socket.connect(&sockaddr).await?;
+
+    Ok(0)
+}

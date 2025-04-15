@@ -1,14 +1,15 @@
-use alloc::{collections::vec_deque::VecDeque, vec::Vec};
+use alloc::{collections::vec_deque::VecDeque};
+use alloc::vec;
 use bitvec_rs::BitVec;
 use hashbrown::HashSet;
 use log::info;
-use smoltcp::iface::SocketSet;
+use smoltcp::iface::{SocketHandle, SocketSet};
 use crate::{sync::SpinNoIrqLock, utils::{Errno, SysResult, RNG}};
 use super::{addr::Sock, PORT_RANGE};
 
 lazy_static! {
     pub static ref PORT_MANAGER: SpinNoIrqLock<PortManager> = SpinNoIrqLock::new(PortManager::new());
-    pub static ref SOCKET_SET: SpinNoIrqLock<SocketSet<'static>> = SpinNoIrqLock::new(SocketSet::new(Vec::new()));
+    pub static ref SOCKET_SET: SpinNoIrqLock<SocketSet<'static>> = SpinNoIrqLock::new(SocketSet::new(vec![]));
 }
 
 pub struct PortManager {

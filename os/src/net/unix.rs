@@ -22,7 +22,7 @@ impl Socket for UnixSocket {
     fn bind(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
-    fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
+    async fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
     fn listen(&self, _backlog: usize) -> SysResult<()> {

@@ -1,8 +1,8 @@
 use alloc::{string::String, sync::Arc, vec};
 use log::info;
-use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer, wire::IpEndpoint};
+use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer, wire::{IpAddress, IpEndpoint}};
 use crate::{fs::{FileMeta, RenameFlags}, sync::SpinNoIrqLock, syscall::ShutHow, utils::{Errno, SysResult}};
-use super::{addr::{Sock, SockAddr}, alloc_port, Port, SockMeta, Socket, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
+use super::{addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, alloc_port, Port, SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
@@ -15,12 +15,13 @@ pub struct UdpSocket {
 }
 
 impl UdpSocket {
-    pub fn new() -> Self {
+    pub fn new(iptype: IpType) -> Self {
         let socket = Self::new_socket();
         let handle = SOCKET_SET.lock().add(socket);
         let sockmeta = SpinNoIrqLock::new(
             SockMeta::new(
                 Sock::Udp,
+                iptype,
                 BUFF_SIZE,
                 BUFF_SIZE,
             )
@@ -47,12 +48,45 @@ impl UdpSocket {
             send_buf,
         )
     }
+
+    /// 这里不只是要检查地址，还要本地是否绑定local end，没有的话就bind一个
+    fn check_addr(&self, mut endpoint: IpEndpoint) -> SysResult<()> {
+        let mut sockmeta = self.sockmeta.lock();
+        match sockmeta.domain {
+            Sock::Udp => {
+                if endpoint.addr.is_unspecified() {
+                    match sockmeta.iptype {
+                        IpType::Ipv4 => endpoint.addr = IpAddress::v4(127, 0, 0, 1),
+                        IpType::Ipv6 => endpoint.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1),
+                    }
+                }
+            }
+            _ => return Err(Errno::EAFNOSUPPORT),
+        }
+        
+        if sockmeta.local_end.is_none() {
+            match sockmeta.iptype {
+                IpType::Ipv4 => {
+                    let addr = SockAddr::Inet4(Ipv4 {
+                        family: AF_INET,
+                        port: 0,
+                        addr: [127, 0, 0, 1],
+                        zero: [0u8; 8],
+                    });
+                    self.bind(&addr);
+                }
+                IpType::Ipv6 => todo!(),
+            };
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
 impl Socket for UdpSocket {
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
-        NET_DEV.lock().poll();
+        // NET_DEV.lock().poll();
         let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
         let mut sockmeta = self.sockmeta.lock();
         if sockmeta.port.is_some() {
@@ -94,14 +128,20 @@ impl Socket for UdpSocket {
     async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
         unimplemented!()
     }
-    fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
-        unimplemented!()
+    async fn connect(&self, addr: &SockAddr) -> SysResult<()> {
+        /// 与TCP不同，UDP的connect函数不会引发三次握手，而是将目标IP和端口记录下来
+        let remote_endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        self.check_addr(remote_endpoint);
+        self.sockmeta.lock().remote_end = Some(remote_endpoint);
+        Ok(())
     }
-    fn set_recv_buf_size(&self, _size: usize) -> SysResult<()> {
-        unimplemented!()
+    fn set_recv_buf_size(&self, size: usize) -> SysResult<()> {
+        self.sockmeta.lock().recv_buf_size = size;
+        Ok(())
     }
-    fn set_send_buf_size(&self, _size: usize) -> SysResult<()> {
-        unimplemented!()
+    fn set_send_buf_size(&self, size: usize) -> SysResult<()> {
+        self.sockmeta.lock().send_buf_size = size;
+        Ok(())
     }
     fn shutdown(&self, how: ShutHow) -> SysResult<()> {
         let mut binding = SOCKET_SET.lock();
