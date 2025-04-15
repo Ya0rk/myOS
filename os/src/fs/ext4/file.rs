@@ -164,7 +164,7 @@ impl FileTrait for NormalFile {
         self.metadata.inode.is_dir()
     }
 
-    fn read_dentry(&self, mut ub: UserBuffer, len: usize) -> usize {
+    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
         if !self.is_dir() {
             return 0;
         }
@@ -187,7 +187,7 @@ impl FileTrait for NormalFile {
         //     dir_entrys.push(entry);
         // }
         // Some(dir_entrys)
-        let dentrys = self.metadata.inode.read_dentry();
+        let dentrys = self.metadata.inode.read_dents();
         let dentrys = match dentrys {
             Some(x) => x,
             _ => return 0,
