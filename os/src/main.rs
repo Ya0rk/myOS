@@ -44,6 +44,7 @@ pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
+use log::info;
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
@@ -74,13 +75,17 @@ pub fn rust_main(hart_id: usize) -> ! {
 
         mm::init(true);
         println!("finished mm::init");
+        utils::logger_init();
+
         #[cfg(feature = "test")]
         {
             // mm::remap_test();
+            info!("start path test");
             fs::path_test();
+            info!(" start dentry test");
+            fs::vfs::dentry_test();
         }
 
-        utils::logger_init();
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
