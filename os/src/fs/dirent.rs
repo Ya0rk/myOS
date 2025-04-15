@@ -10,7 +10,7 @@ pub struct Dirent {
     d_off: i64,        // 从 0 开始到下一个 dirent 的偏移
     d_reclen: u16,     // 当前 dirent 的长度
     d_type: u8,        // 文件类型
-    d_name: [u8; 256], // 文件名
+    pub d_name: [u8; 256], // 文件名
 }
 
 impl Dirent {
