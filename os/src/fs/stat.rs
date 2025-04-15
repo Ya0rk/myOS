@@ -2,6 +2,7 @@ use lwext4_rust::bindings::ext4_inode_stat;
 
 use crate::{config::BLOCK_SIZE, sync::TimeSpec};
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct Kstat {
     pub st_dev: u32,   // 包含文件的设备 ID
