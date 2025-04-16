@@ -2,11 +2,13 @@ mod tcp;
 mod udp;
 mod unix;
 mod manager;
+mod net_async;
 pub mod ffi;
 pub mod socket;
 pub mod addr;
 pub mod dev;
 
+use net_async::*;
 pub use socket::*;
 pub use ffi::*;
 pub use manager::*;
@@ -18,7 +20,7 @@ pub enum SockClass {
     Tcp(Arc<tcp::TcpSocket>),
     Udp(Arc<udp::UdpSocket>),
     Unix(Arc<unix::UnixSocket>),
-    Unspec(),
+    Unspec(), 
 }
 
 impl SockClass {

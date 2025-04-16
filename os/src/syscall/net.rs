@@ -99,3 +99,22 @@ pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResul
 
     Ok(0)
 }
+
+/// accept函数的第一个参数为服务器的socket描述字，第二个参数为指向struct sockaddr *的指针，
+/// 用于返回客户端的协议地址，第三个参数为协议地址的长度。
+/// 如果accpet成功，那么其返回值是由内核自动生成的一个全新的描述字，代表与返回客户的TCP连接。
+/// 
+/// 注意：accept的第一个参数为服务器的socket描述字，是服务器开始调用socket()函数生成的，称为监听socket描述字；
+/// 而accept函数返回的是 已连接的socket描述字。一个服务器通常通常仅仅只创建一个监听socket描述字，
+/// 它在该服务器的生命周期内一直存在。内核为每个由服务器进程接受的客户连接创建了一个已连接socket描述字，
+/// 当服务器完成了对某个客户的服务，相应的已连接socket描述字就被关闭.
+pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
+    let addr = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, addrlen) };
+    let task = current_task().unwrap();
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let flags = file.get_flags();
+    let socket = file.get_socket();
+
+
+    todo!()
+}

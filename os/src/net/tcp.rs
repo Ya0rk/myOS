@@ -15,10 +15,12 @@ use smoltcp::wire::IpEndpoint;
 use spin::Spin;
 use crate::fs::FileMeta;
 use crate::fs::FileTrait;
+use crate::fs::OpenFlags;
 use crate::fs::RenameFlags;
 use crate::mm::UserBuffer;
 use crate::net::addr::Sock;
 use crate::net::alloc_port;
+use crate::net::net_async::TcpAcceptFuture;
 use crate::net::PORT_MANAGER;
 use crate::net::SOCKET_SET;
 use crate::sync::yield_now;
@@ -40,6 +42,7 @@ use alloc::boxed::Box;
 /// TCP 是一种面向连接的字节流套接字
 pub struct TcpSocket {
     pub handle: SocketHandle,
+    pub flags: OpenFlags,
     pub sockmeta: SpinNoIrqLock<SockMeta>,
     pub state: SpinNoIrqLock<TcpState>,
 }
@@ -47,7 +50,11 @@ pub struct TcpSocket {
 unsafe impl Sync for TcpSocket {}
 
 impl TcpSocket {
-    pub fn new(iptype: IpType) -> Self {
+    pub fn new(iptype: IpType, non_block_flags: Option<OpenFlags>) -> Self {
+        let flags = match non_block_flags {
+            Some(noblock) => noblock | OpenFlags::O_RDWR,
+            None => OpenFlags::O_RDWR,
+        };
         let socket = Self::new_sock();
         let handle = SOCKET_SET.lock().add(socket);
         let sockmeta = SpinNoIrqLock::new(
@@ -61,6 +68,7 @@ impl TcpSocket {
         // NET_DEV.lock().poll();
         Self {
             handle,
+            flags,
             sockmeta,
             state: SpinNoIrqLock::new(TcpState::Closed),
         }
@@ -125,12 +133,16 @@ impl TcpSocket {
         }
         Ok(())
     }
+
+    pub fn set_state(&self, state: TcpState) {
+        *self.state.lock() = state;
+    }
 }
 
 // 这里是一些闭包函数实现
 impl TcpSocket {
     /// 对SOCKET_SET进行加锁，获取socket句柄，然后在回调中使用
-    fn with_socket<F, R>(&self, f: F) -> R
+    pub fn with_socket<F, R>(&self, f: F) -> R
     where
         F: FnOnce(&mut tcp::Socket<'_>) -> R,
     {
@@ -191,7 +203,7 @@ impl Socket for TcpSocket {
         match socket.listen(local_end) {
             Ok(_) => {
                 info!("[tcp listen] Listening on port: {}", p.port);
-                *self.state.lock() = TcpState::Listen;
+                self.set_state(TcpState::Listen);
             }
             Err(_) => {
                 info!("[tcp listen] Failed to listen on port: {}", p.port);
@@ -201,7 +213,15 @@ impl Socket for TcpSocket {
 
         Ok(())
     }
-    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
+    async fn accept(&self, addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn FileTrait>> {
+        if *self.state.lock() != TcpState::Listen {
+            return Err(Errno::EINVAL);
+        }
+
+        let remote_end = TcpAcceptFuture::new(self).await?;
+        
+
+
         unimplemented!()
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {

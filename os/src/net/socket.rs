@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use async_trait::async_trait;
 use crate::{
-    fs::FileTrait, syscall::ShutHow, 
+    fs::{FileTrait, OpenFlags}, syscall::ShutHow, 
     utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
@@ -42,7 +42,7 @@ impl SockMeta {
 #[async_trait]
 pub trait Socket: FileTrait {
 
-    async fn accept(&self, addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>>;
+    async fn accept(&self, addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn FileTrait>>;
 
     fn bind(&self, addr: &SockAddr) -> SysResult<()>;
 
@@ -70,7 +70,11 @@ impl dyn Socket {
     fn new_socket(ip_type: IpType, socket_type: SocketType) -> SysResult<SockClass> {
         match socket_type {
             ty if ty.contains(SocketType::SOCK_STREAM) => {
-                Ok(SockClass::Tcp(Arc::new(TcpSocket::new(ip_type))))
+                let mut non_block_flags = None;
+                if socket_type.contains(SocketType::SOCK_NONBLOCK) {
+                    non_block_flags = Some(OpenFlags::O_NONBLOCK);
+                }
+                Ok(SockClass::Tcp(Arc::new(TcpSocket::new(ip_type, non_block_flags))))
             }
             ty if ty.contains(SocketType::SOCK_DGRAM) => {
                 Ok(SockClass::Udp(Arc::new(UdpSocket::new(ip_type))))

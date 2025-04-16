@@ -1,7 +1,7 @@
 use alloc::{string::String, sync::Arc, vec};
 use log::info;
 use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer, wire::{IpAddress, IpEndpoint}};
-use crate::{fs::{FileMeta, RenameFlags}, sync::SpinNoIrqLock, syscall::ShutHow, utils::{Errno, SysResult}};
+use crate::{fs::{FileMeta, OpenFlags, RenameFlags}, sync::SpinNoIrqLock, syscall::ShutHow, utils::{Errno, SysResult}};
 use super::{addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, alloc_port, Port, SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
@@ -11,6 +11,7 @@ use async_trait::async_trait;
 /// UDP 是一种无连接的报文套接字
 pub struct UdpSocket {
     pub handle: SocketHandle,
+    pub flags: OpenFlags,
     pub sockmeta: SpinNoIrqLock<SockMeta>,
 }
 
@@ -30,6 +31,7 @@ impl UdpSocket {
         // NET_DEV.lock().poll();
         Self {
             handle,
+            flags: OpenFlags::O_RDWR,
             sockmeta,
         }
     }
@@ -125,7 +127,7 @@ impl Socket for UdpSocket {
     fn listen(&self, _backlog: usize) -> SysResult<()> {
         Err(Errno::EOPNOTSUPP)
     }
-    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn Socket>> {
+    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn FileTrait>> {
         unimplemented!()
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {

@@ -56,6 +56,8 @@ impl NetDev {
     }
 
     /// 用于接受和发送数据包
+    /// 处理网络接口的事件，包括接收和发送数据包，以及更新套接字的状态。
+    /// 它是网络栈的核心循环，用于驱动网络接口的操作
     pub fn poll(&mut self) {
         let instant = Instant::from_millis(get_time_ms() as i64);
         let mut socket = SOCKET_SET.lock();
