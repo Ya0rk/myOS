@@ -1,8 +1,11 @@
 use alloc::{string::String, sync::Arc};
 use log::info;
-use smoltcp::iface::SocketHandle;
-use crate::{fs::{FileMeta, InodeTrait, Kstat, OpenFlags, Page, RenameFlags}, sync::SpinNoIrqLock, syscall::ShutHow, utils::SysResult};
-use super::{addr::SockAddr, SockMeta, Socket};
+use smoltcp::{iface::SocketHandle, wire::IpEndpoint};
+use crate::{
+    fs::{FileMeta, InodeTrait, Kstat, OpenFlags, Page, RenameFlags}, 
+    sync::SpinNoIrqLock, syscall::ShutHow, utils::SysResult
+};
+use super::{addr::{IpType, SockAddr}, SockMeta, Socket};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
@@ -16,7 +19,7 @@ pub struct UnixSocket {
 
 #[async_trait]
 impl Socket for UnixSocket {
-    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn FileTrait>> {
+    async fn accept(&self) -> SysResult<(IpEndpoint, usize)> {
         unimplemented!()
     }
     fn bind(&self, _addr: &SockAddr) -> SysResult<()> {

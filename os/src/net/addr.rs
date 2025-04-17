@@ -1,11 +1,11 @@
-use core::intrinsics::unlikely;
+use core::{intrinsics::unlikely, ptr::copy_nonoverlapping};
 
 use log::info;
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
 use crate::utils::{Errno, SysResult};
 
-use super::{AF_INET6, AF_UNIX};
+use super::{AF_INET, AF_INET6, AF_UNIX};
 
 
 /// 协议簇类型
@@ -16,6 +16,43 @@ pub enum SockAddr {
     Inet4(Ipv4),
     Inet6(Ipv6),
 }
+
+impl SockAddr {
+    pub fn write2user(&self, buf: &mut [u8], len: usize) -> SysResult<()> {
+        match self {
+            SockAddr::Inet4(addr) => {
+                if len < core::mem::size_of::<Ipv4>() {
+                    return Err(Errno::EINVAL);
+                }
+                // 安全地拷贝 Ipv4 结构体到 buf
+                unsafe {
+                    copy_nonoverlapping(
+                        addr as *const Ipv4 as *const u8,
+                        buf.as_mut_ptr(),
+                        core::mem::size_of::<Ipv4>(),
+                    );
+                }
+               return Ok(());
+            },
+            SockAddr::Inet6(addr) => {
+                if len < core::mem::size_of::<Ipv6>() {
+                    return Err(Errno::EINVAL);
+                }
+                // 安全地拷贝 Ipv6 结构体到 buf
+                unsafe {
+                    copy_nonoverlapping(
+                        addr as *const Ipv6 as *const u8,
+                        buf.as_mut_ptr(),
+                        core::mem::size_of::<Ipv6>(),
+                    );
+                }
+               return Ok(());
+            },
+            _ => return Err(Errno::EAFNOSUPPORT),
+        }
+    }
+}
+
 
 #[derive(Clone, Copy)]
 pub enum Sock {
@@ -44,6 +81,17 @@ pub struct Ipv4 {
     pub zero: [u8; 8],
 }
 
+impl Ipv4 {
+    pub fn new(port: u16, addr: [u8; 4]) -> Self {
+        Self {
+            family: AF_INET,
+            port,
+            addr,
+            zero: [0u8; 8],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct Ipv6 {
@@ -57,6 +105,18 @@ pub struct Ipv6 {
     pub addr: [u8; 16],
     /// IPv6 的范围ID
     pub scope_id: u32,
+}
+
+impl Ipv6 {
+    pub fn new(port: u16, addr: [u8; 16]) -> Self {
+        Self {
+            family: AF_INET6,
+            port,
+            flowinfo: 0, 
+            addr,
+            scope_id: 0,
+        }
+    }
 }
 
 #[repr(C)]

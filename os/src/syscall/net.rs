@@ -1,9 +1,8 @@
 use log::info;
+use smoltcp::wire::IpAddress;
 
 use crate::{
-    net::{addr::SockAddr, Socket, SocketType}, 
-    task::{current_task, sock_map_fd}, 
-    utils::{Errno, SysResult}
+    fs::FileTrait, net::{addr::{IpType, Ipv4, Ipv6, SockAddr}, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX}, task::{current_task, sock_map_fd}, utils::{Errno, SysResult}
 };
 
 use super::ffi::ShutHow;
@@ -109,12 +108,31 @@ pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResul
 /// 它在该服务器的生命周期内一直存在。内核为每个由服务器进程接受的客户连接创建了一个已连接socket描述字，
 /// 当服务器完成了对某个客户的服务，相应的已连接socket描述字就被关闭.
 pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
-    let addr = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, addrlen) };
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let flags = file.get_flags();
     let socket = file.get_socket();
 
+    let (remote_end, newfd) = socket.accept().await?;
+    // 将remote_end保存在addr中
+    let buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, addrlen) };
+    let user_sockaddr = match remote_end.addr {
+        IpAddress::Ipv4(addr) => {
+            let port = remote_end.port;
+            let addr = addr.octets();
+            let temp = SockAddr::Inet4(Ipv4::new(port, addr));
+            temp
+        }
+        IpAddress::Ipv6(addr) => {
+            let port = remote_end.port;
+            let addr = addr.octets();
+            let temp = SockAddr::Inet6(Ipv6::new(port, addr));
+            temp
+        }
+    };
 
-    todo!()
+    user_sockaddr.write2user(buf, addrlen)?;
+    info!("[sys_accept] new sockfd: {}", newfd);
+
+    Ok(newfd)
 }

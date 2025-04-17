@@ -26,6 +26,7 @@ use crate::net::SOCKET_SET;
 use crate::sync::yield_now;
 use crate::sync::SpinNoIrqLock;
 use crate::syscall::ShutHow;
+use crate::task::sock_map_fd;
 use crate::utils::Errno;
 use crate::utils::SysResult;
 use super::addr::IpType;
@@ -82,6 +83,32 @@ impl TcpSocket {
             vec![0; BUFF_SIZE]
         );
         tcp::Socket::new(recv_buf, send_buf)
+    }
+
+    pub fn do_bind(&self, mut local_point: IpEndpoint) -> SysResult<()> {
+        let mut sockmeta = self.sockmeta.lock();
+        let mut p: Port;
+        let mut port_manager = PORT_MANAGER.lock();
+
+        if local_point.port == 0 {
+            p = alloc_port(Sock::Tcp)?;
+            local_point.port = p.port;
+        } else {
+            if port_manager.tcp_used_ports.get(local_point.port as usize).unwrap() {
+                info!("[bind] The port {} is already in use.", local_point.port);
+                return Err(Errno::EADDRINUSE);
+            }
+            p = Port::new(Sock::Tcp, local_point.port);
+            port_manager.tcp_used_ports.set(local_point.port as usize, true);
+        }
+        
+        drop(port_manager);
+        sockmeta.local_end = Some(local_point);
+        sockmeta.port = Some(p);
+        drop(sockmeta);
+
+        info!("[bind] bind to port: {}", local_point.port);
+        Ok(())
     }
 
     fn do_connect(&self, remote_point: IpEndpoint) -> SysResult<TcpState> {
@@ -169,27 +196,8 @@ impl Socket for TcpSocket {
             info!("[bind] The socket is already bound to an address.");
             return Err(Errno::EINVAL);
         }
-        let mut p: Port;
-        let mut port_manager = PORT_MANAGER.lock();
-
-        if local_point.port == 0 {
-            p = alloc_port(Sock::Tcp)?;
-            local_point.port = p.port;
-        } else {
-            if port_manager.tcp_used_ports.get(local_point.port as usize).unwrap() {
-                info!("[bind] The port {} is already in use.", local_point.port);
-                return Err(Errno::EADDRINUSE);
-            }
-            p = Port::new(Sock::Tcp, local_point.port);
-            port_manager.tcp_used_ports.set(local_point.port as usize, true);
-        }
-        
-        drop(port_manager);
-        sockmeta.local_end = Some(local_point);
-        sockmeta.port = Some(p);
         drop(sockmeta);
-
-        info!("[bind] bind to port: {}", local_point.port);
+        self.do_bind(local_point)?;
         Ok(())
     }
     fn listen(&self, backlog: usize) -> SysResult<()> {
@@ -213,16 +221,23 @@ impl Socket for TcpSocket {
 
         Ok(())
     }
-    async fn accept(&self, addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn FileTrait>> {
+    async fn accept(&self) -> SysResult<(IpEndpoint, usize)> {
         if *self.state.lock() != TcpState::Listen {
             return Err(Errno::EINVAL);
         }
 
         let remote_end = TcpAcceptFuture::new(self).await?;
-        
+        let ip_type = self.sockmeta.lock().iptype;
+        let local_end = self.sockmeta.lock().local_end.expect("[tcp accept] no local end");
 
+        let newsock = TcpSocket::new(ip_type, None);
+        newsock.do_bind(local_end)?;
+        newsock.listen(10)?;
+        let newsock = Arc::new(newsock);
+        let newfd = sock_map_fd(newsock, false)
+            .map_err(|_| Errno::EAFNOSUPPORT)?;
 
-        unimplemented!()
+        Ok((remote_end, newfd))
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {
         let mut remote_endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;

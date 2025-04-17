@@ -42,7 +42,7 @@ impl SockMeta {
 #[async_trait]
 pub trait Socket: FileTrait {
 
-    async fn accept(&self, addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn FileTrait>>;
+    async fn accept(&self) -> SysResult<(IpEndpoint, usize)>;
 
     fn bind(&self, addr: &SockAddr) -> SysResult<()>;
 

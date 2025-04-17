@@ -1,14 +1,15 @@
-mod tcp;
 mod udp;
 mod unix;
 mod manager;
 mod net_async;
+pub mod tcp;
 pub mod ffi;
 pub mod socket;
 pub mod addr;
 pub mod dev;
 
 use net_async::*;
+pub use tcp::*;
 pub use socket::*;
 pub use ffi::*;
 pub use manager::*;

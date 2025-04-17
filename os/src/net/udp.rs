@@ -127,7 +127,7 @@ impl Socket for UdpSocket {
     fn listen(&self, _backlog: usize) -> SysResult<()> {
         Err(Errno::EOPNOTSUPP)
     }
-    async fn accept(&self, _addr: Option<&mut SockAddr>) -> SysResult<Arc<dyn FileTrait>> {
+    async fn accept(&self) -> SysResult<(IpEndpoint, usize)> {
         unimplemented!()
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {
