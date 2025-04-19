@@ -9,7 +9,7 @@ use alloc::{format, string::{String, ToString}, vec::Vec};
 /// Represents a file system path.
 /// 
 /// This structure wraps a string and provides various operations for path manipulation.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Path {
     /// The underlying path string
     content: String,
@@ -34,7 +34,7 @@ impl Path {
     /// assert_eq!(parent, "/home/user");
     /// assert_eq!(child, "file.txt");
     /// ```
-    pub fn split_with(self, delima: &str) -> (String, String) {
+    pub fn split_last_with(&self, delima: &str) -> (String, String) {
         let binding = self.get();
         let s = binding.as_str();
         let (mut parent_path, child_name) = s.rsplit_once(delima).unwrap();
@@ -105,6 +105,12 @@ impl Path {
                 path.to_string()
             }
         }
+    }
+
+    // 获取到parent的绝对路径，/a/b/c/d结果为/a/b/c
+    pub fn get_parent_abs(&self) -> String {
+        let (parent_path, child_name) = self.split_last_with("/");
+        parent_path
     }
 }
 

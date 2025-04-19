@@ -28,7 +28,8 @@ bitflags! {
         const O_RSYNC       = 0o4010000;
         const O_DIRECTORY   = 0o200000;
         const O_NOFOLLOW    = 0o400000;
-        /// set close_on_exec 
+        /// set close_on_exec
+        /// O_CLOEXEC是一个open函数的选项，它决定了新打开的文件描述符是否会在调用execve后自动关闭
         const O_CLOEXEC     = 0o2000000;
 
         const O_ASYNC       = 0o20000;
@@ -83,11 +84,11 @@ impl OpenFlags {
         self.contains(OpenFlags::O_WRONLY) || self.contains(OpenFlags::O_RDWR)
     }
 
-    pub fn node_type(&self) -> InodeType {
+    pub fn node_type(&self) -> InodeTypes {
         if self.contains(OpenFlags::O_DIRECTORY) {
-            InodeType::Dir
+            InodeTypes::EXT4_DE_DIR
         } else {
-            InodeType::File
+            InodeTypes::EXT4_DE_REG_FILE
         }
     }
 }

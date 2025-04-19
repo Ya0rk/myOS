@@ -40,17 +40,3 @@ impl ProgramHeaderChecker for ProgramHeader<'_> {
     }
 }
 
-// impl AccessFlags for Flags {
-//     fn readable(&self) -> bool {
-//         self.is_read()
-//     }
-//     fn writable(&self) -> bool {
-//         self.is_write()
-//     }
-//     fn executable(&self) -> bool {
-//         self.is_execute()
-//     }
-
-    
-// }
-

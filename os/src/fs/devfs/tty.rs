@@ -26,7 +26,7 @@ impl FileTrait for DevTty {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
         let init_proc = get_init_proc();
         if let Some(tty_device) = init_proc.get_file_by_fd(0) {
             tty_device.read(user_buf).await
@@ -34,7 +34,7 @@ impl FileTrait for DevTty {
             panic!("get Stdin error!");
         }
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         let init_proc = get_init_proc();
         if let Some(tty_device) = init_proc.get_file_by_fd(1) {
             tty_device.write(user_buf).await

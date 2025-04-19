@@ -10,7 +10,7 @@ use alloc::{
 };
 use alloc::boxed::Box;
 use async_trait::async_trait;
-use lwext4_rust::Ext4File;
+use lwext4_rust::{Ext4File, InodeTypes};
 use spin::Mutex;
 use super::alloc_ino;
 
@@ -30,10 +30,10 @@ pub struct InodeMeta {
 }
 
 impl InodeMeta {
-    pub fn new(file_type: InodeType) -> Self {
+    pub fn new(file_type: InodeType, file_size: usize) -> Self {
         Self {
             ino:  alloc_ino(), 
-            size: AtomicUsize::new(0), 
+            size: AtomicUsize::new(file_size), 
             file_type,
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
         }
@@ -52,7 +52,7 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// The size of the file in bytes.
-    fn size(&self) -> usize {
+    fn get_size(&self) -> usize {
         todo!()
     }
 
@@ -87,20 +87,11 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// Some(Arc<dyn Inode>) if creation succeeds, None otherwise.
-    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
+    fn do_create(&self, _path: &str, _ty: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
         todo!()
     }
 
-    /// Finds an inode by its path relative to this inode.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The path to search for
-    ///
-    /// # Returns
-    ///
-    /// Some(Arc<dyn Inode>) if found, None otherwise.
-    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn walk(&self, _path: &str) -> bool {
         todo!()
     }
 
@@ -212,23 +203,23 @@ impl dyn InodeTrait {
         Ok(0)
     }
 
-    /// 打开一个inode，创建一个管理该inode的对应的file返回
-    pub fn do_open(self: Arc<Self>, parent: Option<Weak<dyn InodeTrait>>, flags: OpenFlags, path: String) -> Option<FileClass> {
-        let new_file = NormalFile::new(
-            flags, 
-            parent,
-            self,
-            path
-        );
-        // 将指针移到文件末尾
-        if flags.contains(OpenFlags::O_APPEND) {
-            new_file.lseek(0, SEEK_END).unwrap();
-        }
-        // 截断文件长度为0
-        if flags.contains(OpenFlags::O_TRUNC) {
-            new_file.metadata.inode.truncate(0);
-        }
+    // 打开一个inode，创建一个管理该inode的对应的file返回
+    // pub fn do_open(self: Arc<Self>, parent: Option<Weak<dyn InodeTrait>>, flags: OpenFlags, path: String) -> Option<FileClass> {
+    //     let new_file = NormalFile::new(
+    //         flags, 
+    //         parent,
+    //         self,
+    //         path
+    //     );
+    //     // 将指针移到文件末尾
+    //     if flags.contains(OpenFlags::O_APPEND) {
+    //         new_file.lseek(0, SEEK_END).unwrap();
+    //     }
+    //     // 截断文件长度为0
+    //     if flags.contains(OpenFlags::O_TRUNC) {
+    //         new_file.metadata.inode.truncate(0);
+    //     }
         
-        Some(FileClass::File(Arc::new(new_file)))
-    }
+    //     Some(FileClass::File(Arc::new(new_file)))
+    // }
 }

@@ -14,7 +14,7 @@ use hashbrown::HashMap;
 use lazy_static::*;
 use spin::RwLock;
 
-use super::InodeTrait;
+use super::{ext4::Ext4Inode, InodeTrait};
 
 // A global, thread-safe file system index using a read-write lock.
 lazy_static! {

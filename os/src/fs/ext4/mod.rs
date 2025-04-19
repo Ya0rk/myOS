@@ -21,7 +21,7 @@ lazy_static! {
     };
 }
 
-pub fn root_inode() -> Arc<dyn InodeTrait> {
+pub fn root_inode() -> Arc<Ext4Inode> {
     SUPER_BLOCK.root_inode()
 }
 

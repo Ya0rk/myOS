@@ -25,11 +25,11 @@ impl FileTrait for DevNull {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, mut _user_buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, mut _user_buf: &mut [u8]) -> SysResult<usize> {
         // do nothing
         Ok(0)
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }

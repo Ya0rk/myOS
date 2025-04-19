@@ -133,7 +133,7 @@ impl FileTrait for Pipe {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, buf: &mut [u8]) -> SysResult<usize> {
         assert!(self.readable());
         if buf.len() == 0{
             return Ok(0);
@@ -144,7 +144,7 @@ impl FileTrait for Pipe {
             cur: 0,
         }.await
     }
-    async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         assert!(self.writable());
         if buf.len() == 0{
             return Ok(0);
@@ -196,7 +196,7 @@ impl FileTrait for Pipe {
 
 struct PipeReadFuture<'a> {
     pipe: &'a Pipe,
-    buf: UserBuffer,
+    buf: &'a mut [u8],
     cur: usize
 }
 
@@ -207,15 +207,8 @@ impl Future for PipeReadFuture<'_> {
         let mut inner = self.pipe.buffer.lock();
         let size = inner.available_read(self.buf.len() - self.cur);
         if size > 0 {
-            let mut pos = 0;
-            let mut idx = 0;
-            loop {
-                if pos >= size { break; }
-                let len = min(self.buf[idx].len(), size - pos);
-                self.buf[idx].copy_from_slice(&inner.read_nbyte(len));
-                idx += 1;
-                pos += len;
-            }
+            let len = min(self.buf.len(), size);
+            self.buf.copy_from_slice(&inner.read_nbyte(len));
             self.cur += size;
             while let Some(waker) = inner.writer_waker.pop_front() {
                 waker.wake();
@@ -233,7 +226,7 @@ impl Future for PipeReadFuture<'_> {
 
 struct PipeWriteFuture<'a> {
     pipe: &'a Pipe,
-    buf: UserBuffer,
+    buf: &'a [u8],
     cur: usize
 }
 
@@ -247,15 +240,8 @@ impl Future for PipeWriteFuture<'_> {
         }
         let size = inner.available_write(self.buf.len() - self.cur);
         if size > 0 {
-            let mut pos = 0;
-            let mut idx = 0;
-            loop {
-                if pos >= size { break; }
-                let len = min(self.buf[idx].len(), size - pos);
-                inner.write_nbyte(&self.buf[idx][0..len]);
-                idx += 1;
-                pos += len;
-            }
+            let len = min(self.buf.len(), size);
+            inner.write_nbyte(&self.buf[0..len]);
             self.cur += size;
             while let Some(waker) = inner.reader_waker.pop_front() {
                 waker.wake();

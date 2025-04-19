@@ -12,7 +12,6 @@ static HEAP_ALLOCATOR: LockedHeap<32> = LockedHeap::empty();
 pub fn handle_alloc_error(layout: core::alloc::Layout) -> ! {
     panic!("Heap allocation error, layout = {:?}", layout);
 }
-/// heap space ([u8; KERNEL_HEAP_SIZE])
 pub struct SyncHeapSpace(UnsafeCell<[u8; KERNEL_HEAP_SIZE]>);
 
 impl SyncHeapSpace {

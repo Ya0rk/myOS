@@ -26,15 +26,15 @@ impl FileTrait for DevRtc {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
         let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
         let str = format!("{:?}", time);
         let bytes = str.as_bytes();
         let len = min(user_buf.len(), bytes.len());
-        user_buf.write(bytes);
+        // user_buf.write(bytes);
         Ok(len)
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }

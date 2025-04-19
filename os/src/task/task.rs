@@ -5,7 +5,7 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, Fd, FdTable, ThreadGroup};
+use super::{add_proc_group_member, FdInfo, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::shutdown;
@@ -18,6 +18,7 @@ use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
 use crate::task::{add_task, current_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task};
 use crate::hal::trap::TrapContext;
+use crate::utils::SysResult;
 use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -31,14 +32,12 @@ use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 pub struct TaskControlBlock {
     // 不可变
     pid:            Pid,
-    // kernel_stack:   KernelStack,
 
     // 可变
     tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
     pgid:           AtomicUsize, // 所属进程组id号
     task_status:    SpinNoIrqLock<TaskStatus>,
 
-    // base_size:      Shared<usize>, // 迟早要删
     thread_group:   Shared<ThreadGroup>,
     memory_space:   Shared<MemorySpace>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
@@ -57,7 +56,6 @@ pub struct TaskControlBlock {
 
     waker:          SyncUnsafeCell<Option<Waker>>,
     trap_cx:        SyncUnsafeCell<TrapContext>,
-    // task_cx:        SyncUnsafeCell<TaskContext>,// 迟早会删
     time_data:      SyncUnsafeCell<TimeData>,
     clear_child_tid:SyncUnsafeCell<Option<usize>>,
     set_child_tid:  SyncUnsafeCell<Option<usize>>,
@@ -68,8 +66,6 @@ pub struct TaskControlBlock {
 impl TaskControlBlock {
     /// 创建新task,只有initproc会调用
     pub async fn new(elf_file: Arc<dyn FileTrait>) -> Arc<Self> {
-        // memory_set with elf program headers/trampoline/trap context/user stack
-        // let (mut memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
         let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf(elf_file).await;
         info!("entry point: {:#x}", entry_point);
         
@@ -80,28 +76,10 @@ impl TaskControlBlock {
         let trap_cx = TrapContext::app_init_context(
             entry_point,
             user_sp,
-            // 0,
         );
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let tgid = pid_handle.0;
-
-        // TODO(YJJ):这里好像并不需要kernel stack
-        // let kernel_stack = KernelStack::new(&pid_handle);
-        
-        // 每个task有自己的kernel stack
-        // let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
-        // memory_space.insert_framed_area(
-        //     kernel_stack_bottom.into(),
-        //     kernel_stack_top.into(), 
-        //     ,
-        // );
-        // memory_space.push_vma(
-        //     VmArea::new(
-        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-        //         MapPerm::RW,
-        //         VmAreaType::Stack)
-        // );
         
         // push a task context which goes to trap_return to the top of kernel stack
         let new_task = Arc::new(Self {
@@ -152,18 +130,9 @@ impl TaskControlBlock {
     }
     pub async fn execve(&self, elf_file: Arc<dyn FileTrait>, argv: Vec<String>, env: Vec<String>) {
         info!("execve start");
-        info!("[execve] argv:{:?}, env:{:?}", argv, env);
+        // info!("[execve] argv:{:?}, env:{:?}", argv, env);
         let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(elf_file).await;
         
-        // TODO(YJJ):这里好像并不需要kernel stack
-        // 建立该进程的kernel stack
-        // let (kernel_stack_bottom, kernel_stack_top) = self.kernel_stack.get_kernel_stack_pos();
-        // memory_space.push_vma(
-        //     VmArea::new(
-        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-        //         MapPerm::RW,
-        //         VmAreaType::Stack)
-        // );
         info!("execve memory_set created");
         
         // 终止所有子线程
@@ -181,13 +150,6 @@ impl TaskControlBlock {
         let mut mem = self.memory_space.lock();
         *mem = memory_space;
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), argv, env, auxv);
-
-        // initialize trap_cx
-        // let trap_cx = TrapContext::app_init_context(
-        //     entry_point,
-        //     user_sp,
-        //     // self.kernel_stack.get_top(),
-        // );
         
         // set trap cx
         let trap_cx = self.get_trap_cx_mut();
@@ -195,18 +157,13 @@ impl TaskControlBlock {
         trap_cx.set_sp(user_sp);
         trap_cx.set_arg(argc, argv_p, env_p);
 
+        // 判断是否有O_CLOEXEC，如果有的话就清空当前位置的fd，避免子进程使用一些父进程的fd
+        self.fd_table.lock().close_on_exec();
+
         // 重置自定义的信号处理
         self.handler.lock().flash_signal_handlers();
 
-        // TODO(YJJ):这里需要将自己加入child中，不然do_wait4中会报错
-        // 因为我在do_wait4中要获取zombie，也就是自己
-        // 后序修改do_wait4逻辑应该就能删除这里
-        // info!("[exec] current taskpid = {}", current_task().unwrap().get_pid());
-        // self.add_child(current_task().unwrap());
-
-
         debug!("task.exec.pid={}", self.pid.0);
-        // info!("[exec] exec success task.exec.pid = {}", self.pid.0);
     }
 
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
@@ -245,15 +202,7 @@ impl TaskControlBlock {
         // trap_cx.set_kernel_sp(kernel_stack_top);
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
-        // TODO(YJJ):需要修改为clone和cow
         let mut child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
-        // let mut child_memory_set = self.memory_set.clone();
-        // child_memory_space.push_vma(
-        //     VmArea::new(
-        //         VirtAddr::from_usize_range(kernel_stack_bottom..kernel_stack_top),
-        //         MapPerm::RW,
-        //         VmAreaType::Stack)
-        // );
 
         let memory_space = new_shared(child_memory_space);
 
@@ -763,16 +712,12 @@ impl TaskControlBlock {
     pub fn fd_table_len(&self) -> usize {
         self.fd_table.lock().table_len()
     }
-    /// 判断是否打开文件描述符fd
-    pub fn fd_is_none(&self, fd: usize) -> bool {
-        self.fd_table.lock().table[fd].is_none()
-    }
     /// 将fd作为index获取文件描述符
-    pub fn get_fd(&self, fd: usize) -> Fd {
-        self.fd_table.lock().get_fd(fd).unwrap()
+    pub fn get_fd(&self, fd: usize) -> SysResult<FdInfo> {
+        self.fd_table.lock().get_fd(fd)
     }
     /// 分配fd
-    pub fn alloc_fd(&self, fd: Fd) -> usize{
+    pub fn alloc_fd(&self, fd: FdInfo) -> usize{
         self.fd_table.lock().alloc_fd(fd).expect("task alloc fd fail")
     }
     /// 删除fd
@@ -780,7 +725,7 @@ impl TaskControlBlock {
         self.fd_table.lock().remove(fd).expect("task remove fd fail")
     }
     /// 在指定位置设置fd
-    pub fn put_fd_in(&self, fd: Fd, idx: usize) {
+    pub fn put_fd_in(&self, fd: FdInfo, idx: usize) {
         self.fd_table.lock().put_in(fd, idx).expect("task [put fd in] fail")
     }
 

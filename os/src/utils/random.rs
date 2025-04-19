@@ -24,15 +24,14 @@ impl LcgRng {
     }
 
     /// 用随机字节填充缓冲区
-    pub fn fill_buf(&mut self, mut buf: UserBuffer) -> usize {
+    pub fn fill_buf(&mut self, buf: &mut [u8]) -> usize {
         let mut offset = 0;
 
         while offset < buf.len() {
             let rand = self.next();
             let rand_bytes = rand.to_le_bytes();
             let chunk_size = (buf.len() - offset).min(4);
-
-            buf.write_at(offset, &rand_bytes[..chunk_size]);
+            buf[offset..].copy_from_slice(&rand_bytes[..chunk_size]);
             offset += chunk_size;
         }
         buf.len()

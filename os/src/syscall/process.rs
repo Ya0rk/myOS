@@ -177,11 +177,10 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, path as *const u8);
-    debug!("sys_exec: path = {:?}", path);
+    info!("sys_exec: path = {:?}", path);
     let mut args: Vec<String> = Vec::new();
     if argv != 0 {
         let argv = translated_ref(token, argv as *const &[usize]);
-        info!("argv:{:?}", argv);
         for str_addr in argv.iter() {
             let arg_entry = translated_str(token, *str_addr as *const u8);
             info!("arg_entry:{}", arg_entry);
@@ -197,9 +196,8 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
         }
     }
     let cwd = task.get_current_path();
+    info!("cwd = {}", cwd);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
-        // let all_data = app_inode.file()?.metadata.inode.read_all().await?;
-        
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, args, envs).await;
         Ok(0)
@@ -303,13 +301,14 @@ pub fn sys_getrandom(
     buflen: usize,
     _flags: usize,
 ) -> SysResult<usize> {
-    let token = current_user_token();
-    let buffer = UserBuffer::new(
-        translated_byte_buffer(
-            token,
-            buf,
-            buflen
-    ));
+    // let token = current_user_token();
+    // let buffer = UserBuffer::new(
+    //     translated_byte_buffer(
+    //         token,
+    //         buf,
+    //         buflen
+    // ));
+    let buffer = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
     Ok(RNG.lock().fill_buf(buffer))
 }
 

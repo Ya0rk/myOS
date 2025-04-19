@@ -33,12 +33,10 @@ mod lang_items;
 pub mod mm;
 pub mod fs;
 pub mod task;
-// pub mod trap;
 pub mod sync;
 pub mod utils;
 pub mod syscall;
 pub mod drivers;
-// pub mod arch;
 pub mod signal;
 pub mod hal;
 
@@ -47,11 +45,6 @@ use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
-// #[cfg(target_arch = "riscv64")]
-// global_asm!(include_str!("entry.asm"));
-
-// #[cfg(target_arch = "loongarch64")]
-// global_asm!(include_str!("entry_la.asm"));
 
 #[macro_use]
 extern crate lazy_static;

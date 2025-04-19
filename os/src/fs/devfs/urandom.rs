@@ -25,10 +25,10 @@ impl FileTrait for DevRandom {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
         Ok(RNG.lock().fill_buf(user_buf))
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }

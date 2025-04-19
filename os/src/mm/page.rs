@@ -32,7 +32,6 @@ impl Page {
     }
 
     pub async fn set_dirty(&self, offset: usize) {
-        // self.set_block(offset);
         match &self.page_type {
             PageType::Anon => {
                 panic!("Cannot set dirty block for an anonymous map!");
@@ -96,14 +95,9 @@ impl Drop for Page {
     
 }
 
-// pub struct DirtySet(SleepLock<HashSet<usize>>);
 pub type DirtySet = SleepLock<HashSet<usize>>;
 
 impl DirtySet {
-
-    // pub fn new() -> Self {
-    //     DirtySet(SleepLock::new(HashSet::new()))
-    // }
     pub async fn set_block(&self, offset: usize) {
         let idx = offset / BLOCK_SIZE;
         let mut dirty_blocks = self.lock().await;

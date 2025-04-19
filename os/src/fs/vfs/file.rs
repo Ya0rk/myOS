@@ -68,12 +68,12 @@ pub trait FileTrait: Send + Sync {
     /// # 返回
     ///
     /// 实际读取的字节数
-    async fn read(&self, buf: UserBuffer) -> SysResult<usize>;
+    async fn read(&self, buf: &mut [u8]) -> SysResult<usize>;
 
     /// 从指定偏移量读取数据到用户缓冲区
     async fn read_at(&self, offset: usize, buf: &mut [u8]) -> SysResult<usize> {
         let inode = self.get_inode();
-        if offset > inode.size() {
+        if offset > inode.get_size() {
             return Ok(0);
         }
         Ok(inode.read_at(offset, buf).await)
@@ -90,13 +90,13 @@ pub trait FileTrait: Send + Sync {
     /// # 返回
     ///
     /// 实际写入的字节数
-    async fn write(&self, buf: UserBuffer) -> SysResult<usize>;
+    async fn write(&self, buf: &[u8]) -> SysResult<usize>;
 
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数
     async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
         let inode = self.get_inode();
         // TODO(YJJ): maybe bug,这里size可能是0？
-        if offset > inode.size() {
+        if offset > inode.get_size() {
             let newsize = offset + buf.len();
             inode.truncate(newsize);
         }

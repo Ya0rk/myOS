@@ -17,7 +17,7 @@ FS = lwext4_rust
 # 	MODE_ARG :=
 # endif
 FS_IMG := ../sdcard-rv.img
-FS_IMG ?= ../$(FS)/ext4.img
+# FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 2
 

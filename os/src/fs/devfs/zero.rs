@@ -26,10 +26,12 @@ impl FileTrait for DevZero {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
-        Ok(user_buf.clear())
+    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
+        let len = user_buf.len();
+        user_buf.fill(0);
+        Ok(len)
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }

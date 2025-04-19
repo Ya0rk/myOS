@@ -33,40 +33,19 @@ impl FileTrait for Stdin {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
         //一次读取多个字符
         let mut c: usize;
         let mut count: usize = 0;
-        let mut buf = Vec::new();
         while count < user_buf.len() {
             c = console_getchar();
             if c > 255 { break; }
-            match c {
-                // `c > 255`是为了兼容OPENSBI，OPENSBI未获取字符时会返回-1
-                // 0 | 256.. => {
-                //     suspend_current_and_run_next();
-                //     continue;
-                // }
-                CR => {
-                    buf.push(LF as u8);
-                    count += 1;
-                    break;
-                }
-                LF => {
-                    buf.push(LF as u8);
-                    count += 1;
-                    break;
-                }
-                _ => {
-                    buf.push(c as u8);
-                    count += 1;
-                }
-            }
+            user_buf[count] = c as u8;
+            count += 1;
         }
-        user_buf.write(buf.as_slice());
         Ok(count)
     }
-    async fn write(&self, _user_buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, _user_buf: &[u8]) -> SysResult<usize> {
         Err(Errno::EINVAL)
         // panic!("Cannot write to stdin!");
     }
@@ -99,54 +78,6 @@ impl FileTrait for Stdin {
     }
 }
 
-// impl Ioctl for Stdin {
-//     fn ioctl(&self, cmd: usize, arg: usize) -> isize {
-//         let cmd = IoctlCommand::from(cmd);
-//         let task = current_task().unwrap();
-//         let mut inner = task.inner_lock();
-//         let token = inner.get_user_token();
-
-//         match cmd {
-//             IoctlCommand::TCGETS | IoctlCommand::TCGETA => {
-//                 let mut arg = UserBuffer::new(
-//                     translated_byte_buffer(token, arg as *const u8, size_of::<Termios>()),
-//                 );
-//                 arg.write(IOINFO.lock().termios.as_bytes());
-//                 return 0;
-//             }
-//             IoctlCommand::TCSETS | IoctlCommand::TCSETSW | IoctlCommand::TCSETSF => {
-//                 let arg = translated_ref(token, arg as *const Termios);
-//                 IOINFO.lock().termios.update(arg);
-//                 return 0;
-//             }
-//             IoctlCommand::TIOCGPGRP => {
-//                 *translated_refmut(token, arg as *mut u32) = IOINFO.lock().foreground_pgid;
-//                 return 0;
-//             }
-//             IoctlCommand::TIOCSPGRP => {
-//                 let arg = translated_ref(token, arg as *const u32);
-//                 IOINFO.lock().foreground_pgid = *arg;
-//                 return 0;
-//             }
-//             IoctlCommand::TIOCGWINSZ => {
-//                 let mut arg = UserBuffer::new(
-//                     translated_byte_buffer(token, arg as *const u8, size_of::<WinSize>()),
-//                 );
-//                 arg.write(IOINFO.lock().winsize.as_bytes());
-//                 return 0;
-//             }
-//             IoctlCommand::TIOCSWINSZ => {
-//                 let arg = translated_ref(token, arg as *const WinSize);
-//                 IOINFO.lock().winsize.update(arg);
-//                 return 0;
-//             }
-//             _ => {
-//                 return -1;
-//             }
-//         };
-//     }
-// }
-
 #[async_trait]
 impl FileTrait for Stdout {
     fn readable(&self) -> bool {
@@ -158,13 +89,11 @@ impl FileTrait for Stdout {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, _user_buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, _user_buf: &mut [u8]) -> SysResult<usize> {
         panic!("Cannot read from stdout!");
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
-        for buffer in user_buf.buffers.iter() {
-            print!("{}", core::str::from_utf8(*buffer).unwrap());
-        }
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
+        print!("{}", core::str::from_utf8(user_buf).unwrap());
         Ok(user_buf.len())
     }
     
@@ -194,54 +123,6 @@ impl FileTrait for Stdout {
         todo!()
     }
 }
-
-// impl Ioctl for Stdout {
-//     fn ioctl(&self, cmd: usize, arg: usize) -> isize {
-//         let cmd = IoctlCommand::from(cmd);
-//         let task = current_task().unwrap();
-//         let mut inner = task.inner_lock();
-//         let token = inner.get_user_token();
-
-//         match cmd {
-//             IoctlCommand::TCGETS | IoctlCommand::TCGETA => {
-//                 let mut arg = UserBuffer::new(
-//                     translated_byte_buffer(token, arg as *const u8, size_of::<Termios>()),
-//                 );
-//                 arg.write(IOINFO.lock().termios.as_bytes());
-//                 return 0;
-//             }
-//             IoctlCommand::TCSETS | IoctlCommand::TCSETSW | IoctlCommand::TCSETSF => {
-//                 let arg = translated_ref(token, arg as *const Termios);
-//                 IOINFO.lock().termios.update(arg);
-//                 return 0;
-//             }
-//             IoctlCommand::TIOCGPGRP => {
-//                 *translated_refmut(token, arg as *mut u32) = IOINFO.lock().foreground_pgid;
-//                 return 0;
-//             }
-//             IoctlCommand::TIOCSPGRP => {
-//                 let arg = translated_ref(token, arg as *const u32);
-//                 IOINFO.lock().foreground_pgid = *arg;
-//                 return 0;
-//             }
-//             IoctlCommand::TIOCGWINSZ => {
-//                 let mut arg = UserBuffer::new(
-//                     translated_byte_buffer(token, arg as *const u8, size_of::<WinSize>()),
-//                 );
-//                 arg.write(IOINFO.lock().winsize.as_bytes());
-//                 return 0;
-//             }
-//             IoctlCommand::TIOCSWINSZ => {
-//                 let arg = translated_ref(token, arg as *const WinSize);
-//                 IOINFO.lock().winsize.update(arg);
-//                 return 0;
-//             }
-//             _ => {
-//                 return -1;
-//             }
-//         };
-//     }
-// }
 
 #[derive(Debug)]
 #[allow(unused)]

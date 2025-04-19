@@ -8,10 +8,10 @@ use log::info;
 use lwext4_rust::file;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::ext4::NormalFile;
-use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dirent, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::syscall::ffi::IoVec;
-use crate::task::{current_task, current_user_token, Fd, FdTable};
+use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{Errno, SysResult};
 use super::ffi::{FaccessatMode, AT_REMOVEDIR};
 
@@ -28,7 +28,8 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
-            Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
+            let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, len) };
+            Ok(file.write(buf).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
     }
@@ -48,7 +49,8 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
-            Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
+            let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+            Ok(file.read(buf).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
     }
@@ -84,8 +86,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
                     continue;
                 }
                 let base = (unsafe { *iov_st }).iov_base;
-                let one = translated_byte_buffer(token, base as *const u8, len);
-                let buffer = UserBuffer::new(one);
+                let buffer = unsafe {core::slice::from_raw_parts_mut(base as *mut u8, len)};
                 let read_len = file.read(buffer).await?;
                 res += read_len;
             }
@@ -118,8 +119,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
                     continue;
                 }
                 let base = (unsafe { *iov_st }).iov_base;
-                let one = translated_byte_buffer(token, base as *const u8, len);
-                let buffer = UserBuffer::new(one);
+                let buffer = unsafe{core::slice::from_raw_parts(base as *mut u8, len)};
                 let write_len = file.write(buffer).await?;
                 res += write_len;
             }
@@ -205,13 +205,11 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     let cwd = task.get_current_path();
     // 检查路径是否有效并打开文件
     if let Some(inode) = open(cwd.as_str() , target_path.as_str(), flags) {
-        let fd = task.alloc_fd(Fd::new(inode.file()?, flags));
+        let fd = task.alloc_fd(FdInfo::new(inode.file()?, flags));
         info!("[sys_openat] alloc fd finished, new fd = {}", fd);
         if fd > RLIMIT_NOFILE {
             return Err(Errno::EMFILE);
         } else {
-            // info!("[sys_openat] task pid = {}", task.get_pid());
-            // info!("[sys_openat] new fd = {}", fd);
             return Ok(fd);
         }
     } else {
@@ -244,8 +242,8 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     let (read_fd, write_fd) = {
         let (read, write) = Pipe::new();
         (
-            task.alloc_fd(Fd::new(read, flags)),
-            task.alloc_fd(Fd::new(write, flags)),
+            task.alloc_fd(FdInfo::new(read, flags)),
+            task.alloc_fd(FdInfo::new(write, flags)),
         )
     };
     info!("alloc read_fd = {}, write_fd = {}", read_fd, write_fd);
@@ -346,11 +344,8 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
 pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     // let mut inner = task.inner_lock();
-    if oldfd >= task.fd_table_len() {
-        return Err(Errno::EBADF);
-    }
 
-    let old_temp_fd = task.get_fd(oldfd);
+    let old_temp_fd = task.get_fd(oldfd)?;
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.set_close_on_exec(true);
     let new_fd = task.alloc_fd(new_temp_fd);
@@ -384,14 +379,13 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     // let mut inner = task.inner_lock();
     
-    if newfd > RLIMIT_NOFILE ||
-        oldfd >= task.fd_table_len() ||
-        task.fd_is_none(oldfd) 
+    if newfd > RLIMIT_NOFILE
     {
         return Err(Errno::EBADF);
     }
 
-    let old_temp_fd = task.get_fd(oldfd);
+    let old_temp_fd = task.get_fd(oldfd)?;
+    if old_temp_fd.is_none() { return Err(Errno::EBADF); }
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.set_close_on_exec(cloexec);
     // 将newfd 放到指定位置
@@ -404,7 +398,6 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usize> {
-
     // Err(Errno::EBADCALL)
     info!("sys_mkdirat start");
 
@@ -434,13 +427,10 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
     // drop(inner);
 
     // 检查路径是否有效并创建目录
-    let result = if let Some(_) = mkdir(target_path.as_str(), mode) {
-        Ok(0) // 成功
-    } else {
-        Err(Errno::EBADCALL) // 失败
-    };
-
-    result
+    match mkdir(target_path.as_str(), mode) {
+        Ok(_) => Ok(0), // 成功
+        _ => Err(Errno::EBADCALL)
+    }
 }
 
 /// 卸载文件系统：https://man7.org/linux/man-pages/man2/umount.2.html
@@ -508,15 +498,15 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     let current_path = task.get_current_path();
 
     // 计算新路径
-    let new_path = if path.starts_with("/") {
+    let target_path = if path.starts_with("/") {
         path
     } else {
         join_path_2_absolute(current_path, path)
     };
 
     // 检查路径是否有效
-    let result = if let Some(_) = open_file(new_path.as_str(), OpenFlags::O_RDONLY) {
-        task.set_current_path(new_path); // 更新当前路径
+    let result = if chdir(&target_path) {
+        task.set_current_path(target_path); // 更新当前路径
         Ok(0) // 成功
     } else {
         Err(Errno::EBADCALL) // 失败
@@ -530,11 +520,13 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, path);
+    info!("[sys_unlink] start path = {}", path);
     let is_relative = !path.starts_with("/");
     let base = task.get_current_path();
 
     if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
         let file = file_class.file()?;
+        info!("[unlink] file path = {}", file.path);
         let is_dir = file.is_dir();
         if is_dir && flags != AT_REMOVEDIR {
             return Err(Errno::EISDIR);
@@ -545,6 +537,7 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
         let child_abs = join_path_2_absolute(base, path);
         file.get_inode().unlink(&child_abs);
     }
+    info!("[sys_unlink] finished");
     
     Ok(0)
 }

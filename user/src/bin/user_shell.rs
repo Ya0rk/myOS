@@ -14,14 +14,14 @@ const BS: u8 = 0x08u8;
 
 use alloc::{string::String, vec::Vec};
 use user_lib::console::getchar;
-use user_lib::{chdir, exec, fork, getcwd, mkdir, waitpid};
+use user_lib::{chdir, exec, exit, fork, getcwd, mkdir, waitpid};
 
 #[no_mangle]
 pub fn main() -> i32 {
     println!("Rust user shell");
     let mut line: String = String::new();
     // let cwd = ["musl/basic"];
-    chdir(&conert_str2byte("musl/basic"));
+    // chdir(&conert_str2byte("musl/basic"));
     // chdir("basic");
     print!(">> ");
     loop {
@@ -57,11 +57,8 @@ pub fn main() -> i32 {
                             let pid = fork();
                             if pid == 0 {
                                 // child process
-                                if exec(line.as_str()) == -1 {
-                                    println!("Error when executing!");
-                                    return -4;
-                                }
-                                unreachable!();
+                                exec(line.as_str());
+                                exit(0);
                             } else {
                                 let mut exit_code: i32 = 0;
                                 let exit_pid = waitpid(pid as usize, &mut exit_code, 0);
