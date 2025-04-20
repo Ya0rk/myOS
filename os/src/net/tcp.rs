@@ -221,20 +221,21 @@ impl Socket for TcpSocket {
 
         Ok(())
     }
-    async fn accept(&self) -> SysResult<(IpEndpoint, usize)> {
+    async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
         if *self.state.lock() != TcpState::Listen {
             return Err(Errno::EINVAL);
         }
 
+        let cloexec_enable = flags.contains(OpenFlags::O_CLOEXEC);
         let remote_end = TcpAcceptFuture::new(self).await?;
         let ip_type = self.sockmeta.lock().iptype;
         let local_end = self.sockmeta.lock().local_end.expect("[tcp accept] no local end");
 
-        let newsock = TcpSocket::new(ip_type, None);
+        let newsock = TcpSocket::new(ip_type, Some(flags));
         newsock.do_bind(local_end)?;
         newsock.listen(10)?;
         let newsock = Arc::new(newsock);
-        let newfd = sock_map_fd(newsock, false)
+        let newfd = sock_map_fd(newsock, cloexec_enable)
             .map_err(|_| Errno::EAFNOSUPPORT)?;
 
         Ok((remote_end, newfd))

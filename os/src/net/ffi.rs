@@ -1,4 +1,4 @@
-use crate::config::KB;
+use crate::{config::KB, fs::OpenFlags};
 
 pub const AF_UNIX: u16 = 1;
 pub const AF_INET: u16 = 2;
@@ -12,9 +12,9 @@ bitflags! {
     #[repr(C)]
     pub struct SocketType: u32 {
         /// 关闭套接字时，是否关闭文件描述符
-        const SOCK_CLOEXEC  = 02000000;
+        const SOCK_CLOEXEC  = 1 << 19;
         /// 关闭套接字时，是否设置为非阻塞
-        const SOCK_NONBLOCK = 0200;
+        const SOCK_NONBLOCK = 1 << 11;
         /// 数据流套接字，用于Tcp
         const SOCK_STREAM = 1;
         /// 数据报套接字，用于Udp

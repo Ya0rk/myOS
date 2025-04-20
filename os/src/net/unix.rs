@@ -19,7 +19,7 @@ pub struct UnixSocket {
 
 #[async_trait]
 impl Socket for UnixSocket {
-    async fn accept(&self) -> SysResult<(IpEndpoint, usize)> {
+    async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
         unimplemented!()
     }
     fn bind(&self, _addr: &SockAddr) -> SysResult<()> {

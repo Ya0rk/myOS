@@ -127,7 +127,7 @@ impl Socket for UdpSocket {
     fn listen(&self, _backlog: usize) -> SysResult<()> {
         Err(Errno::EOPNOTSUPP)
     }
-    async fn accept(&self) -> SysResult<(IpEndpoint, usize)> {
+    async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
         unimplemented!()
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {

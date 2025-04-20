@@ -71,6 +71,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_SOCKET => sys_socket(args[0] as usize, args[1] as usize, args[2] as usize),
         SysCode::SYSCALL_BIND => sys_bind(args[0] as usize, args[1] as usize, args[2] as usize),
         SysCode::SYSCALL_LISTEN => sys_listen(args[0] as usize, args[1] as usize),
+        SysCode::SYSCALL_ACCEPT4 => sys_accept4(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32).await,
+        SysCode::SYSCALL_ACCEPT => sys_accept(args[0] as usize, args[1] as usize,args[2] as usize).await,
         // SysCode::SYSCALL_SOCKET => sys_socket(args[0] as usize, args[1] as usize, args[2] as usize),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }

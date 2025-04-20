@@ -104,6 +104,7 @@ pub enum SysCode {
     SYSCALL_CLONE     = 220,
     SYSCALL_EXEC      = 221,
     SYSCALL_MMAP      = 222,
+    SYSCALL_ACCEPT4   = 242,
     SYSCALL_WAIT4     = 260,
     GETRANDOM         = 278,
     #[num_enum(default)]
@@ -120,6 +121,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_ACCEPT4 => "accept4",
             Self::SYSCALL_ACCEPT => "accept",
             Self::SYSCALL_CONNECT => "connect",
             Self::SYSCALL_SHUTDOWN => "shutdown",

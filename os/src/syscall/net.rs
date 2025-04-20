@@ -2,7 +2,7 @@ use log::info;
 use smoltcp::wire::IpAddress;
 
 use crate::{
-    fs::FileTrait, net::{addr::{IpType, Ipv4, Ipv6, SockAddr}, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX}, task::{current_task, sock_map_fd}, utils::{Errno, SysResult}
+    fs::{FileTrait, OpenFlags}, net::{addr::{IpType, Ipv4, Ipv6, SockAddr}, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX}, task::{current_task, sock_map_fd}, utils::{Errno, SysResult}
 };
 
 use super::ffi::ShutHow;
@@ -113,9 +113,14 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
     let flags = file.get_flags();
     let socket = file.get_socket();
 
-    let (remote_end, newfd) = socket.accept().await?;
+    let (remote_end, newfd) = socket.accept(OpenFlags::empty()).await?;
     // 将remote_end保存在addr中
-    let buf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, addrlen) };
+    let addr = addr as *mut u8;
+    if addr.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    let buf = unsafe { core::slice::from_raw_parts_mut(addr, addrlen) };
     let user_sockaddr = match remote_end.addr {
         IpAddress::Ipv4(addr) => {
             let port = remote_end.port;
@@ -131,6 +136,42 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
         }
     };
 
+    user_sockaddr.write2user(buf, addrlen)?;
+    info!("[sys_accept] new sockfd: {}", newfd);
+
+    Ok(newfd)
+}
+
+/// accept a connection on a socket
+/// If flags is 0, then accept4() is the same as accept().
+pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32) -> SysResult<usize> {
+    if flags == 0 { return sys_accept(sockfd, addr, addrlen).await; }
+    let flags = OpenFlags::from_bits(flags as i32).expect("[sys_accept4] flag parse fail");
+    let task = current_task().unwrap();
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+
+    let (remote_end, newfd) = socket.accept(flags).await?;
+    let addr = addr as *mut u8;
+    if addr.is_null() {
+        return Err(Errno::EFAULT);
+    }
+
+    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    let user_sockaddr = match remote_end.addr {
+        IpAddress::Ipv4(addr) => {
+            let port = remote_end.port;
+            let addr = addr.octets();
+            let temp = SockAddr::Inet4(Ipv4::new(port, addr));
+            temp
+        }
+        IpAddress::Ipv6(addr) => {
+            let port = remote_end.port;
+            let addr = addr.octets();
+            let temp = SockAddr::Inet6(Ipv6::new(port, addr));
+            temp
+        }
+    };
     user_sockaddr.write2user(buf, addrlen)?;
     info!("[sys_accept] new sockfd: {}", newfd);
 
