@@ -33,6 +33,7 @@ use crate::utils::Errno;
 use crate::utils::SysResult;
 use super::addr::IpType;
 use super::addr::SockAddr;
+use super::net_async::TcpSendFuture;
 use super::NetDev;
 use super::Port;
 use super::Socket;
@@ -272,6 +273,10 @@ impl Socket for TcpSocket {
         }
 
         Ok(())
+    }
+    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize> {
+        let res = TcpSendFuture::new(buf, self).await?;
+        Ok(res)
     }
     fn set_recv_buf_size(&self, size: usize) -> SysResult<()> {
         self.sockmeta.lock().recv_buf_size = size;

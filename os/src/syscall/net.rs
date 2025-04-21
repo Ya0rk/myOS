@@ -120,6 +120,7 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
         return Err(Errno::EFAULT);
     }
 
+    // maybe bug: 需要检查懒分配
     let buf = unsafe { core::slice::from_raw_parts_mut(addr, addrlen) };
     let user_sockaddr = match remote_end.addr {
         IpAddress::Ipv4(addr) => {
@@ -157,6 +158,7 @@ pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32)
         return Err(Errno::EFAULT);
     }
 
+    // maybe bug: 需要检查懒分配
     let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
     let user_sockaddr = match remote_end.addr {
         IpAddress::Ipv4(addr) => {
@@ -198,6 +200,7 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         _ => { return Err(Errno::ENOTSOCK); }
     };
 
+    // maybe bug: 需要检查懒分配
     let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
     sockname.write2user(buf, addrlen)?;
     Ok(0)
@@ -216,7 +219,43 @@ pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         Err(e) => { return Err(e); }
     };
 
+    // maybe bug: 需要检查懒分配
     let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
     peername.write2user(buf, addrlen)?;
     Ok(0)
+}
+
+/// send a message on a socket
+/// If the socket is a connectionless-mode socket, the message shall
+/// be sent to the address specified by dest_addr if no pre-specified
+/// peer address has been set. If a peer address has been pre-
+/// specified, either the message shall be sent to the address
+/// specified by dest_addr (overriding the pre-specified peer
+/// address), or the function shall return -1 and set errno to
+/// [EISCONN].
+pub async fn sys_sendto(
+    sockfd: usize,
+    message: usize,
+    msg_len: usize,
+    flags: u32,
+    dest_addr: usize,
+    addrlen: usize,
+) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let dest_sockaddr = SockAddr::from(dest_addr, addrlen);
+    match dest_sockaddr {
+        SockAddr::Unspec => {
+            info!("[sys_sendto] invalid dest_addr");
+            return Err(Errno::EINVAL);
+        },
+        _ => {},
+    }
+
+    // maybe bug: 需要检查懒分配
+    let buf = unsafe{ core::slice::from_raw_parts(message as *mut u8, msg_len) };
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+
+    let res = socket.send_msg(buf, &dest_sockaddr).await?;
+    Ok(res)
 }

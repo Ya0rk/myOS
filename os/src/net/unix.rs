@@ -47,6 +47,9 @@ impl Socket for UnixSocket {
     fn get_peername(&self) -> SysResult<SockAddr> {
         todo!()
     }
+    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize> {
+        todo!()
+    }
 }
 
 #[async_trait]

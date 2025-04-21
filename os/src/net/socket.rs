@@ -50,6 +50,8 @@ pub trait Socket: FileTrait {
 
     fn listen(&self, backlog: usize) -> SysResult<()>;
 
+    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize>;
+
     fn set_recv_buf_size(&self, size: usize) -> SysResult<()>;
 
     fn set_send_buf_size(&self, size: usize) -> SysResult<()>;

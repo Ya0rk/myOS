@@ -1,7 +1,7 @@
 use alloc::{string::String, sync::Arc, vec};
 use log::info;
-use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata}, storage::PacketBuffer, wire::{IpAddress, IpEndpoint}};
-use crate::{fs::{FileMeta, OpenFlags, RenameFlags}, sync::SpinNoIrqLock, syscall::ShutHow, utils::{Errno, SysResult}};
+use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata, UdpMetadata}, storage::PacketBuffer, wire::{IpAddress, IpEndpoint}};
+use crate::{fs::{FileMeta, OpenFlags, RenameFlags}, net::net_async::UdpSendFuture, sync::SpinNoIrqLock, syscall::ShutHow, utils::{Errno, SysResult}};
 use super::{addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, alloc_port, Port, SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
@@ -85,6 +85,17 @@ impl UdpSocket {
     }
 }
 
+impl UdpSocket {
+    pub fn with_socket<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut udp::Socket<'_>) -> R,
+    {
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<udp::Socket>(self.handle);
+        f(socket)
+    }
+}
+
 #[async_trait]
 impl Socket for UdpSocket {
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
@@ -136,6 +147,19 @@ impl Socket for UdpSocket {
         self.check_addr(remote_endpoint);
         self.sockmeta.lock().remote_end = Some(remote_endpoint);
         Ok(())
+    }
+    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize> {
+        // 如果没有远程地址，就先和远程地址建立连接
+        // 就算有远程地址，也要覆盖，使用提供的dest_addr
+        self.connect(dest_addr).await;
+        let dest = match self.sockmeta.lock().remote_end {
+            Some(a) => a,
+            None => return Err(Errno::EISCONN),
+        };
+        let meta = UdpMetadata::from(dest);
+
+        let res = UdpSendFuture::new(buf, self, &meta).await?;
+        Ok(res)
     }
     fn set_recv_buf_size(&self, size: usize) -> SysResult<()> {
         self.sockmeta.lock().recv_buf_size = size;
