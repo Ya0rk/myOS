@@ -63,7 +63,18 @@ static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
 pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
-
+    // 启动顺序：
+    // clear_bss 
+    // logo 
+    // logger_init
+    // trap_init 
+    // init_processors
+    // probe
+    // fs::init
+    // 进行测试
+    // 载入用户进程
+    // 设置时钟中断
+    // 开始调度执行
     println!("hello world!");
 
     if FIRST_HART
@@ -76,15 +87,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         mm::init(true);
         println!("finished mm::init");
         utils::logger_init();
-
-        #[cfg(feature = "test")]
-        {
-            // mm::remap_test();
-            info!("start path test");
-            fs::path_test();
-            info!(" start dentry test");
-            //fs::vfs::dentry_test();
-        }
 
         // TODO:后期可以丰富打印的初始化信息
         println!(
@@ -99,6 +101,18 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         crate::drivers::virtio_driver::probe::probe(dt_root as u64);
 
         fs::init();
+        // 此时完成初始化工作，准备载入进程开始执行
+
+        // 测试代码应当放在这里
+        #[cfg(feature = "test")]
+        {
+            // mm::remap_test();
+            info!("start path test");
+            fs::path_test();
+            info!(" start dentry test");
+            fs::vfs::dentry_test();
+        }
+
         spawn_kernel_task(async move {
             task::add_initproc().await
         });
