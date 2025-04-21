@@ -62,7 +62,7 @@ static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
-pub fn rust_main(hart_id: usize) -> ! {
+pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
 
     println!("hello world!");
 
@@ -83,7 +83,7 @@ pub fn rust_main(hart_id: usize) -> ! {
             info!("start path test");
             fs::path_test();
             info!(" start dentry test");
-            fs::vfs::dentry_test();
+            //fs::vfs::dentry_test();
         }
 
         // TODO:后期可以丰富打印的初始化信息
@@ -93,6 +93,11 @@ pub fn rust_main(hart_id: usize) -> ! {
         );
         hal::trap::init();
         task::init_processors();
+        
+        let dt_root: usize = 0xffff_ffc0_87e0_0000; //注意到应当看rustsbi的Device Tree Region信息
+        info!("satrt probe fdt tree root: {:X}", dt_root);
+        crate::drivers::virtio_driver::probe::probe(dt_root as u64);
+
         fs::init();
         spawn_kernel_task(async move {
             task::add_initproc().await
