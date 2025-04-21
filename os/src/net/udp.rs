@@ -152,6 +152,40 @@ impl Socket for UdpSocket {
         NET_DEV.lock().poll();
         Ok(())
     }
+    fn get_sockname(&self) -> SysResult<SockAddr> {
+        let local_end = self.sockmeta.lock().local_end.expect("[tcp] get_sockname no local_end");
+        let port = local_end.port;
+        let addr = local_end.addr;
+        info!("[tcp]get_sockname local end port: {}, addr = {}", port, addr);
+        match addr {
+            IpAddress::Ipv4(addr) => {
+                let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));
+                return Ok(res);
+            }
+            IpAddress::Ipv6(addr) => {
+                let res = SockAddr::Inet6(Ipv6::new(port, addr.octets()));
+                return Ok(res);
+            }
+        }
+        Ok(SockAddr::Unspec)
+    }
+    fn get_peername(&self) -> SysResult<SockAddr> {
+        let remote_end = self.sockmeta.lock().remote_end.ok_or(Errno::ENOTCONN)?;
+        let port = remote_end.port;
+        let addr = remote_end.addr;
+        info!("[tcp]get_sockname local end port: {}, addr = {}", port, addr);
+        match addr {
+            IpAddress::Ipv4(addr) => {
+                let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));
+                return Ok(res);
+            }
+            IpAddress::Ipv6(addr) => {
+                let res = SockAddr::Inet6(Ipv6::new(port, addr.octets()));
+                return Ok(res);
+            }
+        }
+        Ok(SockAddr::Unspec)
+    }
 }
 
 #[async_trait]

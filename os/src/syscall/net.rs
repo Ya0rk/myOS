@@ -177,3 +177,46 @@ pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32)
 
     Ok(newfd)
 }
+
+/// getsockname() returns the current address to which the socket sockfd is bound, in the buffer pointed to by addr. 
+/// The addrlen argument should be initialized to
+/// indicate the amount of space (in bytes) pointed to by addr. 
+/// On return it contains the actual size of the socket address.
+///
+/// The returned address is truncated if the buffer provided is too small; 
+/// in this case, addrlen will return a value greater than was supplied to the call.
+pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let addr = addr as *mut u8;
+    if addr.is_null() { return Err(Errno::EINVAL); }
+
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+    let sockname = match socket.get_sockname() {
+        Ok(SockAddr::Unspec) => { return Err(Errno::ENOTSOCK); }
+        Ok(res) => res,
+        _ => { return Err(Errno::ENOTSOCK); }
+    };
+
+    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    sockname.write2user(buf, addrlen)?;
+    Ok(0)
+}
+
+pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let addr = addr as *mut u8;
+    if addr.is_null() { return Err(Errno::EINVAL); }
+
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+    let peername = match socket.get_peername() {
+        Ok(SockAddr::Unspec) => { return Err(Errno::ENOTSOCK); }
+        Ok(res) => res,
+        Err(e) => { return Err(e); }
+    };
+
+    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    peername.write2user(buf, addrlen)?;
+    Ok(0)
+}

@@ -41,6 +41,12 @@ impl Socket for UnixSocket {
         info!("[unix socket] shutdown: {:?}, not implemented!", how);
         unimplemented!()
     }
+    fn get_sockname(&self) -> SysResult<SockAddr> {
+        todo!()
+    }
+    fn get_peername(&self) -> SysResult<SockAddr> {
+        todo!()
+    }
 }
 
 #[async_trait]

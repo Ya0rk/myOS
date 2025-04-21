@@ -55,6 +55,10 @@ pub trait Socket: FileTrait {
     fn set_send_buf_size(&self, size: usize) -> SysResult<()>;
 
     fn shutdown(&self, how: ShutHow) -> SysResult<()>;
+
+    fn get_sockname(&self) -> SysResult<SockAddr>;
+
+    fn get_peername(&self) -> SysResult<SockAddr>;
 }
 
 impl dyn Socket {
