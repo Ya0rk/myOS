@@ -4,7 +4,7 @@ use core::arch::asm;
 use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
 use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
-use super::address::{kernel_map_vpn_to_ppn, KernelAddr};
+use super::address::{kaddr_p2v, kpn_v2p, KernelAddr};
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -236,16 +236,23 @@ impl PageTable {
         let range_vpn = range_va.start.floor()..range_va.end.ceil();
         println!("[map_kernel_range] map area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
         for vpn in range_vpn {
-            let ppn = kernel_map_vpn_to_ppn(vpn);
+            let ppn = kpn_v2p(vpn);
             // println!("[map vpn] vpn:{:#x}, ppn:{:#x}", vpn.0, ppn.0);
             self.map(vpn, ppn, flags);
         }
     }    
+
+    pub fn map_kernel_huge_page(&mut self, base_pa: PhysAddr, flags: PTEFlags) {
+        assert!(flags.intersects(PTEFlags::R | PTEFlags::W | PTEFlags::X));
+        let base_vpn: VirtPageNum = kaddr_p2v(base_pa).into();
+        let pte = &mut self.root_ppn.get_pte_array()[base_vpn.indexes()[0]];
+        *pte = PageTableEntry::new(base_pa.into(), flags | PTEFlags::V);
+    }
     pub fn unmap_kernel_range(&mut self, range_va: Range<VirtAddr>) {
         let range_vpn = range_va.start.floor()..range_va.end.ceil();
         info!("[unmap_kernel_range] unmap area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
         for vpn in range_vpn {
-            let ppn = kernel_map_vpn_to_ppn(vpn);
+            let ppn = kpn_v2p(vpn);
             self.unmap(vpn);
         }
     }
@@ -377,7 +384,16 @@ impl PageTable {
             (ekernel as usize).into()..(MEMORY_END).into(),
             PTEFlags::R | PTEFlags::W,
         );
-        println!("mapping memory-mapped registers");
+        println!("mapping devices");
+        // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
+        kernel_page_table.map_kernel_huge_page(
+            (0x0000_0000).into(),
+            PTEFlags::R | PTEFlags::W
+        );
+        kernel_page_table.map_kernel_huge_page(
+            (0x4000_0000).into(),
+            PTEFlags::R | PTEFlags::W
+        );
         // for pair in MMIO {
         //     memory_set.push(
         //         MapArea::new(
@@ -389,13 +405,13 @@ impl PageTable {
         //         None,
         //     );
         // }
-        for pair in MMIO {
-            let base = (*pair).0 + KERNEL_ADDR_OFFSET;
-            kernel_page_table.map_kernel_range(
-                base.into()..(base + (*pair).1).into(),
-                PTEFlags::R | PTEFlags::W,
-            );
-        }
+        // for pair in MMIO {
+        //     let base = (*pair).0 + KERNEL_ADDR_OFFSET;
+        //     kernel_page_table.map_kernel_range(
+        //         base.into()..(base + (*pair).1).into(),
+        //         PTEFlags::R | PTEFlags::W,
+        //     );
+        // }
         println!("kernel memory set initialized");
         kernel_page_table
     }
