@@ -3,7 +3,7 @@
 use core::arch::asm;
 use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
-use crate::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
+use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 use super::address::{kernel_map_vpn_to_ppn, KernelAddr};
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;

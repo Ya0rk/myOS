@@ -4,7 +4,7 @@ use alloc::{collections::btree_map::BTreeMap, sync::{Arc, Weak}};
 use hashbrown::HashSet;
 use log::info;
 use spin::RwLock;
-use crate::{config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::{yield_now, SleepLock}, task::get_current_cpu, utils::{Errno, SysResult}};
+use crate::{hal::config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::{yield_now, SleepLock}, task::get_current_cpu, utils::{Errno, SysResult}};
 use super::InodeTrait;
 use crate::mm::page::*;
 

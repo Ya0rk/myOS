@@ -105,7 +105,7 @@ pub async fn user_trap_handler() {
 }
 #[cfg(target_arch = "loongarch64")]
 pub async fn user_trap_handler() {
-    unimplemented!()
+    unimplemented!("loongarch64")
 }
 
 #[no_mangle]

@@ -1,3 +1,4 @@
+use log::info;
 use spin::Mutex;
 use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 
@@ -14,6 +15,7 @@ unsafe impl<H: Hal> Sync for VirtIoBlkDev<H> {}
 
 impl<H: Hal> VirtIoBlkDev<H> {
     pub fn new(header: &'static mut VirtIOHeader) -> Self {
+        info!("create a new VirtIoBlkDev ddddddddddddddd");
         Self {
             inner: Mutex::new(VirtIOBlk::new(header).expect("VirtIOBlk create failed")),
         }

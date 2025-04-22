@@ -1,4 +1,4 @@
-use crate::{config::INITPROC_PID, sync::SpinNoIrqLock};
+use crate::{hal::config::INITPROC_PID, sync::SpinNoIrqLock};
 use super::TaskControlBlock;
 use alloc::{sync::{Arc, Weak}, vec::Vec};
 use lazy_static::*;

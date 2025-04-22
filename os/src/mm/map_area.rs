@@ -1,4 +1,4 @@
-use crate::{config::{KERNEL_PGNUM_OFFSET, PAGE_SIZE}, mm::StepByOne};
+use crate::{hal::config::{KERNEL_PGNUM_OFFSET, PAGE_SIZE}, mm::StepByOne};
 use alloc::collections::BTreeMap;
 use super::{address::VPNRange, frame_alloc, page_table::PTEFlags, FrameTracker, MapPermission, MapType, PageTable, PhysPageNum, VirtAddr, VirtPageNum};
 

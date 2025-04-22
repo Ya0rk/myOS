@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::config::PAGE_SIZE;
+use crate::hal::config::PAGE_SIZE;
 
 /// end of vector
 pub const AT_NULL: usize = 0;

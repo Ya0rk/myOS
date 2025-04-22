@@ -1,7 +1,6 @@
-.section .text
+.section .text.usertrap
     .globl __trap_from_user
     .globl __return_to_user
-    .global __trap_from_kernel
     .align 4
 
 FP_START = 56
@@ -220,7 +219,9 @@ __return_to_user:
     ld.d $sp, $sp, 3*8
     ertn
 
-.align 4
+    .section .text.kerneltrap
+    .globl __trap_from_kernel
+    .align 4
 __trap_from_kernel:
     # 这里只需要保存caller saved寄存器
     addi.d  $sp, $sp, -34*8

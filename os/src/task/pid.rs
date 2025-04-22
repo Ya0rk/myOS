@@ -1,12 +1,12 @@
 use core::fmt;
 
-use crate::config::{INITPROC_PID, KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE};
+use crate::hal::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, INITPROC_PID};
 use crate::mm::page_table::{PTEFlags, KERNEL_PAGE_TABLE};
 use crate::mm::{VirtAddr};
 use alloc::collections::BTreeSet;
 use lazy_static::*;
 use log::{debug, info};
-use riscv::paging::PTE;
+// use riscv::paging::PTE;
 use spin::Mutex;
 
 lazy_static! {
