@@ -453,9 +453,23 @@ where
 /// a simple range structure for virtual page number
 pub type VPNRange = SimpleRange<VirtPageNum>;
 
-pub fn kernel_map_vaddr_to_paddr(va: VirtAddr) -> PhysAddr {
+
+/// translate kernel virtual addr into physical addr
+pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {
     (va.0 - KERNEL_ADDR_OFFSET).into()
 }
-pub fn kernel_map_vpn_to_ppn(vpn: VirtPageNum) -> PhysPageNum {
+
+/// translate kernel virtual page number into physical page number
+pub fn kpn_v2p(vpn: VirtPageNum) -> PhysPageNum {
     (vpn.0 - KERNEL_PGNUM_OFFSET).into()
+}
+
+/// translate physical addr into kernel virtual addr
+pub fn kaddr_p2v(pa: PhysAddr) -> VirtAddr {
+    (pa.0 + KERNEL_ADDR_OFFSET).into()
+}
+
+/// translate physical page number into kernel virtual page number
+pub fn kpn_p2v(ppn: PhysPageNum) -> VirtPageNum {
+    (ppn.0 + KERNEL_PGNUM_OFFSET).into()
 }
