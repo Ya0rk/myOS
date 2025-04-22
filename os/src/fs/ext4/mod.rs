@@ -14,7 +14,7 @@ use crate::drivers::{BlockDeviceImpl, Disk};
 use super::{InodeTrait, Kstat, SuperBlockTrait};
 
 lazy_static! {
-    static ref SUPER_BLOCK: Arc<dyn SuperBlockTrait> = {
+    pub static ref SUPER_BLOCK: Arc<dyn SuperBlockTrait> = {
         Arc::new(Ext4SuperBlock::new(
             Disk::new(BlockDeviceImpl::new_device()),
         ))

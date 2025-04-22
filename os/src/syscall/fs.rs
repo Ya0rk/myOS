@@ -363,7 +363,7 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
     //     buffer.write_at(res, den.as_bytes());
     //     res += one_den_len;
     // }
-    let res = file.read_dentry(buffer, len);
+    let res = file.read_dents(buffer, len);
     Ok(res)
 }
 

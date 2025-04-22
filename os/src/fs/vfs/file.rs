@@ -165,7 +165,7 @@ pub trait FileTrait: Send + Sync {
 
     fn is_dir(&self) -> bool;
 
-    fn read_dentry(&self, mut ub: UserBuffer, len: usize) -> usize {
+    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
         todo!()
     }
 

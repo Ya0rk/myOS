@@ -6,7 +6,7 @@ mod mount;
 mod pipe;
 mod stat;
 mod stdio;
-mod vfs;
+pub mod vfs;
 mod ffi;
 mod path;
 pub mod pre_data;
