@@ -1,5 +1,6 @@
 use core::mem::size_of;
 use crate::fs::{open, open_file, FileClass, OpenFlags};
+use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{SigDetails, SigMask, UContext};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
@@ -176,30 +177,35 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // info!("[sys_exec] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
-    let path = translated_str(token, path as *const u8);
+    // let path = translated_str(token, path as *const u8);
+    let path = user_cstr(path.into())?.unwrap();
     info!("sys_exec: path = {:?}", path);
-    let mut args: Vec<String> = Vec::new();
-    if argv != 0 {
-        let argv = translated_ref(token, argv as *const &[usize]);
-        for str_addr in argv.iter() {
-            let arg_entry = translated_str(token, *str_addr as *const u8);
-            info!("arg_entry:{}", arg_entry);
-            args.push(arg_entry);
-        }
-    }
-    let mut envs: Vec<String> = Vec::new();
-    if env != 0 {
-        let env = translated_ref(token, env as *const &[usize]);
-        for str_addr in env.iter() {
-            let env_entry = translated_str(token, *str_addr as *const u8);
-            envs.push(env_entry);
-        }
-    }
+    let argv = user_cstr_array(argv.into())?.unwrap();
+    let env = user_cstr_array(env.into())?.unwrap();
+    println!("argv:{:?}", argv);
+    println!("env:{:?}", env);
+    // let mut args: Vec<String> = Vec::new();
+    // if argv != 0 {
+    //     let argv = translated_ref(token, argv as *const &[usize]);
+    //     for str_addr in argv.iter() {
+    //         let arg_entry = translated_str(token, *str_addr as *const u8);
+    //         info!("arg_entry:{}", arg_entry);
+    //         args.push(arg_entry);
+    //     }
+    // }
+    // let mut envs: Vec<String> = Vec::new();
+    // if env != 0 {
+    //     let env = translated_ref(token, env as *const &[usize]);
+    //     for str_addr in env.iter() {
+    //         let env_entry = translated_str(token, *str_addr as *const u8);
+    //         envs.push(env_entry);
+    //     }
+    // }
     let cwd = task.get_current_path();
     info!("cwd = {}", cwd);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
-        task.execve(file, args, envs).await;
+        task.execve(file, argv, env).await;
         Ok(0)
     } else {
         Err(Errno::EBADCALL)
