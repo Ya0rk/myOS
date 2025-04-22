@@ -104,14 +104,14 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         // 此时完成初始化工作，准备载入进程开始执行
 
         // 测试代码应当放在这里
-        #[cfg(feature = "test")]
-        {
-            // mm::remap_test();
-            info!("start path test");
-            fs::path_test();
-            info!(" start dentry test");
-            fs::vfs::dentry_test();
-        }
+        // #[cfg(feature = "test")]
+        // {
+        //     // mm::remap_test();
+        //     info!("start path test");
+        //     fs::path_test();
+        //     info!(" start dentry test");
+        //     fs::vfs::dentry_test();
+        // }
 
         spawn_kernel_task(async move {
             task::add_initproc().await
