@@ -28,9 +28,9 @@ pub fn kernel_trap_handler() {
             Exception::StorePageFault
             | Exception::InstructionPageFault
             | Exception::LoadPageFault => {
-                // log::info!(
-                //         "[kernel_trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
-                // );
+                log::info!(
+                        "[kernel_trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
+                );
                 let access_type = match e {
                     Exception::InstructionPageFault => PageFaultAccessType::RX,
                     Exception::LoadPageFault => PageFaultAccessType::RO,

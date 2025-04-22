@@ -1,10 +1,12 @@
 mod inode;
 mod super_block;
 mod file;
+mod dentry;
 
 pub use inode::*;
 pub use super_block::*;
 pub use file::*;
+pub use dentry::*;
 
 use core::sync::atomic::{AtomicUsize, Ordering::Relaxed};
 

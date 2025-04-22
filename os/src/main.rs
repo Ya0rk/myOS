@@ -44,6 +44,7 @@ pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
+use log::info;
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
@@ -61,8 +62,20 @@ static INIT_FINISHED: AtomicBool = AtomicBool::new(false);
 static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
-pub fn rust_main(hart_id: usize) -> ! {
-
+pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
+    // 启动顺序：
+    // clear_bss 
+    // logo 
+    // mm::init
+    // logger_init
+    // trap_init 
+    // init_processors
+    // probe
+    // fs::init
+    // 进行测试
+    // 载入用户进程
+    // 设置时钟中断
+    // 开始调度执行
     println!("hello world!");
 
     if FIRST_HART
@@ -74,13 +87,8 @@ pub fn rust_main(hart_id: usize) -> ! {
 
         mm::init(true);
         println!("finished mm::init");
-        #[cfg(feature = "test")]
-        {
-            // mm::remap_test();
-            fs::path_test();
-        }
-
         utils::logger_init();
+
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
@@ -88,7 +96,24 @@ pub fn rust_main(hart_id: usize) -> ! {
         );
         hal::trap::init();
         task::init_processors();
+        
+        let dt_root: usize = 0xffff_ffc0_87e0_0000; //注意到应当看rustsbi的Device Tree Region信息
+        info!("satrt probe fdt tree root: {:X}", dt_root);
+        crate::drivers::virtio_driver::probe::probe(dt_root as u64);
+
         fs::init();
+        // 此时完成初始化工作，准备载入进程开始执行
+
+        // 测试代码应当放在这里
+        #[cfg(feature = "test")]
+        {
+            // mm::remap_test();
+            info!("start path test");
+            // fs::path_test();
+            info!(" start dentry test");
+            fs::vfs::dentry_test();
+        }
+
         spawn_kernel_task(async move {
             task::add_initproc().await
         });
@@ -104,7 +129,6 @@ pub fn rust_main(hart_id: usize) -> ! {
     
     unsafe { sync::enable_timer_interrupt() };
     timer::set_next_trigger();
-
     // 列出目前的应用
     let finish = AtomicBool::new(false);
     if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {

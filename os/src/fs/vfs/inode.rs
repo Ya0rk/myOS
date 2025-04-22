@@ -209,7 +209,7 @@ pub trait InodeTrait: Send + Sync {
     fn rename(&self, old_path: &String, new_path: &String);
 
     /// 获得目录项
-    fn read_dentry(&self) -> Option<Vec<Dirent>>;
+    fn read_dents(&self) -> Option<Vec<Dirent>>;
 }
 
 impl dyn InodeTrait {
