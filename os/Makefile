@@ -102,7 +102,6 @@ PHONY += kernel
 
 clean:
 	cargo clean
-	rm -f $(FS_IMG)
 	cd ../user && make clean
 PHONY += clean
 
