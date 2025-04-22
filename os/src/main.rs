@@ -66,6 +66,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // 启动顺序：
     // clear_bss 
     // logo 
+    // mm::init
     // logger_init
     // trap_init 
     // init_processors

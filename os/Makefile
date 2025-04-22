@@ -56,6 +56,10 @@ QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 QEMU_ARGS += -smp $(CPUS)
 
+# 加入另一个块设备
+QEMU_ARGS += -drive file=../$(FS)/myimage.img,if=none,format=raw,id=x1
+QEMU_ARGS += -device virtio-blk-pci,drive=x1
+
 fdtdump:
 	$(QEMU_NAME) $(QEMU_ARGS) -machine dumpdtb=riscv64-virt.dtb
 	dtc -I dtb -O dts -o riscv64-virt.dts riscv64-virt.dtb

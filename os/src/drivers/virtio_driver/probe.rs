@@ -91,10 +91,12 @@ pub fn probe(fd: u64) {
             }
         }
     }
+    #[cfg(target_arch = "loongarch64")]
     if let Some(pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {
         log::info!("Found PCI node: {}", pci_node.name);
         super::pci::enumerate_pci(pci_node, Cam::MmioCam);
     }
+    #[cfg(target_arch = "loongarch64")]
     if let Some(pcie_node) = fdt.find_compatible(&["pci-host-ecam-generic"]) {
         log::info!("Found PCIe node: {}", pcie_node.name);
         super::pci::enumerate_pci(pcie_node, Cam::Ecam);
@@ -117,10 +119,10 @@ pub fn virtio_device(transport: impl Transport) {
 }
 
 fn virtio_blk<T: Transport>(transport: T) {
-    let mut blk = VirtIOBlk::<VirtIoHalImpl, T>::new(transport).expect("failed to create blk driver");
-    println!("check blk readonly");
-    assert!(!blk.readonly());
-    println!("start to test blk");
+    // let mut blk = VirtIOBlk::<VirtIoHalImpl, T>::new(transport).expect("failed to create blk driver");
+    // println!("check blk readonly");
+    // assert!(!blk.readonly());
+    // println!("start to test blk");
     // let mut input = [0xffu8; 512];
     // let mut output = [0; 512];
     // for i in 0..32 {
