@@ -58,27 +58,27 @@ impl InodeTrait for Ext4Inode {
     /// 获取文件大小
     fn size(&self) -> usize {
         // {info!("want to get size of {:?}", self.file.lock().file_path);}
-        // let mut lock_file = self.file.lock();
+        let mut lock_file = self.file.lock();
         // info!("case -1");
-        // let binding = lock_file.get_path();
-        // let path = binding.to_str().unwrap();
-        // if path == "/" || path == "/mnt"{
-        //     info!("case 0");
-        //     lock_file.file_size() as usize
-        // } else if lock_file.file_type_get() == InodeTypes::EXT4_DE_DIR {
-        //     info!("case 1");
-        //     lock_file.file_size() as usize
-        // } else {
-        //     info!("case 2");
-        //     lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
-        //     let size = lock_file.file_size() as usize;
-        //     lock_file.file_close().expect("[ext4Inode new]: file close fail!");
-        //     {info!("get size !");}
-        //     size
-        // }
+        let binding = lock_file.get_path();
+        let path = binding.to_str().unwrap();
+        if path == "/" || path == "/lost+found" || path == "/mnt"{
+            // info!("case 0");
+            lock_file.file_size() as usize
+        } else if lock_file.file_type_get() == InodeTypes::EXT4_DE_DIR {
+            // info!("case 1");
+            lock_file.file_size() as usize
+        } else {
+            // info!("case 2");
+            lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
+            let size = lock_file.file_size() as usize;
+            lock_file.file_close().expect("[ext4Inode new]: file close fail!");
+            // {info!("get size !");}
+            size
+        }
         // self.metadata.size.load(Ordering::Relaxed)
-        let size = self.metadata.size.load(Ordering::Relaxed);
-        size
+        // let size = self.metadata.size.load(Ordering::Relaxed);
+        // size
     }
 
     fn set_size(&self, new_size: usize) -> SysResult {
@@ -219,16 +219,16 @@ impl InodeTrait for Ext4Inode {
         let mut file = self.file.lock();
         info!("{} walk path is {}", file.file_path.to_str().unwrap(), path);
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
-            info!("is a dir");
+            // info!("is a dir");
             let page_cache = None;
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
-            info!("is a file");
+            // info!("is a file");
             let page_cache = Some(PageCache::new_bare());
-            info!("finish create pagecache");
+            // info!("finish create pagecache");
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE, page_cache.clone()))
         } else {
-            info!("is nothing");
+            // info!("is nothing");
             None
         }
     }

@@ -14,7 +14,7 @@ pub struct Ext4File {
     /// EXT4 C 实现中的文件描述符
     file_desc: ext4_file,
     /// 文件在文件系统中的路径
-    file_path: CString,
+    pub file_path: CString,
     /// inode 的类型（文件、目录等）
     this_type: InodeTypes,
 }

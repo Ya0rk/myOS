@@ -110,7 +110,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             info!("start path test");
             // fs::path_test();
             info!(" start dentry test");
-            // fs::vfs::dentry_test();
+            fs::vfs::dentry_test();
         }
 
         spawn_kernel_task(async move {
@@ -128,7 +128,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     
     unsafe { sync::enable_timer_interrupt() };
     timer::set_next_trigger();
-
     // 列出目前的应用
     let finish = AtomicBool::new(false);
     if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
