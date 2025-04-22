@@ -94,6 +94,7 @@ pub enum SysCode {
     SYSCALL_GETPPID   = 173,
     SYSCALL_SYSINFO   = 179,
     SYSCALL_SOCKET    = 198,
+    SYSCALL_SOCKETPAIR= 199,
     SYSCALL_BIND      = 200,
     SYSCALL_LISTEN    = 201,
     SYSCALL_ACCEPT    = 202,
@@ -101,6 +102,9 @@ pub enum SysCode {
     SYSCALL_GETSOCKNAME = 204,
     SYSCALL_GETPEERNAME = 205,
     SYSCALL_SENDTO    = 206,
+    SYSCALL_RECVFROM  = 207,
+    SYSCALL_SETSOCKOPT= 208,
+    SYSCALL_GETSOCKOPT= 209,
     SYSCALL_SHUTDOWN  = 210,
     SYSCALL_BRK       = 214,
     SYSCALL_MUNMAP    = 215,
@@ -124,6 +128,10 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SETSOCKOPT => "setsockopt",
+            Self::SYSCALL_GETSOCKOPT => "getsockopt",
+            Self::SYSCALL_SOCKETPAIR => "socketpair",
+            Self::SYSCALL_RECVFROM => "recvfrom",
             Self::SYSCALL_SENDTO => "sendto",
             Self::SYSCALL_GETPEERNAME => "getpeername",
             Self::SYSCALL_GETSOCKNAME => "getsockname",
@@ -398,3 +406,15 @@ bitflags! {
         const SHUT_RDWR = 2;
     }
 }
+
+pub const SOL_SOCKET: u8 = 1;
+pub const SOL_TCP: u8 = 6;
+
+/// 如果协议是TCP，并且当前的套接字状态不是侦听(listen)或关闭(close)，
+/// 那么，当option_value不是零时，启用TCP保活定时 器，否则关闭保活定时器。
+pub const SO_KEEPALIVE: u32 = 9;// 设置是否保持连接
+pub const SO_SNDBUF: u32 = 7;   // 设置发送缓冲区大小
+pub const SO_RCVBUF: u32 = 8;   // 设置接收缓冲区大小
+pub const MAXSEGMENT: u32 = 2;  // 限制TCP 最大段大小 MSS
+pub const CONGESTION: u32 = 13; // 拥塞控制算法
+pub const NODELAY: u32 = 1;     // 关闭Nagle算法

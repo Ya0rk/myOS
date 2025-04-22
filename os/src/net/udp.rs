@@ -161,13 +161,25 @@ impl Socket for UdpSocket {
         let res = UdpSendFuture::new(buf, self, &meta).await?;
         Ok(res)
     }
-    fn set_recv_buf_size(&self, size: usize) -> SysResult<()> {
-        self.sockmeta.lock().recv_buf_size = size;
+    async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)> {
+        // 完成timer 队列后再来实现，需要控制接收速度
+        todo!()
+    }
+    fn set_recv_buf_size(&self, size: u32) -> SysResult<()> {
+        self.sockmeta.lock().recv_buf_size = size as usize;
         Ok(())
     }
-    fn set_send_buf_size(&self, size: usize) -> SysResult<()> {
-        self.sockmeta.lock().send_buf_size = size;
+    fn set_send_buf_size(&self, size: u32) -> SysResult<()> {
+        self.sockmeta.lock().send_buf_size = size as usize;
         Ok(())
+    }
+    fn get_recv_buf_size(&self) -> SysResult<usize> {
+        let res = self.sockmeta.lock().recv_buf_size;
+        Ok(res)
+    }
+    fn get_send_buf_size(&self) -> SysResult<usize> {
+        let res = self.sockmeta.lock().send_buf_size;
+        Ok(res)
     }
     fn shutdown(&self, how: ShutHow) -> SysResult<()> {
         let mut binding = SOCKET_SET.lock();
@@ -209,6 +221,12 @@ impl Socket for UdpSocket {
             }
         }
         Ok(SockAddr::Unspec)
+    }
+    fn set_keep_alive(&self, action: u32) -> SysResult<()> {
+        todo!()
+    }
+    fn enable_nagle(&self, action: u32) -> SysResult<()> {
+        todo!()
     }
 }
 

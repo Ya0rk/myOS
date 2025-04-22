@@ -74,6 +74,9 @@ impl<'a> Future for TcpSendFuture<'a> {
                 return Poll::Ready(Err(Errno::ENOTCONN));
             }
             if !socket.can_send() {
+                if self.tcpsocket.flags.contains(OpenFlags::O_NONBLOCK) {
+                    return Poll::Ready(Err(Errno::EAGAIN));
+                }
                 socket.register_send_waker(cx.waker());
                 return Poll::Pending;
             }
@@ -113,6 +116,9 @@ impl<'a> Future for UdpSendFuture<'a> {
         NET_DEV.lock().poll();
         let ret = self.udpsocket.with_socket(|socket| {
             if !socket.can_send() {
+                if self.udpsocket.flags.contains(OpenFlags::O_NONBLOCK) {
+                    return Poll::Ready(Err(Errno::EAGAIN));
+                }
                 socket.register_send_waker(cx.waker());
                 return Poll::Pending;
             }
@@ -126,5 +132,56 @@ impl<'a> Future for UdpSendFuture<'a> {
         });
 
         ret
+    }
+}
+
+pub struct TcpRecvFuture<'a> {
+    pub msg_buf: &'a mut [u8],
+    pub tcpsocket: &'a TcpSocket,
+}
+
+impl<'a> TcpRecvFuture<'a> {
+    pub fn new(msg_buf: &'a mut [u8], tcpsocket: &'a TcpSocket) -> Self {
+        Self {
+            msg_buf, 
+            tcpsocket
+        }
+    }
+}
+
+impl<'a> Future for TcpRecvFuture<'a> {
+    type Output = SysResult<usize>;
+
+    fn poll(mut self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
+        NET_DEV.lock().poll();
+        let res = self.tcpsocket.with_socket(|socket| {
+            if socket.state() == TcpState::CloseWait || socket.state() == TcpState::TimeWait {
+                return Poll::Ready(Ok(0));
+            }
+            if !socket.may_recv() {
+                if self.tcpsocket.flags.contains(OpenFlags::O_NONBLOCK) {
+                    return Poll::Ready(Err(Errno::EAGAIN));
+                }
+                return Poll::Ready(Err(Errno::ENOTCONN));
+            }
+
+            match socket.recv_slice(self.msg_buf) {
+                Ok(size) => {
+                    if size > 0 {
+                        return Poll::Ready(Ok(size));
+                    }
+                    return Poll::Pending;
+                }
+                Err(tcp::RecvError::Finished) => {
+                    return Poll::Ready(Err(Errno::ENOTCONN));
+                }
+                Err(tcp::RecvError::InvalidState) => {
+                    return Poll::Ready(Err(Errno::ENOTCONN));
+                }
+            }
+
+        });
+        
+        res
     }
 }

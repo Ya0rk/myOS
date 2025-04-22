@@ -76,6 +76,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_GETSOCKNAME => sys_getsockname(args[0] as usize, args[1] as usize,args[2] as usize),
         SysCode::SYSCALL_GETPEERNAME => sys_getpeername(args[0] as usize, args[1] as usize,args[2] as usize),
         SysCode::SYSCALL_SENDTO => sys_sendto(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32, args[4] as usize, args[5] as usize).await,
+        // TODO: 还需修改udp的recvfrom
+        SysCode::SYSCALL_SENDTO => sys_recvfrom(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32, args[4] as usize, args[5] as usize).await,
+        SysCode::SYSCALL_SOCKETPAIR => sys_socketpair(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize),
+        SysCode::SYSCALL_GETSOCKOPT => sys_getsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

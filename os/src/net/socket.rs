@@ -52,15 +52,25 @@ pub trait Socket: FileTrait {
 
     async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize>;
 
-    fn set_recv_buf_size(&self, size: usize) -> SysResult<()>;
+    async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)>;
 
-    fn set_send_buf_size(&self, size: usize) -> SysResult<()>;
+    fn set_recv_buf_size(&self, size: u32) -> SysResult<()>;
+
+    fn set_send_buf_size(&self, size: u32) -> SysResult<()>;
+
+    fn get_recv_buf_size(&self) -> SysResult<usize>;
+
+    fn get_send_buf_size(&self) -> SysResult<usize>;
 
     fn shutdown(&self, how: ShutHow) -> SysResult<()>;
 
     fn get_sockname(&self) -> SysResult<SockAddr>;
 
     fn get_peername(&self) -> SysResult<SockAddr>;
+
+    fn set_keep_alive(&self, action: u32) -> SysResult<()>;
+
+    fn enable_nagle(&self, action: u32) -> SysResult<()>;
 }
 
 impl dyn Socket {

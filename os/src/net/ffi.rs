@@ -4,8 +4,15 @@ pub const AF_UNIX: u16 = 1;
 pub const AF_INET: u16 = 2;
 pub const AF_INET6: u16 = 10;
 pub const META_SIZE: usize = 1 * KB;
-pub const BUFF_SIZE: usize = 512 * KB;
+pub const BUFF_SIZE: usize = 512 * KB;       // 用于设置接受和发送缓冲区大小
 pub const PORT_RANGE: usize = 65535 - 32768;
+pub const MAX_BUFFER_SIZE: u32 = 128 * KB as u32; // 只用于当下
+pub const TCP_MSS_DEFAULT: u32 = 32 * KB as u32;
+pub const TCP_MSS: u32 = match TCP_MSS_DEFAULT > MAX_BUFFER_SIZE {
+    true  => MAX_BUFFER_SIZE,
+    false => TCP_MSS_DEFAULT
+};
+pub const Congestion: &str = "reno"; // TCP 拥塞控制算法名称
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]

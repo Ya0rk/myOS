@@ -1,4 +1,5 @@
 use core::cell::UnsafeCell;
+use core::time::Duration;
 
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -23,6 +24,7 @@ use crate::net::addr::Ipv6;
 use crate::net::addr::Sock;
 use crate::net::alloc_port;
 use crate::net::net_async::TcpAcceptFuture;
+use crate::net::net_async::TcpRecvFuture;
 use crate::net::PORT_MANAGER;
 use crate::net::SOCKET_SET;
 use crate::sync::yield_now;
@@ -167,6 +169,12 @@ impl TcpSocket {
     pub fn set_state(&self, state: TcpState) {
         *self.state.lock() = state;
     }
+
+    pub fn set_remote_point(&self) {
+        self.with_socket(|socket| {
+            self.sockmeta.lock().remote_end = socket.remote_endpoint();
+        })
+    }
 }
 
 // 这里是一些闭包函数实现
@@ -278,13 +286,44 @@ impl Socket for TcpSocket {
         let res = TcpSendFuture::new(buf, self).await?;
         Ok(res)
     }
-    fn set_recv_buf_size(&self, size: usize) -> SysResult<()> {
-        self.sockmeta.lock().recv_buf_size = size;
+    async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)> {
+        self.set_remote_point();
+        let size = TcpRecvFuture::new(buf, self).await?;
+        // 返回远端地址
+        let remote_end = match self.sockmeta.lock().remote_end {
+            Some(remote) => {
+                let port = remote.port;
+                let addr = remote.addr;
+                match addr {
+                    IpAddress::Ipv4(addr) => {
+                        let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));
+                        res
+                    }
+                    IpAddress::Ipv6(addr) => {
+                        let res = SockAddr::Inet6(Ipv6::new(port, addr.octets()));
+                        res
+                    }
+                }
+            },
+            None => { return Err(Errno::ENOTCONN); }
+        };
+        Ok((size, remote_end))
+    }
+    fn set_recv_buf_size(&self, size: u32) -> SysResult<()> {
+        self.sockmeta.lock().recv_buf_size = size as usize;
         Ok(())
     }
-    fn set_send_buf_size(&self, size: usize) -> SysResult<()> {
-        self.sockmeta.lock().send_buf_size = size;
+    fn set_send_buf_size(&self, size: u32) -> SysResult<()> {
+        self.sockmeta.lock().send_buf_size = size as usize;
         Ok(())
+    }
+    fn get_recv_buf_size(&self) -> SysResult<usize> {
+        let res = self.sockmeta.lock().recv_buf_size;
+        Ok(res)
+    }
+    fn get_send_buf_size(&self) -> SysResult<usize> {
+        let res = self.sockmeta.lock().send_buf_size;
+        Ok(res)
     }
     fn shutdown(&self, how: ShutHow) -> SysResult<()> {
         let mut sockmeta = self.sockmeta.lock();
@@ -341,6 +380,30 @@ impl Socket for TcpSocket {
             }
         }
         Ok(SockAddr::Unspec)
+    }
+    fn set_keep_alive(&self, action: u32) -> SysResult<()> {
+        match action {
+            1 => {
+                self.with_socket(|socket| {
+                    let interval = Duration::from_secs(1).into();
+                    socket.set_keep_alive(Some(interval));
+                })
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+    fn enable_nagle(&self, action: u32) -> SysResult<()> {
+        match action {
+            1 => {
+                self.with_socket(|socket| {
+                    // nagle算法可以阻塞小packet的发送
+                    socket.set_nagle_enabled(true);
+                })
+            }
+            _ => {}
+        }
+        Ok(())
     }
 }
 

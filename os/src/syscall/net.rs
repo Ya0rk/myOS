@@ -1,11 +1,11 @@
-use log::info;
+use log::{info, warn};
 use smoltcp::wire::IpAddress;
 
 use crate::{
-    fs::{FileTrait, OpenFlags}, net::{addr::{IpType, Ipv4, Ipv6, SockAddr}, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX}, task::{current_task, sock_map_fd}, utils::{Errno, SysResult}
+    fs::{FileTrait, OpenFlags, Pipe}, net::{addr::{IpType, Ipv4, Ipv6, SockAddr}, Congestion, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS}, task::{current_task, sock_map_fd, FdInfo}, utils::{Errno, SysResult}
 };
 
-use super::ffi::ShutHow;
+use super::ffi::{ShutHow, CONGESTION, MAXSEGMENT, NODELAY, SOL_SOCKET, SOL_TCP, SO_KEEPALIVE, SO_RCVBUF, SO_SNDBUF};
 
 
 /// domain：即协议域，又称为协议族（family）, 协议族决定了socket的地址类型
@@ -252,10 +252,170 @@ pub async fn sys_sendto(
     }
 
     // maybe bug: 需要检查懒分配
-    let buf = unsafe{ core::slice::from_raw_parts(message as *mut u8, msg_len) };
+    let buf = unsafe{ core::slice::from_raw_parts(message as *const u8, msg_len) };
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket();
 
     let res = socket.send_msg(buf, &dest_sockaddr).await?;
     Ok(res)
+}
+
+/// The recvfrom() function shall receive a message from a connection-
+/// mode or connectionless-mode socket. It is normally used with
+/// connectionless-mode sockets because it permits the application to
+/// retrieve the source address of received data.
+pub async fn sys_recvfrom(
+    sockfd: usize,
+    buf_ptr: usize,
+    buflen: usize,
+    flags: u32,
+    src_addr: usize,
+    addrlen: usize,
+) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+
+    // maybe bug: 需要检查懒分配
+    let buf = unsafe{ core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buflen) };
+    let (size, remote_end) = socket.recv_msg(buf).await?;
+    if src_addr != 0 {
+        // 将远程地址写到用户空间
+        // maybe bug: 需要检查懒分配
+        let buf = unsafe{ core::slice::from_raw_parts_mut(src_addr as *mut u8, addrlen) };
+        remote_end.write2user(buf, addrlen)?;
+    }
+
+    Ok(size)
+}
+
+/// create a pair of connected sockets
+/// The socketpair() call creates an unnamed pair of connected sockets
+/// in the specified domain, of the specified type, and using the
+/// optionally specified protocol.
+/// The file descriptors used in referencing the new sockets are
+/// returned in sv[0] and sv[1].  The two sockets are
+/// indistinguishable.
+pub fn sys_socketpair(
+    domain: usize,
+    _type: usize,
+    protocol: usize,
+    sv: usize,
+) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let length = core::mem::size_of::<i32>();
+    // maybe bug: 需要检查懒分配
+    let sv = unsafe{ core::slice::from_raw_parts_mut(sv as *mut i32, length) };
+
+    let (read_fd, write_fd) = {
+        let (read_end, write_end) = Pipe::new();
+        (
+            task.alloc_fd(FdInfo::new(read_end, OpenFlags::O_RDONLY)),
+            task.alloc_fd(FdInfo::new(write_end, OpenFlags::O_WRONLY)),
+        )
+    };
+    info!("alloc read_fd = {}, write_fd = {}", read_fd, write_fd);
+    sv[0] = read_fd as i32;
+    sv[1] = write_fd as i32;
+    Ok(0)
+}
+
+/// get options on sockets
+/// getsockopt() and setsockopt() manipulate options for the socket
+/// referred to by the file descriptor sockfd.
+/// 
+pub fn sys_getsockopt(
+    sockfd: usize,
+    level: usize,
+    optname: usize,
+    optval_ptr: usize,
+    optlen: usize,
+) -> SysResult<usize> {
+    match (level as u8, optname as u32) {
+        (SOL_SOCKET, SO_SNDBUF) => {
+            let task = current_task().unwrap();
+            let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+            let socket = file.get_socket();
+            // 获取发送缓冲区大小，并写到用户空间
+            let send_buf_size = socket.get_send_buf_size()?;
+            unsafe {
+                *(optval_ptr as *mut u32) = send_buf_size as u32;
+                *(optlen as *mut u32) = core::mem::size_of::<u32>() as u32;
+            }
+        }
+        (SOL_SOCKET, SO_RCVBUF) => {
+            let task = current_task().unwrap();
+            let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+            let socket = file.get_socket();
+            // 获取接收缓冲区大小，并写到用户空间
+            let recv_buf_size = socket.get_recv_buf_size()?;
+            unsafe {
+                *(optval_ptr as *mut u32) = recv_buf_size as u32;
+                *(optlen as *mut u32) = core::mem::size_of::<u32>() as u32;
+            }
+        }
+        (SOL_TCP, MAXSEGMENT) => {
+            // 返回TCP最大段大小 MSS
+            unsafe {
+                *(optval_ptr as *mut u32) = TCP_MSS;
+                *(optlen as *mut u32) = core::mem::size_of::<u32>() as u32;
+            }
+        }
+        (SOL_TCP, CONGESTION) => {
+            // 获取 TCP 拥塞控制算法名称
+            // maybe bug: 需要检查懒分配
+            let name_len = Congestion.len();
+            let buf = unsafe {
+                core::slice::from_raw_parts_mut(optval_ptr as *mut u8, name_len)
+            };
+            let bytes = Congestion.as_bytes();
+            buf.copy_from_slice(bytes);
+            unsafe{ *(optlen as *mut u32) = name_len as u32 };
+        }
+        _ => { 
+            warn!("[sys_getsockopt] sockfd: {:?}, level: {:?}, optname: {:?}, optval_ptr: {:?}, optlen: {:?}",
+            sockfd,
+            level,
+            optname,
+            optval_ptr,
+            optlen); 
+        }
+    }
+
+    Ok(0)
+}
+
+pub fn sys_setsockopt(
+    sockfd: usize,
+    level: usize,
+    optname: usize,
+    optval_ptr: usize,
+    optlen: usize,
+) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+    let socket = file.get_socket();
+    match (level as u8, optname as u32) {
+        (SOL_SOCKET, SO_SNDBUF) => {
+            // 修改发送缓冲区大小
+            let new_size = unsafe{ *(optval_ptr as *const u32) };
+            socket.set_send_buf_size(new_size)?;
+        }
+        (SOL_SOCKET, SO_RCVBUF) => {
+            // 修改接受缓冲区大小
+            let new_size = unsafe{ *(optval_ptr as *const u32) };
+            socket.set_recv_buf_size(new_size)?;
+        }
+        (SOL_SOCKET, SO_KEEPALIVE) => {
+            let action = unsafe{ *(optval_ptr as *const u32) };
+            socket.set_keep_alive(action)?;
+        }
+        (SOL_TCP, NODELAY) => {
+            let action = unsafe{ *(optval_ptr as *const u32) };
+            socket.enable_nagle(action);
+        }
+        _ => {}
+    }
+
+    Ok(0)
 }
