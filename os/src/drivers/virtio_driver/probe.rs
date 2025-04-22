@@ -91,10 +91,18 @@ pub fn probe(fd: u64) {
             }
         }
     }
+    if let Some(pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {
+        log::info!("Found PCI node: {}", pci_node.name);
+        super::pci::enumerate_pci(pci_node, Cam::MmioCam);
+    }
+    if let Some(pcie_node) = fdt.find_compatible(&["pci-host-ecam-generic"]) {
+        log::info!("Found PCIe node: {}", pcie_node.name);
+        super::pci::enumerate_pci(pcie_node, Cam::Ecam);
+    }
 }
 
 
-fn virtio_device(transport: impl Transport) {
+pub fn virtio_device(transport: impl Transport) {
     match transport.device_type() {
         DeviceType::Block => virtio_blk(transport),
         DeviceType::GPU => virtio_gpu(transport),
@@ -109,20 +117,20 @@ fn virtio_device(transport: impl Transport) {
 }
 
 fn virtio_blk<T: Transport>(transport: T) {
-    // let mut blk = VirtIOBlk::<VirtIoHalImpl, T>::new(transport).expect("failed to create blk driver");
-    // println!("check blk readonly");
-    // assert!(!blk.readonly());
-    // println!("start to test blk");
-    // // let mut input = [0xffu8; 512];
-    // // let mut output = [0; 512];
-    // // for i in 0..32 {
-    // //     for x in input.iter_mut() {
-    // //         *x = i as u8;
-    // //     }
-    // //     blk.write_blocks(i, &input).expect("failed to write");
-    // //     blk.read_blocks(i, &mut output).expect("failed to read");
-    // //     assert_eq!(input, output);
-    // // }
+    let mut blk = VirtIOBlk::<VirtIoHalImpl, T>::new(transport).expect("failed to create blk driver");
+    println!("check blk readonly");
+    assert!(!blk.readonly());
+    println!("start to test blk");
+    // let mut input = [0xffu8; 512];
+    // let mut output = [0; 512];
+    // for i in 0..32 {
+    //     for x in input.iter_mut() {
+    //         *x = i as u8;
+    //     }
+    //     blk.write_blocks(i, &input).expect("failed to write");
+    //     blk.read_blocks(i, &mut output).expect("failed to read");
+    //     assert_eq!(input, output);
+    // }
     println!("virtio-blk test finished");
 }
 
