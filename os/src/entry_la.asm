@@ -25,7 +25,7 @@ _start:
     .align 16
     .globl boot_stack_lower_bound
 boot_stack_lower_bound:
-    .space 4096 * 16
+    .space 4096 * 16 * 2
     .globl boot_stack_lower_bound
 boot_stack_top:
 

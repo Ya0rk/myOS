@@ -75,7 +75,8 @@ impl TaskControlBlock {
         
 
         unsafe { memory_space.switch_page_table() };
-        unsafe{riscv::register::sstatus::set_sum();}
+        crate::hal::arch::set_sum(); 
+        // unsafe{riscv::register::sstatus::set_sum();}
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
         let trap_cx = TrapContext::app_init_context(
             entry_point,

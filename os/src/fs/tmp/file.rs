@@ -1,7 +1,7 @@
 use alloc::{string::String, sync::{Arc, Weak}};
 use async_trait::async_trait;
 use crate::{
-    config::PATH_MAX, 
+    hal::config::PATH_MAX, 
     fs::{ffi::RenameFlags, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
     mm::{UserBuffer, page::Page}, utils::{Errno, SysResult}
 };

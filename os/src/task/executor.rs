@@ -1,12 +1,11 @@
 #![allow(unused)]
 
-extern crate alloc;
 
 use alloc::{collections::VecDeque, task};
 use log::info;
 use core::{future::Future, sync::atomic::{AtomicU32, AtomicUsize}};
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
-use crate::{config::HART_NUM, sync::SpinNoIrqLock, utils::{LcgRng, RNG}};
+use crate::{hal::config::HART_NUM, sync::SpinNoIrqLock, utils::{LcgRng, RNG}};
 
 use super::get_current_hart_id;
 

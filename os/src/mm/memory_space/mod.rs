@@ -11,11 +11,14 @@ use core::{
     cmp,
     ops::{Range, RangeBounds},
 };
-use core::arch::riscv64::sfence_vma_vaddr;
-use riscv::register::scause;
+
+// use core::arch::riscv64::sfence_vma_vaddr; 关于core::arch::riscv64::中的内容会在crate::hal::arch中统一引入
+use crate::hal::arch::sfence_vma_vaddr;
+// use riscv::register::scause; 将从riscv库引入scause替换为从hal::arch引入。在hal::arch中会间接引入riscv::register::scause
+// use crate::hal::arch::scause;
 // use async_utils::block_on;
 use crate::{
-    config::{
+    hal::config::{
         align_down_by_page, is_aligned_to_page, DL_INTERP_OFFSET, MMAP_PRE_ALLOC_PAGES, PAGE_SIZE, USER_ELF_PRE_ALLOC_PAGE_CNT, 
         USER_STACK_PRE_ALLOC_SIZE, USER_STACK_SIZE, U_SEG_FILE_BEG, 
         U_SEG_FILE_END, U_SEG_HEAP_BEG, U_SEG_HEAP_END, U_SEG_SHARE_BEG, U_SEG_SHARE_END, 
@@ -23,6 +26,7 @@ use crate::{
     }, 
     fs::{FileTrait, FileClass}, sync::block_on
 };
+
 // use memory::{pte::PTEFlags, PageTable, PhysAddr, VirtAddr, VirtPageNum};
 use super::{page_table::{PTEFlags, PageTable}};
 use super::address::{VirtAddr, VirtPageNum, PhysAddr};
@@ -54,6 +58,8 @@ extern "C" {
     fn sbss_with_stack();
     fn ebss();
     fn ekernel();
+    fn initproc_start();
+    fn initproc_end();
 }
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -69,14 +75,14 @@ impl PageFaultAccessType {
     pub const RW: Self = Self::RO.union(Self::WRITE);
     pub const RX: Self = Self::RO.union(Self::EXECUTE);
 
-    pub fn from_exception(e: scause::Exception) -> Self {
-        match e {
-            scause::Exception::InstructionPageFault => Self::RX,
-            scause::Exception::LoadPageFault => Self::RO,
-            scause::Exception::StorePageFault => Self::RW,
-            _ => panic!("unexcepted exception type for PageFaultAccessType"),
-        }
-    }
+    // pub fn from_exception(e: scause::Exception) -> Self {
+    //     match e {
+    //         scause::Exception::InstructionPageFault => Self::RX,
+    //         scause::Exception::LoadPageFault => Self::RO,
+    //         scause::Exception::StorePageFault => Self::RW,
+    //         _ => panic!("unexcepted exception type for PageFaultAccessType"),
+    //     }
+    // }
 
     pub fn can_access(self, flag: MapPerm) -> bool {
         if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) {

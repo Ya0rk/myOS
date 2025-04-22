@@ -1,4 +1,4 @@
-use crate::config::KERNEL_ADDR_OFFSET;
+use crate::hal::config::KERNEL_ADDR_OFFSET;
 
 #[cfg(feature = "qemu_riscv")]
 pub const CLOCK_FREQ: usize = 12500000;

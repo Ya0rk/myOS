@@ -2,7 +2,7 @@
 use alloc::{sync::Arc, vec::Vec};
 use log::info;
 use lwext4_rust::bindings::O_WRONLY;
-use crate::{config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, mm::memory_space::{MmapFlags, MmapProt}, utils::{Errno, SysResult}};
+use crate::{hal::config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, mm::memory_space::{MmapFlags, MmapProt}, utils::{Errno, SysResult}};
 
 #[derive(Clone)]
 pub struct FdTable {
