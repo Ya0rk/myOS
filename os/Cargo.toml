@@ -11,7 +11,8 @@ buddy_system_allocator = "0.11.0"
 bitflags = "2.8.0"
 xmas-elf = "0.9.1"
 # virtio-drivers = { path = "../vendor/virtio-drivers" }
-virtio-drivers = { path = "../vendor/virtio-drivers-new" }
+# virtio-drivers = { path = "../vendor/virtio-drivers-new" }
+virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers.git"}
 flat_device_tree = { version = "3.1.1" }
 log = "0.4"
 # sbi-rt = { version = "0.0.3", features = ["legacy"] }
