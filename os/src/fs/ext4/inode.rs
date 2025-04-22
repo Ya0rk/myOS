@@ -62,19 +62,15 @@ impl InodeTrait for Ext4Inode {
         // info!("case -1");
         let binding = lock_file.get_path();
         let path = binding.to_str().unwrap();
-        if path == "/" || path == "/lost+found" || path == "/mnt"{
-            // info!("case 0");
-            lock_file.file_size() as usize
-        } else if lock_file.file_type_get() == InodeTypes::EXT4_DE_DIR {
-            // info!("case 1");
-            lock_file.file_size() as usize
-        } else {
+        if lock_file.get_type() == InodeTypes::EXT4_DE_REG_FILE {
             // info!("case 2");
             lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
             let size = lock_file.file_size() as usize;
             lock_file.file_close().expect("[ext4Inode new]: file close fail!");
             // {info!("get size !");}
             size
+        } else {
+            lock_file.file_size() as usize
         }
         // self.metadata.size.load(Ordering::Relaxed)
         // let size = self.metadata.size.load(Ordering::Relaxed);
