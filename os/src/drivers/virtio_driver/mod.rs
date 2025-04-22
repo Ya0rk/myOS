@@ -1,5 +1,6 @@
 mod blk;
 pub mod probe;
+mod pci;
 
 pub use blk::*;
 use spin::Mutex;

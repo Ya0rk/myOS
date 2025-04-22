@@ -8,8 +8,8 @@ APPS := ../user/src/bin/*
 
 # fs image
 FS = lwext4_rust
-# FS_IMG := ../$(FS)/ext4.img
-FS_IMG := ../sdcard-rv.img
+FS_IMG := ../$(FS)/ext4.img
+# FS_IMG := ../sdcard-rv.img
 
 # cpu hart
 CPUS ?= 2
