@@ -16,6 +16,7 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![feature(map_try_insert)]
+#![feature(let_chains)]
 
 #![allow(unused)]
 extern crate alloc;
