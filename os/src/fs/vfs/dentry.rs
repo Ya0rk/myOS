@@ -191,7 +191,7 @@ pub fn dentry_test() {
     Dentry::init();
     print!("list all children:   ");
     {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.name.read()));println!("");}
-    info!("start unmount");
+    // info!("start unmount");
     // Dentry::unbind(&DENTRY_ROOT);
     print!("list all children:   ");
     {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.name.read()));println!("");}
@@ -199,6 +199,7 @@ pub fn dentry_test() {
     {DENTRY_ROOT.children.read().iter().for_each(|x| {
         let mut dentry = x;
         if let Some(x) = dentry.get_inode() {
+            info!("finished got inode");
             info!("{:?}", x.fstat());
         } else {
             info!("{} no seccess", dentry.name.read());

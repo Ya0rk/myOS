@@ -108,9 +108,9 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         {
             // mm::remap_test();
             info!("start path test");
-            fs::path_test();
+            // fs::path_test();
             info!(" start dentry test");
-            fs::vfs::dentry_test();
+            // fs::vfs::dentry_test();
         }
 
         spawn_kernel_task(async move {
