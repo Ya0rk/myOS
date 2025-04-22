@@ -180,10 +180,10 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // let path = translated_str(token, path as *const u8);
     let path = user_cstr(path.into())?.unwrap();
     info!("sys_exec: path = {:?}", path);
-    let argv = user_cstr_array(argv.into())?.unwrap();
-    let env = user_cstr_array(env.into())?.unwrap();
-    println!("argv:{:?}", argv);
-    println!("env:{:?}", env);
+    let argv = user_cstr_array(argv.into())?.unwrap_or_else(|| Vec::new());
+    let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
+    // println!("argv:{:?}", argv);
+    // println!("env:{:?}", env);
     // let mut args: Vec<String> = Vec::new();
     // if argv != 0 {
     //     let argv = translated_ref(token, argv as *const &[usize]);
