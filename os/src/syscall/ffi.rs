@@ -76,6 +76,8 @@ pub enum SysCode {
     SYSCALL_CLOCK_SETTIME = 112,
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_YIELD     = 124,
+    SYSCALL_SIGACTION = 134,
+    SYSCALL_SIGPROCMASK = 135,
     SYSCALL_SIGRETURN = 139,
     SYSCALL_TIMES     = 153,
     SYSCALL_SETPGID   = 154,
@@ -84,6 +86,7 @@ pub enum SysCode {
     SYSCALL_GETTIMEOFDAY  = 169,
     SYSCALL_GETPID    = 172,
     SYSCALL_GETPPID   = 173,
+    SYSCALL_GETUID    = 174,
     SYSCALL_SYSINFO   = 179,
     SYSCALL_BRK       = 214,
     SYSCALL_MUNMAP    = 215,
@@ -106,6 +109,9 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SIGACTION => "sigaction",
+            Self::SYSCALL_SIGPROCMASK => "sigprocmask",
+            Self::SYSCALL_GETUID => "getuid",
             Self::SYSCALL_WRITEV => "writev",
             Self::SYSCALL_READV => "readv",
             Self::SYSCALL_SYSINFO => "sysinfo",

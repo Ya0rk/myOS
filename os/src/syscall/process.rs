@@ -2,7 +2,7 @@ use core::mem::size_of;
 use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::signal::{SigDetails, SigMask, UContext};
+use crate::signal::{KSigAction, SigAction, SigActionFlag, SigDetails, SigHandler, SigMask, SigNom, UContext, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
 use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
@@ -11,7 +11,7 @@ use crate::task::{
 };
 use crate::utils::{Errno, SysResult, RNG};
 use alloc::ffi::CString;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use log::{debug, info};
 use lwext4_rust::bindings::true_;
@@ -177,32 +177,17 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // info!("[sys_exec] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
-    // let path = translated_str(token, path as *const u8);
-    let path = user_cstr(path.into())?.unwrap();
+    let mut path = user_cstr(path.into())?.unwrap();
     info!("sys_exec: path = {:?}", path);
-    let argv = user_cstr_array(argv.into())?.unwrap_or_else(|| Vec::new());
+    let mut argv = user_cstr_array(argv.into())?.unwrap_or_else(|| Vec::new());
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
-    // println!("argv:{:?}", argv);
-    // println!("env:{:?}", env);
-    // let mut args: Vec<String> = Vec::new();
-    // if argv != 0 {
-    //     let argv = translated_ref(token, argv as *const &[usize]);
-    //     for str_addr in argv.iter() {
-    //         let arg_entry = translated_str(token, *str_addr as *const u8);
-    //         info!("arg_entry:{}", arg_entry);
-    //         args.push(arg_entry);
-    //     }
-    // }
-    // let mut envs: Vec<String> = Vec::new();
-    // if env != 0 {
-    //     let env = translated_ref(token, env as *const &[usize]);
-    //     for str_addr in env.iter() {
-    //         let env_entry = translated_str(token, *str_addr as *const u8);
-    //         envs.push(env_entry);
-    //     }
-    // }
     let cwd = task.get_current_path();
     info!("cwd = {}", cwd);
+    info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
+    if path.ends_with(".sh") {
+        path = "/musl/busybox".to_string();
+    }
+    info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;
@@ -441,5 +426,119 @@ pub fn sys_sysinfo(sysinfo: *const u8) -> SysResult<usize> {
     let bind = Sysinfo::new(proc_num);
     let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
     unsafe { core::ptr::write(sysinfo, bind) };
+    Ok(0)
+}
+
+pub fn sys_getuid() -> SysResult<usize> {
+    info!("[sys_getuid]: 0");
+    Ok(0)
+}
+
+/// examine and change blocked signals
+/// how决定如何修改当前的信号屏蔽字;set指定了需要添加、移除或设置的信号
+/// 当前的信号屏蔽字会被保存在 oldset 指向的位置
+pub fn sys_sigprocmask(
+    how: usize,
+    set: usize,
+    old_set: usize,
+    sigsetsize: usize,
+) -> SysResult<usize> {
+    info!("[sys_sigprocmask] start");
+    let task = current_task().unwrap();
+    if old_set != 0 {
+        let mut old_set = old_set as *mut SigMask;
+        unsafe { *old_set = *task.get_blocked_mut() };
+    }
+
+    if set != 0 {
+        let mut set = SigMask::from_bits(set).ok_or(Errno::EINVAL)?;
+        set.remove(SigMask::SIGKILL | SigMask::SIGCONT);
+        match how {
+            SIGBLOCK => {
+                *task.get_blocked_mut() |= set;
+            }
+            SIGUNBLOCK => {
+                task.get_blocked_mut().remove(set);
+            }
+            SIGSETMASK => {
+                *task.get_blocked_mut() = set;
+            }
+            _ => {
+                return Err(Errno::EINVAL);
+            }
+        }
+    }
+    Ok(0)
+}
+
+/// examine and change a signal action
+/// The sigaction() system call is used to change the action taken by
+/// a process on receipt of a specific signal.  (See signal(7) for an
+/// overview of signals.)
+/// 
+/// signum specifies the signal and can be any valid signal except
+/// SIGKILL and SIGSTOP.
+/// If act is non-NULL, the new action for signal signum is installed
+/// from act.  If oldact is non-NULL, the previous action is saved in
+/// oldact.
+pub fn sys_sigaction(
+    signum: usize,
+    act: usize,
+    old_act: usize,
+) -> SysResult<usize> {
+    // 作为强转的暂存器
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct ActionUtil {
+        sa_handler: usize,
+        pub sa_flags: SigActionFlag,
+        pub sa_restorer: usize,
+        pub sa_mask: SigMask,
+    }
+    if signum > MAX_SIGNUM || signum == 9 || signum == 19 {
+        return Err(Errno::EINVAL);
+    }
+    let task = current_task().unwrap();
+    if old_act != 0 {
+        let old_act = old_act as *mut SigAction;
+        let cur_act = &task.handler.lock().actions[signum].sa as *const SigAction;
+        unsafe { old_act.copy_from(cur_act, 1) };
+    }
+    if act != 0 {
+        let mut new_act = unsafe { *(act as *const ActionUtil) };
+        let signo = SigNom::from(signum);
+        new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
+        match new_act.sa_handler {
+            SIG_DFL => {
+                let new_kaction = KSigAction::new(signo);
+                task.handler.lock().set_action(signum, new_kaction);
+            },
+            SIG_IGN => {
+                let new_act = SigAction { 
+                    sa_handler: SigHandler::SIG_IGN, 
+                    sa_flags: new_act.sa_flags, 
+                    sa_restorer: new_act.sa_restorer, 
+                    sa_mask: new_act.sa_mask 
+                };
+                let new_kaction = KSigAction {
+                    sa: new_act
+                };
+                task.handler.lock().set_action(signum, new_kaction);
+            },
+            handler => {
+                let new_act = SigAction {
+                    sa_handler: SigHandler::Customized { handler },
+                    sa_flags: new_act.sa_flags,
+                    sa_restorer: new_act.sa_restorer,
+                    sa_mask: new_act.sa_mask
+                };
+                let new_kaction = KSigAction {
+                    sa: new_act
+                };
+                task.handler.lock().set_action(signum, new_kaction);
+            }
+        }
+    }
+
     Ok(0)
 }

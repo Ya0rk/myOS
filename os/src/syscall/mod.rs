@@ -15,6 +15,9 @@ use crate::utils::SysResult;
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     match syscode {
+        SysCode::SYSCALL_SIGACTION => sys_sigaction(args[0] as usize, args[1] as usize, args[2] as usize),
+        SysCode::SYSCALL_SIGPROCMASK => sys_sigprocmask(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize),
+        SysCode::SYSCALL_GETUID => sys_getuid(),
         SysCode::SYSCALL_GETCWD => sys_getcwd(args[0] as *mut u8, args[1]),
         SysCode::SYSCALL_DUP => sys_dup(args[0]),
         SysCode::SYSCALL_DUP3 => sys_dup3(args[0], args[1], args[2] as u32),

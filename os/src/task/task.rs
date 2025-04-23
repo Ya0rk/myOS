@@ -194,9 +194,6 @@ impl TaskControlBlock {
             false => new_shared(self.handler.lock().deref().clone()), // 一个新的副本，子进程可以独立修改
         };
 
-        // let kernel_stack = KernelStack::new(&pid);
-        // let (kernel_stack_bottom, kernel_stack_top) = kernel_stack.get_kernel_stack_pos();
-
         // modify kernel_sp in trap_cx
         let trap_cx = self.get_trap_cx_mut();
         // trap_cx.set_kernel_sp(kernel_stack_top);

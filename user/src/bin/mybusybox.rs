@@ -24,16 +24,24 @@ const TESTCASES: &[&str] = &[
 
 fn run_cmd(cmd: &str) {
     if fork() == 0 {
+        println!("aaaaaaaaaaaa");
         execve(
-            "busybox",
-            &["busybox\0", "sh\0", "-c", cmd],
+            "/musl/busybox\0",
             &[
-                "PATH=/musl/\0",
-                "LD_LIBRARY_PATH=/musl/\0",
+                "busybox\0",
+                "sh\0",
+                "-c",
+                "/musl/busybox_testcode.sh\0",
+            ],
+            &[
+                "PATH=/\0",
+                "LD_LIBRARY_PATH=/\0",
+                "TERM=screen\0",
             ],
         );
     } else {
         loop {
+            println!("hhhhhhhahahah");
             let mut exit_code: i32 = 0;
             let tid = wait(&mut exit_code);
             if tid == -1 {
