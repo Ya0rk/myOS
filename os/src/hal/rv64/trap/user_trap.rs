@@ -27,7 +27,6 @@ pub async fn user_trap_handler() {
     let task = current_task().unwrap();
 
     if task.get_time_data().usedout_timeslice() && executor::has_task() {
-        // log::info!("time slice used up, yield now");
         yield_now().await;
     }
 
@@ -65,15 +64,10 @@ pub async fn user_trap_handler() {
                     }
                 }
             }
-            
-            
         }
         Trap::Exception(Exception::StorePageFault)
         | Trap::Exception(Exception::LoadPageFault)
         | Trap::Exception(Exception::InstructionPageFault) => {
-            // log::info!(
-            //     "[user_trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
-            // );
             let access_type = match cause {
                 Trap::Exception(Exception::InstructionPageFault) => PageFaultAccessType::RX,
                 Trap::Exception(Exception::LoadPageFault) => PageFaultAccessType::RO,
@@ -98,16 +92,12 @@ pub async fn user_trap_handler() {
                 stval,
                 current_trap_cx().get_sepc(),
             );
-            // page fault exit code
-            // exit_current_and_run_next(-2);
             task.set_zombie();
         }
         Trap::Exception(Exception::IllegalInstruction) => { // 2
             println!("[kernel] hart_id = {:?}, IllegalInstruction in application, kernel killed it.",
                 get_current_hart_id()
             );
-            // illegal instruction exit code
-            // exit_current_and_run_next(-3);
             task.set_zombie();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
