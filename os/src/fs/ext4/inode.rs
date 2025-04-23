@@ -55,6 +55,14 @@ impl Ext4Inode {
     }
 }
 
+impl Drop for Ext4Inode {
+    fn drop(&mut self) {
+        self.sync();
+        let mut file = self.file.lock();
+        file.file_close().expect("failed to close fd");
+    }
+}
+
 #[async_trait]
 impl InodeTrait for Ext4Inode {
     fn get_page_cache(&self) -> Option<Arc<PageCache>> {
@@ -130,11 +138,9 @@ impl InodeTrait for Ext4Inode {
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         match &self.page_cache {
             None => {
-                info!("nononono");
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
-                info!("yesyseyse");
                 cache.write(buf, offset).await
             }
         }
@@ -156,7 +162,7 @@ impl InodeTrait for Ext4Inode {
         r.map_err(|_| Errno::EIO).unwrap()
     }
 
-    /// 截断文件
+    /// 改变文件size
     fn truncate(&self, size: usize) -> usize {
         let mut file = self.file.lock();
 
@@ -167,8 +173,11 @@ impl InodeTrait for Ext4Inode {
         r.map_or_else(|_| Errno::EIO.into(), |_| 0)
     }
     /// 同步文件
-    fn sync(&self) {
-        todo!()
+    async fn sync(&self) {
+        info!("[ext4Inode sync] do sync with pagecache");
+        if let Some(cache) = &self.page_cache {
+            cache.flush().await;
+        }
     }
     /// 读取文件所有内容
     async fn read_all(&self) -> SysResult<Vec<u8>> {
@@ -235,13 +244,5 @@ impl InodeTrait for Ext4Inode {
     }
     fn is_dir(&self) -> bool {
         self.metadata.file_type.is_dir()
-    }
-}
-
-impl Drop for Ext4Inode {
-    fn drop(&mut self) {
-        let mut file = self.file.lock();
-        // debug!("Drop struct FileWrapper {:?}", file.get_path());
-        file.file_close().expect("failed to close fd");
     }
 }

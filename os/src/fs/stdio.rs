@@ -2,6 +2,7 @@ use super::ffi::RenameFlags;
 use super::FileTrait;
 use super::InodeTrait;
 use super::Kstat;
+use super::OpenFlags;
 // use crate::hal::arch::console_getchar;
 use crate::hal::arch::console_getchar;
 use crate::utils::Errno;

@@ -1,7 +1,5 @@
-
 #![allow(warnings)]
 // #![deny(warnings)]
-
 #![no_std]
 #![no_main]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
@@ -38,6 +36,8 @@ pub mod sync;
 pub mod utils;
 pub mod syscall;
 pub mod drivers;
+pub mod net;
+// pub mod arch;
 pub mod signal;
 pub mod hal;
 

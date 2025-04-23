@@ -8,7 +8,7 @@ use crate::mm::address::{VirtAddr, VirtPageNum};
 use crate::mm::page::Page;
 use crate::sync::block_on;
 use crate::task::current_task;
-use crate::utils::{Errno, SysResult};
+use crate::utils::{backtrace, Errno, SysResult};
 use crate::fs::{FileClass, FileTrait};
 use super::{PageFaultAccessType, MmapFlags};
 
@@ -384,10 +384,12 @@ impl VmArea {
         );
 
         if !access_type.can_access(self.perm()) {
+            backtrace();
             log::warn!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
+            panic!("aaaa");
             return Err(Errno::EFAULT);
         }
 

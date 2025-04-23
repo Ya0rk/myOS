@@ -2,19 +2,31 @@ mod fs;
 mod process;
 mod ffi;
 mod mm;
+mod io;
+mod net;
 
 use fs::*;
+use log::info;
 use mm::{sys_brk, sys_mmap, sys_munmap};
 use process::*;
+use io::*;
+use net::*;
 use ffi::SysCode;
 pub use ffi::CloneFlags;
+pub use ffi::ShutHow;
 
 use crate::utils::SysResult;
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
+    info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_SYNC => sys_sync(),
+        SysCode::SYSCALL_GETEGID => sys_getegid(),
+        SysCode::SYSCALL_GETEUID => sys_geteuid(),
+        SysCode::SYSCALL_GETTID => sys_gettid(),
+        SysCode::SYSCALL_FCNTL => sys_fcntl(args[0] as usize, args[1] as u32, args[2] as usize),
         SysCode::SYSCALL_SIGACTION => sys_sigaction(args[0] as usize, args[1] as usize, args[2] as usize),
         SysCode::SYSCALL_SIGPROCMASK => sys_sigprocmask(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_GETUID => sys_getuid(),
@@ -61,6 +73,24 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_SIGRETURN => sys_sigreturn(),
         SysCode::SYSCALL_SYSINFO => sys_sysinfo(args[0] as *mut u8),
         SysCode::SYSCALL_READV => sys_readv(args[0] as usize, args[1] as usize, args[2] as usize).await,
+        SysCode::SYSCALL_FTRUNCATE64 => sys_ftruncate64(args[0] as usize, args[1] as usize),
+        SysCode::SYSCALL_FCHMODAT => sys_fchmodat(),
+        SysCode::SYSCALL_PREAD64 => sys_pread64(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
+        SysCode::SYSCALL_PWRITE64 => sys_pwrite64(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
+        SysCode::SYSCALL_FSTATAT => sys_fstatat(args[0] as isize, args[1] as *const u8, args[2] as *const u8, args[3] as u32),
+        SysCode::SYSCALL_SOCKET => sys_socket(args[0] as usize, args[1] as usize, args[2] as usize),
+        SysCode::SYSCALL_BIND => sys_bind(args[0] as usize, args[1] as usize, args[2] as usize),
+        SysCode::SYSCALL_LISTEN => sys_listen(args[0] as usize, args[1] as usize),
+        SysCode::SYSCALL_ACCEPT4 => sys_accept4(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32).await,
+        SysCode::SYSCALL_ACCEPT => sys_accept(args[0] as usize, args[1] as usize,args[2] as usize).await,
+        SysCode::SYSCALL_GETSOCKNAME => sys_getsockname(args[0] as usize, args[1] as usize,args[2] as usize),
+        SysCode::SYSCALL_GETPEERNAME => sys_getpeername(args[0] as usize, args[1] as usize,args[2] as usize),
+        SysCode::SYSCALL_SENDTO => sys_sendto(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32, args[4] as usize, args[5] as usize).await,
+        // TODO: 还需修改udp的recvfrom
+        SysCode::SYSCALL_SENDTO => sys_recvfrom(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32, args[4] as usize, args[5] as usize).await,
+        SysCode::SYSCALL_SOCKETPAIR => sys_socketpair(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize),
+        SysCode::SYSCALL_GETSOCKOPT => sys_getsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),
+        SysCode::SYSCALL_WRITEV => sys_writev(args[0] as usize, args[1] as usize, args[2] as usize).await,
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

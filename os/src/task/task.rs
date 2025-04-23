@@ -710,12 +710,16 @@ impl TaskControlBlock {
         self.fd_table.lock().table_len()
     }
     /// 将fd作为index获取文件描述符
-    pub fn get_fd(&self, fd: usize) -> SysResult<FdInfo> {
-        self.fd_table.lock().get_fd(fd)
+    pub fn get_fd(&self, fd: usize) -> FdInfo {
+        self.fd_table.lock().get_fd(fd).unwrap()
     }
     /// 分配fd
     pub fn alloc_fd(&self, fd: FdInfo) -> usize{
         self.fd_table.lock().alloc_fd(fd).expect("task alloc fd fail")
+    }
+    /// 为以前分配了Fd的file，分配一个大于than的新fd
+    pub fn alloc_fd_than(&self, fd: FdInfo, than: usize) -> usize{
+        self.fd_table.lock().alloc_fd_than(fd, than).expect("task alloc fd fail")
     }
     /// 删除fd
     pub fn remove_fd(&self, fd: usize) {

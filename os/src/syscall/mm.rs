@@ -1,6 +1,11 @@
 use log::info;
 
-use crate::{config::{align_up_by_page, is_aligned_to_page, PAGE_MASK, PAGE_SIZE}, mm::{memory_space::{vm_area::{MapPerm, VmArea}, MemorySpace, MmapFlags, MmapProt}, MapPermission}, utils::{Errno, SysResult}};
+use crate::{
+    config::{align_up_by_page, is_aligned_to_page, PAGE_MASK, PAGE_SIZE}, 
+    mm::{memory_space::{vm_area::{MapPerm, VmArea}, MemorySpace, MmapFlags, MmapProt}, 
+    MapPermission}, 
+    utils::{Errno, SysResult}
+};
 use crate::task::{current_task};
 
 pub fn sys_brk(new_brk: *const u8) -> SysResult<usize> {
@@ -55,7 +60,7 @@ pub fn sys_mmap(
         }).unwrap();
         return Ok(start_va.0);
     } else {
-        let fd = task.get_fd(fd)?;
+        let fd = task.get_fd(fd);
         if fd.is_none() { return Err(Errno::EBADF); }
         if let Err(e) = fd.check_mmap_valid(flags, prot) {
             return Err(e);

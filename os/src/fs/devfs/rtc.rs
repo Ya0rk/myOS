@@ -1,8 +1,8 @@
 use core::{cmp::min, fmt::{Formatter, Debug}};
-use alloc::{format, string::String, sync::Arc};
+use alloc::{format, string::{String, ToString}, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::{UserBuffer, page::Page}, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
 
 pub struct DevRtc;
 
@@ -40,7 +40,7 @@ impl FileTrait for DevRtc {
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("/dev/rtc".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()

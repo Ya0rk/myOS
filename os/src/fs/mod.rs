@@ -7,15 +7,15 @@ mod pipe;
 mod stat;
 mod stdio;
 mod vfs;
-mod ffi;
 mod path;
 pub mod pre_data;
 pub mod ext4;
 pub mod tmp;
+pub mod ffi;
 
 use ext4::Ext4Inode;
 pub use ext4::{root_inode,ls};
-pub use ffi::{OpenFlags, UmountFlags, MountFlags};
+pub use ffi::*;
 use lwext4_rust::bindings::{O_CREAT, O_RDWR, O_TRUNC};
 use lwext4_rust::{Ext4File, InodeTypes};
 use page_cache::PageCache;
@@ -71,7 +71,6 @@ impl FileClass {
 // os\src\fs\mod.rs
 
 pub fn init() {
-    // flush_preload().await;
     create_init_files();
 }
 
@@ -265,6 +264,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
                     
                     drop(bind);
 
+                    // 这里只是检查作用，后面可以删掉
                     let res = root_inode().file.lock().check_inode_exist(&abs_path.get(), create_inode_type.clone());
                     info!("now path = {}, exits = {}", abs_path.get(), res);
 

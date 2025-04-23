@@ -18,7 +18,7 @@ impl LcgRng {
     }
 
     // 生成下一个随机数
-    fn next(&mut self) -> u32 {
+    pub fn next(&mut self) -> u32 {
         self.state = self.state.wrapping_mul(LCG_MULTIPLIER).wrapping_add(LCG_INCREMENT);
         (self.state >> 32) as u32
     }

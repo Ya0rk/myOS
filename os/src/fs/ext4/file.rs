@@ -49,6 +49,14 @@ impl NormalFile {
 // 为 OSInode 实现 File Trait
 #[async_trait]
 impl FileTrait for NormalFile {
+    fn set_flags(&self, flags: OpenFlags) {
+        *self.metadata.flags.write() = flags;
+    }
+
+    fn get_flags(&self) -> OpenFlags {
+        self.metadata.flags.read().clone()
+    }
+
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         self.metadata.inode.clone()
     }
@@ -84,6 +92,28 @@ impl FileTrait for NormalFile {
         Ok(total_read_size)
     }
 
+    /// 从指定偏移量读取数据到用户缓冲区
+    async fn pread(&self, mut buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+        let mut total_read_size = 0usize;
+        info!("pread file: {}, offset: {}", self.path, offset);
+
+        if self.metadata.inode.get_size() <= offset {
+            //读取位置超过文件大小，返回结果为EOF
+            return Ok(0);
+        }
+
+        let mut new_offset = offset;
+        for slice in buf.buffers.iter_mut() {
+            let read_size = self.metadata.inode.read_at(new_offset, *slice).await;
+            if read_size == 0 {
+                break;
+            }
+            new_offset += read_size;
+            total_read_size += read_size;
+        }
+        Ok(total_read_size)
+    }
+
     async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         let mut total_write_size = 0usize;
         let file_size = self.metadata.inode.get_size();
@@ -100,6 +130,22 @@ impl FileTrait for NormalFile {
 
         Ok(total_write_size)
     }
+
+    async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+        let mut total_write_size = 0usize;
+        let mut offset = offset;
+        let file_size = self.metadata.inode.get_size();
+        if offset > file_size - buf.len() {
+            self.metadata.inode.set_size(buf.len() + offset).expect("[pwrite]: set size fail!");
+        }
+        for slice in buf.buffers.iter() {
+            let write_size = self.metadata.inode.write_at(offset, *slice).await;
+            total_write_size += write_size;
+            offset += write_size;
+        }
+        Ok(total_write_size)
+    }
+
     fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {
         if offset < 0 || whence > 2 {
             return Err(Errno::EINVAL);

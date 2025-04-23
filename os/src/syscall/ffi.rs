@@ -51,13 +51,16 @@ pub enum SysCode {
     SYSCALL_GETCWD    = 17,
     SYSCALL_DUP       = 23,
     SYSCALL_DUP3      = 24,
+    SYSCALL_FCNTL     = 25,
     SYSCALL_MKDIRAT   = 34,
     SYSCALL_UNLINKAT  = 35,
     SYSCALL_LINKAT    = 37,
     SYSCALL_UMOUNT2   = 39,
     SYSCALL_MOUNT     = 40,
+    SYSCALL_FTRUNCATE64 = 46,
     SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR     = 49,
+    SYSCALL_FCHMODAT  = 53,
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
     SYSCALL_PIPE2     = 59,
@@ -67,8 +70,14 @@ pub enum SysCode {
     SYSCALL_WRITE     = 64,
     SYSCALL_READV     = 65,
     SYSCALL_WRITEV    = 66,
+    SYSCALL_PREAD64   = 67,
+    SYSCALL_PWRITE64  = 68,
     SYSCALL_SENDFILE  = 71,
+    // SYSCALL_PSELECT   = 72, // todo in io.rs
+    // SYSCALL_PPOLL     = 73,
+    SYSCALL_FSTATAT   = 79,
     SYSCALL_FSTAT     = 80,
+    SYSCALL_SYNC      = 81,
     SYSCALL_EXIT      = 93,
     SYSCALL_EXIT_GROUP= 94,
     SYSCALL_SET_TID_ADDRESS = 96,
@@ -87,12 +96,29 @@ pub enum SysCode {
     SYSCALL_GETPID    = 172,
     SYSCALL_GETPPID   = 173,
     SYSCALL_GETUID    = 174,
+    SYSCALL_GETEUID   = 175,
+    SYSCALL_GETEGID   = 177,
+    SYSCALL_GETTID    = 178,
     SYSCALL_SYSINFO   = 179,
+    SYSCALL_SOCKET    = 198,
+    SYSCALL_SOCKETPAIR= 199,
+    SYSCALL_BIND      = 200,
+    SYSCALL_LISTEN    = 201,
+    SYSCALL_ACCEPT    = 202,
+    SYSCALL_CONNECT   = 203,
+    SYSCALL_GETSOCKNAME = 204,
+    SYSCALL_GETPEERNAME = 205,
+    SYSCALL_SENDTO    = 206,
+    SYSCALL_RECVFROM  = 207,
+    SYSCALL_SETSOCKOPT= 208,
+    SYSCALL_GETSOCKOPT= 209,
+    SYSCALL_SHUTDOWN  = 210,
     SYSCALL_BRK       = 214,
     SYSCALL_MUNMAP    = 215,
     SYSCALL_CLONE     = 220,
     SYSCALL_EXECVE    = 221,
     SYSCALL_MMAP      = 222,
+    SYSCALL_ACCEPT4   = 242,
     SYSCALL_WAIT4     = 260,
     GETRANDOM         = 278,
     #[num_enum(default)]
@@ -109,9 +135,33 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SYNC => "sync",
+            Self::SYSCALL_GETEGID => "getegid",
+            Self::SYSCALL_GETEUID => "geteuid",
+            Self::SYSCALL_GETTID => "gettid",
             Self::SYSCALL_SIGACTION => "sigaction",
             Self::SYSCALL_SIGPROCMASK => "sigprocmask",
             Self::SYSCALL_GETUID => "getuid",
+            Self::SYSCALL_SETSOCKOPT => "setsockopt",
+            Self::SYSCALL_GETSOCKOPT => "getsockopt",
+            Self::SYSCALL_SOCKETPAIR => "socketpair",
+            Self::SYSCALL_RECVFROM => "recvfrom",
+            Self::SYSCALL_SENDTO => "sendto",
+            Self::SYSCALL_GETPEERNAME => "getpeername",
+            Self::SYSCALL_GETSOCKNAME => "getsockname",
+            Self::SYSCALL_ACCEPT4 => "accept4",
+            Self::SYSCALL_ACCEPT => "accept",
+            Self::SYSCALL_CONNECT => "connect",
+            Self::SYSCALL_SHUTDOWN => "shutdown",
+            Self::SYSCALL_LISTEN => "listen",
+            Self::SYSCALL_BIND => "bind",
+            Self::SYSCALL_SOCKET => "socket",
+            Self::SYSCALL_FSTATAT => "fstatat",
+            Self::SYSCALL_PREAD64 => "pread64",
+            Self::SYSCALL_PWRITE64 => "pwrite64",
+            Self::SYSCALL_FCHMODAT => "fchmodat",
+            Self::SYSCALL_FTRUNCATE64 => "ftruncate64",
+            Self::SYSCALL_FCNTL => "fcntl",
             Self::SYSCALL_WRITEV => "writev",
             Self::SYSCALL_READV => "readv",
             Self::SYSCALL_SYSINFO => "sysinfo",
@@ -323,3 +373,62 @@ pub struct IoVec {
     /// length of the buffer
     pub iov_len: usize,
 }
+
+
+bitflags! {
+    #[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
+    pub struct FcntlFlags: u32 {
+        /// 复制文件描述符，跟dup()函数功能一样
+        const F_DUPFD = 0;
+        /// 设置close-on-exec标志
+        const F_DUPFD_CLOEXEC = 1030;
+        /// 获取文件描述符标志
+        const F_GETFD = 1;
+        /// 设置文件描述符标志
+        const F_SETFD = 2;
+        /// 获取文件状态
+        const F_GETFL = 3;
+        /// 设置文件状态
+        const F_SETFL = 4;
+    }
+
+    #[derive(PartialEq, Eq, Debug)]
+    pub struct FcntlArgFlags: u32 {
+        const FD_CLOEXEC = 1;
+        const AT_EMPTY_PATH = 1 << 0;
+        const AT_SYMLINK_NOFOLLOW = 1 << 8;
+        const AT_EACCESS = 1 << 9;
+        const AT_NO_AUTOMOUNT = 1 << 11;
+        const AT_DUMMY = 1 << 12;
+    }
+
+    #[derive(PartialEq, Eq, Debug, Clone, Copy)]
+    #[repr(C)]
+    pub struct ShutHow: u8 {
+        /// 关闭接收端 (SHUT_RD)
+        /// - 后续不能再接收数据
+        const SHUT_RD = 0;
+
+        /// 关闭发送端 (SHUT_WR)
+        /// - 后续不能再发送数据
+        /// - 会发送FIN包给对端
+        const SHUT_WR = 1;
+
+        /// 同时关闭收发端 (SHUT_RDWR)
+        /// - 完全关闭连接
+        /// - 相当于先SHUT_RD再SHUT_WR
+        const SHUT_RDWR = 2;
+    }
+}
+
+pub const SOL_SOCKET: u8 = 1;
+pub const SOL_TCP: u8 = 6;
+
+/// 如果协议是TCP，并且当前的套接字状态不是侦听(listen)或关闭(close)，
+/// 那么，当option_value不是零时，启用TCP保活定时 器，否则关闭保活定时器。
+pub const SO_KEEPALIVE: u32 = 9;// 设置是否保持连接
+pub const SO_SNDBUF: u32 = 7;   // 设置发送缓冲区大小
+pub const SO_RCVBUF: u32 = 8;   // 设置接收缓冲区大小
+pub const MAXSEGMENT: u32 = 2;  // 限制TCP 最大段大小 MSS
+pub const CONGESTION: u32 = 13; // 拥塞控制算法
+pub const NODELAY: u32 = 1;     // 关闭Nagle算法

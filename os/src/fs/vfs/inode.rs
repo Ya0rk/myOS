@@ -87,6 +87,7 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// Some(Arc<dyn Inode>) if creation succeeds, None otherwise.
+    /// 这里只是创建一个inode，打开文件还需要使用file结构体包裹inode，然后返回file
     fn do_create(&self, _path: &str, _ty: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
         todo!()
     }
@@ -143,7 +144,7 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// Synchronizes the file's in-memory state with storage.
-    fn sync(&self) {
+    async fn sync(&self) {
         todo!()
     }
 
@@ -170,17 +171,6 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Ok(Vec<u8>) containing the file's contents, or an error code.
     async fn read_all(&self) -> SysResult<Vec<u8>> {
-        todo!();
-    }
-
-    /// 将数据写回
-    /// 
-    /// offset：数据开始的地址
-    /// 
-    /// len : 长度
-    /// 
-    /// buf: 数据存在的位置
-    fn write_back(self: Arc<Self>, _offset: usize, _len: usize, _buf: &[u8]) -> SysResult {
         todo!();
     }
 

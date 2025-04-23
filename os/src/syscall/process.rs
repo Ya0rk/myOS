@@ -468,6 +468,7 @@ pub fn sys_sigprocmask(
             }
         }
     }
+    info!("sys_sigprocmask finished");
     Ok(0)
 }
 
@@ -486,6 +487,7 @@ pub fn sys_sigaction(
     act: usize,
     old_act: usize,
 ) -> SysResult<usize> {
+    info!("sys_sigaction");
     // 作为强转的暂存器
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -540,5 +542,24 @@ pub fn sys_sigaction(
         }
     }
 
+    Ok(0)
+}
+
+pub fn sys_gettid() -> SysResult<usize> {
+    info!("sys_gettid");
+    let task = current_task().unwrap();
+    let pid = task.get_pid();
+    Ok(pid)
+}
+
+pub fn sys_geteuid() -> SysResult<usize> {
+    Ok(0)
+}
+
+pub fn sys_getegid() -> SysResult<usize> {
+    Ok(0)
+}
+
+pub fn sys_sync() -> SysResult<usize> {
     Ok(0)
 }

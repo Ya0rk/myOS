@@ -1,5 +1,6 @@
-use alloc::{string::String, sync::Arc};
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat}, mm::{UserBuffer, page::Page}, utils::SysResult};
+use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
+use log::info;
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -31,13 +32,20 @@ impl FileTrait for DevZero {
         user_buf.fill(0);
         Ok(len)
     }
-    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
+    /// 填满0
+    async fn pread(&self, mut user_buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+        info!("[pread] from zerofs, fill 0");
+        let zero: Vec<u8> = (0..user_buf.buffers.len()).map(|_| 0).collect();
+        user_buf.write(&zero);
+        Ok(len)
+    }
+    async fn write(&self, user_buf: & [u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("/dev/zero".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()

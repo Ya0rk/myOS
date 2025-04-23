@@ -9,11 +9,10 @@ edition = "2021"
 lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
 buddy_system_allocator = "0.11.0"
 bitflags = "2.8.0"
-xmas-elf = "0.9.1"
+xmas-elf = "0.10.0"
 virtio-drivers = { path = "../vendor/virtio-drivers" }
 log = "0.4"
-# sbi-rt = { version = "0.0.3", features = ["legacy"] }
-spin = "0.9.8"
+spin = "0.10.0"
 sbi-spec = "0.0.8"
 num_enum = { version = "0.7.2", default-features = false }
 zerocopy = { version = "0.8.21", features = ["derive"]}
@@ -22,6 +21,22 @@ hashbrown = "0.15.2"
 async-task = { version = "4.7.1", default-features = false }
 async-trait = { version = "0.1.88"}
 crossbeam-queue = { version = "0.3", default-features = false, features = ["alloc"] }
+smoltcp = { path = "../vendor/smoltcp-0.12.0", version = "0.12.0", default-features = false, features = [
+    "alloc",
+    "log",
+    "medium-ethernet",
+    "medium-ip",
+    "proto-ipv4",
+    "proto-ipv6",
+    "proto-dhcpv4",
+    "proto-ipv4-fragmentation",
+    "socket-udp",
+    "socket-tcp",
+    "socket-dhcpv4",
+    "async",
+    "log",
+] }
+bitvec-rs = { version="0.2.1", default-features = false }
 # loongarch64 = { git = "https://github.com/Godones/loongArch64", package = "loongArch64" }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]

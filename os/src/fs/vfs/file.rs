@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
-use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{UserBuffer, page::Page}, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, net::Socket, utils::SysResult};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -41,20 +41,8 @@ impl FileMeta {
 #[async_trait]
 pub trait FileTrait: Send + Sync {
     fn get_inode(&self) -> Arc<dyn InodeTrait>;
-    /// 检查文件是否可读
-    ///
-    /// # 返回
-    ///
-    /// 如果文件可读返回 `true`，否则返回 `false`
     fn readable(&self) -> bool;
-
-    /// 检查文件是否可写
-    ///
-    /// # 返回
-    ///
-    /// 如果文件可写返回 `true`，否则返回 `false`
     fn writable(&self) -> bool;
-
     fn executable(&self) -> bool;
 
     /// 从文件中读取数据到用户缓冲区
@@ -119,39 +107,39 @@ pub trait FileTrait: Send + Sync {
     /// # 返回
     ///
     /// 设置后的新偏移量位置
+    fn get_name(&self) -> SysResult<String>;
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize>;
+    fn fstat(&self, stat: &mut Kstat) -> SysResult;
+    fn is_dir(&self) -> bool;
+    // TODO: 缓存未命中处理
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>>;
+
+    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
+        unimplemented!("not support!");
+    }
+    fn set_flags(&self, flags: OpenFlags){
+        unimplemented!("not support!");
+    }
+    fn get_flags(&self) -> OpenFlags {
+        unimplemented!("not support!");
+    }
+    /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
+    async fn pread(&self, mut buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize>{
+        unimplemented!("not support!");
+    }
+    /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
+    async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+        unimplemented!("not support!");
+    }
     fn lseek(&self, _offset: isize, _whence: usize) -> SysResult<usize> {
         unimplemented!("not support!");
     }
-
-    /// 获取文件名
-    ///
-    /// # 返回
-    ///
-    /// 文件的名称
-    fn get_name(&self) -> SysResult<String>;
-
-    /// 重命名
-    /// 
-    /// 成功返回0，否则返回errno
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize>;
-
-    /// 获取文件的状态信息
-    ///
-    /// 填充提供的 Kstat 结构体，包含文件的元数据信息。
-    ///
-    /// # 参数
-    ///
-    /// * `stat` - 用于存储文件状态信息的结构体
-    fn fstat(&self, stat: &mut Kstat) -> SysResult;
-
-    fn is_dir(&self) -> bool;
-
     fn read_dentry(&self) -> Option<Vec<Dirent>> {
-        todo!()
+        unimplemented!("not support!");
     }
 
-    // TODO: 缓存未命中处理
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>>;
+    // ppoll处理
+    // fn poll(&self, events: PollEvents) -> PollEvents;
 }
 
 // pub trait Ioctl: File {

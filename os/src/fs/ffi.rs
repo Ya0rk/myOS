@@ -22,6 +22,7 @@ bitflags! {
         /// 在写入时追加到文件末尾，而不是覆盖文件内容
         const O_APPEND      = 0o2000;
         /// 以非阻塞模式打开文件（通常用于设备文件或管道）
+        /// 目前用于socket文件，检测accept是否为非阻塞
         const O_NONBLOCK    = 0o4000;
         const O_DSYNC       = 0o10000;
         const O_SYNC        = 0o4010000;

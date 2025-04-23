@@ -104,7 +104,6 @@ impl Display for IndertifyMode {
 
 #[cfg(target_arch = "riscv64")]
 fn set_trap_handler(mode: IndertifyMode) {
-    // unimplemented!()
     match mode {
         IndertifyMode::User => {
             unsafe {
