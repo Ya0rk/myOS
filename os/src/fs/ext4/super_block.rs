@@ -3,7 +3,7 @@ use log::info;
 use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
 
 use crate::{
-    drivers::Disk,
+    drivers::{BlockDriver, Disk},
     fs::{page_cache::PageCache, InodeTrait, Kstat, SuperBlockTrait},
 };
 
@@ -11,26 +11,26 @@ use alloc::sync::Arc;
 
 use super::Ext4Inode;
 
-unsafe impl Send for Ext4SuperBlock {}
-unsafe impl Sync for Ext4SuperBlock {}
+unsafe impl<T: BlockDriver> Send for Ext4SuperBlock<T> {}
+unsafe impl<T: BlockDriver> Sync for Ext4SuperBlock<T> {}
 
-pub struct Ext4SuperBlock {
-    inner: Ext4BlockWrapper<Disk>,
+pub struct Ext4SuperBlock<T: BlockDriver> {
+    inner: Ext4BlockWrapper<Disk<T>>,
     root: Arc<Ext4Inode>,
 }
 
-impl Ext4SuperBlock {
-    pub fn new(disk: Disk) -> Self {
+impl<T: BlockDriver> Ext4SuperBlock<T> {
+    pub fn new(disk: Disk<T>) -> Self {
         println!("init ext4 device superblock");
         let inner =
-            Ext4BlockWrapper::<Disk>::new(disk).expect("failed to initialize EXT4 filesystem");
+            Ext4BlockWrapper::<Disk<T>>::new(disk).expect("failed to initialize EXT4 filesystem");
         let page_cache = Some(PageCache::new_bare());
         let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR, page_cache.clone());
         Self { inner, root }
     }
 }
 
-impl SuperBlockTrait for Ext4SuperBlock {
+impl<T: BlockDriver> SuperBlockTrait for Ext4SuperBlock<T> {
     fn root_inode(&self) -> Arc<dyn InodeTrait> {
         self.root.clone()
     }
