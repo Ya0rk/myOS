@@ -1,5 +1,6 @@
 use log::{debug, error, info, warn};
 use lwext4_rust::KernelDevOp;
+use alloc::sync::Arc;
 
 use crate::{drivers::BlockDriver, utils::logger};
 
@@ -8,15 +9,15 @@ use super::{BlockDeviceImpl, DevResult};
 const BLOCK_SIZE: usize = 512;
 
 /// A disk device with a cursor.
-pub struct Disk<T: BlockDriver> {
+pub struct Disk {
     block_id: usize,
     offset: usize,
-    dev: T,
+    dev: Arc<dyn BlockDriver>,
 }
 
-impl<T: BlockDriver> Disk<T> {
+impl Disk {
     /// Create a new disk.
-    pub fn new(dev: T) -> Self {
+    pub fn new(dev: Arc<dyn BlockDriver>) -> Self {
         log::info!("create a new disk");
         assert_eq!(BLOCK_SIZE, dev.block_size());
         Self {
@@ -121,11 +122,10 @@ impl<T: BlockDriver> Disk<T> {
     }
 }
 
-impl<T: BlockDriver> KernelDevOp for Disk<T> {
-    //type DevType = Box<Disk>;
-    type DevType = Disk<T>;
+impl KernelDevOp for Disk {
+    type DevType = Disk;
     /// 读取硬盘数据到指定buf
-    fn read(dev: &mut Disk<T>, mut buf: &mut [u8]) -> Result<usize, i32> {
+    fn read(dev: &mut Disk, mut buf: &mut [u8]) -> Result<usize, i32> {
         debug!("READ block device buf={}", buf.len());
         let mut read_len = 0;
         while !buf.is_empty() {
@@ -162,7 +162,7 @@ impl<T: BlockDriver> KernelDevOp for Disk<T> {
     fn flush(_dev: &mut Self::DevType) -> Result<usize, i32> {
         Ok(0)
     }
-    fn seek(dev: &mut Disk<T>, off: i64, whence: i32) -> Result<i64, i32> {
+    fn seek(dev: &mut Disk, off: i64, whence: i32) -> Result<i64, i32> {
         let size = dev.size();
         debug!(
             "SEEK block device size:{}, pos:{}, offset={}, whence={}",
