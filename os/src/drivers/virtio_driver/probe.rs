@@ -4,7 +4,7 @@
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
 use log::info;
-use riscv::register;
+
 use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
 use alloc::sync::Arc;
 
