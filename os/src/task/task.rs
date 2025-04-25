@@ -8,7 +8,7 @@ use core::time::Duration;
 use super::{add_proc_group_member, FdInfo, FdTable, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
 use crate::fs::ext4::NormalFile;
-use crate::hal::arch::shutdown;
+use crate::hal::arch::{sfence, shutdown};
 use crate::fs::{init, FileClass, FileTrait};
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
@@ -200,6 +200,7 @@ impl TaskControlBlock {
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
         let mut child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
+        unsafe { sfence(); }
 
         let memory_space = new_shared(child_memory_space);
 
