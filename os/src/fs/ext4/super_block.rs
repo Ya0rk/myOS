@@ -11,26 +11,26 @@ use alloc::sync::Arc;
 
 use super::Ext4Inode;
 
-unsafe impl<T: BlockDriver> Send for Ext4SuperBlock<T> {}
-unsafe impl<T: BlockDriver> Sync for Ext4SuperBlock<T> {}
+unsafe impl Send for Ext4SuperBlock {}
+unsafe impl Sync for Ext4SuperBlock {}
 
-pub struct Ext4SuperBlock<T: BlockDriver> {
-    inner: Ext4BlockWrapper<Disk<T>>,
+pub struct Ext4SuperBlock{
+    inner: Ext4BlockWrapper<Disk>,
     root: Arc<Ext4Inode>,
 }
 
-impl<T: BlockDriver> Ext4SuperBlock<T> {
-    pub fn new(disk: Disk<T>) -> Self {
+impl Ext4SuperBlock {
+    pub fn new(disk: Disk) -> Self {
         println!("init ext4 device superblock");
         let inner =
-            Ext4BlockWrapper::<Disk<T>>::new(disk).expect("failed to initialize EXT4 filesystem");
+            Ext4BlockWrapper::<Disk>::new(disk).expect("failed to initialize EXT4 filesystem");
         let page_cache = Some(PageCache::new_bare());
         let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR, page_cache.clone());
         Self { inner, root }
     }
 }
 
-impl<T: BlockDriver> SuperBlockTrait for Ext4SuperBlock<T> {
+impl SuperBlockTrait for Ext4SuperBlock {
     fn root_inode(&self) -> Arc<dyn InodeTrait> {
         self.root.clone()
     }

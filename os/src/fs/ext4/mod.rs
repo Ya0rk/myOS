@@ -16,7 +16,7 @@ use super::{InodeTrait, Kstat, SuperBlockTrait};
 lazy_static! {
     pub static ref SUPER_BLOCK: Arc<dyn SuperBlockTrait> = {
         Arc::new(Ext4SuperBlock::new(
-            Disk::new(BlockDeviceImpl::new_device()),
+            Disk::new(Arc::new(BlockDeviceImpl::new_device())),
         ))
     };
 }
