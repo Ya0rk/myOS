@@ -100,6 +100,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
 /// system call writes iovcnt buffers from the file associated
 /// with the file descriptor fd into the buffers described by iov
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    info!("[sys_writev] fd = {}", fd);
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -109,6 +110,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
     match task.get_file_by_fd(fd) {
         Some(file) => {
             if !file.writable() {
+                info!("no writeable");
                 return Err(Errno::EPERM);
             }
             // 将iov中的结构体一个个取出，转化为UserBuffer

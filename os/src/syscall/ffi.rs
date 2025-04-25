@@ -74,7 +74,7 @@ pub enum SysCode {
     SYSCALL_PWRITE64  = 68,
     SYSCALL_SENDFILE  = 71,
     // SYSCALL_PSELECT   = 72, // todo in io.rs
-    // SYSCALL_PPOLL     = 73,
+    SYSCALL_PPOLL     = 73,
     SYSCALL_FSTATAT   = 79,
     SYSCALL_FSTAT     = 80,
     SYSCALL_SYNC      = 81,
@@ -135,6 +135,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_PPOLL => "ppoll",
             Self::SYSCALL_SYNC => "sync",
             Self::SYSCALL_GETEGID => "getegid",
             Self::SYSCALL_GETEUID => "geteuid",
@@ -432,3 +433,62 @@ pub const SO_RCVBUF: u32 = 8;   // 设置接收缓冲区大小
 pub const MAXSEGMENT: u32 = 2;  // 限制TCP 最大段大小 MSS
 pub const CONGESTION: u32 = 13; // 拥塞控制算法
 pub const NODELAY: u32 = 1;     // 关闭Nagle算法
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct PollFd {
+    pub fd: i32,      // 要监听的文件描述符
+    pub events: i16,  // 你关心的事件（输入参数）
+    pub revents: i16, // 实际发生的事件（输出参数）
+}
+
+bitflags! {
+    pub struct PollEvents: i16 {
+        /// 普通数据可读（例如 TCP 接收缓冲区有数据）
+        /// - 对应 `POLLIN`，表示文件描述符有数据可读取且不会阻塞
+        const POLLIN = 0x001;
+
+        /// 紧急/带外数据可读（如 TCP 紧急指针指向的数据）
+        /// - 对应 `POLLPRI`，用于高优先级数据（如 TCP 带外数据）
+        const POLLPRI = 0x002;
+
+        /// 普通数据可写（例如发送缓冲区未满）
+        /// - 对应 `POLLOUT`，表示可以写入数据且不会阻塞
+        const POLLOUT = 0x004;
+
+        /// 错误条件（隐式事件，无需手动设置）
+        /// - 对应 `POLLERR`，当文件描述符发生错误时由内核自动设置
+        /// - 例如：套接字连接意外断开、管道写入端关闭后读取等
+        const POLLERR = 0x008;
+
+        /// 连接挂断（隐式事件，无需手动设置）
+        /// - 对应 `POLLHUP`，表示连接已被对端关闭
+        /// - 例如：TCP 对端调用 `close()` 或管道所有写入端关闭
+        const POLLHUP = 0x010;
+
+        /// 无效文件描述符（隐式事件，无需手动设置）
+        /// - 对应 `POLLNVAL`，当 `fd` 未打开或非法时由内核设置
+        /// - 通常表示程序逻辑错误（如重复关闭文件描述符）
+        const POLLNVAL = 0x020;
+
+        /// 普通数据可读（XPG4.2 标准定义）
+        /// - 对应 `POLLRDNORM`，与 `POLLIN` 行为等价
+        /// - 用于兼容性，表示普通优先级数据可读
+        const POLLRDNORM = 0x040;
+
+        /// 优先级数据可读（XPG4.2 标准定义）
+        /// - 对应 `POLLRDBAND`，用于非紧急的带外数据
+        /// - 例如：SCTP 协议中的多流数据
+        const POLLRDBAND = 0x080;
+
+        /// 普通数据可写（XPG4.2 标准定义）
+        /// - 对应 `POLLWRNORM`，与 `POLLOUT` 行为等价
+        /// - 用于兼容性，表示普通优先级数据可写
+        const POLLWRNORM = 0x100;
+
+        /// 优先级数据可写（XPG4.2 标准定义）
+        /// - 对应 `POLLWRBAND`，表示可写入非紧急的带外数据
+        /// - 实际使用较少，常见于特定协议扩展
+        const POLLWRBAND = 0x200;
+    }
+}

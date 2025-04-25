@@ -84,13 +84,11 @@ impl TaskControlBlock {
         // push a task context which goes to trap_return to the top of kernel stack
         let new_task = Arc::new(Self {
             pid: pid_handle,
-            // kernel_stack,
             
             // Shared
             pgid: AtomicUsize::new(0),
             tgid: AtomicUsize::new(tgid),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
-            // base_size: new_shared(user_sp),
             thread_group: new_shared(ThreadGroup::new()),
             memory_space: new_shared(memory_space),
             parent: new_shared(None),
@@ -108,7 +106,6 @@ impl TaskControlBlock {
             // SyncUnsafeCell
             waker:   SyncUnsafeCell::new(None),
             trap_cx: SyncUnsafeCell::new(trap_cx),
-            // task_cx: SyncUnsafeCell::new(TaskContext::goto_trap_loop(kernel_stack_top)),
             time_data: SyncUnsafeCell::new(TimeData::new()),
             clear_child_tid: SyncUnsafeCell::new(None),
             set_child_tid:   SyncUnsafeCell::new(None),
@@ -122,7 +119,6 @@ impl TaskControlBlock {
         new_task.add_thread_group_member(new_task.clone());
         new_process_group(new_task.get_pgid());
         add_task(&new_task);
-        // new_task.set_task_waker(get_waker().await);
         spawn_user_task(new_task.clone());
         info!("spawn init proc");
 
@@ -196,7 +192,6 @@ impl TaskControlBlock {
 
         // modify kernel_sp in trap_cx
         let trap_cx = self.get_trap_cx_mut();
-        // trap_cx.set_kernel_sp(kernel_stack_top);
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
         let mut child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
@@ -206,12 +201,10 @@ impl TaskControlBlock {
 
         let new_task = Arc::new(TaskControlBlock {
             pid,
-            // kernel_stack,
 
             // Shared
             pgid,
             tgid,
-            // base_size: self.base_size.clone(),
             thread_group,
             task_status,
             memory_space,
@@ -230,7 +223,6 @@ impl TaskControlBlock {
             // SyncUnsafeCell
             waker,
             trap_cx,
-            // task_cx,
             time_data,
             clear_child_tid,
             set_child_tid,
@@ -240,9 +232,6 @@ impl TaskControlBlock {
         self.add_child(new_task.clone());
         add_proc_group_member(new_task.get_pgid(), new_task.get_pid());
         new_task.add_thread_group_member(new_task.clone());
-
-        // 需要将自己加入？？也是wait的问题？
-        // new_task.add_child(new_task.clone());
         info!("process fork success, new pid = {}, parent pid = {}", new_task.get_pid(), new_task.get_parent().unwrap().get_pid());
         
         new_task
@@ -284,7 +273,6 @@ impl TaskControlBlock {
         );
 
         let new_task = Arc::new(TaskControlBlock{
-            // kernel_stack: KernelStack::new(&pid),//
             pid,
 
             pgid,
@@ -298,7 +286,6 @@ impl TaskControlBlock {
             sig_stack,
 
             task_status,
-            // base_size: self.base_size.clone(),
             thread_group,
             memory_space,
             parent,
@@ -314,9 +301,6 @@ impl TaskControlBlock {
         });
 
         new_task.add_thread_group_member(new_task.clone());
-
-        // 这里也要把自己加入自己的child
-        // new_task.add_child(new_task.clone());
 
         new_task
     }
@@ -334,13 +318,9 @@ impl TaskControlBlock {
         if let Some(tidaddress) = self.get_child_cleartid() {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
             *translated_refmut( current_user_token(), tidaddress as *mut u32) = 0;
-            // task.pcb_map(|proc| proc.futex_queue.wake(tidaddress as u32, 1));
-            // task.futex_queue.lock().wake(tidaddress as u32, 1);
         }
 
         if !self.is_leader() {
-            // info!("[do_exit] task not leader");
-            // self.clear_child();
             self.remove_thread_group_member(pid);
             remove_task_by_pid(pid);
         } else {
@@ -353,7 +333,6 @@ impl TaskControlBlock {
                 for (child_pid, child) in 
                     lock_child.
                     iter()
-                    // filter(|(find_pid, _)| **find_pid != pid) // 需要过滤掉自己，因为在process_fork中把自己加入了child
                 {
                     if child.is_zombie() {
                         info!("[do_exit] child pdi = {} is zmobie", child_pid);
@@ -396,7 +375,6 @@ impl TaskControlBlock {
             }
         }
         if self.is_leader() {
-            // info!("[do_exit] self status = {}", self.get_status());
             self.set_zombie();
         }
         
@@ -644,13 +622,6 @@ impl TaskControlBlock {
         self.get_status() == TaskStatus::Stopped
     }
 
-    /// task context
-    // pub fn get_task_cx(&self) -> &TaskContext {
-    //     unsafe { &*self.task_cx.get() }
-    // }
-    // pub fn get_task_cx_mut(&self) -> &'static mut TaskContext {
-    //     unsafe { &mut *(self.task_cx.get() as *mut TaskContext) }
-    // }
     pub fn get_trap_cx(&self) -> &TrapContext {
         unsafe { &*self.trap_cx.get() }
     }

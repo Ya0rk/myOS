@@ -96,7 +96,7 @@ impl InodeTrait for Ext4Inode {
     fn node_type(&self) -> InodeType {
         as_inode_type(self.file.lock().file_type_get())
     }
-    /// 读取文件 TODO(YJJ):这里可能有问题
+    /// 读取文件
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
         let file_size = self.get_size();
         if file_size == 0 || offset >= file_size{

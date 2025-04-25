@@ -5,7 +5,8 @@ extern crate alloc;
 #[macro_use]
 extern crate user_lib;
 
-use user_lib::{execve, fork, wait, yield_};
+use alloc::vec::Vec;
+use user_lib::{chdir, execve, fork, wait, yield_};
 
 const TESTCASES: &[&str] = &[
     // "time-test",
@@ -22,7 +23,15 @@ const TESTCASES: &[&str] = &[
     // "lmbench_testcode.sh",
 ];
 
+/// 传入str引用转换为C风格字符串，使其可以被用作系统调用
+pub fn conert_str2byte(input: &str) -> Vec<u8> {
+    let mut bytes: Vec<u8> = input.as_bytes().to_vec();
+    bytes.push(0);
+    bytes
+}
+
 fn run_cmd(cmd: &str) {
+    chdir(&conert_str2byte("musl"));
     if fork() == 0 {
         println!("aaaaaaaaaaaa");
         execve(
@@ -30,7 +39,6 @@ fn run_cmd(cmd: &str) {
             &[
                 "busybox\0",
                 "sh\0",
-                "-c",
                 "/musl/busybox_testcode.sh\0",
             ],
             &[

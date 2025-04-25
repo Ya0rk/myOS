@@ -292,13 +292,7 @@ pub fn sys_getrandom(
     buflen: usize,
     _flags: usize,
 ) -> SysResult<usize> {
-    // let token = current_user_token();
-    // let buffer = UserBuffer::new(
-    //     translated_byte_buffer(
-    //         token,
-    //         buf,
-    //         buflen
-    // ));
+    info!("[sys_get_random] start");
     let buffer = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
     Ok(RNG.lock().fill_buf(buffer))
 }

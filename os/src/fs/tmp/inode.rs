@@ -5,7 +5,7 @@ use lwext4_rust::{
     bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, file, Ext4File, InodeTypes
 };
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, page_cache::PageCache, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
+    fs::{ext4::Ext4Inode, ffi::{as_ext4_de_type, as_inode_type, InodeType}, page_cache::PageCache, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
     sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
     utils::{Errno, SysResult}
 };
@@ -66,34 +66,20 @@ impl InodeTrait for TmpInode {
 
     /// 创建文件或者目录
     fn do_create(&self, path: &str, ty: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
-        // let types = as_ext4_de_type(ty);
-        // let mut file = self.file.lock();
-        // let page_cache = match ty {
-        //     InodeType::File => Some(PageCache::new_bare()),
-        //     _ => None
-        // };
-        // let nf = TmpInode::new(path, types.clone(), page_cache.clone());
-
-        // if !file.check_inode_exist(path, types.clone()) {
-        //     drop(file);
-        //     let mut ext4file = nf.file.lock();
-        //     if types == InodeTypes::EXT4_DE_DIR {
-        //         if ext4file.dir_mk(path).is_err() {
-        //             return None;
-        //         }
-        //     } else {
-        //         ext4file.file_open(path, O_RDWR | O_CREAT | O_TRUNC).expect("create file failed!");
-        //         ext4file.file_close().expect("[do_creat]: file clone fail!");
-        //     }
-        // }
-        // Some(nf)
-        todo!()
+        let page_cache = match ty {
+            InodeTypes::EXT4_DE_REG_FILE => Some(PageCache::new_bare()),
+            _ => None
+        };
+        let nf = Ext4Inode::new(path, ty.clone(), page_cache.clone());
+        info!("[do_create] path = {}", path);
+        
+        Some(nf)
     }
     /// 获取文件类型
     fn node_type(&self) -> InodeType {
         as_inode_type(self.file.lock().file_type_get())
     }
-    /// 读取文件 TODO(YJJ):这里可能有问题
+    /// 读取文件
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
         let file_size = self.get_size();
         if file_size == 0 || offset > file_size{

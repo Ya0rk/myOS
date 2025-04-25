@@ -1,10 +1,11 @@
 // mod interrupt;
 mod up;
-pub mod mutex;
 mod misc;
+pub mod mutex;
 pub mod time;
 pub mod timer;
 pub mod once;
+pub mod time_async;
 
 use core::{future::Future, task::{Context, Poll}};
 use alloc::{boxed::Box, sync::Arc, task::Wake};
@@ -14,6 +15,7 @@ pub use mutex::{new_shared, new_sleep_shared};
 pub use timer::{get_time, sleep_for, set_next_trigger};
 pub use misc::{get_waker, yield_now, suspend_now};
 pub use up::SyncUnsafeCell;
+pub use time_async::*;
 pub use time::{TimeVal, TimeSpec, Tms, TimeData, TimeStamp};
 pub use mutex::{SpinLock, SpinNoIrqLock, SleepLock, MutexGuard, MutexOperations, NoIrqLock, NoopLock, Shared, SleepShared};
 

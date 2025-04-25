@@ -83,7 +83,6 @@ pub trait FileTrait: Send + Sync {
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数
     async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
         let inode = self.get_inode();
-        // TODO(YJJ): maybe bug,这里size可能是0？
         if offset > inode.get_size() {
             let newsize = offset + buf.len();
             inode.truncate(newsize);

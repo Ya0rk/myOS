@@ -384,6 +384,8 @@ impl VmArea {
         );
 
         if !access_type.can_access(self.perm()) {
+            info!("type = {:?}", access_type);
+            info!("perm = {:?}", self.perm());
             backtrace();
             log::warn!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
