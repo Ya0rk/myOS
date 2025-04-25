@@ -9,14 +9,15 @@ pub use super_block::*;
 use alloc::sync::Arc;
 use lazy_static::*;
 
-use crate::drivers::{BlockDeviceImpl, Disk};
+use crate::drivers::Disk;
 
 use super::{InodeTrait, Kstat, SuperBlockTrait};
 
 lazy_static! {
     pub static ref SUPER_BLOCK: Arc<dyn SuperBlockTrait> = {
+        let block_device = crate::drivers::get_block_device().unwrap(); 
         Arc::new(Ext4SuperBlock::new(
-            Disk::new(Arc::new(BlockDeviceImpl::new_device())),
+            Disk::new(block_device),
         ))
     };
 }
