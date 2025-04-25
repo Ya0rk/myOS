@@ -1,3 +1,15 @@
+/// 对应着一个设备的实例
+use alloc::sync::Arc;
+#[derive(Clone)]
+pub enum Device {
+    /// 只实现了BaseDriver的设备
+    PlainDevice(Arc<dyn BaseDriver>),
+    /// 额外实现了BlockDriver的设备
+    BlockDevice(Arc<dyn BlockDriver>),
+    // // 可以补充更多设备和对应的trait...
+    // GenericDevice(Arc<dyn BaseDriver>),
+}
+
 /// All supported device types.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum DeviceType {
@@ -56,14 +68,14 @@ pub trait BlockDriver: BaseDriver {
     ///
     /// The size of the buffer may exceed the block size, in which case multiple
     /// contiguous blocks will be read.
-    fn read_block(&mut self, block_id: usize, buf: &mut [u8]) -> DevResult;
+    fn read_block(&self, block_id: usize, buf: &mut [u8]) -> DevResult;
 
     /// Writes blocked data to the given block.
     ///
     /// The size of the buffer may exceed the block size, in which case multiple
     /// contiguous blocks will be written.
-    fn write_block(&mut self, block_id: usize, buf: &[u8]) -> DevResult;
+    fn write_block(&self, block_id: usize, buf: &[u8]) -> DevResult;
 
     /// Flushes the device to write all pending data to the storage.
-    fn flush(&mut self) -> DevResult;
+    fn flush(&self) -> DevResult;
 }

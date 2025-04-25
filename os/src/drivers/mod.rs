@@ -11,36 +11,67 @@ pub use device::*;
 pub use disk::*;
 // pub use virtio::*;
 pub use virtio_driver::*;
-use virtio_drivers::{device::console::Size, transport::{self, mmio::{MmioTransport, VirtIOHeader}, Transport}};
+use virtio_drivers::{device::console::Size, transport::{self, mmio::{MmioTransport, VirtIOHeader}, pci::PciTransport, Transport}};
 use core::ptr::NonNull;
+use core::any::Any;
 use log::*;
+use alloc::{vec::Vec, sync::Arc};
+use spin::RwLock;
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 
 
-pub type BlockDeviceImpl = VirtIoBlkDev<VirtIoHalImpl, MmioTransport<'static>>;
+use device::Device;
 
-impl BlockDeviceImpl {
-    pub fn new_device() -> Self {
-        let VIRTIO0: usize = virtio_driver::probe::BLOCKDEVICE_ADDR_REG.lock().unwrap();
-        let size: usize =  virtio_driver::probe::BLOCKDEVICE_SIZE_REG.lock().unwrap();
-        let header = NonNull::new(VIRTIO0 as *mut VirtIOHeader).unwrap();
-        match unsafe {
-            MmioTransport::new(header, size)
-        } {
-            Err(e) => {panic!("create virtio block device failed!")}
-            Ok(transport) => {
-                info!(
-                    "Detected block device virtio MMIO device with vendor id {:#X}, device type {:?}, version {:?}",
-                    transport.vendor_id(),
-                    transport.device_type(),
-                    transport.version(),
-                );
-                unsafe { VirtIoBlkDev::new(transport) }
-            }
-        }
-        
-    }
+lazy_static::lazy_static! {
+    pub static ref DEVICE_SET: RwLock<Vec<Device>> = RwLock::new(Vec::new());
 }
+
+pub fn register_block_device(dev: Arc<dyn BlockDriver>) {
+    let device = Device::BlockDevice(dev);
+    DEVICE_SET.write().push(device);
+}
+
+/// 获得一个任意一个块设备
+pub fn get_block_device() -> Option<Arc<dyn BlockDriver>> {
+    let device_set = DEVICE_SET.read();
+    for dev in device_set.iter() {
+        if let Device::BlockDevice(block_dev) = dev {
+            return Some(block_dev.clone());
+        }
+    }
+    None
+}
+
+// #[cfg(target_arch = "riscv64")]
+// pub type BlockDeviceImpl = VirtIoBlkDev<VirtIoHalImpl, MmioTransport<'static>>;
+// #[cfg(target_arch = "loongarch64")]
+// pub type BlockDeviceImpl = VirtIoBlkDev<VirtIoHalImpl, PciTransport<'static>>;
+
+
+// impl BlockDeviceImpl {
+//     pub fn new_device() -> Self {
+//         let VIRTIO0: usize = virtio_driver::probe::BLOCKDEVICE_ADDR_REG.lock().unwrap();
+//         let size: usize =  virtio_driver::probe::BLOCKDEVICE_SIZE_REG.lock().unwrap();
+//         let header = NonNull::new(VIRTIO0 as *mut VirtIOHeader).unwrap();
+//         match unsafe {
+//             MmioTransport::new(header, size)
+//         } {
+//             Err(e) => {panic!("create virtio block device failed!")}
+//             Ok(transport) => {
+//                 info!(
+//                     "Detected block device virtio MMIO device with vendor id {:#X}, device type {:?}, version {:?}",
+//                     transport.vendor_id(),
+//                     transport.device_type(),
+//                     transport.version(),
+//                 );
+//                 unsafe { VirtIoBlkDev::new(transport) }
+//             }
+//         }
+        
+//     }
+// }
+
+
 
 // use alloc::vec;
 // pub fn block_device_test() {

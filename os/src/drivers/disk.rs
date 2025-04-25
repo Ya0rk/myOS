@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 
 use crate::{drivers::BlockDriver, utils::logger};
 
-use super::{BlockDeviceImpl, DevResult};
+use super::DevResult;
 
 const BLOCK_SIZE: usize = 512;
 

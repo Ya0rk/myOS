@@ -3,6 +3,11 @@
 
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
+use log::info;
+use riscv::register;
+use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
+use alloc::sync::Arc;
+
 use super::VirtIoHalImpl;
 use lazy_static::*;
 use spin::RwLock;
@@ -104,7 +109,7 @@ pub fn probe(fd: u64) {
 }
 
 
-pub fn virtio_device(transport: impl Transport) {
+pub fn virtio_device(transport: impl Transport + 'static) {
     match transport.device_type() {
         DeviceType::Block => virtio_blk(transport),
         DeviceType::GPU => virtio_gpu(transport),
@@ -118,7 +123,7 @@ pub fn virtio_device(transport: impl Transport) {
     }
 }
 
-fn virtio_blk<T: Transport>(transport: T) {
+fn virtio_blk<T: Transport + 'static>(transport: T) {
     // let mut blk = VirtIOBlk::<VirtIoHalImpl, T>::new(transport).expect("failed to create blk driver");
     // println!("check blk readonly");
     // assert!(!blk.readonly());
@@ -133,7 +138,12 @@ fn virtio_blk<T: Transport>(transport: T) {
     //     blk.read_blocks(i, &mut output).expect("failed to read");
     //     assert_eq!(input, output);
     // }
-    println!("virtio-blk test finished");
+    // println!("virtio-blk test finished");
+    info!("create a virtio block device");
+    let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport));
+    info!("register");
+    register_block_device(blk);
+    info!("finished register");
 }
 
 fn virtio_gpu<T: Transport>(transport: T) {
