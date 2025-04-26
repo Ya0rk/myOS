@@ -1,4 +1,4 @@
-pub const UART_ADDR: usize = 0x0_1FE0_01E0;
+pub const UART_ADDR: usize = 0x0_1FE0_01E0 + 0x9000_0000_0000_0000;
 
 
 pub const TICKS_PER_SEC: usize = 100;
@@ -42,7 +42,7 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
 
 // #[cfg(target_arch = "loongarch64")]
-pub const KERNEL_ADDR_OFFSET: usize = 0x9000_000;
+pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
 pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_ADDR_OFFSET >> PAGE_SIZE_BITS;
 pub const USER_SPACE_TOP: usize = 0x9000_0030_0000_0000;
