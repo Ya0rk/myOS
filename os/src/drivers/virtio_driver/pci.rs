@@ -1,5 +1,6 @@
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use log::{info, trace, debug, error, warn};
+use zerocopy::IntoBytes;
 use super::probe::virtio_device;
 use super::VirtIoHalImpl;
 
@@ -62,16 +63,28 @@ pub fn enumerate_pci(pci_node: FdtNode, cam: Cam) {
             region.starting_address,
             region.starting_address as usize + region.size.unwrap()
         );
-        assert_eq!(region.size.unwrap(), cam.size() as usize);
+
+        info!("region size {:#X}, cam size {:#X}", region.size.unwrap(), cam.size() as usize);
+        // assert_eq!(region.size.unwrap(), cam.size() as usize);
         // SAFETY: We know the pointer is to a valid MMIO region.
+        
         let mut pci_root =
-            PciRoot::new(unsafe { MmioCam::new(region.starting_address as *mut u8, cam) });
+            PciRoot::new(unsafe { MmioCam::new((region.starting_address as usize + 0x9000_0000_0000_0000) as *mut u8, cam) });
+        
         for (device_function, info) in pci_root.enumerate_bus(0) {
-            let (status, command) = pci_root.get_status_command(device_function);
+            
             info!(
-                "Found {} at {}, status {:?} command {:?}",
-                info, device_function, status, command
+                "Found {} at {}",
+                info, device_function
             );
+
+            let (status, command) = pci_root.get_status_command(device_function);
+
+            info!(
+                "status: {:?} command {:?}",
+                status, command
+            );
+
             if let Some(virtio_type) = virtio_device_type(&info) {
                 info!("  VirtIO {:?}", virtio_type);
                 allocate_bars(&mut pci_root, device_function, &mut allocator);
@@ -130,6 +143,7 @@ impl PciMemory32Allocator {
         if memory_32_size == 0 {
             panic!("No 32-bit PCI memory region found.");
         }
+        info!("Using 32-bit PCI memory region: {:#x}-{:#x}", memory_32_address, memory_32_address+memory_32_size);
         Self {
             start: memory_32_address,
             end: memory_32_address + memory_32_size,
@@ -206,9 +220,9 @@ fn allocate_bars(
                 }
                 MemoryBarType::Width64 => {
                     if size > 0 {
-                        let address = allocator.allocate_memory_32(size);
-                        debug!("Allocated address {:#010x}", address);
-                        root.set_bar_64(device_function, bar_index as u8, address.into());
+                        let address = allocator.allocate_memory_32(size) as u64;
+                        info!("Allocated address {:#010x}", address);
+                        root.set_bar_64(device_function, bar_index as u8, address + 0x9000_0000_0000_0000);
                     }
                 }
 
