@@ -159,10 +159,10 @@ impl From<VirtAddr> for KernelAddr {
         Self(v.0)
     }
 }
-
+/// todo 需要在loongarch中重建
 fn check_addr_valid(addr: usize, offset: usize) {
-    let tmp: isize = (addr as isize >> offset) as isize;
-    assert!(tmp == 0 || tmp == -1, "invalid addr: {:#x}", addr);
+    // let tmp: isize = (addr as isize >> offset) as isize;
+    // assert!(tmp == 0 || tmp == -1, "invalid addr: {:#x}", addr);
 }
 
 impl From<usize> for PhysAddr {
