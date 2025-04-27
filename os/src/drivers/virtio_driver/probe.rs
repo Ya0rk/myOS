@@ -124,26 +124,26 @@ pub fn virtio_device(transport: impl Transport + 'static) {
 }
 
 fn virtio_blk<T: Transport + 'static>(transport: T) {
-    // let mut blk = VirtIOBlk::<VirtIoHalImpl, T>::new(transport).expect("failed to create blk driver");
-    // println!("check blk readonly");
-    // assert!(!blk.readonly());
-    // println!("start to test blk");
-    // let mut input = [0xffu8; 512];
-    // let mut output = [0; 512];
-    // for i in 0..32 {
-    //     for x in input.iter_mut() {
-    //         *x = i as u8;
-    //     }
-    //     blk.write_blocks(i, &input).expect("failed to write");
-    //     blk.read_blocks(i, &mut output).expect("failed to read");
-    //     assert_eq!(input, output);
-    // }
-    // println!("virtio-blk test finished");
-    info!("create a virtio block device");
-    let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport));
-    info!("register");
-    register_block_device(blk);
-    info!("finished register");
+    let mut blk = VirtIOBlk::<VirtIoHalImpl, T>::new(transport).expect("failed to create blk driver");
+    println!("check blk readonly");
+    assert!(!blk.readonly());
+    println!("start to test blk");
+    let mut input = [0xffu8; 512];
+    let mut output = [0; 512];
+    for i in 0..32 {
+        for x in input.iter_mut() {
+            *x = i as u8;
+        }
+        blk.write_blocks(i, &input).expect("failed to write");
+        blk.read_blocks(i, &mut output).expect("failed to read");
+        assert_eq!(input, output);
+    }
+    println!("virtio-blk test finished");
+    // info!("create a virtio block device");
+    // let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport));
+    // info!("register");
+    // register_block_device(blk);
+    // info!("finished register");
 }
 
 fn virtio_gpu<T: Transport>(transport: T) {
