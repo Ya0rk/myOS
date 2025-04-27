@@ -91,9 +91,7 @@ pub fn enumerate_pci(pci_node: FdtNode, cam: Cam) {
 
 
             if let Some(virtio_type) = virtio_device_type(&info) {
-                if virtio_type == DeviceType::Network {
-                    continue;
-                }
+
                 info!("  VirtIO {:?}", virtio_type);
                 allocate_bars(&mut pci_root, device_function, &mut allocator);
                 dump_bar_contents(&mut pci_root, device_function, 4);
