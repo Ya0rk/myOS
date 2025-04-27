@@ -66,8 +66,8 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // 启动顺序：
     // clear_bss 
     // logo 
-    // mm::init
     // logger_init
+    // mm::init
     // trap_init 
     // init_processors
     // probe
@@ -77,6 +77,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // 设置时钟中断
     // 开始调度执行
     println!("hello world!");
+    println!("hart id is {:#X}, dt_root is {:#x}", hart_id, dt_root);
 
     if FIRST_HART
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
@@ -84,11 +85,11 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     {
         hal::entry::boot::clear_bss();
         hal::entry::boot::logo();
-
+        utils::logger_init();
+        println!("start init mm");
         mm::init(true);
         println!("finished mm::init");
-        utils::logger_init();
-
+        
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
@@ -97,7 +98,11 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         hal::trap::init();
         task::init_processors();
         
+        #[cfg(target_arch = "riscv64")]
         let dt_root: usize = 0xffff_ffc0_87e0_0000; //注意到应当看rustsbi的Device Tree Region信息
+        #[cfg(target_arch = "loongarch64")]
+        let dt_root: usize = 0x9000_0000_0010_0000;
+
         info!("satrt probe fdt tree root: {:X}", dt_root);
         crate::drivers::virtio_driver::probe::probe(dt_root as u64);
 
