@@ -1,7 +1,7 @@
 use core::arch::asm;
 // use riscv::register::sstatus::FS;
 use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
-
+use loongarch64::register::*;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -18,11 +18,11 @@ pub struct UserFloatRegs {
 #[derive(Clone, Copy)]
 pub struct TrapContext {
     /* 0-31 */ pub user_x: [usize; 32], 
-    /*  32  */ pub sstatus: PrMd,
+    /*  32  */ pub sstatus: Sstatus,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
     /*  35  */ pub kernal_ra: usize,
-    /* 36-53*/ pub kernel_s: [usize; 18], // 保存callee saved寄存器(s0-s8 r12-r20)
+    /* 36-53*/ pub kernel_s: [usize; 12], // 保存callee saved寄存器(s0-s8 r12-r20)
     /*  54  */ pub kernel_fp: usize,
     /*  55  */ pub kernel_tp: usize,
     /*  56  */ pub float_regs: UserFloatRegs,
@@ -33,8 +33,8 @@ impl TrapContext {
     pub fn app_init_context(
         entry: usize,
         sp: usize,
-        kernel_sp: usize,
-        _trap_loop: usize,
+        //kernel_sp: usize,
+        //_trap_loop: usize,
     ) -> Self {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
@@ -42,7 +42,7 @@ impl TrapContext {
             user_x: [0; 32],
             sstatus,
             sepc: entry,
-            kernel_sp,
+            kernel_sp: 0,
             kernal_ra: 0,
             kernel_s: [0; 12],
             kernel_fp: 0,
@@ -51,6 +51,13 @@ impl TrapContext {
         };
         cx.set_sp(sp);
         cx
+    }
+    /// 设置context参数
+    pub fn set_arg(&mut self, argc: usize, argv: usize, env: usize) {
+        self.user_x[10] = argc;
+        self.user_x[11] = argv;
+        self.user_x[12] = env;
+        self.float_regs = UserFloatRegs::new();
     }
     pub fn set_sp(&mut self, sp: usize) {
         self.user_x[2] = sp;
@@ -92,6 +99,7 @@ impl UserFloatRegs {
         Self {
             f: [0.0; 32],
             fcsr: 0,
+            fcc: 0,
             need_save: 0,
             need_restore: 0,
             dirty: 0,
