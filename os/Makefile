@@ -1,5 +1,12 @@
 # Building
-TARGET := riscv64gc-unknown-none-elf
+ARCH := riscv64
+# ARCH := loongarch64
+ifeq ($(ARCH), riscv64)
+	TARGET := riscv64gc-unknown-none-elf
+endif
+ifeq ($(ARCH), loongarch64)
+	TARGET := loongarch64-unknown-none
+endif
 MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
@@ -45,16 +52,27 @@ DISASM ?= -x
 TEST ?=
 
 #qemu
-QEMU_NAME := qemu-system-riscv64
+QEMU_NAME := qemu-system-$(ARCH)
 
-QEMU_ARGS =  -machine virt 
-QEMU_ARGS += -m 128M
-QEMU_ARGS += -nographic 
-QEMU_ARGS += -bios $(BOOTLOADER) 
-QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
-QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
-QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
-QEMU_ARGS += -smp $(CPUS)
+ifeq ($(ARCH), riscv64)
+	QEMU_ARGS =  -machine virt 
+	QEMU_ARGS += -m 128M
+	QEMU_ARGS += -nographic 
+	QEMU_ARGS += -bios $(BOOTLOADER) 
+	QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+	QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+	QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+	QEMU_ARGS += -smp $(CPUS)
+endif
+ifeq ($(ARCH), loongarch64)
+	QEMU_ARGS =  -machine virt 
+	QEMU_ARGS += -m 1G
+	QEMU_ARGS += -nographic 
+	QEMU_ARGS += -kernel $(KERNEL_ELF)
+	QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+	QEMU_ARGS += -device virtio-blk-pci,drive=x0,id=virtio-disk0 
+	QEMU_ARGS += -smp $(CPUS)
+endif
 
 # 加入另一个块设备
 # QEMU_ARGS += -drive file=../$(FS)/myimage.img,if=none,format=raw,id=x1
@@ -92,7 +110,7 @@ $(APPS):
 kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
-	cp src/linker-$(BOARD).ld src/linker.ld
+	cp ./linker/linker-$(BOARD)-$(ARCH).ld ./src/linker.ld
 	cargo build $(MODE_ARG)
 	rm src/linker.ld
 PHONY += kernel
@@ -160,18 +178,10 @@ LArc:
 PHONY += LArc
 
 # 龙芯架构的启动方式
-LA:
-	cargo build --target loongarch64-unknown-none
-	qemu-system-loongarch64 \
-		-m 1G \
-		-smp 1 \
-		-kernel ./target/loongarch64-unknown-none/debug/os \
-		-vga none \
-		-nographic \
-		-drive file=$(FS_IMG),if=none,format=raw,id=mydev \
-		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
-		-device virtio-blk-pci,drive=mydev,id=virtio-disk0 
-
+LA: copy_to_fs
+	cp ./linker/linker-$(BOARD)-$(ARCH).ld ./src/linker.ld
+	cargo build --target $(TARGET) $(MODE_ARG)
+	$(QEMU_NAME) $(QEMU_ARGS)
 PHONY += LA
 # qemu-system-loongarch64 \
 # 	-kernel {os_file} 
