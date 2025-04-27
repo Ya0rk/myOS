@@ -139,10 +139,10 @@ fn virtio_blk<T: Transport + 'static>(transport: T) {
     //     assert_eq!(input, output);
     // }
     // println!("virtio-blk test finished");
-    // info!("create a virtio block device");
-    // let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport));
-    // info!("register");
-    // register_block_device(blk);
+    info!("create a virtio block device");
+    let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport));
+    info!("register");
+    register_block_device(blk);
     info!("finished register");
 }
 
