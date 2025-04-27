@@ -98,13 +98,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         hal::trap::init();
         task::init_processors();
         
-        #[cfg(target_arch = "riscv64")]
-        let dt_root: usize = 0xffff_ffc0_87e0_0000; //注意到应当看rustsbi的Device Tree Region信息
-        #[cfg(target_arch = "loongarch64")]
-        let dt_root: usize = 0x9000_0000_0010_0000;
-
-        info!("satrt probe fdt tree root: {:X}", dt_root);
-        crate::drivers::virtio_driver::probe::probe(dt_root as u64);
+        crate::drivers::init();
 
         fs::init();
         // 此时完成初始化工作，准备载入进程开始执行
