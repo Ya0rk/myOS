@@ -63,12 +63,12 @@ unsafe impl Hal for VirtIoHalImpl {
     unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
         let vaddr = buffer.as_ptr() as *mut u8 as usize;
         // Nothing to do, as the host already has access to all memory.
-        // PageTable::from_token(current_user_token())
-        //     .translate_va(VirtAddr::from(vaddr))
-        //     .unwrap()
-        //     .0
+        PageTable::from_token(current_user_token())
+            .translate_va(VirtAddr::from(vaddr))
+            .unwrap()
+            .0
         // 注意到现在采取直接映射模式,在entry中有设置
-        vaddr
+        // vaddr
     }
 
     unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {
