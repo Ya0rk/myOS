@@ -5,7 +5,6 @@ use lwext4_rust::{
     bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET},
     Ext4File, InodeTypes
 };
-// use riscv::register::mstatus::set_fs;
 use crate::{
     fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, page_cache::PageCache, stat::as_inode_stat, Dirent, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
     sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
