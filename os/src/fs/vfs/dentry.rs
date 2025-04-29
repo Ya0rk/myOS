@@ -253,6 +253,17 @@ lazy_static! {
     pub static ref DENTRY_ROOT: Arc<Dentry> = Dentry::new_root();
 }
 
+macro_rules! test_inode {
+    ($path:expr) => {
+        if let Some(inode) = Dentry::get_inode_from_path(&String::from($path)) {
+            info!("inode stat for {}: {:?}", $path, inode.fstat());
+        } else {
+            info!("no such file or directory: {}", $path);
+        }
+    };
+}
+
+
 pub fn dentry_test() {
     info!("stat root inode");
     info!("root inode stat is {:?}", root_inode().fstat());
@@ -286,6 +297,12 @@ pub fn dentry_test() {
         }
     }
     info!("-------------finished baisc get_inode test-------------");
+    info!("-------------start confuse get_inode test-------------");
+        info!("test 3");
+        test_inode!("////test_dir0");
+        info!("test 4");
+        test_inode!("//.//../..///.//test_dir0/test_dir1/./file_b");
+    info!("-------------finished confuse get_inode test-------------");
     // info!("start get_inode test");
     // {DENTRY_ROOT.children.read().iter().for_each(|x| {
     //     let mut dentry = x;
