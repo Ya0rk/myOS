@@ -4,7 +4,7 @@ use hashbrown::HashSet;
 use log::info;
 use lwext4_rust::bindings::printf;
 use riscv::interrupt::Mutex;
-use sbi_rt::SharedPtr;
+use sbi_rt::{NonRetentive, SharedPtr};
 use spin::{rwlock::RwLock};
 use core::hash::{Hash, Hasher};
 use crate::{fs::{ffi::InodeType, path, root_inode, Path, INODE_CACHE}};
@@ -59,18 +59,50 @@ impl Dentry {
     /// 创建一个没有绑定Inode的dentry,爹指向self,名字为name
     fn new_bare(
         self: &Arc<Self>,
-        name: String,
+        name: &String,
     ) -> Arc<Self> {
         info!("create bare {}", name);
         let mut inode = Vec::new();
         let res = Self {
-            name: RwLock::new(name),
+            name: RwLock::new(String::from(name)),
             parent: Arc::downgrade(self),
             children: RwLock::new(HashSet::new()),
             inode: RwLock::new(inode),
         };
         Arc::new(res)
     }
+
+    fn get_parent(self: Arc<Self>) -> Arc<Self> {
+        let mut dentry = self.clone();
+        if let Some(parent) = dentry.parent.upgrade() {
+            dentry = parent;
+        }
+        dentry
+    }
+
+    fn get_child(self: Arc<Self>, pattern: &String) -> Option<Arc<Self>> {
+        info!("visit {}", pattern);
+        {
+            let children = self.children.read();
+            match pattern.as_str() {
+                "" | "." | "/" => {
+                        return Some(self.clone());
+                    }
+                ".." => {
+                    return Some(self.clone().get_parent());
+                }
+                _ => {}
+            }
+            for child in children.iter() {
+                let name = child.name.read();
+                if name.as_str() == pattern {
+                    return Some(child.clone());
+                }
+            }
+        }
+        None
+    }
+
 
     /// 将一个dentry和inode绑定,如果inode是一个文件夹,就把为他的儿子创建一个新的dentry
     fn bind(self: &Arc<Self>, inode:Arc<dyn InodeTrait>) {
@@ -113,7 +145,7 @@ impl Dentry {
                                     alloc::format!("{}/{}", self.name.read(), name)
                                 }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
                                 let temp = temp.replace('\0', "");//去除掉“\0”字符
-                                let son = Self::new_bare(&self, temp);
+                                let son = Self::new_bare(&self, &temp);
                                 children_vec.insert(son);
                             }
                             Err(e) => {
@@ -148,33 +180,70 @@ impl Dentry {
             }
         }
         // 如果没有 inode，获取写锁并重新检查（避免并发重复计算）
-        let mut inode_guard = self.inode.write();
-        // 双重检查，防止在获取写锁期间其他线程已写入 inode
-        if let Some(inode) = inode_guard.last() {
-            return Some(inode.clone());
-        }
+        let res = {
+            let mut inode_guard = self.inode.write();
+            // 双重检查，防止在获取写锁期间其他线程已写入 inode
+            if let Some(inode) = inode_guard.last() {
+                return Some(inode.clone());
+            }
+            {
+                if self.name.read().ends_with("/..") {
+                    info!("check in {:?}", *(self.name.read()));
+                    let this = Weak::upgrade(&self.parent)?.clone();
+                    let parent = Weak::upgrade(&this.parent)?.clone();
+                    return parent.get_inode();
+                }
+            }
+            {
+                if self.name.read().ends_with("/.") {
+                    info!("check in {:?}", *(self.name.read()));
+                    return Weak::upgrade(&self.parent)?.clone().get_inode();
+                }
+            }
+            // 获取父节点
+            let parent_dentry = self.parent.upgrade()?;
+            // 获取父节点的 inode 并执行 walk
+            let parent_inode = parent_dentry.get_inode()?;
+            let this_inode = parent_inode.walk(&self.name.read())?;
+            // 存储 inode 到栈
+            inode_guard.push(this_inode.clone());
+            this_inode
+        };
         {
-            if self.name.read().ends_with("/..") {
-                info!("check in {:?}", *(self.name.read()));
-                let this = Weak::upgrade(&self.parent)?.clone();
-                let parent = Weak::upgrade(&this.parent)?.clone();
-                return parent.get_inode();
+            self.flush_binding();
+        }
+        Some(res)
+    }
+
+    pub fn get_inode_from_path(path: &String) -> Option<Arc<dyn InodeTrait>> {
+        if !path.starts_with('/') {
+            panic!("path should start with /");
+        }
+        let mut dentry_now = DENTRY_ROOT.clone();
+        if path == "/" {
+            return dentry_now.get_inode();
+        }
+        let mut path_now = String::from("/");
+
+        let path_split = path.split('/').collect::<Vec<_>>();
+        for name in path_split {
+            if path_now.ends_with("/") {
+                path_now = alloc::format!("{}{}", path_now, name);
+            } else {
+                path_now = alloc::format!("{}/{}", path_now, name);
+            }
+            match dentry_now.get_child(&path_now) { 
+                Some(child) => {
+                    dentry_now = child;
+                    dentry_now.get_inode();
+                }
+                None => {
+                    info!("no such file or directory: {}", path_now);
+                    return None;
+                }
             }
         }
-        {
-            if self.name.read().ends_with("/.") {
-                info!("check in {:?}", *(self.name.read()));
-                return Weak::upgrade(&self.parent)?.clone().get_inode();
-            }
-        }
-        // 获取父节点
-        let parent_dentry = self.parent.upgrade()?;
-        // 获取父节点的 inode 并执行 walk
-        let parent_inode = parent_dentry.get_inode()?;
-        let this_inode = parent_inode.walk(&self.name.read())?;
-        // 存储 inode 到栈
-        inode_guard.push(this_inode.clone());
-        Some(this_inode)
+        dentry_now.get_inode()
     }
 
 }
@@ -193,20 +262,43 @@ pub fn dentry_test() {
     {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.name.read()));println!("");}
     // info!("start unmount");
     // Dentry::unbind(&DENTRY_ROOT);
-    print!("list all children:   ");
-    {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.name.read()));println!("");}
-    info!("start get_inode test");
-    {DENTRY_ROOT.children.read().iter().for_each(|x| {
-        let mut dentry = x;
-        if let Some(x) = dentry.get_inode() {
-            info!("finished got inode");
-            info!("{:?}", x.fstat());
+    // print!("list all children:   ");
+    // {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.name.read()));println!("");}
+    info!("-------------start baisc get_inode test-------------");
+    {
+        info!("test 0");
+        if let Some(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0")) {
+            info!("inode stat {:?}", inode.fstat());
         } else {
-            info!("{} no seccess", dentry.name.read());
+            info!("no such file or directory: /test_dir0");
         }
-    })};
-    {if let Some(x) = DENTRY_ROOT.get_inode() {
-        info!("root dentry stat is {:?}", x.fstat());
-    }}
+        info!("test 1");
+        if let Some(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0/file_a")) {
+            info!("inode stat {:?}", inode.fstat());
+        } else {
+            info!("no such file or directory: /test_dir0/file_a");
+        }
+        info!("test 2");
+        if let Some(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0/test_dir1/file_b")) {
+            info!("inode stat {:?}", inode.fstat());
+        } else {
+            info!("no such file or directory: /test_dir0/test_dir1/file_b");
+        }
+    }
+    info!("-------------finished baisc get_inode test-------------");
+    // info!("start get_inode test");
+    // {DENTRY_ROOT.children.read().iter().for_each(|x| {
+    //     let mut dentry = x;
+    //     if let Some(x) = dentry.get_inode() {
+    //         info!("finished got inode");
+    //         info!("{:?}", x.fstat());
+    //     } else {
+    //         info!("{} no seccess", dentry.name.read());
+    //     }
+    // })};
+    // {if let Some(x) = DENTRY_ROOT.get_inode() {
+    //     info!("root dentry stat is {:?}", x.fstat());
+    // }}
     info!("finished dentry test");
+    panic!("dentry test");
 }
