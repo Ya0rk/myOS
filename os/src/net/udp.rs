@@ -1,7 +1,7 @@
 use alloc::{string::String, sync::Arc, vec};
 use log::info;
 use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata, UdpMetadata}, storage::PacketBuffer, wire::{IpAddress, IpEndpoint}};
-use crate::{fs::{FileMeta, OpenFlags, RenameFlags}, net::net_async::UdpSendFuture, sync::SpinNoIrqLock, syscall::ShutHow, utils::{Errno, SysResult}};
+use crate::{fs::{FileMeta, OpenFlags, RenameFlags}, net::net_async::UdpSendFuture, sync::{get_waker, SpinNoIrqLock}, syscall::ShutHow, utils::{Errno, SysResult}};
 use super::{addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, alloc_port, Port, SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
@@ -99,7 +99,6 @@ impl UdpSocket {
 #[async_trait]
 impl Socket for UdpSocket {
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
-        // NET_DEV.lock().poll();
         let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
         let mut sockmeta = self.sockmeta.lock();
         if sockmeta.port.is_some() {
@@ -120,6 +119,8 @@ impl Socket for UdpSocket {
         }
         drop(port_manager);
         sockmeta.port = Some(p);
+
+        NET_DEV.lock().poll();
 
         let mut binding = SOCKET_SET.lock();
         let socket = binding.get_mut::<udp::Socket>(self.handle);
@@ -267,5 +268,33 @@ impl FileTrait for UdpSocket {
     }
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<crate::mm::page::Page>> {
         unimplemented!()
+    }
+    async fn pollin(&self) -> bool {
+        NET_DEV.lock().poll();
+        let waker = get_waker().await;
+        let res = self.with_socket(|socket| {
+            if socket.can_recv() {
+                info!("[UdpSocket::pollin] have data can recv");
+                return true;
+            }
+            info!("[UdpSocket::pollin] don't have data, nothing to recv");
+            socket.register_recv_waker(&waker);
+            return false;
+        });
+        res
+    }
+    async fn pollout(&self) -> bool {
+        NET_DEV.lock().poll();
+        let waker = get_waker().await;
+        let res = self.with_socket(|socket| {
+            if socket.can_send() {
+                info!("[UdpSocket::pollout] have data to send");
+                return true;
+            }
+            info!("[UdpSocket::pollout] nothing to send");
+            socket.register_send_waker(&waker);
+            return false;
+        });
+        res
     }
 }

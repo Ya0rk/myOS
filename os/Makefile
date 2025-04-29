@@ -78,9 +78,9 @@ PHONY += initproc
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
-	cargo install cargo-binutils
-	rustup component add rust-src
-	rustup component add llvm-tools-preview
+	# cargo install cargo-binutils
+	# rustup component add rust-src
+	# rustup component add llvm-tools-preview
 PHONY += env
 
 $(KERNEL_BIN): kernel
@@ -96,7 +96,7 @@ kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
 	cp src/linker-$(BOARD).ld src/linker.ld
-	cargo build $(MODE_ARG)
+	cargo build $(MODE_ARG) -j 16
 	rm src/linker.ld
 PHONY += kernel
 
@@ -119,7 +119,7 @@ run: run-inner
 PHONY += run
 
 qemu-version-check:
-	sh scripts/qemu-ver-check.sh $(QEMU_NAME)
+	# sh scripts/qemu-ver-check.sh $(QEMU_NAME)
 PHONY += qemu-version-check
 
 run-inner: qemu-version-check build

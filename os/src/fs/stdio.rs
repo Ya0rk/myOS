@@ -9,6 +9,7 @@ use crate::utils::Errno;
 use crate::utils::SysResult;
 use crate::mm::{UserBuffer, page::Page};
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use async_trait::async_trait;
@@ -34,6 +35,9 @@ impl FileTrait for Stdin {
     fn executable(&self) -> bool {
         false
     }
+    fn get_flags(&self) -> OpenFlags {
+        OpenFlags::O_RDONLY
+    }
     async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
         //一次读取多个字符
         let mut c: usize;
@@ -52,18 +56,11 @@ impl FileTrait for Stdin {
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("Stdin".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    // fn poll(&self, events: PollEvents) -> PollEvents {
-    //     let mut revents = PollEvents::empty();
-    //     if events.contains(PollEvents::IN) {
-    //         revents |= PollEvents::IN;
-    //     }
-    //     revents
-    // }
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
@@ -90,8 +87,14 @@ impl FileTrait for Stdout {
     fn executable(&self) -> bool {
         false
     }
+    fn get_flags(&self) -> OpenFlags {
+        OpenFlags::O_WRONLY
+    }
     async fn read(&self, _user_buf: &mut [u8]) -> SysResult<usize> {
         panic!("Cannot read from stdout!");
+    }
+    async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
+        self.write(buf).await
     }
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         print!("{}", core::str::from_utf8(user_buf).unwrap());
@@ -99,7 +102,7 @@ impl FileTrait for Stdout {
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("Stdout".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()

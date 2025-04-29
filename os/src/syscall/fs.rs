@@ -2,13 +2,14 @@ use core::cell::SyncUnsafeCell;
 use core::ops::Add;
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::vec;
 use log::info;
 use lwext4_rust::file;
 use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::ext4::NormalFile;
-use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dirent, FileClass, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dirent, FileClass, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::syscall::ffi::IoVec;
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
@@ -241,7 +242,16 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     let token = current_user_token();
     let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
-    info!("[sys_openat] path = {}", path);
+    info!("[sys_openat] path = {}, flags = {:?}", path, flags);
+    // if path == "./busybox_cmd.txt" {
+    //     let fdtable = task.fd_table.lock().table.clone();
+    //     if fdtable[1].is_none() {
+    //         info!("taskid = {}, busybox_cmd.txt don't have stdout", task.get_pid());
+    //         let stdout = FdInfo::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
+    //         task.alloc_fd(stdout);
+    //     }
+    //     info!("[sys_openat] open busybox_cmd.txt, permission = {:?}", flags);
+    // }
 
     // 计算目标路径
     let target_path = if path.starts_with("/") {
@@ -265,7 +275,7 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     // 检查路径是否有效并打开文件
     if let Some(inode) = open(cwd.as_str() , target_path.as_str(), flags) {
         let fd = task.alloc_fd(FdInfo::new(inode.file()?, flags));
-        info!("[sys_openat] alloc fd finished, new fd = {}", fd);
+        info!("[sys_openat] taskid = {}, alloc fd finished, new fd = {}",task.get_pid(), fd);
         if fd > RLIMIT_NOFILE {
             return Err(Errno::EMFILE);
         } else {
@@ -283,6 +293,8 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
+    let file = task.get_file_by_fd(1).ok_or(Errno::EBADF)?;
+    info!("[sys_close] pid = {}, success get stdout", task.get_pid());
     
     // 删除对应的fd
     task.remove_fd(fd);
@@ -297,15 +309,16 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
 pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     info!("sys_pipe start!");
     let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
+    info!("[sys_pipe] flags = {:?}", flags.clone());
     let task = current_task().unwrap();
     let (read_fd, write_fd) = {
         let (read, write) = Pipe::new();
         (
-            task.alloc_fd(FdInfo::new(read, flags)),
-            task.alloc_fd(FdInfo::new(write, flags)),
+            task.alloc_fd(FdInfo::new(read.clone(),  OpenFlags::O_RDONLY)),
+            task.alloc_fd(FdInfo::new(write.clone(), OpenFlags::O_WRONLY)),
         )
     };
-    info!("alloc read_fd = {}, write_fd = {}", read_fd, write_fd);
+    info!("taskid = {}, alloc read_fd = {}, write_fd = {}", task.get_pid(), read_fd, write_fd);
 
     let token = task.get_user_token();
     *translated_refmut(token, pipefd) = read_fd as u32;
@@ -402,11 +415,12 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
 /// Success: 返回新的文件描述符; Fail: 返回-1
 pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
+    info!("[sys_dup] pid = {}, oldfd = {}", task.get_pid(), oldfd);
     // let mut inner = task.inner_lock();
 
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.set_close_on_exec(true);
+    let new_temp_fd = old_temp_fd.off_Ocloexec(true);
     let new_fd = task.alloc_fd(new_temp_fd);
     // drop(inner);
     if new_fd > RLIMIT_NOFILE {
@@ -429,14 +443,13 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     let flag = OpenFlags::from_bits(flags as i32).unwrap();
     let cloexec = {
         match flag {
-            flags if flags.is_empty() => Some(false),
             OpenFlags::O_CLOEXEC => Some(true),
-            _ => None,
+            _ => Some(false),
         }
     }.ok_or(Errno::EINVAL)?;
 
     let task = current_task().unwrap();
-    // let mut inner = task.inner_lock();
+    info!("[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = {}", task.get_pid());
     
     if newfd > RLIMIT_NOFILE
     {
@@ -446,7 +459,8 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     let old_temp_fd = task.get_fd(oldfd);
     if old_temp_fd.is_none() { return Err(Errno::EBADF); }
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.set_close_on_exec(cloexec);
+    let new_temp_fd = old_temp_fd.clone().off_Ocloexec(!cloexec);
+    info!("[sys_dup3] old file name = {}, oldfd = {}", old_temp_fd.clone().file.unwrap().get_name()?, oldfd);
     // 将newfd 放到指定位置
     task.put_fd_in(new_temp_fd, newfd);
 
@@ -640,13 +654,14 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let mut len: usize = 0;
     let mut buf = vec![0u8; count];
     let mut new_offset = offset;
+    if new_offset != 0 { panic!("not implement") };
 
     loop {
-        let read_size = src.get_inode().read_at(new_offset, &mut buf).await;
+        let read_size = src.read(&mut buf).await?;
         if read_size == 0 {
             break;
         }
-        let write_size = dest.get_inode().write_at(new_offset, &buf).await;
+        let write_size = dest.write(&buf[0..read_size]).await?;
         if read_size != write_size {
             return Err(Errno::EIO);
         }
@@ -656,13 +671,13 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
 
     // If offset is not NULL, then sendfile() does not modify the file offset of in_fd; 
     // otherwise the file offset is adjusted to reflect the number of bytes read from in_fd.
-    if offset == 0 {
+    if offset != 0 {
         // 重新设置offset：
         let token = task.get_user_token();
         src.lseek(len as isize, SEEK_CUR).unwrap();
         *translated_refmut(token, offset as *mut usize) = new_offset;
     }
-
+    info!("[sys_sendfile] finished");
     Ok(len)
 }
 

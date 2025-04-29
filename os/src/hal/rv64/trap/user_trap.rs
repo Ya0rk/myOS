@@ -47,6 +47,12 @@ pub async fn user_trap_handler() {
 
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
+
+            if task.get_pid() == 4 && task.fd_table.lock().table[1].is_none() {
+                info!("[user trap] now task4's stdout is none, plz debug");
+                loop {
+                }
+            }
             
             match result {
                 Ok(ret) => {

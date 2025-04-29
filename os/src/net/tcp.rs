@@ -27,6 +27,7 @@ use crate::net::net_async::TcpAcceptFuture;
 use crate::net::net_async::TcpRecvFuture;
 use crate::net::PORT_MANAGER;
 use crate::net::SOCKET_SET;
+use crate::sync::get_waker;
 use crate::sync::yield_now;
 use crate::sync::SpinNoIrqLock;
 use crate::syscall::ShutHow;
@@ -174,6 +175,29 @@ impl TcpSocket {
         self.with_socket(|socket| {
             self.sockmeta.lock().remote_end = socket.remote_endpoint();
         })
+    }
+
+    // 判断是否可以从tcp socket中读取数据
+    pub fn shoule_return_ready(&self) -> bool {
+        let res = self.with_socket(|socket| {
+            if socket.can_recv() {
+                info!("[TcpSocket::pollin] can recv");
+                return true;
+            }
+            // TODO(YJJ):maybe bug
+            if socket.state() == TcpState::CloseWait
+            || socket.state() == TcpState::FinWait2
+            || socket.state() == TcpState::TimeWait
+            || (*self.state.lock() == TcpState::Listen && socket.state() == TcpState::Established)
+            || socket.state() == TcpState::SynReceived
+            {
+                info!("[TcpSocket::pollin]  can recv, state become {:?}", socket.state());
+                return true;
+            }
+
+            return false;
+        });
+        res
     }
 }
 
@@ -444,5 +468,37 @@ impl FileTrait for TcpSocket {
     }
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<crate::mm::page::Page>> {
         unimplemented!()
+    }
+    /// TCP Socket 的异步可读性检查方法，
+    /// 用于判断当前 Socket 是否有数据可读或处于特定状态（如连接关闭），
+    /// 并根据情况注册 Waker 以便在数据到达时唤醒异步任务。
+    async fn pollin(&self) -> bool {
+        info!("[TcpSocket::pollin] start");
+        // 调用底层网络接口轮询机制，处理待处理的网络事件, 确保 Socket 状态和数据缓冲区是最新的
+        NET_DEV.lock().poll();
+        if self.shoule_return_ready() {
+            return true;
+        }
+        let waker = get_waker().await;
+        self.with_socket(|socket| {
+            info!("[TcpSocket::pollin] nothing to read, state {:?}", socket.state());
+            socket.register_recv_waker(&waker);
+        });
+
+        false
+    }
+    async fn pollout(&self) -> bool {
+        info!("[TcpSocket::pollin] start");
+        NET_DEV.lock().poll();
+        let waker = get_waker().await;
+        let res = self.with_socket(|socket| {
+            if socket.can_send() {
+                info!("[TcpSocket::pollout] can send");
+                return true;
+            }
+            socket.register_send_waker(&waker);
+            return false;
+        });
+        res
     }
 }

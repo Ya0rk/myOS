@@ -3,6 +3,7 @@ use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{page::Page, U
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
+use log::info;
 use spin::RwLock;
 
 use super::InodeTrait;
@@ -137,8 +138,16 @@ pub trait FileTrait: Send + Sync {
         unimplemented!("not support!");
     }
 
-    // ppoll处理
-    // fn poll(&self, events: PollEvents) -> PollEvents;
+    // ppoll处理,代表数据到达，可以读取数据
+    async fn pollin(&self) -> bool {
+        info!("[pollin] use defaule implement");
+        true
+    }
+    // ppoll处理，代表可以写入数据，如 socket 发送缓冲区有空闲
+    async fn pollout(&self) -> bool {
+        info!("[pollout] use defaule implement");
+        true
+    }
 }
 
 // pub trait Ioctl: File {

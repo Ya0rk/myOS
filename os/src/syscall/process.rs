@@ -178,7 +178,11 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut path = user_cstr(path.into())?.unwrap();
-    info!("sys_exec: path = {:?}", path);
+    info!("sys_exec: path = {:?}, taskid = {}", path, task.get_pid());
+    if task.get_pid() == 4 {
+        let file = task.get_file_by_fd(1).unwrap();
+        info!("[sys_exec] a taskid = {}, filename = {}", task.get_pid(), file.get_name()?);
+    }
     let mut argv = user_cstr_array(argv.into())?.unwrap_or_else(|| Vec::new());
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
@@ -462,7 +466,7 @@ pub fn sys_sigprocmask(
             }
         }
     }
-    info!("sys_sigprocmask finished");
+    info!("[sys_sigprocmask] taskid = {} ,finished", task.get_pid());
     Ok(0)
 }
 

@@ -126,6 +126,10 @@ impl TaskControlBlock {
     }
     pub async fn execve(&self, elf_file: Arc<dyn FileTrait>, argv: Vec<String>, env: Vec<String>) {
         info!("execve start");
+        if self.get_pid() == 4 {
+            let file = self.get_file_by_fd(1).unwrap();
+            info!("[sys_exec] b taskid = {}, filename = {}", self.get_pid(), file.get_name().unwrap());
+        }
         // info!("[execve] argv:{:?}, env:{:?}", argv, env);
         let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(elf_file).await;
         
@@ -152,14 +156,23 @@ impl TaskControlBlock {
         trap_cx.set_sepc(entry_point);
         trap_cx.set_sp(user_sp);
         trap_cx.set_arg(argc, argv_p, env_p);
-
+        if self.get_pid() == 4 {
+            let file = self.get_file_by_fd(1).unwrap();
+            info!("[sys_exec] d taskid = {}, filename = {}", self.get_pid(), file.get_name().unwrap());
+        }
         // 判断是否有O_CLOEXEC，如果有的话就清空当前位置的fd，避免子进程使用一些父进程的fd
         self.fd_table.lock().close_on_exec();
-
+        if self.get_pid() == 4 {
+            let file = self.get_file_by_fd(1).unwrap();
+            info!("[sys_exec] c taskid = {}, filename = {}", self.get_pid(), file.get_name().unwrap());
+        }
         // 重置自定义的信号处理
         self.handler.lock().flash_signal_handlers();
 
         debug!("task.exec.pid={}", self.pid.0);
+        if self.get_pid() == 4 && self.fd_table.lock().table[1].is_none() {
+            info!("[execve] taskid = {} 's fd=1 is none", self.get_pid());
+        }
     }
 
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
@@ -233,6 +246,7 @@ impl TaskControlBlock {
         add_proc_group_member(new_task.get_pgid(), new_task.get_pid());
         new_task.add_thread_group_member(new_task.clone());
         info!("process fork success, new pid = {}, parent pid = {}", new_task.get_pid(), new_task.get_parent().unwrap().get_pid());
+        info!("task fdtable len = {}", new_task.fd_table_len());
         
         new_task
     }
@@ -548,7 +562,7 @@ impl TaskControlBlock {
 
     /// 唤醒当前的进程
     pub fn wake_up(&self) {
-        self.get_waker()
+        self.get_task_waker()
             .as_ref()
             .expect("this task has no waker!")
             .wake_by_ref();
@@ -674,8 +688,9 @@ impl TaskControlBlock {
     
     // fd
     /// 通过fd获取文件
-    pub fn get_file_by_fd(&self, fd: usize) -> Option<Arc<dyn FileTrait + Send + Sync>> {
-        self.fd_table.lock().get_file_by_fd(fd).unwrap_or(None)
+    pub fn get_file_by_fd(&self, fd: usize) -> Option<Arc<dyn FileTrait>> {
+        // self.fd_table.lock().get_file_by_fd(fd).unwrap_or(None)
+        self.fd_table.lock().get_file_by_fd(fd).unwrap()
     }
     /// 获取当前进程的文件描述符表长度
     pub fn fd_table_len(&self) -> usize {
@@ -701,7 +716,6 @@ impl TaskControlBlock {
     pub fn put_fd_in(&self, fd: FdInfo, idx: usize) {
         self.fd_table.lock().put_in(fd, idx).expect("task [put fd in] fail")
     }
-
     /// 清空fd_table
     pub fn clear_fd_table(&self) {
         self.fd_table.lock().clear();
@@ -719,7 +733,7 @@ impl TaskControlBlock {
 
     /// waker
     /// 获取当前进程的waker
-    pub fn get_waker(&self) -> &Option<Waker> {
+    pub fn get_task_waker(&self) -> &Option<Waker> {
         unsafe { & *self.waker.get() }
     }
     /// 判断当前进程是否有waker

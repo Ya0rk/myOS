@@ -927,7 +927,7 @@ pub fn init_stack(
     // --------------------------------------------------------------------------------
     // 在构建栈的时候，我们从底向上塞各个东西
 
-    info!("[init_stack] in");
+    // info!("[init_stack] in");
     let mut sp = sp_init.to_usize();
     debug_assert!(sp & 0xf == 0);
 
@@ -1002,7 +1002,7 @@ pub fn init_stack(
     push_usize(&mut sp, argc);
 
     
-    info!("[init_stack] out");
+    // info!("[init_stack] out");
     // 返回值
     (sp, argc, arg_ptr_ptr, env_ptr_ptr)
 }

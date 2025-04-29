@@ -85,7 +85,7 @@ pub fn user_cstr(addr: VirtAddr) -> SysResult<Option<String>> {
         // TODO: len设置太大，可能导致跨页
         let len = 256;
         // 跨页处理
-        let mut cur_len = len.min(PAGE_SIZE - addr.0 & PAGE_MASK);
+        let mut cur_len = len.min(PAGE_SIZE - (addr.0 & PAGE_MASK));
         loop {
             check_readable(addr, cur_len)?;
             let bytes = from_raw_parts(addr.as_ptr(), cur_len);

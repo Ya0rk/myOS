@@ -434,15 +434,17 @@ pub const MAXSEGMENT: u32 = 2;  // 限制TCP 最大段大小 MSS
 pub const CONGESTION: u32 = 13; // 拥塞控制算法
 pub const NODELAY: u32 = 1;     // 关闭Nagle算法
 
+/// 主要用于ppoll系统调用
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
 pub struct PollFd {
     pub fd: i32,      // 要监听的文件描述符
-    pub events: i16,  // 你关心的事件（输入参数）
-    pub revents: i16, // 实际发生的事件（输出参数）
+    pub events:  PollEvents, // 你关心的事件（输入参数）
+    pub revents: PollEvents, // 实际发生的事件（输出参数）
 }
 
 bitflags! {
+    #[derive(Copy, Clone)]
     pub struct PollEvents: i16 {
         /// 普通数据可读（例如 TCP 接收缓冲区有数据）
         /// - 对应 `POLLIN`，表示文件描述符有数据可读取且不会阻塞

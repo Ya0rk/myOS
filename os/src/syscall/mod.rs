@@ -4,6 +4,7 @@ mod ffi;
 mod mm;
 mod io;
 mod net;
+mod io_async;
 
 use fs::*;
 use log::info;
@@ -20,8 +21,9 @@ use crate::utils::SysResult;
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
-    info!("syscode = {}", syscode);
+    // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_PPOLL => sys_ppoll(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
         SysCode::SYSCALL_SYNC => sys_sync(),
         SysCode::SYSCALL_GETEGID => sys_getegid(),
         SysCode::SYSCALL_GETEUID => sys_geteuid(),
