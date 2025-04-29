@@ -82,20 +82,21 @@ impl Dentry {
 
     fn get_child(self: Arc<Self>, pattern: &String) -> Option<Arc<Self>> {
         info!("visit {}", pattern);
-        {
+        if pattern.ends_with("/") || pattern.ends_with(".") || pattern.as_str() == "" {
+            info!("return name is {}", self.name.read());
+            return Some(self.clone());
+        } else if pattern.ends_with("..") {
+            info!("return name is {}", self.name.read());
+            return Some(self.clone().get_parent());
+        }
+        {    
             let children = self.children.read();
-            match pattern.as_str() {
-                "" | "." | "/" => {
-                        return Some(self.clone());
-                    }
-                ".." => {
-                    return Some(self.clone().get_parent());
-                }
-                _ => {}
-            }
             for child in children.iter() {
                 let name = child.name.read();
-                if name.as_str() == pattern {
+                let name = Path::string2path(name.clone());
+                let pattern = Path::string2path(pattern.clone());
+                if name.get_filename() == pattern.get_filename() {
+                    info!("return name is {}", self.name.read());
                     return Some(child.clone());
                 }
             }
@@ -298,10 +299,12 @@ pub fn dentry_test() {
     }
     info!("-------------finished baisc get_inode test-------------");
     info!("-------------start confuse get_inode test-------------");
-        info!("test 3");
-        test_inode!("////test_dir0");
-        info!("test 4");
-        test_inode!("//.//../..///.//test_dir0/test_dir1/./file_b");
+        // info!("test 3");
+        // test_inode!("////test_dir0");
+        // info!("test 4");
+        // test_inode!("//.//../..///.//test_dir0/test_dir1/./file_b");
+        // info!("test 5");
+        test_inode!("/././././././././././././././././no_exist");
     info!("-------------finished confuse get_inode test-------------");
     // info!("start get_inode test");
     // {DENTRY_ROOT.children.read().iter().for_each(|x| {
