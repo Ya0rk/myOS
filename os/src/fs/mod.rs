@@ -16,7 +16,7 @@ pub mod ffi;
 use ext4::Ext4Inode;
 pub use ext4::{root_inode,ls};
 pub use ffi::*;
-use lwext4_rust::bindings::{O_CREAT, O_RDWR, O_TRUNC};
+use lwext4_rust::bindings::{self, O_CREAT, O_RDWR, O_TRUNC};
 use lwext4_rust::{Ext4File, InodeTypes};
 use page_cache::PageCache;
 pub use path::{Path, path_test, join_path_2_absolute};
@@ -81,13 +81,14 @@ pub fn list_apps() -> bool{
     true
 }
 
-pub async fn create_init_files() -> SysResult {
+pub fn create_init_files() -> SysResult {
     //创建/proc文件夹
-    open(
-        "/",
-        "proc",
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
-    );
+    mkdir("/proc", 0);
+    // 创建musl glibc文件夹
+    mkdir("/musl", 0);
+    let muslinode = Ext4Inode::new("/musl", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
+    mkdir("/glibc", 0);
+    let glibcinode = Ext4Inode::new("/glibc", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
     //创建/proc/mounts文件系统使用情况
     if let Some(FileClass::File(mountsfile)) =
         open("/proc", "mounts", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
@@ -98,8 +99,6 @@ pub async fn create_init_files() -> SysResult {
             mounts.as_mut_ptr(),
             mounts.len(),
         ) };
-        let mountssize = mountsfile.write(mountbuf).await?;
-        debug!("create /proc/mounts with {} sizes", mountssize);
     }
     //创建/proc/meminfo系统内存使用情况
     if let Some(FileClass::File(memfile)) =
@@ -111,15 +110,10 @@ pub async fn create_init_files() -> SysResult {
             let mem = meminfo.as_bytes_mut();
             membuf = core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len());
         }
-        let memsize = memfile.write(membuf).await?;
-        debug!("create /proc/meminfo with {} sizes", memsize);
     }
+
     //创建/dev文件夹
-    open(
-        "/",
-        "dev",
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
-    );
+    mkdir("/dev", 0);
     //注册设备/dev/rtc和/dev/rtc0
     register_device("/dev/rtc");
     register_device("/dev/rtc0");
@@ -130,19 +124,13 @@ pub async fn create_init_files() -> SysResult {
     //注册设备/dev/numm
     register_device("/dev/null");
     //创建./dev/misc文件夹
-    open(
-        "/dev",
-        "misc",
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
-    );
+    
+    mkdir("/dev/misc", 0);
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
+
     //创建/etc文件夹
-    open(
-        "/",
-        "etc",
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY,
-    );
+    mkdir("/etc", 0);
     //创建/etc/adjtime记录时间偏差
     if let Some(FileClass::File(adjtimefile)) =
         open("/etc", "adjtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
@@ -153,8 +141,6 @@ pub async fn create_init_files() -> SysResult {
             let adj = adjtime.as_bytes_mut();
             adjtimebuf = core::slice::from_raw_parts_mut(adj.as_mut_ptr(), adj.len());
         }
-        let adjtimesize = adjtimefile.write(adjtimebuf).await?;
-        debug!("create /etc/adjtime with {} sizes", adjtimesize);
     }
     //创建./etc/localtime记录时区
     if let Some(FileClass::File(localtimefile)) =
@@ -169,8 +155,6 @@ pub async fn create_init_files() -> SysResult {
                 local.len(),
             );
         }
-        let localtimesize = localtimefile.write(localtimebuf).await?;
-        debug!("create /etc/localtime with {} sizes", localtimesize);
     }
     Ok(())
 }
@@ -180,10 +164,10 @@ fn create_open_file(
     parent_path: &str,
     flags: OpenFlags,
 ) -> Option<FileClass> {
-    println!(
-        "[create_file],flags={:?},abs_path={},parent_path={}",
-        flags, target_abs_path, parent_path
-    );
+    // println!(
+    //     "[create_file],flags={:?},abs_path={},parent_path={}",
+    //     flags, target_abs_path, parent_path
+    // );
 
     // 一定能找到,因为除了RootInode外都有父结点
     let parent_dir = match INODE_CACHE.get(parent_path) {
@@ -221,11 +205,13 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
 }
 
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
+    info!("[fs_open] start, cwd = {}, path = {}", cwd, path);
     let abs_path = Path::string2path(
         join_path_2_absolute(
             cwd.to_string(), 
             path.to_string()
     ));
+    // info!("[open] abspath = {}", abs_path.get());
 
     if find_device(&abs_path.get()) {
         if let Some(device) = open_device_file(&abs_path.get()) {
@@ -254,10 +240,6 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
                     // 说明在lwext4中还找不到这个inode
                     // 那么父母一定是存在,父母不存在返回错误
                     let parent_abs = abs_path.get_parent_abs();
-                    // 利用lwext4创建ext4file
-                    if create_inode_type == InodeTypes::EXT4_DE_DIR {
-                        mkdir(path, 0);
-                    }
                     let mut file = Ext4File::new(&abs_path.get(), create_inode_type.clone());
                     file.file_open(&abs_path.get(), O_RDWR | O_CREAT | O_TRUNC); // 为他创建lwext4的ext4inode
                     file.file_close();
@@ -275,6 +257,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         false => {
             // 不用创建的话，说明文件存在，直接打开即可
             // 不存在lwext4中(代表unlink将其删掉了)同时又没有create flag，代表打开的文件不存在，直接返回none
+            info!("open asdfasdf");
             if !root_inode()
                 .file
                 .lock()
@@ -282,6 +265,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
                     return None;
             }
 
+            info!("fasdkfjla;sdjf");
             let parent_abs = abs_path.get_parent_abs();
             return create_open_file(&abs_path.get(), &parent_abs, flags);
         },
@@ -295,7 +279,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
 /// - path: 文件夹目录（绝对路径）
 /// - mode: 创建模式
 pub fn mkdir(target_abs_path: &str, mode: usize) -> SysResult<()> {
-    // info!("open() abs_path is {}", path);
+    info!("[mkdir] new dir abs_path is {}", target_abs_path);
     // 查看当前路径是否是设备
     if find_device(target_abs_path) {
         return Err(Errno::EEXIST);

@@ -27,7 +27,7 @@ impl Future for PpollFutrue {
         let mut res_vec = Vec::new();
         for (file, event) in this.file_event.iter() {
             if event.contains(PollEvents::POLLIN) {
-                info!("[PpollFuture] pollin");
+                // info!("[PpollFuture] pollin");
                 let mut pollin_future = file.pollin();
                 let res = Pin::new(&mut pollin_future).poll(cx);
                 match res {
@@ -41,7 +41,7 @@ impl Future for PpollFutrue {
                 }
             }
             if event.contains(PollEvents::POLLOUT) {
-                info!("[PpollFuture] pollout");
+                // info!("[PpollFuture] pollout");
                 let mut pollout_future = file.pollout();
                 let res = Pin::new(&mut pollout_future).poll(cx);
                 match res {

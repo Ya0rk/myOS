@@ -23,6 +23,7 @@ pub fn sys_mmap(
 ) -> SysResult<usize> {
     let addr = addr as usize;
     if length == 0 || (addr & PAGE_MASK != 0) || (offset & PAGE_MASK != 0) {
+        info!("aaaaa");
         return Err(Errno::EINVAL);
     }
     let flags = MmapFlags::from_bits_truncate(flags);

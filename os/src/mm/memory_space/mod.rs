@@ -617,7 +617,7 @@ impl MemorySpace {
     pub fn from_user_lazily(user_space: &mut Self) -> Self {
         let mut memory_space = Self::new_user();
         for (range, area) in user_space.areas().iter() {
-            log::info!("[MemorySpace::from_user_lazily] cloning {area:?}");
+            // log::info!("[MemorySpace::from_user_lazily] cloning {area:?}");
             let mut new_area = area.clone();
             debug_assert_eq!(range, new_area.range_va());
             for vpn in area.range_vpn() {
@@ -628,7 +628,7 @@ impl MemorySpace {
                             // If shared memory,
                             // then we don't need to modify the pte flags,
                             // i.e. no copy-on-write.
-                            log::info!("[from_user_lazily] clone Shared Memory");
+                            // log::info!("[from_user_lazily] clone Shared Memory");
                             new_area.pages.insert(vpn, page.clone());
                             (pte.flags(), page.ppn())
                         }

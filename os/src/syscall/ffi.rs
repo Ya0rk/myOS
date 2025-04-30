@@ -52,6 +52,7 @@ pub enum SysCode {
     SYSCALL_DUP       = 23,
     SYSCALL_DUP3      = 24,
     SYSCALL_FCNTL     = 25,
+    SYSCALL_IOCTL     = 29,
     SYSCALL_MKDIRAT   = 34,
     SYSCALL_UNLINKAT  = 35,
     SYSCALL_LINKAT    = 37,
@@ -84,6 +85,7 @@ pub enum SysCode {
     SYSCALL_NANOSLEEP = 101,
     SYSCALL_CLOCK_SETTIME = 112,
     SYSCALL_CLOCK_GETTIME = 113,
+    SYSCALL_SYSLOG    = 116,
     SYSCALL_YIELD     = 124,
     SYSCALL_SIGACTION = 134,
     SYSCALL_SIGPROCMASK = 135,
@@ -135,6 +137,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SYSLOG => "syslog",
+            Self::SYSCALL_IOCTL => "ioctl",
             Self::SYSCALL_PPOLL => "ppoll",
             Self::SYSCALL_SYNC => "sync",
             Self::SYSCALL_GETEGID => "getegid",
@@ -492,5 +496,42 @@ bitflags! {
         /// - 对应 `POLLWRBAND`，表示可写入非紧急的带外数据
         /// - 实际使用较少，常见于特定协议扩展
         const POLLWRBAND = 0x200;
+    }
+}
+
+pub const LOGINFO: &str = r"YooOs version 0.01-riscv64";
+
+#[repr(i32)]
+#[derive(Clone)]
+pub enum SyslogCmd {
+    LOG_CLOSE = 0,
+    LOG_OPEN = 1,
+    LOG_READ = 2,
+    LOG_READ_ALL = 3,
+    LOG_READ_CLEAR = 4,
+    LOG_CLEAR = 5,
+    LOG_CONSOLE_OFF = 6,
+    LOG_CONSOLE_ON = 7,
+    LOG_CONSOLE_LEVEL = 8,
+    LOG_SIZE_UNREAD = 9,
+    LOG_SIZE_BUFFER = 10,
+}
+
+impl From<i32> for SyslogCmd {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => SyslogCmd::LOG_CLOSE,
+            1 => SyslogCmd::LOG_OPEN,
+            2 => SyslogCmd::LOG_READ,
+            3 => SyslogCmd::LOG_READ_ALL,
+            4 => SyslogCmd::LOG_READ_CLEAR,
+            5 => SyslogCmd::LOG_CLEAR,
+            6 => SyslogCmd::LOG_CONSOLE_OFF,
+            7 => SyslogCmd::LOG_CONSOLE_ON,
+            8 => SyslogCmd::LOG_CONSOLE_LEVEL,
+            9 => SyslogCmd::LOG_SIZE_UNREAD,
+            10 => SyslogCmd::LOG_SIZE_BUFFER,
+            _ => panic!("Invalid value for SyslogCmd"),
+        }
     }
 }

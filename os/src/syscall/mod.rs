@@ -23,6 +23,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_SYSLOG => sys_log(args[0] as i32, args[1] as usize, args[2] as usize),
+        SysCode::SYSCALL_IOCTL => sys_ioctl(args[0] as usize, args[1] as usize, args[2] as usize),
         SysCode::SYSCALL_PPOLL => sys_ppoll(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
         SysCode::SYSCALL_SYNC => sys_sync(),
         SysCode::SYSCALL_GETEGID => sys_getegid(),

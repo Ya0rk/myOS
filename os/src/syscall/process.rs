@@ -5,7 +5,7 @@ use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, trans
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigDetails, SigHandler, SigMask, SigNom, UContext, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
 use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
-use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
+use crate::syscall::ffi::{CloneFlags, SyslogCmd, Utsname, WaitOptions, LOGINFO};
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_task_by_pid, spawn_user_task
 };
@@ -179,10 +179,10 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let token = task.get_user_token();
     let mut path = user_cstr(path.into())?.unwrap();
     info!("sys_exec: path = {:?}, taskid = {}", path, task.get_pid());
-    if task.get_pid() == 4 {
-        let file = task.get_file_by_fd(1).unwrap();
-        info!("[sys_exec] a taskid = {}, filename = {}", task.get_pid(), file.get_name()?);
-    }
+    // if task.get_pid() == 4 {
+    //     let file = task.get_file_by_fd(1).unwrap();
+    //     info!("[sys_exec] a taskid = {}, filename = {}", task.get_pid(), file.get_name()?);
+    // }
     let mut argv = user_cstr_array(argv.into())?.unwrap_or_else(|| Vec::new());
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
@@ -466,7 +466,7 @@ pub fn sys_sigprocmask(
             }
         }
     }
-    info!("[sys_sigprocmask] taskid = {} ,finished", task.get_pid());
+    // info!("[sys_sigprocmask] taskid = {} ,finished", task.get_pid());
     Ok(0)
 }
 
@@ -560,4 +560,24 @@ pub fn sys_getegid() -> SysResult<usize> {
 
 pub fn sys_sync() -> SysResult<usize> {
     Ok(0)
+}
+
+/// send messages to the system logger
+/// 
+pub fn sys_log(cmd: i32, buf: usize, len: usize) -> SysResult<usize> {
+    info!("[sys_syslog] start");
+    let task = current_task().unwrap();
+    let cmd = SyslogCmd::from(cmd);
+    let res = match cmd {
+        SyslogCmd::LOG_READ | SyslogCmd::LOG_READ_ALL | SyslogCmd::LOG_READ_CLEAR => {
+            let copylen = len.min(LOGINFO.len());
+            let buf = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, copylen) };
+            let info = LOGINFO.as_bytes();
+            buf.copy_from_slice(info);
+            Ok(copylen)
+        }
+        _ => Ok(0),
+    };
+    
+    res
 }

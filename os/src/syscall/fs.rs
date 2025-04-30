@@ -150,6 +150,7 @@ pub fn sys_fstatat(
     statbuf: *const u8, 
     flags: u32
 ) -> SysResult<usize> {
+    info!("[sys_fstatat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
@@ -236,22 +237,13 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
 /// 
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
-    info!("sys_openat start");
+    info!("[sys_openat] start");
 
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
     info!("[sys_openat] path = {}, flags = {:?}", path, flags);
-    // if path == "./busybox_cmd.txt" {
-    //     let fdtable = task.fd_table.lock().table.clone();
-    //     if fdtable[1].is_none() {
-    //         info!("taskid = {}, busybox_cmd.txt don't have stdout", task.get_pid());
-    //         let stdout = FdInfo::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
-    //         task.alloc_fd(stdout);
-    //     }
-    //     info!("[sys_openat] open busybox_cmd.txt, permission = {:?}", flags);
-    // }
 
     // 计算目标路径
     let target_path = if path.starts_with("/") {

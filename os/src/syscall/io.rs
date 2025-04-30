@@ -108,3 +108,10 @@ pub async fn sys_ppoll(
 
     res
 }
+
+/// control device
+pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    if fd > task.fd_table_len() { return Err(Errno::EBADF); }
+    Ok(0)
+}

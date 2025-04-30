@@ -5,6 +5,7 @@
 
 use core::fmt::Debug;
 use alloc::{format, string::{String, ToString}, vec::Vec};
+use log::info;
 
 /// Represents a file system path.
 /// 
@@ -37,6 +38,7 @@ impl Path {
     pub fn split_last_with(&self, delima: &str) -> (String, String) {
         let binding = self.get();
         let s = binding.as_str();
+        info!("split: path = {}, delima = {}", self.get(), delima);
         let (mut parent_path, child_name) = s.rsplit_once(delima).unwrap();
         if parent_path.is_empty() {
             parent_path = "/";
