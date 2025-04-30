@@ -123,8 +123,10 @@ pub fn create_init_files() -> SysResult {
     register_device("/dev/zero");
     //注册设备/dev/numm
     register_device("/dev/null");
-    //创建./dev/misc文件夹
     
+    register_device("/proc");
+
+    //创建./dev/misc文件夹
     mkdir("/dev/misc", 0);
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");

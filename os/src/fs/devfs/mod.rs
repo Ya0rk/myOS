@@ -44,6 +44,8 @@ pub fn open_device_file(abs_path: &str) -> Option<Arc<dyn FileTrait>> {
         Some(Arc::new(DevRandom::new()))
     } else if abs_path == "/dev/tty" {
         Some(Arc::new(DevTty::new()))
+    } else if abs_path == "/proc" {
+        Some(Arc::new(DevZero::new()))
     } else {
         None
     }

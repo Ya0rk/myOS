@@ -4,6 +4,7 @@ use super::InodeTrait;
 use super::Kstat;
 use super::OpenFlags;
 use crate::hal::arch::console_getchar;
+use crate::task::get_current_hart_id;
 use crate::utils::Errno;
 use crate::utils::SysResult;
 use crate::mm::{UserBuffer, page::Page};
@@ -96,7 +97,7 @@ impl FileTrait for Stdout {
         self.write(buf).await
     }
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        print!("{}", core::str::from_utf8(user_buf).unwrap());
+        print!("HARTid{}: {}",get_current_hart_id(), core::str::from_utf8(user_buf).unwrap());
         Ok(user_buf.len())
     }
     

@@ -19,9 +19,9 @@ pub struct FdInfo {
 
 impl FdInfo {
     pub fn new(fd: Arc<dyn FileTrait>, flags: OpenFlags) -> Self {
-        if flags.contains(OpenFlags::O_CLOEXEC) {
-            info!("[Fdinfo] taskid = {}, new flags = {:?}", current_task().unwrap().get_pid(), flags);
-        }
+        // if flags.contains(OpenFlags::O_CLOEXEC) {
+        //     info!("[Fdinfo] taskid = {}, new flags = {:?}", current_task().unwrap().get_pid(), flags);
+        // }
         FdInfo {
             file: Some(fd),
             flags,

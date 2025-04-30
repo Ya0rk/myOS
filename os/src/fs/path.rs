@@ -111,7 +111,10 @@ impl Path {
 
     // 获取到parent的绝对路径，/a/b/c/d结果为/a/b/c
     pub fn get_parent_abs(&self) -> String {
-        let (parent_path, child_name) = self.split_last_with("/");
+        let (mut parent_path, child_name) = self.split_last_with("/");
+        if parent_path == "" {
+            parent_path = "/".to_string();
+        }
         parent_path
     }
 }
