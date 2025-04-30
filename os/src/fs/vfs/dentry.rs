@@ -305,6 +305,7 @@ pub fn dentry_test() {
         // test_inode!("//.//../..///.//test_dir0/test_dir1/./file_b");
         // info!("test 5");
         test_inode!("/././././././././././././././././no_exist");
+        test_inode!("/musl/busybox_testcode.sh");
     info!("-------------finished confuse get_inode test-------------");
     // info!("start get_inode test");
     // {DENTRY_ROOT.children.read().iter().for_each(|x| {
@@ -320,5 +321,5 @@ pub fn dentry_test() {
     //     info!("root dentry stat is {:?}", x.fstat());
     // }}
     info!("finished dentry test");
-    panic!("dentry test");
+    // panic!("dentry test");
 }
