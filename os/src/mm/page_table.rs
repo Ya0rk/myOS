@@ -13,8 +13,6 @@ use alloc::vec::Vec;
 use bitflags::*;
 use log::info;
 use spin::Mutex;
-// use riscv::register::satp;
-// use crate::utils::flags::{AccessFlags, AccessFlagsMut, UserAccessFlags};
 
 // TODO(COW标志位可以设置在这里)
 bitflags! {
@@ -80,71 +78,16 @@ impl PageTableEntry {
     }
 }
 
-// impl AccessFlags for PTEFlags {
-//     fn readable(&self) -> bool {
-//         self.contains(PTEFlags::R)
-//     }
-//     fn writable(&self) -> bool {
-//         self.contains(PTEFlags::W)
-//     }
-//     fn executable(&self) -> bool {
-//         self.contains(PTEFlags::X)
-//     }
-//     fn into<T: AccessFlagsMut + AccessFlagsInit>(&self) -> T {
-//         let mut flags = T::new();
-//         flags.set_readable(self.readable());
-//         flags.set_writable(self.writable());
-//         flags.set_executable(self.executable());
-//         flags
-//     }
-// }
-
-// impl AccessFlagsMut for PTEFlags {
-//     fn set_readable(&mut self, readable: bool) {
-//         self.set(PTEFlags::R, readable);
-//     }
-//     fn set_writable(&mut self, writable: bool) {
-//         self.set(PTEFlags::W, writable);
-//     }
-//     fn set_executable(&mut self, executable: bool) {
-//         self.set(PTEFlags::X, executable);
-//     }
-    
-// }
-
-// impl UserAccessFlags for PTEFlags {
-//     fn user_accessible(&self) -> bool {
-//         self.contains(PTEFlags::U)
-//     }
-//     fn set_user_accessible(&mut self, user_accessible: bool) {
-//         self.set(PTEFlags::U, user_accessible);
-//     }
-// }
-
-
-
-
 pub unsafe fn switch_pgtable(page_table_token: usize) {
-    // unimplemented!()
-    // satp::write(page_table_token);
-    // asm!("sfence.vma");
     crate::hal::arch::satp_write(page_table_token);
     crate::hal::arch::sfence();
-    // hal::arch::switch_pagetable(page_table_token);
-
 }
 
 
 // TODO: 优化结构
-
-// pub static mut KERNEL_PAGE_TABLE: Option<Arc<Mutex<PageTable>>> = None;
 lazy_static! {
     pub static ref KERNEL_PAGE_TABLE: Arc<Mutex<PageTable>> = Arc::new(Mutex::new(PageTable::init_kernel_page_table()));
 }
-
-// pub fn get_kernel_page_table() -> &'static Arc<Mutex<PageTable>> {
-//     unsafe {KERNEL_PAGE_TABLE.as_ref()}
-// }
 
 
 pub struct PageTable {
@@ -310,75 +253,28 @@ impl PageTable {
             sbss_with_stack as usize, ebss as usize
         );
         println!("mapping .text section");
-        // memory_set.push(
-        //     MapArea::new(
-        //         (stext as usize).into(),
-        //         (etext as usize).into(),
-        //         MapType::Direct,
-        //         MapPermission::R | MapPermission::X,
-        //     ),
-        //     None,
-        // );
-        // println!("aaa");
         kernel_page_table.map_kernel_range(
             (stext as usize).into()..(etext as usize).into(),
             PTEFlags::R | PTEFlags::X,
         );
         println!("mapping .rodata section");
-        // memory_set.push(
-        //     MapArea::new(
-        //         (srodata as usize).into(),
-        //         (erodata as usize).into(),
-        //         MapType::Direct,
-        //         MapPermission::R,
-        //     ),
-        //     None,
-        // );
-        
         kernel_page_table.map_kernel_range(
             (srodata as usize).into()..(erodata as usize).into(),
             PTEFlags::R,
         );
         println!("mapping .data section");
-        // memory_set.push(
-        //     MapArea::new(
-        //         (sdata as usize).into(),
-        //         (edata as usize).into(),
-        //         MapType::Direct,
-        //         MapPermission::R | MapPermission::W,
-        //     ),
-        //     None,
-        // );
         
         kernel_page_table.map_kernel_range(
             (sdata as usize).into()..(edata as usize).into(),
             PTEFlags::R | PTEFlags::W,
         );
         println!("mapping .bss section");
-        // memory_set.push(
-        //     MapArea::new(
-        //         (sbss_with_stack as usize).into(),
-        //         (ebss as usize).into(),
-        //         MapType::Direct,
-        //         MapPermission::R | MapPermission::W,
-        //     ),
-        //     None,
-        // );
         
         kernel_page_table.map_kernel_range(
             (sbss_with_stack as usize).into()..(ebss as usize).into(),
             PTEFlags::R | PTEFlags::W,
         );
         println!("mapping physical memory");
-        // memory_set.push(
-        //     MapArea::new(
-        //         (ekernel as usize).into(),
-        //         MEMORY_END.into(),
-        //         MapType::Direct,
-        //         MapPermission::R | MapPermission::W,
-        //     ),
-        //     None,
-        // );
         
         kernel_page_table.map_kernel_range(
             (ekernel as usize).into()..(MEMORY_END).into(),

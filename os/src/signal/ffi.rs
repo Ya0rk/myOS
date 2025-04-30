@@ -225,14 +225,17 @@ impl SigMask {
     }
 }
 
+pub const SIG_DFL:usize = 0;
+pub const SIG_IGN:usize = 1;
+
 #[allow(non_camel_case_types)]
 #[repr(usize)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum SigHandler {
     /// 恢复信号的默认行为
-    SIG_DFL,
+    SIG_DFL = 0,
     /// 忽略该信号（如防止 SIGCHLD 产生僵尸进程）
-    SIG_IGN,
+    SIG_IGN = 1,
     /// 用户自定义的信号处理函数
     Customized { handler: usize },
 }
@@ -256,3 +259,7 @@ impl From<usize> for SigNom {
         }
     }
 }
+
+pub const SIGBLOCK: usize = 0;
+pub const SIGUNBLOCK: usize = 1;
+pub const SIGSETMASK: usize = 2;

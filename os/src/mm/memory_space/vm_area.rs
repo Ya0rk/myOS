@@ -12,14 +12,8 @@ use crate::mm::address::{VirtAddr, VirtPageNum};
 use crate::mm::page::Page;
 use crate::sync::block_on;
 use crate::task::current_task;
-use crate::utils::{Errno, SysResult};
+use crate::utils::{backtrace, Errno, SysResult};
 use crate::fs::{FileClass, FileTrait};
-
-// use crate::{
-//     mm::{PageFaultAccessType, PageTable},
-//     // processor::env::SumGuard,
-//     syscall::MmapFlags,
-// };
 use super::{PageFaultAccessType, MmapFlags};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -180,10 +174,6 @@ impl VmArea {
         new
     }
 
-    // pub fn new_kernel(range_va: Range<VirtAddr>, map_perm: MapPerm) -> Self {
-
-    // }
-
     pub fn from_another(another: &Self) -> Self {
         log::debug!("[VmArea::from_another] {another:?}");
         Self {
@@ -315,9 +305,6 @@ impl VmArea {
         offset: usize,
         data: &[u8],
     ) {
-        // debug_assert_eq!(self.vma_type, VmAreaType::Elf);
-        // let _sum_guard = SumGuard::new();
-
         let mut offset = offset;
         let mut start: usize = 0;
         let mut current_vpn = self.start_vpn();
@@ -395,27 +382,26 @@ impl VmArea {
         vpn: VirtPageNum,
         access_type: PageFaultAccessType,
     ) -> SysResult<()> {
-        // info!("[VmArea] handle page fault, access: {:?}, pid: {}", access_type, current_task().unwrap().get_pid());
         log::debug!(
             "[VmArea::handle_page_fault] {self:?}, {vpn:?} at page table {:?}",
             page_table.root_ppn
         );
 
         if !access_type.can_access(self.perm()) {
+            info!("type = {:?}", access_type);
+            info!("perm = {:?}", self.perm());
+            backtrace();
             log::warn!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
+            panic!("aaaa");
             return Err(Errno::EFAULT);
         }
 
         let page: Arc<Page>;
         let pte = page_table.find_pte(vpn);
         if let Some(pte) = pte {
-            // info!("[VmArea] page fault of COW");
-            // if PTE is valid, then it must be COW
-            // log::info!("[VmArea::handle_page_fault] pte flags: {:?}", pte.flags());
-            // log::info!("[VmArea::handle_page_fault] pte bits: {:#x}", pte.bits);
             let mut pte_flags = pte.flags();
 
             debug_assert!(pte_flags.contains(PTEFlags::COW));
@@ -426,11 +412,6 @@ impl VmArea {
             let old_page = self.get_page(vpn);
             let cnt = Arc::strong_count(old_page);
             if cnt > 1 {
-                // shared now
-                // log::debug!(
-                //     "[VmArea::handle_page_fault] copying cow page {old_page:?} with count {cnt}",
-                // );
-
                 // copy the data
                 page = Page::new();
                 page.copy_from_slice(old_page.get_bytes_array());
@@ -443,9 +424,6 @@ impl VmArea {
                 self.pages.insert(vpn, page);
                 unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
             } else {
-                // not shared
-                // log::debug!("[VmArea::handle_page_fault] removing cow flag for page {old_page:?}",);
-
                 // set the pte to writable
                 pte_flags.remove(PTEFlags::COW);
                 pte_flags.insert(PTEFlags::W);
@@ -453,12 +431,6 @@ impl VmArea {
                 unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
             }
         } else {
-            
-            // info!("[VmArea] page fault of lazy alloc");
-            log::debug!(
-                "[VmArea::handle_page_fault] handle for type {:?}",
-                self.vma_type
-            );
             match self.vma_type {
                 VmAreaType::Heap | VmAreaType::Stack => {
                     // lazy allcation for heap

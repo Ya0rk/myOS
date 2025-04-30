@@ -31,7 +31,7 @@ impl Ext4SuperBlock {
 }
 
 impl SuperBlockTrait for Ext4SuperBlock {
-    fn root_inode(&self) -> Arc<dyn InodeTrait> {
+    fn root_inode(&self) -> Arc<Ext4Inode> {
         self.root.clone()
     }
     fn fs_stat(&self) -> Kstat {

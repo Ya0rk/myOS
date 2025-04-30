@@ -2,17 +2,15 @@ use core::sync::atomic::Ordering;
 use async_trait::async_trait;
 use log::info;
 use lwext4_rust::{
-    bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET},
-    Ext4File, InodeTypes
+    bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, file, Ext4File, InodeTypes
 };
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType},
-    page_cache::PageCache, stat::as_inode_stat, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
+    fs::{ext4::Ext4Inode, ffi::{as_ext4_de_type, as_inode_type, InodeType}, page_cache::PageCache, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
     sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
     utils::{Errno, SysResult}
 };
 
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{string::String, sync::Arc, vec::Vec};
 use alloc::vec;
 use alloc::boxed::Box;
 
@@ -30,9 +28,12 @@ impl TmpInode {
     pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<Self> {
         let file_type = as_inode_type(types.clone());
         let ext4file = new_shared(Ext4File::new(path, types));
+        ext4file.lock().file_open(path, O_RDONLY);
+        let file_size = ext4file.lock().file_size();
+        ext4file.lock().file_close();
 
         let inode = Arc::new(Self {
-            metadata: InodeMeta::new(file_type),
+            metadata: InodeMeta::new(file_type, file_size as usize),
             file    : ext4file,
             page_cache: page_cache.clone()
         });
@@ -48,7 +49,7 @@ impl TmpInode {
 #[async_trait]
 impl InodeTrait for TmpInode {
     /// 获取文件大小
-    fn size(&self) -> usize {
+    fn get_size(&self) -> usize {
         let mut lock_file = self.file.lock();
         let binding = lock_file.get_path();
         let path = binding.to_str().unwrap();
@@ -64,36 +65,23 @@ impl InodeTrait for TmpInode {
     }
 
     /// 创建文件或者目录
-    fn do_create(&self, path: &str, ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
-        let types = as_ext4_de_type(ty);
-        let mut file = self.file.lock();
+    fn do_create(&self, path: &str, ty: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
         let page_cache = match ty {
-            InodeType::File => Some(PageCache::new_bare()),
+            InodeTypes::EXT4_DE_REG_FILE => Some(PageCache::new_bare()),
             _ => None
         };
-        let nf = TmpInode::new(path, types.clone(), page_cache.clone());
-
-        if !file.check_inode_exist(path, types.clone()) {
-            drop(file);
-            let mut ext4file = nf.file.lock();
-            if types == InodeTypes::EXT4_DE_DIR {
-                if ext4file.dir_mk(path).is_err() {
-                    return None;
-                }
-            } else {
-                ext4file.file_open(path, O_RDWR | O_CREAT | O_TRUNC).expect("create file failed!");
-                ext4file.file_close().expect("[do_creat]: file clone fail!");
-            }
-        }
+        let nf = Ext4Inode::new(path, ty.clone(), page_cache.clone());
+        info!("[do_create] path = {}", path);
+        
         Some(nf)
     }
     /// 获取文件类型
     fn node_type(&self) -> InodeType {
         as_inode_type(self.file.lock().file_type_get())
     }
-    /// 读取文件 TODO(YJJ):这里可能有问题
+    /// 读取文件
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
-        let file_size = self.size();
+        let file_size = self.get_size();
         if file_size == 0 || offset > file_size{
             return 0;
         }
@@ -149,25 +137,21 @@ impl InodeTrait for TmpInode {
     }
     /// 读取文件所有内容
     async fn read_all(&self) -> SysResult<Vec<u8>> {
-        let mut buf = vec![0; self.size()];
+        let mut buf = vec![0; self.get_size()];
         self.read_at(0, &mut buf).await;
         Ok(buf)
     }
     /// 在当前路径下查询是否存在这个path的文件
     /// 
     /// 如果存在就创建一个inode
-    fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn walk(&self, path: &str) -> bool {
         let mut file = self.file.lock();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
-            // debug!("lookup new DIR FileWrapper");
-            let page_cache = None;
-            Some(TmpInode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
+            true
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
-            // debug!("lookup new FILE FileWrapper");
-            let page_cache = Some(PageCache::new_bare());
-            Some(TmpInode::new(path, InodeTypes::EXT4_DE_REG_FILE, page_cache.clone()))
+            true
         } else {
-            None
+            false
         }
     }
     /// 获取文件状态

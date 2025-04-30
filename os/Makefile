@@ -1,6 +1,7 @@
 # Building
 TARGET := riscv64gc-unknown-none-elf
 MODE := release
+# IMG := sdcard
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
@@ -8,9 +9,15 @@ APPS := ../user/src/bin/*
 
 # fs image
 FS = lwext4_rust
-# FS_IMG := ../$(FS)/ext4.img
-FS_IMG := ../sdcard-rv.img
 
+# ifeq ($(MODE), release)
+# 	MODE_ARG := --release
+# endif
+# ifeq ($(MODE), debug)
+# 	MODE_ARG :=
+# endif
+FS_IMG := ../sdcard-rv.img
+# FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 2
 
@@ -75,9 +82,9 @@ PHONY += initproc
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
-	cargo install cargo-binutils
-	rustup component add rust-src
-	rustup component add llvm-tools-preview
+	# cargo install cargo-binutils
+	# rustup component add rust-src
+	# rustup component add llvm-tools-preview
 PHONY += env
 
 $(KERNEL_BIN): kernel
@@ -93,13 +100,12 @@ kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
 	cp src/linker-$(BOARD).ld src/linker.ld
-	cargo build $(MODE_ARG)
+	cargo build $(MODE_ARG) -j 16
 	rm src/linker.ld
 PHONY += kernel
 
 clean:
 	cargo clean
-	rm -f $(FS_IMG)
 	cd ../user && make clean
 PHONY += clean
 
@@ -117,7 +123,7 @@ run: run-inner
 PHONY += run
 
 qemu-version-check:
-	sh scripts/qemu-ver-check.sh $(QEMU_NAME)
+	# sh scripts/qemu-ver-check.sh $(QEMU_NAME)
 PHONY += qemu-version-check
 
 run-inner: qemu-version-check build
@@ -193,12 +199,10 @@ LAgdb:
 PHONY += LAgdb
 
 # TEMP - 从官方sdcard镜像启动
-rv-tb-build:
-	env $(KERNEL_BIN) initproc
+rv-tb-build: env $(KERNEL_BIN) initproc 
 PHONY += rv-tb-build
 
-rv-tb-run:
-	qemu-version-check build
+rv-tb-run: rv-tb-build
 	$(QEMU_NAME) $(QEMU_ARGS)
 PHONY += rv-tb-run
 

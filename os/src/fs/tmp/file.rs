@@ -36,16 +36,12 @@ impl TmpFile {
         .upgrade()
         .unwrap()
         .walk(&path)
-        .is_none()
     }
 }
 
 // 为 OSInode 实现 File Trait
 #[async_trait]
 impl FileTrait for TmpFile {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn get_flags(&self) -> OpenFlags {
         self.metadata.flags.read().clone()
     }
@@ -64,38 +60,31 @@ impl FileTrait for TmpFile {
         false
     }
 
-    async fn read(&self, mut buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, mut buf: &mut [u8]) -> SysResult<usize> {
         let mut total_read_size = 0usize;
 
-        if self.metadata.inode.size() <= self.metadata.offset() {
+        if self.metadata.inode.get_size() <= self.metadata.offset() {
             //读取位置超过文件大小，返回结果为EOF
             return Ok(0);
         }
 
         let mut new_offset = self.metadata.offset();
         // 这边要使用 iter_mut()，因为要将数据写入
-        for slice in buf.buffers.iter_mut() {
-            // TODO(YJJ):设置一定的时钟中断次数后yield
-            // yield_now();
-            let read_size = self.metadata.inode.read_at(new_offset, *slice).await;
-            if read_size == 0 {
-                break;
-            }
-            new_offset += read_size;
-            total_read_size += read_size;
-        }
+        let read_size = self.metadata.inode.read_at(new_offset, buf).await;
+        new_offset += read_size;
+        total_read_size += read_size;
         self.metadata.set_offset(new_offset);
         Ok(total_read_size)
     }
 
-    async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         let mut total_write_size = 0usize;
-        for slice in buf.buffers.iter() {
+        // for slice in buf.buffers.iter() {
             let old_offset = self.metadata.offset();
-            let write_size = self.metadata.inode.write_at(old_offset, *slice).await;
+            let write_size = self.metadata.inode.write_at(old_offset, buf).await;
             self.metadata.set_offset(old_offset+write_size);
             total_write_size += write_size;
-        }
+        // }
         Ok(total_write_size)
     }
     fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {
@@ -107,7 +96,7 @@ impl FileTrait for TmpFile {
         let res = match whence {
             SEEK_SET => offset,
             SEEK_CUR => old_offset + offset,
-            SEEK_END => offset + self.metadata.inode.size(),
+            SEEK_END => offset + self.metadata.inode.get_size(),
             _ => return Err(Errno::EINVAL)
         };
         self.metadata.set_offset(res);

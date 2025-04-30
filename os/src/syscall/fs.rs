@@ -2,18 +2,19 @@ use core::cell::SyncUnsafeCell;
 use core::ops::Add;
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::vec;
 use log::info;
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
-use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileClass, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
+use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dirent, FileClass, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
-use crate::syscall::ffi::{FcntlArgFlags, IoVec};
+use crate::syscall::ffi::IoVec;
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{Errno, SysResult};
-use super::ffi::{FaccessatMode, FcntlFlags, AT_REMOVEDIR};
+use super::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, AT_REMOVEDIR};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
@@ -28,7 +29,8 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
-            Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
+            let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, len) };
+            Ok(file.write(buf).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
     }
@@ -48,7 +50,8 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
-            Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
+            let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+            Ok(file.read(buf).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
     }
@@ -84,8 +87,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
                     continue;
                 }
                 let base = (unsafe { *iov_st }).iov_base;
-                let one = translated_byte_buffer(token, base as *const u8, len);
-                let buffer = UserBuffer::new(one);
+                let buffer = unsafe {core::slice::from_raw_parts_mut(base as *mut u8, len)};
                 let read_len = file.read(buffer).await?;
                 res += read_len;
             }
@@ -99,6 +101,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
 /// system call writes iovcnt buffers from the file associated
 /// with the file descriptor fd into the buffers described by iov
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    info!("[sys_writev] fd = {}", fd);
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -108,6 +111,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
     match task.get_file_by_fd(fd) {
         Some(file) => {
             if !file.writable() {
+                info!("no writeable");
                 return Err(Errno::EPERM);
             }
             // 将iov中的结构体一个个取出，转化为UserBuffer
@@ -118,8 +122,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
                     continue;
                 }
                 let base = (unsafe { *iov_st }).iov_base;
-                let one = translated_byte_buffer(token, base as *const u8, len);
-                let buffer = UserBuffer::new(one);
+                let buffer = unsafe{core::slice::from_raw_parts(base as *mut u8, len)};
                 let write_len = file.write(buffer).await?;
                 res += write_len;
             }
@@ -147,6 +150,7 @@ pub fn sys_fstatat(
     statbuf: *const u8, 
     flags: u32
 ) -> SysResult<usize> {
+    info!("[sys_fstatat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
@@ -233,13 +237,13 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
 /// 
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
-    info!("sys_openat start");
+    info!("[sys_openat] start");
 
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
-    info!("[sys_openat] path = {}", path);
+    info!("[sys_openat] path = {}, flags = {:?}", path, flags);
 
     // 计算目标路径
     let target_path = if path.starts_with("/") {
@@ -259,17 +263,14 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
         info!("[sys_openat] other cwd = {}", other_cwd);
         join_path_2_absolute(other_cwd, path)
     };
-
-    // 检查路径是否有效并打开文件
     let cwd = task.get_current_path();
-    if let Some(inode) = open(cwd.as_str(), target_path.as_str(), flags) {
+    // 检查路径是否有效并打开文件
+    if let Some(inode) = open(cwd.as_str() , target_path.as_str(), flags) {
         let fd = task.alloc_fd(FdInfo::new(inode.file()?, flags));
-        info!("[sys_openat] alloc fd finished, new fd = {}", fd);
+        info!("[sys_openat] taskid = {}, alloc fd finished, new fd = {}",task.get_pid(), fd);
         if fd > RLIMIT_NOFILE {
             return Err(Errno::EMFILE);
         } else {
-            // info!("[sys_openat] task pid = {}", task.get_pid());
-            // info!("[sys_openat] new fd = {}", fd);
             return Ok(fd);
         }
     } else {
@@ -284,6 +285,8 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
+    let file = task.get_file_by_fd(1).ok_or(Errno::EBADF)?;
+    info!("[sys_close] pid = {}, success get stdout", task.get_pid());
     
     // 删除对应的fd
     task.remove_fd(fd);
@@ -298,15 +301,16 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
 pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     info!("sys_pipe start!");
     let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
+    info!("[sys_pipe] flags = {:?}", flags.clone());
     let task = current_task().unwrap();
     let (read_fd, write_fd) = {
         let (read, write) = Pipe::new();
         (
-            task.alloc_fd(FdInfo::new(read, flags)),
-            task.alloc_fd(FdInfo::new(write, flags)),
+            task.alloc_fd(FdInfo::new(read.clone(),  OpenFlags::O_RDONLY)),
+            task.alloc_fd(FdInfo::new(write.clone(), OpenFlags::O_WRONLY)),
         )
     };
-    info!("alloc read_fd = {}, write_fd = {}", read_fd, write_fd);
+    info!("taskid = {}, alloc read_fd = {}, write_fd = {}", task.get_pid(), read_fd, write_fd);
 
     let token = task.get_user_token();
     *translated_refmut(token, pipefd) = read_fd as u32;
@@ -403,14 +407,12 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
 /// Success: 返回新的文件描述符; Fail: 返回-1
 pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
+    info!("[sys_dup] pid = {}, oldfd = {}", task.get_pid(), oldfd);
     // let mut inner = task.inner_lock();
-    if oldfd >= task.fd_table_len() {
-        return Err(Errno::EBADF);
-    }
 
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.set_close_on_exec(true);
+    let new_temp_fd = old_temp_fd.off_Ocloexec(true);
     let new_fd = task.alloc_fd(new_temp_fd);
     // drop(inner);
     if new_fd > RLIMIT_NOFILE {
@@ -433,25 +435,24 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     let flag = OpenFlags::from_bits(flags as i32).unwrap();
     let cloexec = {
         match flag {
-            flags if flags.is_empty() => Some(false),
             OpenFlags::O_CLOEXEC => Some(true),
-            _ => None,
+            _ => Some(false),
         }
     }.ok_or(Errno::EINVAL)?;
 
     let task = current_task().unwrap();
-    // let mut inner = task.inner_lock();
+    info!("[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = {}", task.get_pid());
     
-    if newfd > RLIMIT_NOFILE ||
-        oldfd >= task.fd_table_len() ||
-        task.fd_is_none(oldfd) 
+    if newfd > RLIMIT_NOFILE
     {
         return Err(Errno::EBADF);
     }
 
     let old_temp_fd = task.get_fd(oldfd);
+    if old_temp_fd.is_none() { return Err(Errno::EBADF); }
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.set_close_on_exec(cloexec);
+    let new_temp_fd = old_temp_fd.clone().off_Ocloexec(!cloexec);
+    info!("[sys_dup3] old file name = {}, oldfd = {}", old_temp_fd.clone().file.unwrap().get_name()?, oldfd);
     // 将newfd 放到指定位置
     task.put_fd_in(new_temp_fd, newfd);
 
@@ -462,7 +463,6 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usize> {
-
     // Err(Errno::EBADCALL)
     info!("sys_mkdirat start");
 
@@ -492,13 +492,10 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
     // drop(inner);
 
     // 检查路径是否有效并创建目录
-    let result = if let Some(_) = mkdir(target_path.as_str(), mode) {
-        Ok(0) // 成功
-    } else {
-        Err(Errno::EBADCALL) // 失败
-    };
-
-    result
+    match mkdir(target_path.as_str(), mode) {
+        Ok(_) => Ok(0), // 成功
+        _ => Err(Errno::EBADCALL)
+    }
 }
 
 /// 卸载文件系统：https://man7.org/linux/man-pages/man2/umount.2.html
@@ -566,16 +563,15 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     let current_path = task.get_current_path();
 
     // 计算新路径
-    let new_path = if path.starts_with("/") {
+    let target_path = if path.starts_with("/") {
         path
     } else {
         join_path_2_absolute(current_path, path)
     };
 
     // 检查路径是否有效
-    let cwd = task.get_current_path();
-    let result = if let Some(_) = open(&cwd, new_path.as_str(), OpenFlags::O_RDONLY) {
-        task.set_current_path(new_path); // 更新当前路径
+    let result = if chdir(&target_path) {
+        task.set_current_path(target_path); // 更新当前路径
         Ok(0) // 成功
     } else {
         Err(Errno::EBADCALL) // 失败
@@ -589,11 +585,13 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, path);
+    info!("[sys_unlink] start path = {}", path);
     let is_relative = !path.starts_with("/");
     let base = task.get_current_path();
 
     if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
         let file = file_class.file()?;
+        info!("[unlink] file path = {}", file.path);
         let is_dir = file.is_dir();
         if is_dir && flags != AT_REMOVEDIR {
             return Err(Errno::EISDIR);
@@ -604,6 +602,7 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
         let child_abs = join_path_2_absolute(base, path);
         file.get_inode().unlink(&child_abs);
     }
+    info!("[sys_unlink] finished");
     
     Ok(0)
 }
@@ -647,13 +646,14 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let mut len: usize = 0;
     let mut buf = vec![0u8; count];
     let mut new_offset = offset;
+    if new_offset != 0 { panic!("not implement") };
 
     loop {
-        let read_size = src.get_inode().read_at(new_offset, &mut buf).await;
+        let read_size = src.read(&mut buf).await?;
         if read_size == 0 {
             break;
         }
-        let write_size = dest.get_inode().write_at(new_offset, &buf).await;
+        let write_size = dest.write(&buf[0..read_size]).await?;
         if read_size != write_size {
             return Err(Errno::EIO);
         }
@@ -663,13 +663,13 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
 
     // If offset is not NULL, then sendfile() does not modify the file offset of in_fd; 
     // otherwise the file offset is adjusted to reflect the number of bytes read from in_fd.
-    if offset == 0 {
+    if offset != 0 {
         // 重新设置offset：
         let token = task.get_user_token();
         src.lseek(len as isize, SEEK_CUR).unwrap();
         *translated_refmut(token, offset as *mut usize) = new_offset;
     }
-
+    info!("[sys_sendfile] finished");
     Ok(len)
 }
 

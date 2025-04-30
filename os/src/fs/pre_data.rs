@@ -12,28 +12,43 @@ pub async fn flush_preload() -> Arc<NormalFile> {
     extern "C" {
         fn initproc_start();
         fn initproc_end();
-        fn usershell_start();
-        fn usershell_end();
-    }
-    let mut v1 = Vec::new();
-    let len = usershell_end as usize - usershell_start as usize;
-    let data = unsafe { core::slice::from_raw_parts_mut(usershell_start as *mut u8, len) as &'static [u8] };
-    if let Some(FileClass::File(usershell)) = open_file("user_shell", OpenFlags::O_CREAT) {
-        let buf = UserBuffer::new(v1);
-        usershell.metadata.inode.write_directly(0, &data).await;
+        fn user_shell_start();
+        fn user_shell_end();
+        fn busybox_start();
+        fn busybox_end();
     }
 
-    let mut v2 = Vec::new();
-    let len = initproc_end as usize - initproc_start as usize;
-    let data = unsafe { core::slice::from_raw_parts_mut(initproc_start as *mut u8, len) as &'static [u8] };
+    // busybox
+    if let Some(FileClass::File(busybox)) = open_file("/mybusybox", OpenFlags::O_CREAT) {
+        let len = busybox_end as usize - busybox_start as usize;
+        let data = unsafe { core::slice::from_raw_parts_mut(busybox_start as *mut u8, len) as &'static [u8] };
+        info!("data len ={}", data.len());
+        info!("busybox size = {}", busybox.metadata.inode.get_size());
+        busybox.write(data).await;
+        return busybox;
+    }
+    else {
+        panic!("[flush_preload] open busybox failed");
+    }
     
+    // user_shell
+    if let Some(FileClass::File(user_shell)) = open_file("user_shell", OpenFlags::O_CREAT) {
+        let len = user_shell_end as usize - user_shell_start as usize;
+        let data = unsafe { core::slice::from_raw_parts_mut(user_shell_start as *mut u8, len) as &'static [u8] };
+        user_shell.metadata.inode.write_directly(0, &data).await;
+    }
+    else {
+        panic!("[flush_preload] open user_shell failed");
+    }
+
+    // initproc
     if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
-        // v.push(data);
-        let buf = UserBuffer::new(v2);
-        initproc.metadata.inode.write_directly(0, &data).await;
-        // info!("[flush_preload] write initproc to file");
+        let len = initproc_end as usize - initproc_start as usize;
+        let data = unsafe { core::slice::from_raw_parts_mut(initproc_start as *mut u8, len) as &'static [u8] };
+        initproc.write(data).await;
         return initproc;
     }
-    // info!("[flush_preload] open initproc failed");
-    panic!("[flush_preload] open initproc failed");
+    else {
+        panic!("[flush_preload] open initproc failed");
+    }
 }

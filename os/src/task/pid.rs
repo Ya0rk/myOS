@@ -3,14 +3,16 @@ use core::fmt;
 use crate::hal::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, INITPROC_PID};
 use crate::mm::page_table::{PTEFlags, KERNEL_PAGE_TABLE};
 use crate::mm::{VirtAddr};
+use crate::sync::SpinNoIrqLock;
 use alloc::collections::BTreeSet;
 use lazy_static::*;
 use log::{debug, info};
 // use riscv::paging::PTE;
 use spin::Mutex;
+use riscv::paging::PTE;
 
 lazy_static! {
-    pub static ref PID_ALLOCATOR: Mutex<PidAllocator> = Mutex::new(PidAllocator::new());
+    pub static ref PID_ALLOCATOR: SpinNoIrqLock<PidAllocator> = SpinNoIrqLock::new(PidAllocator::new());
 }
 ///分配和管理pid号，避免重复
 pub struct PidAllocator {

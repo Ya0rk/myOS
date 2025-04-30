@@ -1,7 +1,9 @@
 use log::info;
+
 use crate::{
-    hal::config::{align_up_by_page, is_aligned_to_page, PAGE_MASK},
-    mm::{memory_space::{vm_area::{MapPerm, VmArea}, MemorySpace, MmapFlags, MmapProt}, MapPermission},
+    hal::config::{align_up_by_page, is_aligned_to_page, PAGE_MASK, PAGE_SIZE}, 
+    mm::{memory_space::{vm_area::{MapPerm, VmArea}, MemorySpace, MmapFlags, MmapProt}, 
+    MapPermission}, 
     utils::{Errno, SysResult}
 };
 use crate::task::{current_task};
@@ -20,17 +22,23 @@ pub fn sys_mmap(
     offset: usize,
 ) -> SysResult<usize> {
     let addr = addr as usize;
+    if length == 0 || (addr & PAGE_MASK != 0) || (offset & PAGE_MASK != 0) {
+        info!("aaaaa");
+        return Err(Errno::EINVAL);
+    }
     let flags = MmapFlags::from_bits_truncate(flags);
     let prot = MmapProt::from_bits_truncate(prot);
     info!("[sys_mmap] addr:{addr:#x}, length:{length:#x}, prot:{prot:?}, flags:{flags:?}, fd:{fd}, offset:{offset:#x}");
-    let mut perm = MapPerm::U;
-    if (prot.contains(MmapProt::PROT_READ))     { perm.insert(MapPerm::R); }
-    if (prot.contains(MmapProt::PROT_WRITE))    { perm.insert(MapPerm::W); }
-    if (prot.contains(MmapProt::PROT_EXEC))     { perm.insert(MapPerm::X); }
-
-    if length == 0 || (addr & PAGE_MASK != 0) || (offset & PAGE_MASK != 0) {
-        return Err(Errno::EINVAL);
-    }
+    let perm = MapPerm::from(prot);
+    
+    // 将length对齐PAGESIZE
+    let padding = match (PAGE_SIZE - length % PAGE_SIZE) {
+        res if res == PAGE_SIZE => 0,
+        res if res != PAGE_SIZE => res,
+        _ => {unreachable!()},
+    };
+    let length = length + padding;
+    
     let task = current_task().unwrap();
     if flags.contains(MmapFlags::MAP_FIXED) {
         // at specific addr
@@ -51,24 +59,20 @@ pub fn sys_mmap(
                 }
             }
         }).unwrap();
-        Ok(start_va.0)
+        return Ok(start_va.0);
     } else {
-        if let Ok(fd) = task.fd_table.lock().get_fd(fd) {
-            if let Err(e) = fd.check_mmap_valid(flags, prot) {
-                return Err(e);
-            } 
-            let file = fd.file.unwrap();
-            let start_va = task.with_mut_memory_space(|m| {
-                m.alloc_mmap_area_lazily(addr.into(), length, perm, flags, file, offset)
-            }).unwrap();
-            Ok(start_va.0)
-        }
-        else {
-            Err(Errno::EBADF)
-        }
-        
+        let fd = task.get_fd(fd);
+        if fd.is_none() { return Err(Errno::EBADF); }
+        if let Err(e) = fd.check_mmap_valid(flags, prot) {
+            return Err(e);
+        } 
+        let file = fd.file.unwrap();
+        let start_va = task.with_mut_memory_space(|m| {
+            m.alloc_mmap_area_lazily(addr.into(), length, perm, flags, file, offset)
+        }).unwrap();
+        return Ok(start_va.0);
     }
-    // Ok(0)
+    Err(Errno::EBADCALL)
 }
 
 pub fn sys_munmap(addr: *const u8, length: usize) -> SysResult<usize> {

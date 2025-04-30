@@ -1,15 +1,15 @@
 pub use crate::board::{CLOCK_FREQ, MEMORY_END, MMIO};
 
-const KB: usize = 1024;
+pub const KB: usize = 1024;
 #[allow(unused)]
-const MB: usize = 1024 * KB;
+pub const MB: usize = 1024 * KB;
 
 // mm
 // TODO:目前是有栈协程，如果将userstack修改为8MB，kernelstack修改为64kB，会导致Kerenlstack爆栈
 // 如果是无栈协程就不会
 pub const USER_STACK_SIZE: usize = 8 * MB;
 pub const KERNEL_STACK_SIZE: usize = 64 * KB;
-pub const KERNEL_HEAP_SIZE: usize = 0x20_0000;
+pub const KERNEL_HEAP_SIZE: usize = 64 * MB;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 12;
 

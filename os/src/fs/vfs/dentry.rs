@@ -246,12 +246,42 @@ impl Dentry {
         }
         dentry_now.get_inode()
     }
+    pub fn get_dentry_from_path(path: &String) -> Option<Arc<Self>> {
+        if !path.starts_with('/') {
+            panic!("path should start with /");
+        }
+        let mut dentry_now = DENTRY_ROOT.clone();
+        if path == "/" {
+            return Some(dentry_now);
+        }
+        let mut path_now = String::from("/");
+
+        let path_split = path.split('/').collect::<Vec<_>>();
+        for name in path_split {
+            if path_now.ends_with("/") {
+                path_now = alloc::format!("{}{}", path_now, name);
+            } else {
+                path_now = alloc::format!("{}/{}", path_now, name);
+            }
+            match dentry_now.get_child(&path_now) { 
+                Some(child) => {
+                    dentry_now = child;
+                    dentry_now.get_inode();
+                }
+                None => {
+                    info!("no such file or directory: {}", path_now);
+                    return None;
+                }
+            }
+        }
+        Some(dentry_now)
+    }
 
 }
 
 
 lazy_static! {
-    pub static ref DENTRY_ROOT: Arc<Dentry> = Dentry::new_root();
+    static ref DENTRY_ROOT: Arc<Dentry> = Dentry::new_root();
 }
 
 macro_rules! test_inode {

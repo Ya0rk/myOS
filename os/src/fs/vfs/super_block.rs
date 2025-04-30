@@ -1,11 +1,11 @@
 use alloc::sync::Arc;
-use crate::fs::Kstat;
+use crate::fs::{ext4::Ext4Inode, Kstat};
 
 use super::InodeTrait;
 
 pub trait SuperBlockTrait: Send + Sync {
     /// 获取根节点
-    fn root_inode(&self) -> Arc<dyn InodeTrait>;
+    fn root_inode(&self) -> Arc<Ext4Inode>;
     /// 将数据写回磁盘
     fn sync(&self);
     fn fs_stat(&self) -> Kstat;

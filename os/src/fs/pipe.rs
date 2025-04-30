@@ -1,7 +1,7 @@
 use core::{cmp::min, future::Future, task::{Poll, Waker}};
 use super::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags};
-use crate::{hal::config::PIPE_BUFFER_SIZE, mm::{UserBuffer, page::Page}, sync::once::LateInit, utils::{Errno, SysResult}};
-use alloc::{collections::vec_deque::VecDeque, string::String, sync::{Arc, Weak}, vec::Vec};
+use crate::{hal::config::PIPE_BUFFER_SIZE, mm::{page::Page, UserBuffer}, sync::{get_waker, once::LateInit}, utils::{Errno, SysResult}};
+use alloc::{collections::vec_deque::VecDeque, string::{String, ToString}, sync::{Arc, Weak}, vec::Vec};
 use spin::Mutex;
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -139,7 +139,7 @@ impl FileTrait for Pipe {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, buf: &mut [u8]) -> SysResult<usize> {
         assert!(self.readable());
         if buf.len() == 0{
             return Ok(0);
@@ -150,7 +150,7 @@ impl FileTrait for Pipe {
             cur: 0,
         }.await
     }
-    async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         assert!(self.writable());
         if buf.len() == 0{
             return Ok(0);
@@ -163,28 +163,11 @@ impl FileTrait for Pipe {
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("[getname] this is pipe file".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    // fn poll(&self, events: PollEvents) -> PollEvents {
-    //     let mut revents = PollEvents::empty();
-    //     if events.contains(PollEvents::IN) && self.readable {
-    //         revents |= PollEvents::IN;
-    //     }
-    //     if events.contains(PollEvents::OUT) && self.writable {
-    //         revents |= PollEvents::OUT;
-    //     }
-    //     let ring_buffer = self.inner_lock();
-    //     if self.readable && ring_buffer.all_write_ends_closed() {
-    //         revents |= PollEvents::HUP;
-    //     }
-    //     if self.writable && ring_buffer.all_read_ends_closed() {
-    //         revents |= PollEvents::ERR;
-    //     }
-    //     revents
-    // }
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }
@@ -198,11 +181,30 @@ impl FileTrait for Pipe {
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         todo!()
     }
+    /// 异步管道（Pipe）读取操作的核心逻辑，用于检查管道是否可读（有数据可读或对端已关闭），
+    /// 并根据情况注册 Waker 以便在数据到达时唤醒异步任务。
+    async fn pollin(&self) -> bool {
+        if self.other.strong_count() == 0 || self.buffer.lock().status != RingBufferStatus::Empty {
+            return true;
+        }
+        let waker = get_waker().await;
+        // 还没有数据，此时等待被唤醒
+        self.buffer.lock().reader_waker.push_back(waker);
+        false
+    }
+    async fn pollout(&self) -> bool {
+        if self.other.strong_count() == 0 || self.buffer.lock().status != RingBufferStatus::Full {
+            return true;
+        }
+        let waker = get_waker().await;
+        self.buffer.lock().writer_waker.push_back(waker);
+        false
+    }
 }
 
 struct PipeReadFuture<'a> {
     pipe: &'a Pipe,
-    buf: UserBuffer,
+    buf: &'a mut [u8],
     cur: usize
 }
 
@@ -213,15 +215,8 @@ impl Future for PipeReadFuture<'_> {
         let mut inner = self.pipe.buffer.lock();
         let size = inner.available_read(self.buf.len() - self.cur);
         if size > 0 {
-            let mut pos = 0;
-            let mut idx = 0;
-            loop {
-                if pos >= size { break; }
-                let len = min(self.buf[idx].len(), size - pos);
-                self.buf[idx].copy_from_slice(&inner.read_nbyte(len));
-                idx += 1;
-                pos += len;
-            }
+            let len = min(self.buf.len(), size);
+            self.buf.copy_from_slice(&inner.read_nbyte(len));
             self.cur += size;
             while let Some(waker) = inner.writer_waker.pop_front() {
                 waker.wake();
@@ -239,7 +234,7 @@ impl Future for PipeReadFuture<'_> {
 
 struct PipeWriteFuture<'a> {
     pipe: &'a Pipe,
-    buf: UserBuffer,
+    buf: &'a [u8],
     cur: usize
 }
 
@@ -248,26 +243,19 @@ impl Future for PipeWriteFuture<'_> {
 
     fn poll(mut self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
         let mut inner = self.pipe.buffer.lock();
-        if self.pipe.other.strong_count() == 0 {
-            return Poll::Ready(Err(Errno::EPIPE));
-        }
         let size = inner.available_write(self.buf.len() - self.cur);
         if size > 0 {
-            let mut pos = 0;
-            let mut idx = 0;
-            loop {
-                if pos >= size { break; }
-                let len = min(self.buf[idx].len(), size - pos);
-                inner.write_nbyte(&self.buf[idx][0..len]);
-                idx += 1;
-                pos += len;
-            }
+            let len = min(self.buf.len(), size);
+            inner.write_nbyte(&self.buf[0..len]);
             self.cur += size;
             while let Some(waker) = inner.reader_waker.pop_front() {
                 waker.wake();
             }
             Poll::Ready(Ok(size))
         } else {
+            if self.pipe.other.strong_count() == 0 {
+                return Poll::Ready(Ok(size));
+            }
             inner.writer_waker.push_back(cx.waker().clone());
             Poll::Pending
         }

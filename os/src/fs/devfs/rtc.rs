@@ -1,5 +1,5 @@
 use core::{cmp::min, fmt::{Formatter, Debug}};
-use alloc::{format, string::String, sync::Arc};
+use alloc::{format, string::{String, ToString}, sync::Arc};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
@@ -14,9 +14,6 @@ impl DevRtc {
 
 #[async_trait]
 impl FileTrait for DevRtc {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
@@ -29,21 +26,21 @@ impl FileTrait for DevRtc {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
         let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
         let str = format!("{:?}", time);
         let bytes = str.as_bytes();
         let len = min(user_buf.len(), bytes.len());
-        user_buf.write(bytes);
+        // user_buf.write(bytes);
         Ok(len)
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("/dev/rtc".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()

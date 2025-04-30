@@ -13,8 +13,9 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-use core::convert::TryInto;
+use core::{convert::TryInto, ptr::{null, null_mut}};
 
+use alloc::vec::Vec;
 use buddy_system_allocator::LockedHeap;
 use syscall::*;
 
@@ -165,7 +166,14 @@ pub fn fork() -> isize {
     sys_fork()
 }
 pub fn exec(path: &str) -> isize {
-    sys_exec(path)
+    sys_execve(path, null(), null())
+}
+pub fn execve(path: &str, argv: &[&str], env: &[&str]) -> isize {
+    let mut argv: Vec<usize> = argv.iter().map(|s| (*s).as_ptr() as usize).collect();
+    let mut env: Vec<usize> = env.iter().map(|s| (*s).as_ptr() as usize).collect();
+    argv.push(0);
+    env.push(0);
+    sys_execve(path, argv.as_ptr(), env.as_ptr())
 }
 
 pub fn wait(exit_code: &mut i32) -> isize {

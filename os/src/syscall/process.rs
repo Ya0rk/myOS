@@ -1,14 +1,18 @@
 use core::mem::size_of;
 use crate::fs::{open, open_file, FileClass, OpenFlags};
+use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::signal::{SigDetails, SigMask, UContext};
+use crate::signal::{KSigAction, SigAction, SigActionFlag, SigDetails, SigHandler, SigMask, SigNom, UContext, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
 use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
-use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
+use crate::syscall::ffi::{CloneFlags, SyslogCmd, Utsname, WaitOptions, LOGINFO};
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_task_by_pid, spawn_user_task
 };
 use crate::utils::{Errno, SysResult, RNG};
+use alloc::ffi::CString;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use log::{debug, info};
 use lwext4_rust::bindings::true_;
 use zerocopy::IntoBytes;
@@ -169,18 +173,28 @@ pub fn sys_clone(
     Ok(new_pid as usize)
 }
 
-pub async fn sys_exec(path: usize) -> SysResult<usize> {
+pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize> {
     // info!("[sys_exec] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
-    let path = translated_str(token, path as *const u8);
-    debug!("sys_exec: path = {:?}", path);
+    let mut path = user_cstr(path.into())?.unwrap();
+    info!("sys_exec: path = {:?}, taskid = {}", path, task.get_pid());
+    // if task.get_pid() == 4 {
+    //     let file = task.get_file_by_fd(1).unwrap();
+    //     info!("[sys_exec] a taskid = {}, filename = {}", task.get_pid(), file.get_name()?);
+    // }
+    let mut argv = user_cstr_array(argv.into())?.unwrap_or_else(|| Vec::new());
+    let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
+    info!("cwd = {}", cwd);
+    info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
+    if path.ends_with(".sh") {
+        path = "/musl/busybox".to_string();
+    }
+    info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
-        // let all_data = app_inode.file()?.metadata.inode.read_all().await?;
-        
-        let task = current_task().unwrap();
-        task.exec(file).await;
+        let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
+        task.execve(file, argv, env).await;
         Ok(0)
     } else {
         Err(Errno::EBADCALL)
@@ -282,13 +296,8 @@ pub fn sys_getrandom(
     buflen: usize,
     _flags: usize,
 ) -> SysResult<usize> {
-    let token = current_user_token();
-    let buffer = UserBuffer::new(
-        translated_byte_buffer(
-            token,
-            buf,
-            buflen
-    ));
+    info!("[sys_get_random] start");
+    let buffer = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
     Ok(RNG.lock().fill_buf(buffer))
 }
 
@@ -416,4 +425,159 @@ pub fn sys_sysinfo(sysinfo: *const u8) -> SysResult<usize> {
     let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
     unsafe { core::ptr::write(sysinfo, bind) };
     Ok(0)
+}
+
+pub fn sys_getuid() -> SysResult<usize> {
+    info!("[sys_getuid]: 0");
+    Ok(0)
+}
+
+/// examine and change blocked signals
+/// how决定如何修改当前的信号屏蔽字;set指定了需要添加、移除或设置的信号
+/// 当前的信号屏蔽字会被保存在 oldset 指向的位置
+pub fn sys_sigprocmask(
+    how: usize,
+    set: usize,
+    old_set: usize,
+    sigsetsize: usize,
+) -> SysResult<usize> {
+    info!("[sys_sigprocmask] start");
+    let task = current_task().unwrap();
+    if old_set != 0 {
+        let mut old_set = old_set as *mut SigMask;
+        unsafe { *old_set = *task.get_blocked_mut() };
+    }
+
+    if set != 0 {
+        let mut set = SigMask::from_bits(set).ok_or(Errno::EINVAL)?;
+        set.remove(SigMask::SIGKILL | SigMask::SIGCONT);
+        match how {
+            SIGBLOCK => {
+                *task.get_blocked_mut() |= set;
+            }
+            SIGUNBLOCK => {
+                task.get_blocked_mut().remove(set);
+            }
+            SIGSETMASK => {
+                *task.get_blocked_mut() = set;
+            }
+            _ => {
+                return Err(Errno::EINVAL);
+            }
+        }
+    }
+    // info!("[sys_sigprocmask] taskid = {} ,finished", task.get_pid());
+    Ok(0)
+}
+
+/// examine and change a signal action
+/// The sigaction() system call is used to change the action taken by
+/// a process on receipt of a specific signal.  (See signal(7) for an
+/// overview of signals.)
+/// 
+/// signum specifies the signal and can be any valid signal except
+/// SIGKILL and SIGSTOP.
+/// If act is non-NULL, the new action for signal signum is installed
+/// from act.  If oldact is non-NULL, the previous action is saved in
+/// oldact.
+pub fn sys_sigaction(
+    signum: usize,
+    act: usize,
+    old_act: usize,
+) -> SysResult<usize> {
+    info!("sys_sigaction");
+    // 作为强转的暂存器
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct ActionUtil {
+        sa_handler: usize,
+        pub sa_flags: SigActionFlag,
+        pub sa_restorer: usize,
+        pub sa_mask: SigMask,
+    }
+    if signum > MAX_SIGNUM || signum == 9 || signum == 19 {
+        return Err(Errno::EINVAL);
+    }
+    let task = current_task().unwrap();
+    if old_act != 0 {
+        let old_act = old_act as *mut SigAction;
+        let cur_act = &task.handler.lock().actions[signum].sa as *const SigAction;
+        unsafe { old_act.copy_from(cur_act, 1) };
+    }
+    if act != 0 {
+        let mut new_act = unsafe { *(act as *const ActionUtil) };
+        let signo = SigNom::from(signum);
+        new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
+        match new_act.sa_handler {
+            SIG_DFL => {
+                let new_kaction = KSigAction::new(signo);
+                task.handler.lock().set_action(signum, new_kaction);
+            },
+            SIG_IGN => {
+                let new_act = SigAction { 
+                    sa_handler: SigHandler::SIG_IGN, 
+                    sa_flags: new_act.sa_flags, 
+                    sa_restorer: new_act.sa_restorer, 
+                    sa_mask: new_act.sa_mask 
+                };
+                let new_kaction = KSigAction {
+                    sa: new_act
+                };
+                task.handler.lock().set_action(signum, new_kaction);
+            },
+            handler => {
+                let new_act = SigAction {
+                    sa_handler: SigHandler::Customized { handler },
+                    sa_flags: new_act.sa_flags,
+                    sa_restorer: new_act.sa_restorer,
+                    sa_mask: new_act.sa_mask
+                };
+                let new_kaction = KSigAction {
+                    sa: new_act
+                };
+                task.handler.lock().set_action(signum, new_kaction);
+            }
+        }
+    }
+
+    Ok(0)
+}
+
+pub fn sys_gettid() -> SysResult<usize> {
+    info!("sys_gettid");
+    let task = current_task().unwrap();
+    let pid = task.get_pid();
+    Ok(pid)
+}
+
+pub fn sys_geteuid() -> SysResult<usize> {
+    Ok(0)
+}
+
+pub fn sys_getegid() -> SysResult<usize> {
+    Ok(0)
+}
+
+pub fn sys_sync() -> SysResult<usize> {
+    Ok(0)
+}
+
+/// send messages to the system logger
+/// 
+pub fn sys_log(cmd: i32, buf: usize, len: usize) -> SysResult<usize> {
+    info!("[sys_syslog] start");
+    let task = current_task().unwrap();
+    let cmd = SyslogCmd::from(cmd);
+    let res = match cmd {
+        SyslogCmd::LOG_READ | SyslogCmd::LOG_READ_ALL | SyslogCmd::LOG_READ_CLEAR => {
+            let copylen = len.min(LOGINFO.len());
+            let buf = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, copylen) };
+            let info = LOGINFO.as_bytes();
+            buf.copy_from_slice(info);
+            Ok(copylen)
+        }
+        _ => Ok(0),
+    };
+    
+    res
 }

@@ -9,6 +9,8 @@ use crate::{
 };
 use alloc::boxed::Box;
 
+use super::Ext4Inode;
+
 pub struct NormalFile {
     pub path: String, // 文件的路径
     pub parent: Option<Weak<dyn InodeTrait>>, // 对父目录的弱引用
@@ -37,7 +39,10 @@ impl NormalFile {
         .upgrade()
         .unwrap()
         .walk(&path)
-        .is_none()
+    }
+
+    pub fn unlink(&self) {
+        
     }
 }
 
@@ -68,25 +73,22 @@ impl FileTrait for NormalFile {
         stat.st_mode & 0o111 != 0
     }
 
-    async fn read(&self, mut buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, mut buf: &mut [u8]) -> SysResult<usize> {
         let mut total_read_size = 0usize;
         info!("read file: {}, offset: {}", self.path, self.metadata.offset());
 
-        if self.metadata.inode.size() <= self.metadata.offset() {
-            //读取位置超过文件大小，返回结果为EOF
-            return Ok(0);
-        }
+        // if self.metadata.inode.size() <= self.metadata.offset() || self.metadata.inode.size() == 0 {
+        //     //读取位置超过文件大小，返回结果为EOF
+        //     return Ok(0);
+        // }
 
         let mut new_offset = self.metadata.offset();
-        for slice in buf.buffers.iter_mut() {
-            let read_size = self.metadata.inode.read_at(new_offset, *slice).await;
-            if read_size == 0 {
-                break;
-            }
-            new_offset += read_size;
-            total_read_size += read_size;
-        }
+        // 这边要使用 iter_mut()，因为要将数据写入
+        let read_size = self.metadata.inode.read_at(new_offset, buf).await;
+        new_offset += read_size;
+        total_read_size += read_size;
         self.metadata.set_offset(new_offset);
+
         Ok(total_read_size)
     }
 
@@ -95,7 +97,7 @@ impl FileTrait for NormalFile {
         let mut total_read_size = 0usize;
         info!("pread file: {}, offset: {}", self.path, offset);
 
-        if self.metadata.inode.size() <= offset {
+        if self.metadata.inode.get_size() <= offset {
             //读取位置超过文件大小，返回结果为EOF
             return Ok(0);
         }
@@ -112,31 +114,27 @@ impl FileTrait for NormalFile {
         Ok(total_read_size)
     }
 
-    async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         let mut total_write_size = 0usize;
-        let file_size = self.metadata.inode.size();
+        let file_size = self.metadata.inode.get_size();
         let offset = self.metadata.offset();
-        // TODO(YJJ): 如果不检测 maybe bug???
         if buf.len() > file_size - offset {
-            // info!("[write] file size = {}", file_size);
-            // info!("[write] buf size = {}, offset = {}", buf.len(), offset);
-            // self.metadata.inode.truncate(offset + buf.len());
             self.metadata.inode.set_size(buf.len() + offset).expect("[write_at]: set size fail!");
-            // info!("[write] set size = {}", self.metadata.inode.size());
         }
-        for slice in buf.buffers.iter() {
-            let old_offset = self.metadata.offset();
-            let write_size = self.metadata.inode.write_at(old_offset, *slice).await;
-            self.metadata.set_offset(old_offset+write_size);
-            total_write_size += write_size;
-        }
+
+        let old_offset = self.metadata.offset();
+        let write_size = self.metadata.inode.write_at(old_offset, buf).await;
+        self.metadata.set_offset(old_offset+write_size);
+        total_write_size += write_size;
+        info!("size = {} ============", self.metadata.inode.get_size());
+
         Ok(total_write_size)
     }
 
     async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
         let mut total_write_size = 0usize;
         let mut offset = offset;
-        let file_size = self.metadata.inode.size();
+        let file_size = self.metadata.inode.get_size();
         if offset > file_size - buf.len() {
             self.metadata.inode.set_size(buf.len() + offset).expect("[pwrite]: set size fail!");
         }
@@ -148,7 +146,6 @@ impl FileTrait for NormalFile {
         Ok(total_write_size)
     }
 
-
     fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {
         if offset < 0 || whence > 2 {
             return Err(Errno::EINVAL);
@@ -158,7 +155,7 @@ impl FileTrait for NormalFile {
         let res = match whence {
             SEEK_SET => offset,
             SEEK_CUR => old_offset + offset,
-            SEEK_END => offset + self.metadata.inode.size(),
+            SEEK_END => offset + self.metadata.inode.get_size(),
             _ => return Err(Errno::EINVAL)
         };
         self.metadata.set_offset(res);

@@ -2,7 +2,9 @@
 use alloc::{sync::Arc, vec::Vec};
 use log::info;
 use lwext4_rust::bindings::O_WRONLY;
-use crate::{hal::config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, mm::memory_space::{MmapFlags, MmapProt}, utils::{Errno, SysResult}};
+use crate::{hal::config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, utils::{Errno, SysResult}};
+
+use super::current_task;
 
 #[derive(Clone)]
 pub struct FdTable {
@@ -11,12 +13,15 @@ pub struct FdTable {
 
 #[derive(Clone)]
 pub struct FdInfo {
-    pub file: Option<Arc<dyn FileTrait + Send + Sync>>,
+    pub file: Option<Arc<dyn FileTrait>>,
     pub flags: OpenFlags,
 }
 
 impl FdInfo {
-    pub fn new(fd: Arc<dyn FileTrait + Send + Sync>, flags: OpenFlags) -> Self {
+    pub fn new(fd: Arc<dyn FileTrait>, flags: OpenFlags) -> Self {
+        // if flags.contains(OpenFlags::O_CLOEXEC) {
+        //     info!("[Fdinfo] taskid = {}, new flags = {:?}", current_task().unwrap().get_pid(), flags);
+        // }
         FdInfo {
             file: Some(fd),
             flags,
@@ -39,10 +44,11 @@ impl FdInfo {
         self.file.is_none() && self.flags.is_empty()
     }
 
-    pub fn set_close_on_exec(mut self, enable: bool) -> Self {
+    pub fn off_Ocloexec(mut self, enable: bool) -> Self {
         if enable {
             self.flags.remove(OpenFlags::O_CLOEXEC);
         } else {
+            // info!("[set_close_on_exec] taskid = {}, will set cloexec", current_task().unwrap().get_pid());
             self.flags.insert(OpenFlags::O_CLOEXEC);
         }
         self
@@ -75,47 +81,70 @@ impl FdTable {
         }
     }
 
-    /// 找到一个空位分配fd，返回fd的下标就是新fd
-    pub fn alloc_fd(&mut self, fd: FdInfo) -> SysResult<usize> {
-        // 先判断是否有没有使用的空闲fd， 用idx作为数组下标
-        if let Some(valid_idx) = (0..self.table_len()).find(|idx| self.table[*idx].is_none()) {
-            self.put_in(fd, valid_idx)?;
-            Ok(valid_idx)
-        } else {
-            // 在最后加入
-            // info!("before len = {}", self.table_len());
-            let new_fd = self.table_len();
-            self.put_in(fd, new_fd)?;
-            // info!("after len = {}", self.table_len());
-            Ok(new_fd)
+    // 在task.exec中调用
+    pub fn close_on_exec(&mut self) {
+        for (fd, info) in self.table.iter_mut().enumerate() {
+            if let Some(file) = &info.file {
+                // if info.file.clone().unwrap().get_flags().contains(OpenFlags::O_CLOEXEC) {
+                if info.flags.contains(OpenFlags::O_CLOEXEC) {
+                    info.clear();
+                }
+            }
+        }
+    }
+
+    /// 找到一个空位分配fd，返回数组下标就是新fd
+    pub fn alloc_fd(&mut self, info: FdInfo) -> SysResult<usize> {
+        // 先判断是否有没有使用的空闲fd
+        match self.find_slot(0) {
+            Some(valid_fd) => {
+                self.put_in(info, valid_fd)?;
+                // info!("[alloc_fd] fdlen = {}, newfd = {}", self.table_len(), valid_fd);
+                return Ok(valid_fd);
+            }
+            None => {
+                // 在最后加入
+                // info!("don't find fd, now fdlen = {}", self.table_len());
+                let new_fd = self.table_len();
+                self.put_in(info, new_fd)?;
+                return Ok(new_fd);
+            }
         }
     }
 
     /// 分配一个大于than的fd
-    pub fn alloc_fd_than(&mut self, fd: FdInfo, than: usize) -> SysResult<usize> {
-        // 先判断是否有没有使用的空闲fd， 用idx作为数组下标
-        if let Some(valid_idx) = (than..self.table_len()).find(|idx| self.table[*idx].is_none()) {
-            self.put_in(fd, valid_idx)?;
-            Ok(valid_idx)
-        } else {
-            // 在最后加入
-            // info!("before len = {}", self.table_len());
-            let new_fd = self.table_len();
-            self.put_in(fd, new_fd)?;
-            // info!("after len = {}", self.table_len());
-            Ok(new_fd)
+    pub fn alloc_fd_than(&mut self, info: FdInfo, than: usize) -> SysResult<usize> {
+        // 先判断是否有没有使用的空闲fd
+        match self.find_slot(than) {
+            Some(valid_fd) => {
+                self.put_in(info, valid_fd)?;
+                return Ok(valid_fd);
+            }
+            None => {
+                // 在最后加入
+                let new_fd = self.table_len();
+                self.put_in(info, new_fd)?;
+                return Ok(new_fd);
+            }
         }
     }
 
+    pub fn find_slot(&self, start: usize) -> Option<usize> {
+        if let Some(valid_fd) = (start..self.table_len()).find(|idx| self.table[*idx].is_none()) {
+            return Some(valid_fd);
+        }
+        None
+    }
+
     // 在指定位置加入Fd
-    pub fn put_in(&mut self, fd: FdInfo, idx: usize) -> SysResult {
+    pub fn put_in(&mut self, info: FdInfo, idx: usize) -> SysResult {
         if idx > RLIMIT_NOFILE {
             return Err(Errno::EMFILE);
         }
         if idx >= self.table_len() {
             self.table.resize(idx + 1, FdInfo::new_bare());
         }
-        self.table[idx] = fd;
+        self.table[idx] = info;
         Ok(())
     }
 
@@ -132,8 +161,9 @@ impl FdTable {
     }
 
     /// 通过fd获取文件
-    pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn FileTrait + Send + Sync>>> {
+    pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn FileTrait>>> {
         if idx >= self.table_len() {
+            info!("[getfilebyfd] fdtable len = {}", self.table_len());
             return  Err(Errno::EBADF);
         }
         Ok(self.table[idx].file.as_ref().map(|fd| fd.clone()))
@@ -147,8 +177,15 @@ impl FdTable {
     }
 
     pub fn clear(&mut self) {
-        for fd in &mut self.table {
-            fd.clear();
-        }
+        self.table.clear();
     }
+}
+
+/// 将一个socket加入到fd表中
+pub fn sock_map_fd(socket: Arc<dyn FileTrait>, cloexec_enable: bool) -> SysResult<usize> {
+    let fdInfo = FdInfo::new(socket, OpenFlags::O_RDWR);
+    let new_info = fdInfo.off_Ocloexec(cloexec_enable);
+    let task = current_task().expect("no current task");
+    let fd = task.alloc_fd(new_info);
+    Ok(fd)
 }

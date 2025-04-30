@@ -52,6 +52,7 @@ pub enum SysCode {
     SYSCALL_DUP       = 23,
     SYSCALL_DUP3      = 24,
     SYSCALL_FCNTL     = 25,
+    SYSCALL_IOCTL     = 29,
     SYSCALL_MKDIRAT   = 34,
     SYSCALL_UNLINKAT  = 35,
     SYSCALL_LINKAT    = 37,
@@ -74,16 +75,20 @@ pub enum SysCode {
     SYSCALL_PWRITE64  = 68,
     SYSCALL_SENDFILE  = 71,
     // SYSCALL_PSELECT   = 72, // todo in io.rs
-    // SYSCALL_PPOLL     = 73,
+    SYSCALL_PPOLL     = 73,
     SYSCALL_FSTATAT   = 79,
     SYSCALL_FSTAT     = 80,
+    SYSCALL_SYNC      = 81,
     SYSCALL_EXIT      = 93,
     SYSCALL_EXIT_GROUP= 94,
     SYSCALL_SET_TID_ADDRESS = 96,
     SYSCALL_NANOSLEEP = 101,
     SYSCALL_CLOCK_SETTIME = 112,
     SYSCALL_CLOCK_GETTIME = 113,
+    SYSCALL_SYSLOG    = 116,
     SYSCALL_YIELD     = 124,
+    SYSCALL_SIGACTION = 134,
+    SYSCALL_SIGPROCMASK = 135,
     SYSCALL_SIGRETURN = 139,
     SYSCALL_TIMES     = 153,
     SYSCALL_SETPGID   = 154,
@@ -92,12 +97,30 @@ pub enum SysCode {
     SYSCALL_GETTIMEOFDAY  = 169,
     SYSCALL_GETPID    = 172,
     SYSCALL_GETPPID   = 173,
+    SYSCALL_GETUID    = 174,
+    SYSCALL_GETEUID   = 175,
+    SYSCALL_GETEGID   = 177,
+    SYSCALL_GETTID    = 178,
     SYSCALL_SYSINFO   = 179,
+    SYSCALL_SOCKET    = 198,
+    SYSCALL_SOCKETPAIR= 199,
+    SYSCALL_BIND      = 200,
+    SYSCALL_LISTEN    = 201,
+    SYSCALL_ACCEPT    = 202,
+    SYSCALL_CONNECT   = 203,
+    SYSCALL_GETSOCKNAME = 204,
+    SYSCALL_GETPEERNAME = 205,
+    SYSCALL_SENDTO    = 206,
+    SYSCALL_RECVFROM  = 207,
+    SYSCALL_SETSOCKOPT= 208,
+    SYSCALL_GETSOCKOPT= 209,
+    SYSCALL_SHUTDOWN  = 210,
     SYSCALL_BRK       = 214,
     SYSCALL_MUNMAP    = 215,
     SYSCALL_CLONE     = 220,
-    SYSCALL_EXEC      = 221,
+    SYSCALL_EXECVE    = 221,
     SYSCALL_MMAP      = 222,
+    SYSCALL_ACCEPT4   = 242,
     SYSCALL_WAIT4     = 260,
     GETRANDOM         = 278,
     #[num_enum(default)]
@@ -114,6 +137,30 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SYSLOG => "syslog",
+            Self::SYSCALL_IOCTL => "ioctl",
+            Self::SYSCALL_PPOLL => "ppoll",
+            Self::SYSCALL_SYNC => "sync",
+            Self::SYSCALL_GETEGID => "getegid",
+            Self::SYSCALL_GETEUID => "geteuid",
+            Self::SYSCALL_GETTID => "gettid",
+            Self::SYSCALL_SIGACTION => "sigaction",
+            Self::SYSCALL_SIGPROCMASK => "sigprocmask",
+            Self::SYSCALL_GETUID => "getuid",
+            Self::SYSCALL_SETSOCKOPT => "setsockopt",
+            Self::SYSCALL_GETSOCKOPT => "getsockopt",
+            Self::SYSCALL_SOCKETPAIR => "socketpair",
+            Self::SYSCALL_RECVFROM => "recvfrom",
+            Self::SYSCALL_SENDTO => "sendto",
+            Self::SYSCALL_GETPEERNAME => "getpeername",
+            Self::SYSCALL_GETSOCKNAME => "getsockname",
+            Self::SYSCALL_ACCEPT4 => "accept4",
+            Self::SYSCALL_ACCEPT => "accept",
+            Self::SYSCALL_CONNECT => "connect",
+            Self::SYSCALL_SHUTDOWN => "shutdown",
+            Self::SYSCALL_LISTEN => "listen",
+            Self::SYSCALL_BIND => "bind",
+            Self::SYSCALL_SOCKET => "socket",
             Self::SYSCALL_FSTATAT => "fstatat",
             Self::SYSCALL_PREAD64 => "pread64",
             Self::SYSCALL_PWRITE64 => "pwrite64",
@@ -160,7 +207,7 @@ impl SysCode {
             Self::SYSCALL_BRK => "brk",
             Self::SYSCALL_MUNMAP => "munmap",
             Self::SYSCALL_CLONE => "clone",
-            Self::SYSCALL_EXEC => "exec",
+            Self::SYSCALL_EXECVE => "execve",
             Self::SYSCALL_MMAP => "mmap",
             Self::SYSCALL_WAIT4 => "wait4",
             Self::SYSCALL_UNKNOWN => "unknown",
@@ -358,5 +405,133 @@ bitflags! {
         const AT_EACCESS = 1 << 9;
         const AT_NO_AUTOMOUNT = 1 << 11;
         const AT_DUMMY = 1 << 12;
+    }
+
+    #[derive(PartialEq, Eq, Debug, Clone, Copy)]
+    #[repr(C)]
+    pub struct ShutHow: u8 {
+        /// 关闭接收端 (SHUT_RD)
+        /// - 后续不能再接收数据
+        const SHUT_RD = 0;
+
+        /// 关闭发送端 (SHUT_WR)
+        /// - 后续不能再发送数据
+        /// - 会发送FIN包给对端
+        const SHUT_WR = 1;
+
+        /// 同时关闭收发端 (SHUT_RDWR)
+        /// - 完全关闭连接
+        /// - 相当于先SHUT_RD再SHUT_WR
+        const SHUT_RDWR = 2;
+    }
+}
+
+pub const SOL_SOCKET: u8 = 1;
+pub const SOL_TCP: u8 = 6;
+
+/// 如果协议是TCP，并且当前的套接字状态不是侦听(listen)或关闭(close)，
+/// 那么，当option_value不是零时，启用TCP保活定时 器，否则关闭保活定时器。
+pub const SO_KEEPALIVE: u32 = 9;// 设置是否保持连接
+pub const SO_SNDBUF: u32 = 7;   // 设置发送缓冲区大小
+pub const SO_RCVBUF: u32 = 8;   // 设置接收缓冲区大小
+pub const MAXSEGMENT: u32 = 2;  // 限制TCP 最大段大小 MSS
+pub const CONGESTION: u32 = 13; // 拥塞控制算法
+pub const NODELAY: u32 = 1;     // 关闭Nagle算法
+
+/// 主要用于ppoll系统调用
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct PollFd {
+    pub fd: i32,      // 要监听的文件描述符
+    pub events:  PollEvents, // 你关心的事件（输入参数）
+    pub revents: PollEvents, // 实际发生的事件（输出参数）
+}
+
+bitflags! {
+    #[derive(Copy, Clone)]
+    pub struct PollEvents: i16 {
+        /// 普通数据可读（例如 TCP 接收缓冲区有数据）
+        /// - 对应 `POLLIN`，表示文件描述符有数据可读取且不会阻塞
+        const POLLIN = 0x001;
+
+        /// 紧急/带外数据可读（如 TCP 紧急指针指向的数据）
+        /// - 对应 `POLLPRI`，用于高优先级数据（如 TCP 带外数据）
+        const POLLPRI = 0x002;
+
+        /// 普通数据可写（例如发送缓冲区未满）
+        /// - 对应 `POLLOUT`，表示可以写入数据且不会阻塞
+        const POLLOUT = 0x004;
+
+        /// 错误条件（隐式事件，无需手动设置）
+        /// - 对应 `POLLERR`，当文件描述符发生错误时由内核自动设置
+        /// - 例如：套接字连接意外断开、管道写入端关闭后读取等
+        const POLLERR = 0x008;
+
+        /// 连接挂断（隐式事件，无需手动设置）
+        /// - 对应 `POLLHUP`，表示连接已被对端关闭
+        /// - 例如：TCP 对端调用 `close()` 或管道所有写入端关闭
+        const POLLHUP = 0x010;
+
+        /// 无效文件描述符（隐式事件，无需手动设置）
+        /// - 对应 `POLLNVAL`，当 `fd` 未打开或非法时由内核设置
+        /// - 通常表示程序逻辑错误（如重复关闭文件描述符）
+        const POLLNVAL = 0x020;
+
+        /// 普通数据可读（XPG4.2 标准定义）
+        /// - 对应 `POLLRDNORM`，与 `POLLIN` 行为等价
+        /// - 用于兼容性，表示普通优先级数据可读
+        const POLLRDNORM = 0x040;
+
+        /// 优先级数据可读（XPG4.2 标准定义）
+        /// - 对应 `POLLRDBAND`，用于非紧急的带外数据
+        /// - 例如：SCTP 协议中的多流数据
+        const POLLRDBAND = 0x080;
+
+        /// 普通数据可写（XPG4.2 标准定义）
+        /// - 对应 `POLLWRNORM`，与 `POLLOUT` 行为等价
+        /// - 用于兼容性，表示普通优先级数据可写
+        const POLLWRNORM = 0x100;
+
+        /// 优先级数据可写（XPG4.2 标准定义）
+        /// - 对应 `POLLWRBAND`，表示可写入非紧急的带外数据
+        /// - 实际使用较少，常见于特定协议扩展
+        const POLLWRBAND = 0x200;
+    }
+}
+
+pub const LOGINFO: &str = r"YooOs version 0.01-riscv64";
+
+#[repr(i32)]
+#[derive(Clone)]
+pub enum SyslogCmd {
+    LOG_CLOSE = 0,
+    LOG_OPEN = 1,
+    LOG_READ = 2,
+    LOG_READ_ALL = 3,
+    LOG_READ_CLEAR = 4,
+    LOG_CLEAR = 5,
+    LOG_CONSOLE_OFF = 6,
+    LOG_CONSOLE_ON = 7,
+    LOG_CONSOLE_LEVEL = 8,
+    LOG_SIZE_UNREAD = 9,
+    LOG_SIZE_BUFFER = 10,
+}
+
+impl From<i32> for SyslogCmd {
+    fn from(value: i32) -> Self {
+        match value {
+            0 => SyslogCmd::LOG_CLOSE,
+            1 => SyslogCmd::LOG_OPEN,
+            2 => SyslogCmd::LOG_READ,
+            3 => SyslogCmd::LOG_READ_ALL,
+            4 => SyslogCmd::LOG_READ_CLEAR,
+            5 => SyslogCmd::LOG_CLEAR,
+            6 => SyslogCmd::LOG_CONSOLE_OFF,
+            7 => SyslogCmd::LOG_CONSOLE_ON,
+            8 => SyslogCmd::LOG_CONSOLE_LEVEL,
+            9 => SyslogCmd::LOG_SIZE_UNREAD,
+            10 => SyslogCmd::LOG_SIZE_BUFFER,
+            _ => panic!("Invalid value for SyslogCmd"),
+        }
     }
 }

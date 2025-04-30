@@ -1,5 +1,5 @@
 use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 use log::info;
@@ -14,9 +14,6 @@ impl DevNull {
 
 #[async_trait]
 impl FileTrait for DevNull {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
@@ -29,8 +26,7 @@ impl FileTrait for DevNull {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, mut _user_buf: UserBuffer) -> SysResult<usize> {
-        // do nothing
+    async fn read(&self, mut _user_buf: &mut [u8]) -> SysResult<usize> {
         Ok(0)
     }
     /// 填满0
@@ -40,13 +36,12 @@ impl FileTrait for DevNull {
         user_buf.write(&zero);
         Ok(len)
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
-        // do nothing
+    async fn write(&self, user_buf: & [u8]) -> SysResult<usize> {
         Ok(user_buf.len())
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("/dev/null".to_string())
     }
 
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
