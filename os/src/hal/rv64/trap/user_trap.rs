@@ -23,6 +23,7 @@ pub async fn user_trap_handler() {
     let sepc = sepc::read();
     let cause = scause.cause();
     let task = current_task().unwrap();
+    // println!("stval = {:#x}", stval);
 
     if task.get_time_data().usedout_timeslice() && executor::has_task() {
         yield_now().await;
@@ -83,7 +84,7 @@ pub async fn user_trap_handler() {
         | Trap::Exception(Exception::InstructionFault) // 1
         | Trap::Exception(Exception::LoadFault) => { // 10
             println!(
-                "[kernel] hart_id = {:?}, {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                "[user_trap] hart_id = {:?}, {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 get_current_hart_id(),
                 scause.bits(),
                 scause.cause(),
@@ -93,8 +94,8 @@ pub async fn user_trap_handler() {
             task.set_zombie();
         }
         Trap::Exception(Exception::IllegalInstruction) => { // 2
-            println!("[kernel] hart_id = {:?}, IllegalInstruction in application, kernel killed it.",
-                get_current_hart_id()
+            println!("[user_trap] hart_id = {:?}, IllegalInstruction in application, stval = {:#x}, sepc = {:#x}, kernel killed it.",
+                get_current_hart_id(), stval, sepc
             );
             task.set_zombie();
         }

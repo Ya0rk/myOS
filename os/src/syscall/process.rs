@@ -205,6 +205,16 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     //         *temp = "/musl/busybox_cmd.txt".to_string();
     //     }
     // }
+    if path.ends_with(".sh") {
+        path = "/musl/busybox".to_string();
+        argv.insert(0, "/musl/busybox".to_string());
+        argv.insert(1, "sh".to_string());
+    }
+    // for temp in &mut argv {
+    //     if temp.ends_with("test.sh") {
+    //         *temp = "tst.sh".to_string();
+    //     }
+    // }
     info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
