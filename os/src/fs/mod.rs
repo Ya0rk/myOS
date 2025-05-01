@@ -10,7 +10,7 @@ pub mod vfs;
 mod path;
 pub mod pre_data;
 pub mod ext4;
-pub mod tmp;
+// pub mod tmp;
 pub mod ffi;
 
 use ext4::Ext4Inode;
