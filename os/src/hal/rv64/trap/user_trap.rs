@@ -48,22 +48,16 @@ pub async fn user_trap_handler() {
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
 
-            if task.get_pid() == 4 && task.fd_table.lock().table[1].is_none() {
-                info!("[user trap] now task4's stdout is none, plz debug");
-                loop {
-                }
-            }
-            
             match result {
                 Ok(ret) => {
                     cx.user_x[10] = ret as usize;
                 }
                 Err(err) => {
                     // TODO：这里单独处理的waitpid返回值情况，后序要修改
-                    if err as isize == -1 || err as isize == -2 {
+                    if (err as isize) < 0 {
                         cx.user_x[10] = err as usize;
                     } else {
-                        cx.user_x[10] = -(err as isize) as usize;
+                        cx.user_x[10] = (-(err as isize)) as usize;
                         info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
                     }
                 }

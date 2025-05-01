@@ -299,7 +299,7 @@ impl MemorySpace {
         let mut max_end_vpn = offset.floor();
         let mut header_va = 0;
         let mut has_found_header_va = false;
-        log::info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
+        // log::info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
@@ -329,13 +329,13 @@ impl MemorySpace {
 
             let map_offset = start_va - start_va.align_down();
 
-            log::info!(
-                "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}, flags{}",
-                ph.offset(),
-                ph.file_size(),
-                ph.mem_size(),
-                ph_flags
-            );
+            // log::info!(
+            //     "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}, flags{}",
+            //     ph.offset(),
+            //     ph.file_size(),
+            //     ph.mem_size(),
+            //     ph_flags
+            // );
 
             if ph.file_size() == ph.mem_size() && is_aligned_to_page(ph.offset() as usize) {
                 // assert!(!map_perm.contains(MapPerm::W));
@@ -415,7 +415,7 @@ impl MemorySpace {
 
         let ph_head_addr = header_va.0 + elf.header.pt2.ph_offset() as usize;
         auxv.push(AuxHeader::new(AT_RANDOM, ph_head_addr));
-        log::info!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x}",);
+        // log::info!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x}",);
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
 
         (self, entry, auxv)
@@ -514,7 +514,7 @@ impl MemorySpace {
 
         // align to 16 bytes
         let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
-        log::info!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
+        // log::info!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
 
         let mut vm_area = VmArea::new(range.clone(), MapPerm::URW, VmAreaType::Stack);
         vm_area.map_range(
@@ -535,7 +535,7 @@ impl MemorySpace {
 
         // align to 16 bytes
         let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
-        log::info!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
+        // log::info!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
 
         let mut vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Stack);
         self.push_vma(vm_area);
@@ -582,7 +582,7 @@ impl MemorySpace {
             .iter_mut()
             .find(|(_, vma)| vma.vma_type == VmAreaType::Heap)
             .unwrap();
-        log::info!("[MemorySpace::reset_heap_break] heap range: {range:?}, new_brk: {new_brk:?}");
+        // log::info!("[MemorySpace::reset_heap_break] heap range: {range:?}, new_brk: {new_brk:?}");
         let result = if new_brk > range.end {
             let ret = self.areas_mut().extend_back(range.start..new_brk);
             if ret.is_ok() {

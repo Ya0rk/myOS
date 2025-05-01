@@ -126,7 +126,7 @@ impl FileTrait for NormalFile {
         let write_size = self.metadata.inode.write_at(old_offset, buf).await;
         self.metadata.set_offset(old_offset+write_size);
         total_write_size += write_size;
-        info!("size = {} ============", self.metadata.inode.get_size());
+        // info!("size = {} ============", self.metadata.inode.get_size());
 
         Ok(total_write_size)
     }

@@ -47,16 +47,6 @@ impl FileTrait for DevNull {
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    // fn poll(&self , events: PollEvents) -> PollEvents {
-    //     let mut revents = PollEvents::empty();
-    //     if events.contains(PollEvents::IN) {
-    //         revents |= PollEvents::IN;
-    //     }
-    //     if events.contains(PollEvents::OUT) {
-    //         revents |= PollEvents::OUT;
-    //     }
-    //     revents
-    // }
 
     /// 这里并没有实现
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
@@ -66,7 +56,6 @@ impl FileTrait for DevNull {
         todo!()
     }
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
         todo!()
     }
 }

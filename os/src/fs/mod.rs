@@ -84,9 +84,14 @@ pub fn list_apps() -> bool{
 pub fn create_init_files() -> SysResult {
     //创建/proc文件夹
     mkdir("/proc", 0);
+    let proc = Ext4Inode::new("/proc", InodeTypes::EXT4_DE_DIR, None);
     // 创建musl glibc文件夹
-    mkdir("/musl", 0);
-    let muslinode = Ext4Inode::new("/musl", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
+    // let mut file = Ext4File::new("/musl", InodeTypes::EXT4_DE_DIR);
+    // file.file_open("/musl", O_RDWR  | O_TRUNC); // 为他创建lwext4的ext4inode
+    // file.file_close();
+    open("/", "musl", OpenFlags::O_DIRECTORY | OpenFlags::O_RDWR);
+    open("/musl", "ls",   OpenFlags::O_RDWR);
+    
     mkdir("/glibc", 0);
     let glibcinode = Ext4Inode::new("/glibc", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
     //创建/proc/mounts文件系统使用情况
@@ -221,7 +226,8 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         }
         return None;
     }
-    
+
+    let parent_abs = abs_path.get_parent_abs();
     let create_inode_type = match flags.contains(OpenFlags::O_DIRECTORY) {
         true  => InodeTypes::EXT4_DE_DIR,
         false => InodeTypes::EXT4_DE_REG_FILE,
@@ -234,14 +240,12 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
             match bind.check_inode_exist(&abs_path.get(), create_inode_type.clone()) {
                 true  => {
                     info!("path = {} is exitbbbbbbbbb", abs_path.get());
-                    let parent_abs = abs_path.get_parent_abs();
                     return create_open_file(&abs_path.get(), &parent_abs, flags);
                 },
                 false => {
                     info!("path = {} no exitsssssssssss", abs_path.get());
                     // 说明在lwext4中还找不到这个inode
                     // 那么父母一定是存在,父母不存在返回错误
-                    let parent_abs = abs_path.get_parent_abs();
                     let mut file = Ext4File::new(&abs_path.get(), create_inode_type.clone());
                     file.file_open(&abs_path.get(), O_RDWR | O_CREAT | O_TRUNC); // 为他创建lwext4的ext4inode
                     file.file_close();
@@ -268,7 +272,6 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
             }
 
             info!("fasdkfjla;sdjf");
-            let parent_abs = abs_path.get_parent_abs();
             return create_open_file(&abs_path.get(), &parent_abs, flags);
         },
     }

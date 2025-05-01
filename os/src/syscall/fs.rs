@@ -11,6 +11,8 @@ use crate::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::ext4::NormalFile;
 use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dirent, FileClass, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
+use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
+use crate::sync::{TimeSpec, TimeStamp};
 use crate::syscall::ffi::IoVec;
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{Errno, SysResult};
@@ -68,6 +70,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 ///```
 /// len: 数组的长度
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    info!("[sys_readv] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -200,6 +203,7 @@ pub fn sys_fstatat(
 /// 
 /// 返回值：成功返回0，失败返回-1；
 pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
+    info!("[sys_fstat] start");
     let task = current_task().unwrap();
     // let inner = task.inner_lock();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
@@ -265,8 +269,16 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     };
     let cwd = task.get_current_path();
     // 检查路径是否有效并打开文件
-    if let Some(inode) = open(cwd.as_str() , target_path.as_str(), flags) {
-        let fd = task.alloc_fd(FdInfo::new(inode.file()?, flags));
+    if let Some(fileclass) = open(cwd.as_str() , target_path.as_str(), flags) {
+        let fd = match fileclass {
+            FileClass::File(file) => {
+                task.alloc_fd(FdInfo::new(file, flags))
+            },
+            FileClass::Abs(file) => {
+                task.alloc_fd(FdInfo::new(file, flags))
+            },
+            _ => { unreachable!() }
+        };
         info!("[sys_openat] taskid = {}, alloc fd finished, new fd = {}",task.get_pid(), fd);
         if fd > RLIMIT_NOFILE {
             return Err(Errno::EMFILE);
@@ -285,8 +297,6 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
-    let file = task.get_file_by_fd(1).ok_or(Errno::EBADF)?;
-    info!("[sys_close] pid = {}, success get stdout", task.get_pid());
     
     // 删除对应的fd
     task.remove_fd(fd);
@@ -301,7 +311,6 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
 pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     info!("sys_pipe start!");
     let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
-    info!("[sys_pipe] flags = {:?}", flags.clone());
     let task = current_task().unwrap();
     let (read_fd, write_fd) = {
         let (read, write) = Pipe::new();
@@ -340,6 +349,7 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// 
 /// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
 pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
+    info!("[sys_getdents64] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -357,6 +367,7 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
         Some(dir_entrys) => dir_entrys,
         _ => return Err(Errno::EINVAL),
     };
+    info!("len dentry = {}", dentrys.len());
 
     let mut res = 0;
     let one_den_len = size_of::<Dirent>();
@@ -367,7 +378,7 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
         buffer.write_at(res, den.as_bytes());
         res += one_den_len;
     }
-
+    info!("getdents finish");
     Ok(res)
 }
 
@@ -375,6 +386,7 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
 ///
 /// Success: 返回当前工作目录的长度;  Fail: 返回-1
 pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
+    info!("[sys_getcwd] start");
     if buf.is_null() || size == 0 {
         return Err(Errno::EINVAL);
     }
@@ -427,6 +439,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
 /// 
 /// Success: 返回新的文件描述符; Fail: 返回-1
 pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
+    info!("[sys_dup3] start");
     if oldfd == newfd {
         return Err(Errno::EINVAL);
     }
@@ -441,7 +454,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     }.ok_or(Errno::EINVAL)?;
 
     let task = current_task().unwrap();
-    info!("[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = {}", task.get_pid());
+    // info!("[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = {}", task.get_pid());
     
     if newfd > RLIMIT_NOFILE
     {
@@ -452,7 +465,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     if old_temp_fd.is_none() { return Err(Errno::EBADF); }
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.clone().off_Ocloexec(!cloexec);
-    info!("[sys_dup3] old file name = {}, oldfd = {}", old_temp_fd.clone().file.unwrap().get_name()?, oldfd);
+    // info!("[sys_dup3] old file name = {}, oldfd = {}", old_temp_fd.clone().file.unwrap().get_name()?, oldfd);
     // 将newfd 放到指定位置
     task.put_fd_in(new_temp_fd, newfd);
 
@@ -464,7 +477,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 /// Success: 0; Fail: 返回-1
 pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usize> {
     // Err(Errno::EBADCALL)
-    info!("sys_mkdirat start");
+    info!("[sys_mkdirat] start");
 
     let task = current_task().unwrap();
     let token = current_user_token();
@@ -502,6 +515,7 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_umount2(target: *const u8, flags: u32) -> SysResult<usize> {
+    info!("[sys_umount2] start");
     let ufg = UmountFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
     if ufg.contains(UmountFlags::MNT_EXPIRE)
         && (ufg.contains(UmountFlags::MNT_DETACH) || ufg.contains(UmountFlags::MNT_FORCE))
@@ -521,6 +535,7 @@ pub fn sys_umount2(target: *const u8, flags: u32) -> SysResult<usize> {
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags: u32, data: *const u8) -> SysResult<usize> {
+    info!("[sys_mount] start");
     let token = current_user_token();
     let source = translated_str(token, source);
     let target = translated_str(token, target);
@@ -553,7 +568,7 @@ pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags:
 /// 
 /// Success: 返回0； 失败： 返回-1；
 pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
-    // info!("sys_chdir start");
+    info!("[sys_chdir] start");
 
     let token = current_user_token();
     let task = current_task().unwrap();
@@ -582,6 +597,7 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
 
 
 pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> {
+    info!("[sys_unlinkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, path);
@@ -609,6 +625,7 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
 
 /// make a new name for a file: a hard link
 pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
+    info!("[sys_linkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let old_path = translated_str(token, oldpath);
@@ -636,6 +653,7 @@ pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath:
 
 /// copies data between one file descriptor and another
 pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usize) -> SysResult<usize> {
+    info!("[sys_sendfile] start");
     let task = current_task().unwrap();
     let src = task.get_file_by_fd(in_fd).ok_or(Errno::EBADF)?;
     let dest = task.get_file_by_fd(out_fd).ok_or(Errno::EBADF)?;
@@ -681,6 +699,7 @@ pub fn sys_faccessat(
     mode: u32,
     _flags: u32,
 ) -> SysResult<usize> {
+    info!("[sys_faccessat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
@@ -728,6 +747,7 @@ pub fn sys_faccessat(
 /// associated with the file descriptor fd to the argument offset
 /// according to the directive whence as follows
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
+    info!("[sys_lseek] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -740,6 +760,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
 /// 用于修改某个文件描述符的属性
 /// 第1个参数fd为待修改属性的文件描述符，第2个参数cmd为对应的操作命令，第3个参数为cmd的参数
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
+    info!("[sys_fcntl] start");
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
@@ -806,6 +827,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
 /// 改变文件大小
 /// 返回值：0、-1
 pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
+    info!("[sys_ftruncate64] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -817,6 +839,7 @@ pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
 
 /// 可更改现有文件的访问权限
 pub fn sys_fchmodat() -> SysResult<usize> {
+    info!("[sys_fchmodat] start");
     return Ok(0);
 }
 
@@ -828,6 +851,7 @@ pub async fn sys_pread64(
     count: usize,
     offset: usize,
 ) -> SysResult<usize> {
+    info!("[sys_pread64] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -850,6 +874,7 @@ pub async fn sys_pwrite64(
     count: usize,
     offset: usize,
 ) -> SysResult<usize> {
+    info!("[sys_pwrite64] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -862,4 +887,59 @@ pub async fn sys_pwrite64(
     let buffer = translated_byte_buffer(token, buf as *const u8, count);
     let user_buffer = UserBuffer::new(buffer);
     file.pwrite(user_buffer, offset, count).await
+}
+
+/// change file timestamps with nanosecond precision
+///  With utimensat() the file is specified via the pathname given in pathname
+/// times[0] specifies the new "last access time" (atime); times[1] specifies the new "last modification time" (mtime)
+pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2], flags: i32) -> SysResult<usize> {
+    info!("[sys_utimensat] start");
+    let task = current_task().unwrap();
+    let mut new_time = TimeStamp::new();
+
+    // 如果pathname不是空，target就是pathname对应文件
+    // 如果是空，那么就是dirfd对应文件
+    let inode = if pathname != 0 {
+        let cwd = task.get_current_path();
+        let mut path = translated_str(task.get_user_token(), pathname as *const u8);
+        
+        let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
+        let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).unwrap().file()?;
+        file.get_inode()
+    } else {
+        let res = match dirfd {
+            AT_FDCWD => { unimplemented!() }
+            _ => {
+                let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EINVAL)?;
+                file.get_inode()
+            }
+        };
+        res
+    };
+
+    if !times.is_null() {
+        let user_time = unsafe { &*times };
+        match user_time[0].tv_nsec {
+            UTIME_NOW => {} // sec设置为当前时间
+            UTIME_OMIT => { // 保持不变
+                // 保持不变
+                let old_timestamp = inode.get_timestamp();
+                new_time.atime = old_timestamp.atime;
+            }
+            _ => { new_time.atime = user_time[0]; }
+        }
+        match user_time[1].tv_nsec {
+            UTIME_NOW => {} // sec设置为当前时间
+            UTIME_OMIT => { // 保持不变
+                // 保持不变
+                let old_timestamp = inode.get_timestamp();
+                new_time.mtime = old_timestamp.mtime;
+            }
+            _ => { new_time.mtime = user_time[1]; }
+        }
+    }
+
+    inode.set_timestamps(new_time);
+
+    Ok(0)
 }

@@ -79,6 +79,7 @@ pub enum SysCode {
     SYSCALL_FSTATAT   = 79,
     SYSCALL_FSTAT     = 80,
     SYSCALL_SYNC      = 81,
+    SYSCALL_UTIMENSAT = 88,
     SYSCALL_EXIT      = 93,
     SYSCALL_EXIT_GROUP= 94,
     SYSCALL_SET_TID_ADDRESS = 96,
@@ -87,6 +88,7 @@ pub enum SysCode {
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_SYSLOG    = 116,
     SYSCALL_YIELD     = 124,
+    SYSCALL_KILL      = 129,
     SYSCALL_SIGACTION = 134,
     SYSCALL_SIGPROCMASK = 135,
     SYSCALL_SIGRETURN = 139,
@@ -137,6 +139,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_UTIMENSAT => "utimensat",
+            Self::SYSCALL_KILL => "kill",
             Self::SYSCALL_SYSLOG => "syslog",
             Self::SYSCALL_IOCTL => "ioctl",
             Self::SYSCALL_PPOLL => "ppoll",

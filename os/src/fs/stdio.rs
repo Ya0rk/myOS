@@ -97,7 +97,7 @@ impl FileTrait for Stdout {
         self.write(buf).await
     }
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        print!("HARTid{}: {}",get_current_hart_id(), core::str::from_utf8(user_buf).unwrap());
+        print!("{}", core::str::from_utf8(user_buf).unwrap());
         Ok(user_buf.len())
     }
     

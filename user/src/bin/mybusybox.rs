@@ -37,7 +37,7 @@ fn run_cmd(cmd: &str) {
         execve(
             "/musl/busybox\0",
             &[
-                "busybox\0",
+                "/musl/busybox\0",
                 "sh\0",
                 "/musl/busybox_testcode.sh\0",
             ],
@@ -48,14 +48,11 @@ fn run_cmd(cmd: &str) {
             ],
         );
     } else {
-        loop {
-            println!("hhhhhhhahahah");
-            let mut exit_code: i32 = 0;
-            let tid = wait(&mut exit_code);
-            if tid == -1 {
-                yield_();
-                continue;
-            }
+        println!("hhhhhhhahahah");
+        let mut exit_code: i32 = 0;
+        let tid = wait(&mut exit_code);
+        if tid == -1 {
+            yield_();
         }
     }
 }

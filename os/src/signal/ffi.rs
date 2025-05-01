@@ -170,7 +170,7 @@ bitflags! {
 }
 
 #[derive(PartialEq, Clone, Copy)]
-#[repr(usize)]
+#[repr(i32)]
 pub enum SigNom {
     // 标准信号常量定义（基于 Linux/x86 架构）
     // 注：信号编号可能因操作系统或架构略有不同，此处以 Linux 常规值为准
@@ -252,7 +252,7 @@ impl SigHandler {
 impl From<usize> for SigNom {
     fn from(value: usize) -> Self {
         if value <= MAX_SIGNUM {
-            let ret: SigNom = unsafe { core::mem::transmute(value) };
+            let ret: SigNom = unsafe { core::mem::transmute(value as i32) };
             return ret;
         } else {
             panic!("signal nomber out of bounds!");
