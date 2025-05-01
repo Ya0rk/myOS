@@ -7,7 +7,7 @@ use riscv::interrupt::Mutex;
 use sbi_rt::{NonRetentive, SharedPtr};
 use spin::{rwlock::RwLock};
 use core::hash::{Hash, Hasher};
-use crate::{fs::{ffi::InodeType, path, root_inode, Path, INODE_CACHE}};
+use crate::fs::{ffi::InodeType, mkdir, path, root_inode, Path, INODE_CACHE};
 use alloc::sync::{Arc, Weak};
 use super::{inode, InodeTrait, SuperBlockTrait};
 
@@ -83,10 +83,10 @@ impl Dentry {
     fn get_child(self: Arc<Self>, pattern: &String) -> Option<Arc<Self>> {
         info!("visit {}", pattern);
         if pattern.ends_with("/") || pattern.ends_with(".") || pattern.as_str() == "" {
-            info!("return name is {}", self.name.read());
+            // info!("return name is {}", self.name.read());
             return Some(self.clone());
         } else if pattern.ends_with("..") {
-            info!("return name is {}", self.name.read());
+            // info!("return name is {}", self.name.read());
             return Some(self.clone().get_parent());
         }
         {    
@@ -96,7 +96,20 @@ impl Dentry {
                 let name = Path::string2path(name.clone());
                 let pattern = Path::string2path(pattern.clone());
                 if name.get_filename() == pattern.get_filename() {
-                    info!("return name is {}", self.name.read());
+                    // info!("return name is {}", self.name.read());
+                    return Some(child.clone());
+                }
+            }
+        }
+        self.flush_binding();
+        {    
+            let children = self.children.read();
+            for child in children.iter() {
+                let name = child.name.read();
+                let name = Path::string2path(name.clone());
+                let pattern = Path::string2path(pattern.clone());
+                if name.get_filename() == pattern.get_filename() {
+                    // info!("return name is {}", self.name.read());
                     return Some(child.clone());
                 }
             }
@@ -170,9 +183,9 @@ impl Dentry {
     }
     /// 从一个dentry上获取inode
     fn get_inode(self: &Arc<Self>) -> Option<Arc<dyn InodeTrait>> {
-        {
-            info!("exec get_inode {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
-        }
+        // {
+        //     info!("exec get_inode {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
+        // }
         // 首先检查是否已有 inode（读锁）
         {
             let inode_guard = self.inode.read();
@@ -217,6 +230,7 @@ impl Dentry {
     }
 
     pub fn get_inode_from_path(path: &String) -> Option<Arc<dyn InodeTrait>> {
+        info!("[get_inode_from_path] {}", path);
         if !path.starts_with('/') {
             panic!("path should start with /");
         }
@@ -244,6 +258,7 @@ impl Dentry {
                 }
             }
         }
+        info!("[get_inode_from_path] successful {}", path);
         dentry_now.get_inode()
     }
     pub fn get_dentry_from_path(path: &String) -> Option<Arc<Self>> {
@@ -287,9 +302,9 @@ lazy_static! {
 macro_rules! test_inode {
     ($path:expr) => {
         if let Some(inode) = Dentry::get_inode_from_path(&String::from($path)) {
-            info!("inode stat for {}: {:?}", $path, inode.fstat());
+            info!("[test_inode] inode stat for {}: {:?}", $path, inode.fstat());
         } else {
-            info!("no such file or directory: {}", $path);
+            info!("[test_inode] no such file or directory: {}", $path);
         }
     };
 }
@@ -299,7 +314,7 @@ pub fn dentry_test() {
     info!("stat root inode");
     info!("root inode stat is {:?}", root_inode().fstat());
     info!("start dentry test");
-    Dentry::init();
+    // Dentry::init();
     print!("list all children:   ");
     {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.name.read()));println!("");}
     // info!("start unmount");
@@ -334,9 +349,15 @@ pub fn dentry_test() {
         // info!("test 4");
         // test_inode!("//.//../..///.//test_dir0/test_dir1/./file_b");
         // info!("test 5");
+        // test_inode!("/musl/basic/mnt/test_mount");
+        test_inode!("/musl/busybox");
         test_inode!("/././././././././././././././././no_exist");
         test_inode!("/musl/busybox_testcode.sh");
     info!("-------------finished confuse get_inode test-------------");
+    info!("-------------start dentry mkdir test-------------");
+        mkdir("/musl/basic/mnt/test_mkdir", 0);
+        test_inode!("/musl/basic/mnt/test_mkdir");
+    info!("-------------finished dentry mkdir test------------");
     // info!("start get_inode test");
     // {DENTRY_ROOT.children.read().iter().for_each(|x| {
     //     let mut dentry = x;
