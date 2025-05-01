@@ -186,10 +186,13 @@ impl InodeTrait for Ext4Inode {
         self.read_at(0, &mut buf).await;
         Ok(buf)
     }
-    /// 判断在当前路径下是否有这个path的文件
+    
+    /// 恢复原来的作用!!!
     /// 
-    /// self是parent，如果没找到就返回false，代表在lwext4中没有这个inode
-    fn walk(&self, path: &str) -> Option<dyn InodeTrait> {
+    /// 在当前文件夹下查找该路径的的文件
+    /// 
+    /// 返回一个InodeTrait
+    fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
         info!("{} walk path is {}", file.file_path.to_str().unwrap(), path);
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {

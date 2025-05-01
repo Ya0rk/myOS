@@ -92,7 +92,7 @@ pub trait InodeTrait: Send + Sync {
         todo!()
     }
 
-    fn walk(&self, _path: &str) -> bool {
+    fn walk(&self, _path: &str) ->  Option<Arc<dyn InodeTrait>>{
         todo!()
     }
 
