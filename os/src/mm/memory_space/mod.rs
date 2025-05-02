@@ -191,7 +191,7 @@ impl MemorySpace {
 
 
     pub async fn new_user_from_elf(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
-        let elf_data = elf_file.get_inode().read_all().await.unwrap();
+        let elf_data = elf_file.get_inode().read_all().await.expect("[new_user_from_elf] read elf file failed");
         let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
         let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
         memory_space.alloc_heap();

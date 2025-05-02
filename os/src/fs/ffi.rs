@@ -147,7 +147,7 @@ pub const LOCALTIME: &str =
 
 
 #[repr(u8)]
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum InodeType {
     Unknown = 0o0,
     /// FIFO (named pipe)
@@ -219,8 +219,12 @@ pub fn as_inode_type(types: InodeTypes) -> InodeType {
         InodeTypes::EXT4_DE_REG_FILE => InodeType::File,
         InodeTypes::EXT4_DE_SYMLINK => InodeType::SymLink,
         InodeTypes::EXT4_DE_SOCK => InodeType::Socket,
+
+        InodeTypes::EXT4_INODE_MODE_DIRECTORY => InodeType::Dir,
+        InodeTypes::EXT4_INODE_MODE_FILE => InodeType::File,
+
         _ => {
-            // warn!("unknown file type: {:?}", vtype);
+            log::warn!("unknown file type: {:?}", types);
             unreachable!()
         }
     }

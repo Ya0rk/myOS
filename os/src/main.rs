@@ -43,6 +43,7 @@ pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
+use alloc::vec::{self, Vec};
 use log::info;
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
@@ -83,6 +84,11 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         println!("finished mm::init");
         utils::logger_init();
 
+        // info!("[rust_main] alloc a vec size is 1387650");
+        // let mut buffer: Vec<u8> = alloc::vec![1; 1387650];
+        // println!("{:?}", buffer[256]);
+        // info!("[rust_main] alloc mem is enough");
+
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
@@ -91,7 +97,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         hal::trap::init();
         task::init_processors();
         
-        let dt_root: usize = 0xffff_ffc0_87e0_0000; //注意到应当看rustsbi的Device Tree Region信息
+        let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
         info!("satrt probe fdt tree root: {:X}", dt_root);
         crate::drivers::virtio_driver::probe::probe(dt_root as u64);
 
@@ -99,18 +105,23 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         // 此时完成初始化工作，准备载入进程开始执行
 
         // 测试代码应当放在这里
-        #[cfg(feature = "test")]
+        // #[cfg(feature = "test")]
         {
             // mm::remap_test();
             info!("start path test");
             // fs::path_test();
             info!(" start dentry test");
-            fs::vfs::dentry_test();
+            // fs::vfs::dentry_test();
         }
+
+        // spawn_kernel_task(async move {
+        //     fs::vfs::dentry_test().await
+        // });
 
         spawn_kernel_task(async move {
             task::add_initproc().await
         });
+        
         INIT_FINISHED.store(true, Ordering::SeqCst);
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]
