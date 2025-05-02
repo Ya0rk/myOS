@@ -16,7 +16,7 @@ FS = lwext4_rust
 # ifeq ($(MODE), debug)
 # 	MODE_ARG :=
 # endif
-FS_IMG := ../sdcard-rv.img
+FS_IMG := ../sdcard-rv_busybox.img
 # FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 2
@@ -55,7 +55,7 @@ TEST ?=
 QEMU_NAME := qemu-system-riscv64
 
 QEMU_ARGS =  -machine virt 
-QEMU_ARGS += -m 128M
+QEMU_ARGS += -m 1G
 QEMU_ARGS += -nographic 
 QEMU_ARGS += -bios $(BOOTLOADER) 
 QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
