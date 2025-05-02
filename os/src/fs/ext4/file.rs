@@ -33,12 +33,19 @@ impl NormalFile {
 
     // 判断是否存在同名文件
     pub fn is_child(&self, path: &str) -> bool {
-        self.parent
-        .as_ref()
-        .expect("no parent, plz check!")
-        .upgrade()
-        .unwrap()
-        .walk(&path)
+        if let 
+            Some(_) = 
+            self.parent
+                .as_ref()
+                .expect("no parent, plz check!")
+                .upgrade()
+                .unwrap()
+                .walk(&path) 
+        {
+            true
+        } else {
+            false
+        }
     }
 
     pub fn unlink(&self) {
@@ -116,11 +123,13 @@ impl FileTrait for NormalFile {
 
     async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         let mut total_write_size = 0usize;
-        let file_size = self.metadata.inode.get_size();
+        // 将改变inode大小的逻辑移入inode的write_at方法中
+        // 增加代码内聚
+        // let file_size = self.metadata.inode.get_size();
         let offset = self.metadata.offset();
-        if buf.len() > file_size - offset {
-            self.metadata.inode.set_size(buf.len() + offset).expect("[write_at]: set size fail!");
-        }
+        // if buf.len() > file_size - offset {
+        //     self.metadata.inode.set_size(buf.len() + offset).expect("[write_at]: set size fail!");
+        // }
 
         let old_offset = self.metadata.offset();
         let write_size = self.metadata.inode.write_at(old_offset, buf).await;

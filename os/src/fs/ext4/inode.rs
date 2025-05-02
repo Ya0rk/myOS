@@ -2,11 +2,11 @@ use core::sync::atomic::Ordering;
 use async_trait::async_trait;
 use log::info;
 use lwext4_rust::{
-    bindings::{O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, file, Ext4File, InodeTypes
+    bindings::{EXT4_DE_DIR, EXT4_DE_REG_FILE, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, file, Ext4File, InodeTypes
 };
 use riscv::register::mstatus::set_fs;
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, open, page_cache::PageCache, root_inode, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
+    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, Dirent, open, page_cache::PageCache, root_inode, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
     sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
     utils::{Errno, SysResult}
 };
@@ -72,23 +72,55 @@ impl InodeTrait for Ext4Inode {
     /// 获取文件大小
     fn get_size(&self) -> usize {
         let size = self.metadata.size.load(Ordering::Relaxed);
+        info!("[get_size] {}", size);
         size
     }
 
     fn set_size(&self, new_size: usize) -> SysResult {
         self.metadata.size.store(new_size, Ordering::Relaxed);
+        info!("[set_size] {}", new_size);
         Ok(())
     }
 
     /// 创建文件或者目录,self是父目录,path是子文件的绝对路径,这里是要创建一个Inode
     fn do_create(&self, path: &str, types: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
+        info!("[do_create] start {}", path);
         let page_cache = match types {
             InodeTypes::EXT4_DE_REG_FILE => Some(PageCache::new_bare()),
             _ => None
         };
+        // 注意到原来这里是一个虚假的闯将,应当修改为在ext4文件系统中,真实的创建.
+        // 这里文件创建的标识 O_RDWR | O_CREAT | O_TRUNC 和原来的fs/mod.rs::open函数中保持一致
+        match types.clone() {
+            InodeTypes::EXT4_DE_DIR => {
+                info!("[do_create] type is dir");
+                let mut file = Ext4File::new(path, types.clone());
+                if let Ok(_) = file.dir_mk(path) {
+                    info!("[do_create] succeed {}", path);
+                } else {
+                    info!("[do_create] failed {}", path);
+                }
+                file.file_close();
+            }
+            InodeTypes::EXT4_DE_REG_FILE => {
+                info!("[do_create] type is reg file");
+                let mut file = Ext4File::new(path, types.clone());
+                if let Ok(_) = file.file_open(path, O_CREAT | O_TRUNC | O_RDWR) {
+                    info!("[do_create] succeed {}", path);
+                } else {
+                    info!("[do_create] failed {}", path);
+                }
+                file.file_close();
+            }
+            _ => {
+
+            }
+        }
+        
+
         let nf = Ext4Inode::new(path, types.clone(), page_cache.clone());
         // nf.file.lock().file_open(path, O_RDWR).expect("[do_create] create file failed!");
-        info!("[do_create] path = {}", path);
+        info!("[do_create] succe {}", path);
         
         Some(nf)
     }
@@ -136,14 +168,21 @@ impl InodeTrait for Ext4Inode {
 
     /// 写入文件
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
-        match &self.page_cache {
+        let write_size = match &self.page_cache {
             None => {
+                info!("[write_at] no cache");
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
+                info!("[write_at] has cache");
                 cache.write(buf, offset).await
             }
+        };
+        // 增加代码内聚
+        if self.get_size() < offset + write_size {
+            self.set_size(offset + write_size);
         }
+        write_size
     }
 
     async fn write_directly(&self, offset: usize, buf: &[u8]) -> usize {
@@ -183,6 +222,7 @@ impl InodeTrait for Ext4Inode {
     async fn read_all(&self) -> SysResult<Vec<u8>> {
         info!("[read_all] read all file, size = {}", self.get_size());
         let mut buf = vec![0; self.get_size()];
+        info!("got enough buf");
         self.read_at(0, &mut buf).await;
         Ok(buf)
     }
