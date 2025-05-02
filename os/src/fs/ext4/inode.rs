@@ -28,16 +28,19 @@ unsafe impl Sync for Ext4Inode {}
 
 impl Ext4Inode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
-    pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<Self> {
-        info!("path = {} ssssss", path);
+    pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<dyn InodeTrait> {
+        info!("[Ext4Inode::new] path = {} ssssss", path);
+        if INODE_CACHE.has_inode(path) {
+            return INODE_CACHE.get(path).clone().unwrap();
+        }
         let file_type = as_inode_type(types.clone());
         let ext4file = new_shared(Ext4File::new(path, types.clone()));
         let mut file_size = 0u64;
         if types != InodeTypes::EXT4_DE_DIR {
-            info!("path = {}, types = {}", path, true);
+            info!("[Ext4Inode::new] path = {}, types = {:?}", path, types);
             ext4file.lock().file_open(path, O_RDONLY);
             file_size = ext4file.lock().file_size();
-            info!("path = {}, size = {} aaaaaaaaaaa",path, file_size);
+            info!("[Ext4Inode::new] path = {}, size = {} aaaaaaaaaaa",path, file_size);
             ext4file.lock().file_close();
         }
 
@@ -93,7 +96,7 @@ impl InodeTrait for Ext4Inode {
         // 这里文件创建的标识 O_RDWR | O_CREAT | O_TRUNC 和原来的fs/mod.rs::open函数中保持一致
         match types.clone() {
             InodeTypes::EXT4_DE_DIR => {
-                info!("[do_create] type is dir");
+                info!("[do_create] type is dir {}", path);
                 let mut file = Ext4File::new(path, types.clone());
                 if let Ok(_) = file.dir_mk(path) {
                     info!("[do_create] succeed {}", path);
@@ -103,7 +106,7 @@ impl InodeTrait for Ext4Inode {
                 file.file_close();
             }
             InodeTypes::EXT4_DE_REG_FILE => {
-                info!("[do_create] type is reg file");
+                info!("[do_create] type is reg file {}", path);
                 let mut file = Ext4File::new(path, types.clone());
                 if let Ok(_) = file.file_open(path, O_CREAT | O_TRUNC | O_RDWR) {
                     info!("[do_create] succeed {}", path);
@@ -182,6 +185,7 @@ impl InodeTrait for Ext4Inode {
         if self.get_size() < offset + write_size {
             self.set_size(offset + write_size);
         }
+        self.sync();
         write_size
     }
 
