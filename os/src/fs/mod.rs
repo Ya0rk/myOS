@@ -13,7 +13,9 @@ pub mod ext4;
 // pub mod tmp;
 pub mod ffi;
 
-use ext4::Ext4Inode;
+use core::error;
+
+use ext4::{file, Ext4Inode};
 pub use ext4::{root_inode,ls};
 pub use ffi::*;
 use lwext4_rust::bindings::{self, O_CREAT, O_RDWR, O_TRUNC};
@@ -72,6 +74,8 @@ impl FileClass {
 // os\src\fs\mod.rs
 
 pub fn init() {
+    // 应当初始化Dentry
+    Dentry::init();
     create_init_files();
 }
 
@@ -134,6 +138,10 @@ pub fn create_init_files() -> SysResult {
 
     //创建/etc文件夹
     mkdir("/etc", 0);
+    if let Some(FileClass::File(file)) = open_file("/etc/passwd", OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
+        let buf = [0; 10];
+        file.write(&buf);
+    };
     //创建/etc/adjtime记录时间偏差
     if let Some(FileClass::File(adjtimefile)) =
         open("/etc", "adjtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
@@ -163,33 +171,59 @@ pub fn create_init_files() -> SysResult {
 }
 
 /// 创建一个打开的文件
+/// 
+/// target_abs_path: 应当为绝对路径
+/// 
+/// parent_path: 应当为绝对路径
 fn create_open_file(
     target_abs_path: &str,
     parent_path: &str,
     flags: OpenFlags,
 ) -> Option<FileClass> {
-    // println!(
-    //     "[create_file],flags={:?},abs_path={},parent_path={}",
-    //     flags, target_abs_path, parent_path
-    // );
+    info!(
+        "[create_file] flags={:?}, abs_path={}, parent_path={}",
+        flags, target_abs_path, parent_path
+    );
 
-    // 一定能找到,因为除了RootInode外都有父结点
-    let parent_dir = match INODE_CACHE.get(parent_path) {
-        Some(inode) => inode,
-        None => Ext4Inode::new(parent_path, InodeTypes::EXT4_DE_DIR, None),
+    // 逻辑为获得一个Option<Arc InodeTrait>如果返回None直接返回None,因为代表父母节点都没有
+    // 如果父母节点存在, 那么当父母节点是Dir的时候获得inode,如果父母节点不是Dir页直接返回None
+    let parent_dir = {
+        if let Some(inode) = Dentry::get_inode_from_path(&(parent_path.into())) {
+            if inode.node_type() == InodeType::Dir {
+                inode
+            } else {
+                info!("[create_file] failed inode type is {:?}", inode.node_type());
+                return None;
+            }
+        } else {
+            return None;
+        }
     };
-
-    // 再看看能不能找到target，如果找到就返回
-    let target_inode = match INODE_CACHE.get(target_abs_path) {
-        Some(inode) => {
-            info!("this inode in cache, path = {}", target_abs_path);
+    info!("[create_file] got parent inode");
+    // 通过Dentry直接返回target_inode,如果节点存在就直接返回
+    // 如果节点不存在就检查创建的标志位,
+    // 如果需要创建就创建一个,使用InodeTrait::do_create方法
+    // 如果不需要创建就直接返回None
+    let target_inode =  {
+        if let Some(inode) = Dentry::get_inode_from_path(&(target_abs_path.into())) {
             inode
-        },
-        None => {
-            info!("this inode not in cache, path = {}", target_abs_path);
-            parent_dir.do_create(target_abs_path, flags.node_type()).expect("[create_open_file] don't get inode")
-        },
+        } else {
+            if flags.contains(OpenFlags::O_CREAT) {
+                // need to create
+                if let Some(inode) = parent_dir.do_create(target_abs_path, flags.node_type()) {
+                    inode
+                } else {
+                    debug!("[create_open_file] create inode failed");
+                    return None;
+                }
+            } else {
+                // no need to create
+                return None;
+            }
+            
+        }
     };
+    info!("[create_file] got target inode");
 
     let res = {
         let osinode = NormalFile::new(
@@ -204,12 +238,13 @@ fn create_open_file(
     Some(res)
 }
 
+
 pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
     open(&"/", path, flags)
 }
 
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
-    info!("[fs_open] start, cwd = {}, path = {}", cwd, path);
+    info!("[fs_open] cwd = {}, path = {}", cwd, path);
     let abs_path = Path::string2path(
         join_path_2_absolute(
             cwd.to_string(), 
@@ -217,6 +252,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     ));
     // info!("[open] abspath = {}", abs_path.get());
 
+    // 临时保存这个机制,后期应当使用设备文件系统去代替
     if find_device(&abs_path.get()) {
         if let Some(device) = open_device_file(&abs_path.get()) {
             return Some(FileClass::Abs(device));
@@ -224,58 +260,8 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
         return None;
     }
     
-    let create_inode_type = match flags.contains(OpenFlags::O_DIRECTORY) {
-        true  => InodeTypes::EXT4_DE_DIR,
-        false => InodeTypes::EXT4_DE_REG_FILE,
-    };
-
-    match flags.contains(OpenFlags::O_CREAT) {
-        true => {
-            let root = root_inode();
-            let mut bind = root.file.lock();
-            match bind.check_inode_exist(&abs_path.get(), create_inode_type.clone()) {
-                true  => {
-                    info!("path = {} is exitbbbbbbbbb", abs_path.get());
-                    let parent_abs = abs_path.get_parent_abs();
-                    return create_open_file(&abs_path.get(), &parent_abs, flags);
-                },
-                false => {
-                    info!("path = {} no exitsssssssssss", abs_path.get());
-                    // 说明在lwext4中还找不到这个inode
-                    // 那么父母一定是存在,父母不存在返回错误
-                    let parent_abs = abs_path.get_parent_abs();
-                    let mut file = Ext4File::new(&abs_path.get(), create_inode_type.clone());
-                    file.file_open(&abs_path.get(), O_RDWR | O_CREAT | O_TRUNC); // 为他创建lwext4的ext4inode
-                    file.file_close();
-                    
-                    drop(bind);
-
-                    // 这里只是检查作用，后面可以删掉
-                    let res = root_inode().file.lock().check_inode_exist(&abs_path.get(), create_inode_type.clone());
-                    info!("now path = {}, exits = {}", abs_path.get(), res);
-
-                    return create_open_file(&abs_path.get(), &parent_abs, flags);
-                }
-            }
-        },
-        false => {
-            // 不用创建的话，说明文件存在，直接打开即可
-            // 不存在lwext4中(代表unlink将其删掉了)同时又没有create flag，代表打开的文件不存在，直接返回none
-            info!("open asdfasdf");
-            if !root_inode()
-                .file
-                .lock()
-                .check_inode_exist(&abs_path.get(), create_inode_type) {
-                    return None;
-            }
-
-            info!("fasdkfjla;sdjf");
-            let parent_abs = abs_path.get_parent_abs();
-            return create_open_file(&abs_path.get(), &parent_abs, flags);
-        },
-    }
-
-    None
+    create_open_file(&abs_path.get(), &abs_path.get_parent_abs(), flags)
+    
 }
 
 /// 创建一个新的文件夹
@@ -284,45 +270,44 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
 /// - mode: 创建模式
 pub fn mkdir(target_abs_path: &str, mode: usize) -> SysResult<()> {
     info!("[mkdir] new dir abs_path is {}", target_abs_path);
+
+    let abs_path = Path::string2path(target_abs_path.into());
+
     // 查看当前路径是否是设备
     if find_device(target_abs_path) {
         return Err(Errno::EEXIST);
     }
 
-    // 查看当前路径是否已经存在
-    if INODE_CACHE.has_inode(target_abs_path) {
-        return Err(Errno::EEXIST);
-    }
-
-    // 搜索上级文件夹
-    // 获得上级文件夹文件路径
-    let parent_abs = Path::string2path(target_abs_path.to_string()).get_parent_abs();
-    // 获取上级文件夹的inode，等到创建inode的时候需要，如果上级文件夹的inode不存在就报错
-    let parent_inode = if INODE_CACHE.has_inode(&parent_abs) {
-        INODE_CACHE.get(&parent_abs).unwrap() // Get the parent inode if it exists
-    } else {
-        return Err(Errno::EEXIST);
-    };
-    // 查看当前上级文件夹下是否有该文件夹，如果有该文件夹就返回错误
-    if parent_inode.walk(target_abs_path) {
-        return Err(Errno::EEXIST);
-    }
-    // 利用parent_inode在根据绝对路径去创造新文件
-    let mut parent_file = Ext4File::new(&parent_abs, InodeTypes::EXT4_DE_DIR);
-    parent_file.dir_mk(target_abs_path);
     
     info!(
         "[mkdir] path {}, mode {}",
         target_abs_path, mode
     );
+
+    // 首先探测有没有这个文件,如果有就报错
+    // 否则使用 OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT 去创建
+    // 最后返回OK就可以
+    if let Some(_) = Dentry::get_inode_from_path(&abs_path.get()) {
+        return Err(Errno::EEXIST);
+    } else {
+        create_open_file(&abs_path.get(), &abs_path.get_parent_abs(), OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT);
+    }
+
     Ok(())
 
 }
 
 pub fn chdir(target: &str) -> bool {
     info!("[chdir] target = {}", target);
-    let bind = root_inode();
-    let mut root = bind.file.lock();
+    // let bind = root_inode();
+    // let mut root = bind.file.lock();
 
-    root.check_inode_exist(target, InodeTypes::EXT4_DE_DIR)
+    // root.check_inode_exist(target, InodeTypes::EXT4_DE_DIR)
+    let path: String = target.into();
+    if let Some(inode) = Dentry::get_inode_from_path(&path) {
+        if inode.node_type() == InodeType::Dir {
+            return true;
+        }
+    }
+    false
 }
