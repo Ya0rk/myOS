@@ -4,6 +4,7 @@ mod ffi;
 mod mm;
 mod io;
 mod net;
+mod sync;
 mod io_async;
 
 use fs::*;
@@ -12,6 +13,7 @@ use mm::{sys_brk, sys_mmap, sys_munmap};
 use process::*;
 use io::*;
 use net::*;
+use sync::*;
 use ffi::SysCode;
 pub use ffi::CloneFlags;
 pub use ffi::ShutHow;
@@ -23,6 +25,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_GET_ROBUST_LIST => sys_get_robust_list(args[0] as usize, args[1] as usize, args[2] as usize),
+        SysCode::SYSCALL_SET_ROBUST_LIST => sys_set_robust_list(args[0] as usize, args[1] as usize),
+        SysCode::SYSCALL_FUTEX => sys_futex(args[0] as u32, args[1] as i32, args[2] as u32, args[3] as u32, args[4] as u32, args[5] as u32).await,
         SysCode::SYSCALL_UTIMENSAT => sys_utimensat(args[0] as isize, args[1] as usize, args[2] as *const [TimeSpec; 2], args[3] as i32),
         SysCode::SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as usize),
         SysCode::SYSCALL_SYSLOG => sys_log(args[0] as i32, args[1] as usize, args[2] as usize),

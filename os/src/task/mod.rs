@@ -7,8 +7,10 @@ mod fd;
 mod sched;
 mod thread_group;
 pub mod aux;
+pub mod futex;
 pub mod executor;
 
+pub use futex::*;
 pub use fd::{FdTable, FdInfo, sock_map_fd};
 pub use pid::{KernelStack, Pid, PidAllocator};
 pub use task::{TaskControlBlock, TaskStatus};

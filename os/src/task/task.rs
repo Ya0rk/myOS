@@ -5,7 +5,7 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, FdInfo, FdTable, ThreadGroup};
+use super::{add_proc_group_member, FdInfo, FdTable, RobustList, ThreadGroup};
 use super::{pid_alloc, KernelStack, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
@@ -38,11 +38,12 @@ pub struct TaskControlBlock {
     task_status:    SpinNoIrqLock<TaskStatus>,
 
     thread_group:   Shared<ThreadGroup>,
-    memory_space:   Shared<MemorySpace>,
+    pub memory_space:   Shared<MemorySpace>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
     pub children:   Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
     pub fd_table:   Shared<FdTable>,
     current_path:   Shared<String>,
+    pub robust_list: Shared<RobustList>,
 
     // signal
     pub pending:        AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
@@ -94,6 +95,7 @@ impl TaskControlBlock {
             children: new_shared(BTreeMap::new()),
             fd_table: new_shared(FdTable::new()),
             current_path: new_shared(String::from("/")), // root directory
+            robust_list: new_shared(RobustList::new()),
 
             pending: AtomicBool::new(false),
             ucontext: AtomicUsize::new(0),
@@ -176,6 +178,7 @@ impl TaskControlBlock {
         let waker = SyncUnsafeCell::new(None);
         let parent = new_shared(Some(Arc::downgrade(self)));
         let current_path = self.current_path.clone();
+        let robust_list = new_shared(RobustList::new());
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
@@ -209,6 +212,7 @@ impl TaskControlBlock {
             children,
             fd_table,
             current_path,
+            robust_list,
 
             pending,
             ucontext,
@@ -250,6 +254,7 @@ impl TaskControlBlock {
         let parent = self.parent.clone();
         let children = self.children.clone();
         let current_path = self.current_path.clone();
+        let robust_list = new_shared(RobustList::new());
         let waker = SyncUnsafeCell::new(None);
         let trap_cx = SyncUnsafeCell::new(*self.get_trap_cx());
         let time_data = SyncUnsafeCell::new(TimeData::new());
@@ -282,6 +287,7 @@ impl TaskControlBlock {
             blocked,
             handler: sig,
             sig_stack,
+            robust_list,
 
             task_status,
             thread_group,

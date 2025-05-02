@@ -83,6 +83,9 @@ pub enum SysCode {
     SYSCALL_EXIT      = 93,
     SYSCALL_EXIT_GROUP= 94,
     SYSCALL_SET_TID_ADDRESS = 96,
+    SYSCALL_FUTEX     = 98,
+    SYSCALL_SET_ROBUST_LIST = 99,
+    SYSCALL_GET_ROBUST_LIST = 100,
     SYSCALL_NANOSLEEP = 101,
     SYSCALL_CLOCK_SETTIME = 112,
     SYSCALL_CLOCK_GETTIME = 113,
@@ -139,6 +142,9 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_GET_ROBUST_LIST => "get_robust_list",
+            Self::SYSCALL_SET_ROBUST_LIST => "set_robust_list",
+            Self::SYSCALL_FUTEX => "futex",
             Self::SYSCALL_UTIMENSAT => "utimensat",
             Self::SYSCALL_KILL => "kill",
             Self::SYSCALL_SYSLOG => "syslog",

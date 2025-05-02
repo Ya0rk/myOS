@@ -16,7 +16,7 @@ use riscv::register::{scause::{self, Exception, Interrupt, Trap}, stval, sepc};
 pub fn kernel_trap_handler() {
     use log::info;
 
-    use crate::task::get_current_cpu;
+    use crate::{sync::TIMER_QUEUE, task::get_current_cpu};
     let scause = scause::read();
     let stval = stval::read();
     let sepc = sepc::read();
@@ -24,6 +24,7 @@ pub fn kernel_trap_handler() {
     match cause {
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
             info!("[kernel_trap_handler] kernel timer interrupt");
+            TIMER_QUEUE.handle_expired();
             get_current_cpu().timer_irq_inc();
             set_next_trigger();
         },

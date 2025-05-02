@@ -1,7 +1,10 @@
 use core::{future::Future, pin::Pin, task::{Context, Poll}, time::Duration};
 
 use alloc::{collections::binary_heap::BinaryHeap, vec::Vec};
+use log::info;
 use spin::Lazy;
+use crate::utils::Errno;
+
 use super::{timer::{time_duration, Timer}, SpinNoIrqLock};
 
 // TODO(YJJ):使用时间轮和最小堆混合时间管理器来优化时间复杂度===========
@@ -66,7 +69,7 @@ impl<F: Future> TimeoutFuture<F> {
 }
 
 impl<F: Future> Future for TimeoutFuture<F> {
-    type Output = Result<F::Output, ()>;
+    type Output = Result<F::Output, Errno>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // 先检查内部Future是否完成
@@ -79,7 +82,8 @@ impl<F: Future> Future for TimeoutFuture<F> {
         // 检查是否已经超时
         let current = time_duration();
         if current >= this.deadline {
-            return Poll::Ready(Err(()));
+            info!("[TimeoutFuture] time use out");
+            return Poll::Ready(Err(Errno::ETIMEDOUT));
         }
 
         // 注册定时器（仅一次）
