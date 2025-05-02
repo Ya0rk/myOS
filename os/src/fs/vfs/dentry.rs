@@ -1,4 +1,4 @@
-use alloc::{string::String, vec::Vec};
+use alloc::{string::String, vec::{self, Vec}};
 use bitflags::parser::ParseError;
 use hashbrown::HashSet;
 use log::info;
@@ -7,7 +7,7 @@ use riscv::interrupt::Mutex;
 use sbi_rt::{NonRetentive, SharedPtr};
 use spin::{rwlock::RwLock};
 use core::hash::{Hash, Hasher};
-use crate::fs::{ffi::InodeType, mkdir, path, root_inode, Path, INODE_CACHE};
+use crate::{fs::{ffi::InodeType, mkdir, open_file, path, root_inode, FileTrait, OpenFlags, Path, INODE_CACHE}, utils::SysResult};
 use alloc::sync::{Arc, Weak};
 use super::{inode, InodeTrait, SuperBlockTrait};
 
@@ -42,7 +42,10 @@ impl Hash for Dentry {
 impl Dentry {
     /// 初始化dentry系统,将更节点和ext4文件系统绑定
     pub fn init() {
+        info!("[dentry init]");
         Self::bind(&DENTRY_ROOT, crate::fs::ext4::SUPER_BLOCK.root_inode());
+        info!("list root dir");
+        {DENTRY_ROOT.children.read().iter().for_each(|x| println!("{}", x.name.read()));};
     }
     /// 创建一个根节点dentry
     fn new_root() -> Arc<Self>{
@@ -61,7 +64,7 @@ impl Dentry {
         self: &Arc<Self>,
         name: &String,
     ) -> Arc<Self> {
-        info!("create bare {}", name);
+        // info!("create bare {}", name);
         let mut inode = Vec::new();
         let res = Self {
             name: RwLock::new(String::from(name)),
@@ -81,7 +84,7 @@ impl Dentry {
     }
 
     fn get_child(self: Arc<Self>, pattern: &String) -> Option<Arc<Self>> {
-        info!("visit {}", pattern);
+        // info!("visit {}", pattern);
         if pattern.ends_with("/") || pattern.ends_with(".") || pattern.as_str() == "" {
             // info!("return name is {}", self.name.read());
             return Some(self.clone());
@@ -101,6 +104,8 @@ impl Dentry {
                 }
             }
         }
+        // 注意到这里其实是一个临时的机制,因为一个子文件可能并不属于这个文件系统,而是外部挂载而来
+        // 应当改进flush_binding、mount、unmount的逻辑,实现粒度更小的操作
         self.flush_binding();
         {    
             let children = self.children.read();
@@ -230,6 +235,9 @@ impl Dentry {
     }
 
     pub fn get_inode_from_path(path: &String) -> Option<Arc<dyn InodeTrait>> {
+        if INODE_CACHE.has_inode(path) {
+            return INODE_CACHE.get(path)
+        }
         info!("[get_inode_from_path] {}", path);
         if !path.starts_with('/') {
             panic!("path should start with /");
@@ -259,6 +267,9 @@ impl Dentry {
             }
         }
         info!("[get_inode_from_path] successful {}", path);
+        if let Some(inode) = dentry_now.get_inode() {
+            INODE_CACHE.insert(path, inode);
+        };
         dentry_now.get_inode()
     }
     pub fn get_dentry_from_path(path: &String) -> Option<Arc<Self>> {
@@ -310,7 +321,7 @@ macro_rules! test_inode {
 }
 
 
-pub fn dentry_test() {
+pub async fn dentry_test() {
     info!("stat root inode");
     info!("root inode stat is {:?}", root_inode().fstat());
     info!("start dentry test");
@@ -353,11 +364,45 @@ pub fn dentry_test() {
         test_inode!("/musl/busybox");
         test_inode!("/././././././././././././././././no_exist");
         test_inode!("/musl/busybox_testcode.sh");
+        test_inode!("/musl");
     info!("-------------finished confuse get_inode test-------------");
     info!("-------------start dentry mkdir test-------------");
         mkdir("/musl/basic/mnt/test_mkdir", 0);
         test_inode!("/musl/basic/mnt/test_mkdir");
     info!("-------------finished dentry mkdir test------------");
+    
+    info!("-------------start dentry write and read test");
+        if let Some(file) = open_file("/musl/basic/mnt/test_mkdir/file_a", OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
+            let mut file = file.file().unwrap();
+            let buf = alloc::vec![1, 20];
+            match file.write(&buf).await {
+                Ok(_) => {
+                    println!("[dentry] succeed write \n {:?}", buf);
+                }
+                Err(_) => {
+                    println!("[dentry] failed write");
+                }
+            };
+            file.get_inode().sync();
+        } else {
+            info!("[dentry] open failed");
+        };
+        if let Some(file) = open_file("/musl/basic/mnt/test_mkdir/file_a", OpenFlags::O_RDWR) {
+            let mut file = file.file().unwrap();
+            let mut buf = alloc::vec![0, 20];
+            match file.read(&mut buf).await {
+                Ok(_) => {
+                    println!("[dentry] read from /musl/basic/mnt/test_mkdir/file_a \n {:?}", buf);
+                }
+                Err(_) => {
+                    println!("[dentry] failed read");
+                }
+            } 
+        } else {
+            info!("[dentry] open failed");
+        };
+    info!("-------------finished dentry write and read test");
+    
     // info!("start get_inode test");
     // {DENTRY_ROOT.children.read().iter().for_each(|x| {
     //     let mut dentry = x;
