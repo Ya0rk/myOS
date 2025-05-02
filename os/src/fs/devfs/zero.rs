@@ -1,6 +1,6 @@
 use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
 use log::info;
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -50,16 +50,9 @@ impl FileTrait for DevZero {
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    // fn poll(&self, events: PollEvents) -> PollEvents {
-    //     let mut revents = PollEvents::empty();
-    //     if events.contains(PollEvents::IN) {
-    //         revents |= PollEvents::IN;
-    //     }
-    //     if events.contains(PollEvents::OUT) {
-    //         revents |= PollEvents::OUT;
-    //     }
-    //     revents
-    // }
+    fn read_dentry(&self) -> Option<Vec<Dirent>>{
+        None
+    }
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
         todo!()
     }

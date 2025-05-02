@@ -12,7 +12,7 @@ const TESTCASES: &[&str] = &[
     // "time-test",
     // "test-splice.sh",
     "busybox_testcode.sh",
-    // "lua_testcode.sh",
+    "lua_testcode.sh",
     // "netperf_testcode.sh",
     // "libc-bench",
     // "libctest_testcode.sh",
@@ -33,13 +33,14 @@ pub fn conert_str2byte(input: &str) -> Vec<u8> {
 fn run_cmd(cmd: &str) {
     chdir(&conert_str2byte("musl"));
     if fork() == 0 {
+        let path = ["/musl/", cmd].concat();
         println!("aaaaaaaaaaaa");
         execve(
             "/musl/busybox\0",
             &[
-                "busybox\0",
+                "/musl/busybox\0",
                 "sh\0",
-                "/musl/busybox_testcode.sh\0",
+                &path,
             ],
             &[
                 "PATH=/\0",
@@ -48,14 +49,11 @@ fn run_cmd(cmd: &str) {
             ],
         );
     } else {
-        loop {
-            println!("hhhhhhhahahah");
-            let mut exit_code: i32 = 0;
-            let tid = wait(&mut exit_code);
-            if tid == -1 {
-                yield_();
-                continue;
-            }
+        println!("hhhhhhhahahah");
+        let mut exit_code: i32 = 0;
+        let tid = wait(&mut exit_code);
+        if tid == -1 {
+            yield_();
         }
     }
 }

@@ -36,14 +36,6 @@ impl SuperBlockTrait for Ext4SuperBlock {
     }
     fn fs_stat(&self) -> Kstat {
         Kstat::new()
-        // let mut file = self.root.file.lock();
-        // match file.fstat() {
-        //     Ok(stat) => {
-        //         let (atime, mtime, ctime) = self.root.metadata.timestamp.lock().get();
-        //         as_inode_stat(stat, atime, mtime, ctime)
-        //     }
-        //     Err(_) => Kstat::new()
-        // }
     }
     fn sync(&self) {
         todo!()

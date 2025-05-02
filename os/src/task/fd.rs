@@ -19,9 +19,6 @@ pub struct FdInfo {
 
 impl FdInfo {
     pub fn new(fd: Arc<dyn FileTrait>, flags: OpenFlags) -> Self {
-        // if flags.contains(OpenFlags::O_CLOEXEC) {
-        //     info!("[Fdinfo] taskid = {}, new flags = {:?}", current_task().unwrap().get_pid(), flags);
-        // }
         FdInfo {
             file: Some(fd),
             flags,
@@ -48,7 +45,6 @@ impl FdInfo {
         if enable {
             self.flags.remove(OpenFlags::O_CLOEXEC);
         } else {
-            // info!("[set_close_on_exec] taskid = {}, will set cloexec", current_task().unwrap().get_pid());
             self.flags.insert(OpenFlags::O_CLOEXEC);
         }
         self
@@ -85,7 +81,6 @@ impl FdTable {
     pub fn close_on_exec(&mut self) {
         for (fd, info) in self.table.iter_mut().enumerate() {
             if let Some(file) = &info.file {
-                // if info.file.clone().unwrap().get_flags().contains(OpenFlags::O_CLOEXEC) {
                 if info.flags.contains(OpenFlags::O_CLOEXEC) {
                     info.clear();
                 }
@@ -99,12 +94,10 @@ impl FdTable {
         match self.find_slot(0) {
             Some(valid_fd) => {
                 self.put_in(info, valid_fd)?;
-                // info!("[alloc_fd] fdlen = {}, newfd = {}", self.table_len(), valid_fd);
                 return Ok(valid_fd);
             }
             None => {
                 // 在最后加入
-                // info!("don't find fd, now fdlen = {}", self.table_len());
                 let new_fd = self.table_len();
                 self.put_in(info, new_fd)?;
                 return Ok(new_fd);

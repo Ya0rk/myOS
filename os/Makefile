@@ -73,7 +73,7 @@ fdtdump:
 PHONY = fdtdump
 
 # build: env $(KERNEL_BIN) fs-img
-build: env $(KERNEL_BIN) initproc copy_to_fs
+build: env $(KERNEL_BIN) initproc 
 PHONY += build
 
 initproc:
@@ -90,9 +90,9 @@ PHONY += env
 $(KERNEL_BIN): kernel
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-copy_to_fs: 
-	cd ../$(FS) && sh create_img.sh 
-PHONY += copy_to_fs
+# copy_to_fs: 
+# 	cd ../$(FS) && sh create_img.sh 
+# PHONY += copy_to_fs
 
 $(APPS):
 

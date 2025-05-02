@@ -3,11 +3,11 @@ use super::TimeSpec;
 /// 这个结构用来记录文件（inode）创建、访问和修改的时间
 pub struct TimeStamp {
     /// 上次被访问的时间
-    atime: TimeSpec, 
+    pub atime: TimeSpec, 
     /// 上次被修改的时间
-    mtime: TimeSpec, 
+    pub mtime: TimeSpec, 
     /// 创建时间
-    ctime: TimeSpec, 
+    pub ctime: TimeSpec, 
 }
 
 impl TimeStamp {

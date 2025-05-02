@@ -1,6 +1,6 @@
 use core::{fmt::Display, time::Duration};
 use zerocopy::IntoBytes;
-use crate::{sync::timer::{get_time_ns, get_time_s, NSEC_PER_SEC}, task::current_task};
+use crate::{sync::timer::{get_time_ns, get_time_s, time_duration, NSEC_PER_SEC}, task::current_task};
 
 #[derive(Copy, Clone, IntoBytes)]
 #[repr(C)]

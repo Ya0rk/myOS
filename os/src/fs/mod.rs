@@ -89,6 +89,7 @@ pub fn list_apps() -> bool{
 pub fn create_init_files() -> SysResult {
     //创建/proc文件夹
     mkdir("/proc", 0);
+    let proc = Ext4Inode::new("/proc", InodeTypes::EXT4_DE_DIR, None);
     // 创建musl glibc文件夹
     // mkdir("/musl", 0);
     // let muslinode = Ext4Inode::new("/musl", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));

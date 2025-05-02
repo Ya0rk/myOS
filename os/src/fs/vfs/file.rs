@@ -155,7 +155,4 @@ pub trait FileTrait: Send + Sync {
     }
 }
 
-// pub trait Ioctl: File {
-//     /// ioctl处理
-//     fn ioctl(&self, cmd: usize, arg: usize) -> isize;
-// }
+
