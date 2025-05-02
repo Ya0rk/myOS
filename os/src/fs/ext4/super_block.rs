@@ -4,19 +4,19 @@ use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
 
 use crate::{
     drivers::Disk,
-    fs::{page_cache::PageCache, InodeTrait, Kstat, SuperBlockTrait},
+    fs::{page_cache::PageCache, Ext4Inode, Kstat, SuperBlockTrait},
 };
 
 use alloc::sync::Arc;
 
-use super::Ext4Inode;
+use super::InodeTrait;
 
 unsafe impl Send for Ext4SuperBlock {}
 unsafe impl Sync for Ext4SuperBlock {}
 
 pub struct Ext4SuperBlock {
     inner: Ext4BlockWrapper<Disk>,
-    root: Arc<Ext4Inode>,
+    root: Arc<dyn InodeTrait>,
 }
 
 impl Ext4SuperBlock {
@@ -31,7 +31,7 @@ impl Ext4SuperBlock {
 }
 
 impl SuperBlockTrait for Ext4SuperBlock {
-    fn root_inode(&self) -> Arc<Ext4Inode> {
+    fn root_inode(&self) -> Arc<dyn InodeTrait> {
         self.root.clone()
     }
     fn fs_stat(&self) -> Kstat {
