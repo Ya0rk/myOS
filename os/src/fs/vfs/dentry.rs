@@ -1,13 +1,13 @@
-use alloc::{string::String, vec::{self, Vec}};
+use alloc::{format, string::String, vec::{self, Vec}};
 use bitflags::parser::ParseError;
-use hashbrown::HashSet;
-use log::info;
+use hashbrown::{HashMap, HashSet};
+use log::{debug, error, info, warn};
 use lwext4_rust::bindings::printf;
-use riscv::interrupt::Mutex;
+use riscv::{interrupt::Mutex, register::fcsr::read};
 use sbi_rt::{NonRetentive, SharedPtr};
 use spin::{rwlock::RwLock};
 use core::hash::{Hash, Hasher};
-use crate::{fs::{ffi::InodeType, mkdir, open_file, path, root_inode, FileTrait, OpenFlags, Path, INODE_CACHE}, utils::SysResult};
+use crate::{fs::{ffi::InodeType, mkdir, open_file, path, root_inode, FileTrait, OpenFlags, Path}, utils::SysResult};
 use alloc::sync::{Arc, Weak};
 use super::{inode, InodeTrait, SuperBlockTrait};
 
@@ -15,11 +15,11 @@ use super::{inode, InodeTrait, SuperBlockTrait};
 /// 一个目录项,文件树在内存当中的映射
 pub struct Dentry {
     ///absolute path should be
-    pub name: RwLock<String>, 
+    name: RwLock<String>, 
     /// 父dentry的弱引用
-    pub parent: Weak<Dentry>,
+    parent: Weak<Dentry>,
     /// 孩子dentry的强引用
-    pub children: RwLock<HashSet<Arc<Dentry>>>,
+    children: RwLock<HashMap<String, Arc<Dentry>>>,
     /// 用栈去存储当前的挂载的inode对象
     inode: RwLock<Vec<Arc<dyn InodeTrait>>>,
 }
@@ -45,7 +45,7 @@ impl Dentry {
         info!("[dentry init]");
         Self::bind(&DENTRY_ROOT, crate::fs::ext4::SUPER_BLOCK.root_inode());
         info!("list root dir");
-        {DENTRY_ROOT.children.read().iter().for_each(|x| println!("{}", x.name.read()));};
+        {DENTRY_ROOT.children.read().iter().for_each(|x| println!("{}", x.0));};
     }
     /// 创建一个根节点dentry
     fn new_root() -> Arc<Self>{
@@ -54,7 +54,7 @@ impl Dentry {
             Dentry {
                 name: RwLock::new(String::from("/")),
                 parent: weak_self.clone(),
-                children: RwLock::new(HashSet::new()),
+                children: RwLock::new(HashMap::new()),
                 inode: RwLock::new(Vec::new()),
             }
         })
@@ -69,10 +69,30 @@ impl Dentry {
         let res = Self {
             name: RwLock::new(String::from(name)),
             parent: Arc::downgrade(self),
-            children: RwLock::new(HashSet::new()),
+            children: RwLock::new(HashMap::new()),
             inode: RwLock::new(inode),
         };
-        Arc::new(res)
+        let result = Arc::new(res);
+        // self.children.write().insert(name.clone(), result.clone());
+        result
+    }
+    /// 创建一个儿子节点
+    fn new(
+        self: &Arc<Self>,
+        name: &String,
+        inode: Arc<dyn InodeTrait>,    
+    ) -> Arc<Self> {
+        let mut inodes = Vec::new();
+        let res = Self {
+            name: RwLock::new(String::from(name)),
+            parent: Arc::downgrade(self),
+            children: RwLock::new(HashMap::new()),
+            inode: RwLock::new(inodes),
+        };
+        let res = Arc::new(res);
+        self.children.write().insert(name.clone(), res.clone());
+        res.bind(inode);
+        res
     }
 
     fn get_parent(self: Arc<Self>) -> Arc<Self> {
@@ -83,8 +103,9 @@ impl Dentry {
         dentry
     }
 
+    /// pattern为绝对路径
     fn get_child(self: Arc<Self>, pattern: &String) -> Option<Arc<Self>> {
-        // info!("visit {}", pattern);
+        info!("visit {}", pattern);
         if pattern.ends_with("/") || pattern.ends_with(".") || pattern.as_str() == "" {
             // info!("return name is {}", self.name.read());
             return Some(self.clone());
@@ -92,33 +113,82 @@ impl Dentry {
             // info!("return name is {}", self.name.read());
             return Some(self.clone().get_parent());
         }
+        let pattern = Path::string2path(pattern.clone());
+        let pattern_abs = pattern.get();
+        let pattern_filename = pattern.get_filename();
         {    
             let children = self.children.read();
-            for child in children.iter() {
-                let name = child.name.read();
-                let name = Path::string2path(name.clone());
-                let pattern = Path::string2path(pattern.clone());
-                if name.get_filename() == pattern.get_filename() {
-                    // info!("return name is {}", self.name.read());
-                    return Some(child.clone());
-                }
+            if let Some(dentry) = children.get(&pattern_abs) {
+                return Some(dentry.clone());
             }
         }
         // 注意到这里其实是一个临时的机制,因为一个子文件可能并不属于这个文件系统,而是外部挂载而来
         // 应当改进flush_binding、mount、unmount的逻辑,实现粒度更小的操作
-        self.flush_binding();
-        {    
-            let children = self.children.read();
-            for child in children.iter() {
-                let name = child.name.read();
-                let name = Path::string2path(name.clone());
-                let pattern = Path::string2path(pattern.clone());
-                if name.get_filename() == pattern.get_filename() {
-                    // info!("return name is {}", self.name.read());
-                    return Some(child.clone());
+        let dents = self.get_inode().unwrap().read_dents().unwrap();
+        let mut children_vec = self.children.write();
+        for dent in dents {
+            let name = Vec::from(dent.d_name);
+            match String::from_utf8(name) {
+                Ok(name) => {
+                    let real_name = name.replace("\0", "");
+                    info!("compare between {:?} and {:?}", real_name, pattern_filename);
+                    if real_name == pattern_filename {
+                        info!("hit {}", name);
+                        if name.ends_with("lost_found") {continue;}//临时添加
+                                let temp = if self.name.read().ends_with("/") {
+                                    alloc::format!("{}{}", self.name.read(), real_name)
+                                } else {
+                                    alloc::format!("{}/{}", self.name.read(), real_name)
+                                }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
+                                let temp = temp.replace('\0', "");//去除掉“\0”字符
+                                let son = Self::new_bare(&self, &temp);
+                                children_vec.insert(temp, son.clone());
+                                return Some(son);
+                    }
+                }
+                Err(e) => {
+                    info!("no valid name {:?}", e);
                 }
             }
         }
+        None
+    }
+
+    /// name为相对路径
+    /// 
+    /// 增加孩子, 只要父母是合法的, 那就一定会返回Dentry
+    /// 即当Inode不存在的时候就会创建Inode
+    pub fn add_child(self: Arc<Self>, name: &String, flag: OpenFlags) -> Option<Arc<dyn InodeTrait>> {
+        let self_name = self.name.read();
+        debug!("[Dentry::add_child] add {} in {}", name, self_name);
+        let target_name = if self_name.ends_with("/") {
+            format!("{}{}", self_name, name)
+        } else {
+            format!("{}/{}", self_name, name)
+        };
+        if let Some(parent_inode) = self.get_inode() {
+            if parent_inode.node_type() != InodeType::Dir {
+                warn!("[Dentry::add_child] {}: should add child in a dir", self.name.read());
+                return None;
+            } else {
+                if let Some(child_dentry) = self.clone().get_child(&target_name) {
+                    // 如果存在这个节点就直接返回获得的Inode
+                    return child_dentry.get_inode();
+                } else {
+                    //如果不存在就创建,使用Inode的do_create方法
+                    if let Some(inode) = parent_inode.do_create(&target_name, flag.node_type()) {
+                        // self.children.write().insert(target_name.clone(), self.new(&target_name, inode.clone()));
+                        // return Some(inode);
+                        self.new(&target_name, inode.clone());
+                        return Some(inode.clone());
+                    } else {
+                        // 创建不成功
+                        return None;
+                    }
+                }
+            }
+        }
+
         None
     }
 
@@ -133,7 +203,7 @@ impl Dentry {
         info!("finished bind");
     }
 
-    fn unbind(self: &Arc<Self>) {
+    pub fn unbind(self: &Arc<Self>) {
         {
             self.inode.write().pop();
         }
@@ -165,7 +235,7 @@ impl Dentry {
                                 }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
                                 let temp = temp.replace('\0', "");//去除掉“\0”字符
                                 let son = Self::new_bare(&self, &temp);
-                                children_vec.insert(son);
+                                children_vec.insert(temp, son);
                             }
                             Err(e) => {
                                 info!("no valid name {:?}", e);
@@ -188,9 +258,9 @@ impl Dentry {
     }
     /// 从一个dentry上获取inode
     fn get_inode(self: &Arc<Self>) -> Option<Arc<dyn InodeTrait>> {
-        // {
-        //     info!("exec get_inode {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
-        // }
+        {
+            info!("[get_inode] {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
+        }
         // 首先检查是否已有 inode（读锁）
         {
             let inode_guard = self.inode.read();
@@ -235,9 +305,9 @@ impl Dentry {
     }
 
     pub fn get_inode_from_path(path: &String) -> Option<Arc<dyn InodeTrait>> {
-        if INODE_CACHE.has_inode(path) {
-            return INODE_CACHE.get(path)
-        }
+        // if INODE_CACHE.has_inode(path) {
+        //     return INODE_CACHE.get(path)
+        // }
         info!("[get_inode_from_path] {}", path);
         if !path.starts_with('/') {
             panic!("path should start with /");
@@ -267,9 +337,9 @@ impl Dentry {
             }
         }
         info!("[get_inode_from_path] successful {}", path);
-        if let Some(inode) = dentry_now.get_inode() {
-            INODE_CACHE.insert(path, inode);
-        };
+        // if let Some(inode) = dentry_now.get_inode() {
+        //     INODE_CACHE.insert(path, inode);
+        // };
         dentry_now.get_inode()
     }
     pub fn get_dentry_from_path(path: &String) -> Option<Arc<Self>> {
@@ -327,7 +397,7 @@ pub async fn dentry_test() {
     info!("start dentry test");
     // Dentry::init();
     print!("list all children:   ");
-    {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.name.read()));println!("");}
+    {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.0));println!("");}
     // info!("start unmount");
     // Dentry::unbind(&DENTRY_ROOT);
     // print!("list all children:   ");
