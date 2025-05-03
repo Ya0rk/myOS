@@ -1,5 +1,5 @@
 use core::mem::size_of;
-use crate::config::INITPROC_PID;
+use crate::hal::config::INITPROC_PID;
 use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
