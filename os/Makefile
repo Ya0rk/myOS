@@ -10,13 +10,8 @@ APPS := ../user/src/bin/*
 # fs image
 FS = lwext4_rust
 
-# ifeq ($(MODE), release)
-# 	MODE_ARG := --release
-# endif
-# ifeq ($(MODE), debug)
-# 	MODE_ARG :=
-# endif
-FS_IMG := ../sdcard-rv.img
+
+FS_IMG := ../sdcard-rv-test.img
 # FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 2

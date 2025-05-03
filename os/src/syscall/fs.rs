@@ -961,7 +961,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
     } else {
         // 忽略dirfd
         // 参考Pantheon
-        let info = "/musl".to_string();
+        let info = "/glibc/".to_string();
         let buf = unsafe{ buf as *mut u8 };
         let len = core::cmp::min(info.len(), bufsiz);
         unsafe { 

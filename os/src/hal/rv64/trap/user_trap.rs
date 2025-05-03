@@ -1,6 +1,7 @@
 #![allow(unused_import_braces)]
 #![allow(unused)]
 use log::info;
+use crate::hal::arch::sstatus::FS;
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, yield_now};
 use crate::syscall::syscall;
@@ -128,6 +129,7 @@ pub fn user_trap_return() {
 
     let trap_cx= current_trap_cx();
     trap_cx.float_regs.trap_out_do_with_freg();
+    trap_cx.sstatus.set_fs(FS::Clean);
     
     get_current_cpu().timer_irq_reset();
     let task = current_task().unwrap();

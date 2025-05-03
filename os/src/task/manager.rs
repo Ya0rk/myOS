@@ -82,7 +82,7 @@ impl ProcessGroupManager {
 
     fn remove(&mut self, pgid: PGid, pid: Pid) {
         let target_group = self.0.get_mut(&pgid).unwrap();
-        target_group.remove(pid);
+        target_group.retain(|p| *p != pid);
     }
 
     /// 获取所有进程数量

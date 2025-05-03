@@ -197,7 +197,7 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     info!("cwd = {}", cwd);
     // info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
     if path.ends_with("busybox") {
-        path = "/musl/busybox".to_string();
+        path = [cwd.clone(), "busybox".to_string()].concat();
     }
     // for temp in &mut argv {
     //     if temp.ends_with("busybox") {
@@ -208,8 +208,8 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     //     }
     // }
     if path.ends_with(".sh") {
-        path = "/musl/busybox".to_string();
-        argv.insert(0, "/musl/busybox".to_string());
+        path = [cwd.clone(), "busybox".to_string()].concat();
+        argv.insert(0, path.clone());
         argv.insert(1, "sh".to_string());
     }
     // for temp in &mut argv {
