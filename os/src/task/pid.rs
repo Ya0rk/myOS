@@ -1,7 +1,8 @@
 use core::fmt;
 
 use crate::hal::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, INITPROC_PID};
-use crate::mm::page_table::{PTEFlags, KERNEL_PAGE_TABLE};
+use crate::mm::page_table::{ KERNEL_PAGE_TABLE};
+use crate::hal::mem::page_table::PTEFlags;
 use crate::mm::{VirtAddr};
 use alloc::collections::BTreeSet;
 use lazy_static::*;

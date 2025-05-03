@@ -28,6 +28,7 @@ mod board;
 
 #[macro_use]
 mod console;
+// TODO: 实际上src/config不能直接遗弃
 // mod config;
 mod lang_items;
 pub mod mm;

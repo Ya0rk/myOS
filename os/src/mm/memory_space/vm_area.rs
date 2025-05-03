@@ -6,8 +6,10 @@ use core::ops::{Range, RangeBounds};
 use crate::hal::arch::sfence_vma_vaddr;
 // use async_utils::block_on;
 use crate::hal::config::{align_down_by_page, PAGE_SIZE};
+use crate::hal::mem::page_table::{PTEFlags, PageTableEntry};
 // use memory::{pte::PTEFlags, VirtAddr, VirtPageNum};
-use crate::mm::page_table::{PTEFlags, PageTable};
+use crate::mm::page_table::{PageTable};
+// use PTEFlags
 use crate::mm::address::{VirtAddr, VirtPageNum};
 use crate::mm::page::Page;
 use crate::sync::block_on;

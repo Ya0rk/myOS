@@ -5,6 +5,7 @@ use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
 use super::address::{kaddr_p2v, kpn_v2p, KernelAddr};
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
+use crate::hal::mem::page_table::{PTEFlags, PageTableEntry};
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -17,68 +18,68 @@ use spin::Mutex;
 // use crate::utils::flags::{AccessFlags, AccessFlagsMut, UserAccessFlags};
 
 // TODO(COW标志位可以设置在这里)
-bitflags! {
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    pub struct PTEFlags: u16 {
-        const V = 1 << 0;
-        const R = 1 << 1;
-        const W = 1 << 2;
-        const X = 1 << 3;
-        const U = 1 << 4;
-        const G = 1 << 5;
-        const A = 1 << 6;
-        const D = 1 << 7;
-        const COW = 1 << 8;
-    }
-}
+// bitflags! {
+//     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+//     pub struct PTEFlags: u16 {
+//         const V = 1 << 0;
+//         const R = 1 << 1;
+//         const W = 1 << 2;
+//         const X = 1 << 3;
+//         const U = 1 << 4;
+//         const G = 1 << 5;
+//         const A = 1 << 6;
+//         const D = 1 << 7;
+//         const COW = 1 << 8;
+//     }
+// }
 
-#[derive(Copy, Clone)]
-#[repr(C)]
-/// page table entry structure
-pub struct PageTableEntry {
-    ///PTE
-    pub bits: usize,
-}
+// #[derive(Copy, Clone)]
+// #[repr(C)]
+// /// page table entry structure
+// pub struct PageTableEntry {
+//     ///PTE
+//     pub bits: usize,
+// }
 
-impl PageTableEntry {
-    ///Create a PTE from ppn
-    pub fn new(ppn: PhysPageNum, flags: PTEFlags) -> Self {
-        PageTableEntry {
-            bits: ppn.0 << 10 | flags.bits() as usize,
-        }
-    }
-    ///Return an empty PTE
-    pub fn empty() -> Self {
-        PageTableEntry { bits: 0 }
-    }
-    ///Return 44bit ppn
-    pub fn ppn(&self) -> PhysPageNum {
-        (self.bits >> 10 & ((1usize << 44) - 1)).into()
-    }
-    ///Return 10bit flag
-    pub fn flags(&self) -> PTEFlags {
-        PTEFlags::from_bits((self.bits & ((1 << 9) - 1)) as u16).unwrap()
-    }
-    ///Check PTE valid
-    pub fn is_valid(&self) -> bool {
-        self.flags().contains(PTEFlags::V)
-    }
-    ///Check PTE readable
-    pub fn readable(&self) -> bool {
-        self.flags().contains(PTEFlags::R)
-    }
-    ///Check PTE writable
-    pub fn writable(&self) -> bool {
-        self.flags().contains(PTEFlags::W)
-    }
-    ///Check PTE executable
-    pub fn executable(&self) -> bool {
-        self.flags().contains(PTEFlags::X)
-    }
-    pub fn set_flags(&mut self, flags: PTEFlags) {
-        self.bits = ((self.bits >> 10) << 10) | flags.bits() as usize;
-    }
-}
+// impl PageTableEntry {
+//     ///Create a PTE from ppn
+//     pub fn new(ppn: PhysPageNum, flags: PTEFlags) -> Self {
+//         PageTableEntry {
+//             bits: ppn.0 << 10 | flags.bits() as usize,
+//         }
+//     }
+//     ///Return an empty PTE
+//     pub fn empty() -> Self {
+//         PageTableEntry { bits: 0 }
+//     }
+//     ///Return 44bit ppn
+//     pub fn ppn(&self) -> PhysPageNum {
+//         (self.bits >> 10 & ((1usize << 44) - 1)).into()
+//     }
+//     ///Return 10bit flag
+//     pub fn flags(&self) -> PTEFlags {
+//         PTEFlags::from_bits((self.bits & ((1 << 9) - 1)) as u16).unwrap()
+//     }
+//     ///Check PTE valid
+//     pub fn is_valid(&self) -> bool {
+//         self.flags().contains(PTEFlags::V)
+//     }
+//     ///Check PTE readable
+//     pub fn readable(&self) -> bool {
+//         self.flags().contains(PTEFlags::R)
+//     }
+//     ///Check PTE writable
+//     pub fn writable(&self) -> bool {
+//         self.flags().contains(PTEFlags::W)
+//     }
+//     ///Check PTE executable
+//     pub fn executable(&self) -> bool {
+//         self.flags().contains(PTEFlags::X)
+//     }
+//     pub fn set_flags(&mut self, flags: PTEFlags) {
+//         self.bits = ((self.bits >> 10) << 10) | flags.bits() as usize;
+//     }
+// }
 
 // impl AccessFlags for PTEFlags {
 //     fn readable(&self) -> bool {
@@ -165,6 +166,7 @@ impl PageTable {
         let frame = frame_alloc().unwrap();
         let kernel_page_table = KERNEL_PAGE_TABLE.lock();
         let kernel_root_ppn = kernel_page_table.root_ppn;
+        // TODO: refine KERNEL_PGNUM_OFFSET to KERNEL_PGNUM_START
         // 第一级页表
         let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
         frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
@@ -176,10 +178,13 @@ impl PageTable {
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
         Self {
+            // TODO: to adapt la
             root_ppn: PhysPageNum::from(satp & ((1usize << 44) - 1)),
             frames: Vec::new(),
         }
     }
+
+    // TODO: to refactor: whether pte is created during fn call or not is undefined
     fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
@@ -199,6 +204,8 @@ impl PageTable {
         }
         result
     }
+
+    // TODO: to refactor
     pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
@@ -223,11 +230,13 @@ impl PageTable {
     pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
         debug_assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
+        // TODO: to avoid exposed flag bits
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
     pub fn map_force(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
         // assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
+        // TODO: to avoid exposed flag bits
         *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
     }
 
@@ -243,9 +252,11 @@ impl PageTable {
     }    
 
     pub fn map_kernel_huge_page(&mut self, base_pa: PhysAddr, flags: PTEFlags) {
+        // TODO: to avoid exposed flag bits
         assert!(flags.intersects(PTEFlags::R | PTEFlags::W | PTEFlags::X));
         let base_vpn: VirtPageNum = kaddr_p2v(base_pa).into();
         let pte = &mut self.root_ppn.get_pte_array()[base_vpn.indexes()[0]];
+        // TODO: to avoid exposed flag bits
         *pte = PageTableEntry::new(base_pa.into(), flags | PTEFlags::V);
     }
     pub fn unmap_kernel_range(&mut self, range_va: Range<VirtAddr>) {
@@ -279,6 +290,7 @@ impl PageTable {
     }
     /// 获取根页表 ppn
     pub fn token(&self) -> usize {
+        todo!("to adapt la");
         8usize << 60 | self.root_ppn.0
     }
     pub unsafe fn switch(&self) {
@@ -320,6 +332,7 @@ impl PageTable {
         //     None,
         // );
         // println!("aaa");
+        // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (stext as usize).into()..(etext as usize).into(),
             PTEFlags::R | PTEFlags::X,
@@ -334,7 +347,7 @@ impl PageTable {
         //     ),
         //     None,
         // );
-        
+        // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (srodata as usize).into()..(erodata as usize).into(),
             PTEFlags::R,
@@ -349,7 +362,7 @@ impl PageTable {
         //     ),
         //     None,
         // );
-        
+        // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (sdata as usize).into()..(edata as usize).into(),
             PTEFlags::R | PTEFlags::W,
@@ -364,7 +377,7 @@ impl PageTable {
         //     ),
         //     None,
         // );
-        
+        // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (sbss_with_stack as usize).into()..(ebss as usize).into(),
             PTEFlags::R | PTEFlags::W,
@@ -379,13 +392,17 @@ impl PageTable {
         //     ),
         //     None,
         // );
-        
+        // TODO: la: use direct mapping instead of page mapping
+        // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (ekernel as usize).into()..(MEMORY_END).into(),
             PTEFlags::R | PTEFlags::W,
         );
+        // ffff_ffc0_8020_0000
+        // ffff_ffc0_8800_0000
         println!("mapping devices");
         // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
+        // TODO: to adapt la
         kernel_page_table.map_kernel_huge_page(
             (0x0000_0000).into(),
             PTEFlags::R | PTEFlags::W
@@ -416,6 +433,9 @@ impl PageTable {
         kernel_page_table
     }
 }
+
+
+// TODO: all below is to be discarded
 
 pub fn switch_to_kernel_pgtable() {
     unsafe { KERNEL_PAGE_TABLE.lock().switch(); }

@@ -28,7 +28,8 @@ use crate::{
 };
 
 // use memory::{pte::PTEFlags, PageTable, PhysAddr, VirtAddr, VirtPageNum};
-use super::{page_table::{PTEFlags, PageTable}};
+use super::{page_table::{PageTable}};
+use crate::hal::mem::page_table::PTEFlags;
 use super::address::{VirtAddr, VirtPageNum, PhysAddr};
 use super::page::Page;
 use crate::utils::container::range_map::RangeMap;

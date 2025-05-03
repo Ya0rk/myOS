@@ -28,9 +28,9 @@ const MB: usize = 1024 * KB;
 // 如果是无栈协程就不会
 pub const USER_STACK_SIZE: usize = 64 * KB;
 pub const KERNEL_STACK_SIZE: usize = 64 * KB;
-pub const KERNEL_HEAP_SIZE: usize = 0x20_0000;
-pub const PAGE_SIZE: usize = 0x4000;
-pub const PAGE_SIZE_BITS: usize = 14;
+pub const KERNEL_HEAP_SIZE: usize = 0x200_0000;
+pub const PAGE_SIZE: usize = 0x1000;
+pub const PAGE_SIZE_BITS: usize = 12;
 
 
 pub const PAGE_MASK: usize = PAGE_SIZE - 1;
@@ -45,6 +45,14 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
 pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_ADDR_OFFSET >> PAGE_SIZE_BITS;
+
+pub const KERNEL_ADDR_START: usize = 0xffff_ffc0_0000_0000;
+pub const KERNEL_PGNUM_START: usize = KERNEL_ADDR_START >> PAGE_SIZE_BITS;
+
+
+// TODO: 使用正确的虚拟地址
+
+// TODO: What's this???
 pub const USER_SPACE_TOP: usize = 0x9000_0030_0000_0000;
 pub const USER_TRAP_CONTEXT: usize = USER_SPACE_TOP - PAGE_SIZE;
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
