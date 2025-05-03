@@ -377,7 +377,9 @@ impl Ext4File {
     /// 返回文件的大小（字节）
     pub fn file_size(&mut self) -> u64 {
         //注，记得先 O_RDONLY 打开文件
-        unsafe { ext4_fsize(&mut self.file_desc) }
+        let res = unsafe { ext4_fsize(&mut self.file_desc) };
+        debug!("file_size {:?}: {}", self.file_path, res);
+        res
     }
 
 

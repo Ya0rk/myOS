@@ -6,7 +6,7 @@ use lwext4_rust::{
 };
 use riscv::register::mstatus::set_fs;
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, Dirent, open, page_cache::PageCache, root_inode, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat, INODE_CACHE},
+    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, Dirent, open, page_cache::PageCache, root_inode, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat},
     sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
     utils::{Errno, SysResult}
 };
@@ -30,13 +30,17 @@ impl Ext4Inode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
     pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<dyn InodeTrait> {
         info!("[Ext4Inode::new] path = {} ssssss", path);
-        if INODE_CACHE.has_inode(path) {
-            return INODE_CACHE.get(path).clone().unwrap();
-        }
+        // if INODE_CACHE.has_inode(path) {
+        //     return INODE_CACHE.get(path).clone().unwrap();
+        // }
         let file_type = as_inode_type(types.clone());
         let ext4file = new_shared(Ext4File::new(path, types.clone()));
         let mut file_size = 0u64;
-        if types != InodeTypes::EXT4_DE_DIR {
+        if types == InodeTypes::EXT4_DE_DIR || types == InodeTypes::EXT4_INODE_MODE_DIRECTORY {
+            // file_size = ext4file.lock().file_size();
+            file_size = 4096;
+            info!("[Ext4Inode::new] path = {}, size = {} bbbbbbbbbbb",path, file_size);
+        } else {
             info!("[Ext4Inode::new] path = {}, types = {:?}", path, types);
             ext4file.lock().file_open(path, O_RDONLY);
             file_size = ext4file.lock().file_size();
@@ -53,7 +57,7 @@ impl Ext4Inode {
         if let Some(pg) = &inode.page_cache {
             pg.set_inode(inode.clone());
         }
-        INODE_CACHE.insert(path, inode.clone());
+        // INODE_CACHE.insert(path, inode.clone());
         inode
     }
 }
@@ -185,7 +189,7 @@ impl InodeTrait for Ext4Inode {
         if self.get_size() < offset + write_size {
             self.set_size(offset + write_size);
         }
-        self.sync();
+        // self.sync().await;
         write_size
     }
 
@@ -274,7 +278,7 @@ impl InodeTrait for Ext4Inode {
     fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
         // mayby bug? 这个用的parent cnt
         let mut lock_file = self.file.lock();
-        INODE_CACHE.remove(child_abs_path);
+        // INODE_CACHE.remove(child_abs_path);
         match lock_file.links_cnt().unwrap() {
             cnt if cnt <= 1 => {
                 lock_file.file_remove(child_abs_path);

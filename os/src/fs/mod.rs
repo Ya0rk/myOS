@@ -1,6 +1,6 @@
 mod devfs;
 mod dirent;
-mod inode_cache;
+// mod inode_cache;
 mod page_cache;
 mod mount;
 mod pipe;
@@ -23,7 +23,7 @@ use lwext4_rust::{Ext4File, InodeTypes};
 use page_cache::PageCache;
 pub use path::{Path, path_test, join_path_2_absolute};
 pub use dirent::Dirent;
-pub use inode_cache::*;
+// pub use inode_cache::*;
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
 use sbi_rt::NonRetentive;
@@ -200,6 +200,7 @@ fn create_open_file(
             return None;
         }
     };
+    let parent_dentry = Dentry::get_dentry_from_path(&(parent_path.into())).unwrap();
     info!("[create_file] got parent inode");
     // 通过Dentry直接返回target_inode,如果节点存在就直接返回
     // 如果节点不存在就检查创建的标志位,
@@ -211,12 +212,8 @@ fn create_open_file(
         } else {
             if flags.contains(OpenFlags::O_CREAT) {
                 // need to create
-                if let Some(inode) = parent_dir.do_create(target_abs_path, flags.node_type()) {
-                    inode
-                } else {
-                    debug!("[create_open_file] create inode failed");
-                    return None;
-                }
+                let path = Path::string2path(String::from(target_abs_path));
+                parent_dentry.add_child(&path.get_filename(), flags).unwrap()
             } else {
                 // no need to create
                 return None;

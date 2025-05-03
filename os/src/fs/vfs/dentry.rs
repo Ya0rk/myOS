@@ -105,7 +105,7 @@ impl Dentry {
 
     /// pattern为绝对路径
     fn get_child(self: Arc<Self>, pattern: &String) -> Option<Arc<Self>> {
-        info!("visit {}", pattern);
+        // info!("visit {}", pattern);
         if pattern.ends_with("/") || pattern.ends_with(".") || pattern.as_str() == "" {
             // info!("return name is {}", self.name.read());
             return Some(self.clone());
@@ -131,19 +131,19 @@ impl Dentry {
             match String::from_utf8(name) {
                 Ok(name) => {
                     let real_name = name.replace("\0", "");
-                    info!("compare between {:?} and {:?}", real_name, pattern_filename);
+                    debug!("compare between {:?} and {:?}", real_name, pattern_filename);
                     if real_name == pattern_filename {
-                        info!("hit {}", name);
+                        // info!("hit {}", name);
                         if name.ends_with("lost_found") {continue;}//临时添加
-                                let temp = if self.name.read().ends_with("/") {
-                                    alloc::format!("{}{}", self.name.read(), real_name)
-                                } else {
-                                    alloc::format!("{}/{}", self.name.read(), real_name)
-                                }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
-                                let temp = temp.replace('\0', "");//去除掉“\0”字符
-                                let son = Self::new_bare(&self, &temp);
-                                children_vec.insert(temp, son.clone());
-                                return Some(son);
+                        let temp = if self.name.read().ends_with("/") {
+                            alloc::format!("{}{}", self.name.read(), real_name)
+                        } else {
+                        alloc::format!("{}/{}", self.name.read(), real_name)
+                        }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
+                        let temp = temp.replace('\0', "");//去除掉“\0”字符
+                        let son = Self::new_bare(&self, &temp);
+                        children_vec.insert(temp, son.clone());
+                        return Some(son);
                     }
                 }
                 Err(e) => {
@@ -213,8 +213,8 @@ impl Dentry {
 
     /// 获取dentry的inode栈顶,根据这个栈顶去刷新dentry的children
     fn flush_binding(self: &Arc<Self>) {
-        let mut children_vec = self.children.write();
-        children_vec.clear();
+        {let mut children_vec = self.children.write();
+        children_vec.clear();}
         match self.inode.read().last() {
             None => {
                 return;
@@ -235,7 +235,8 @@ impl Dentry {
                                 }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
                                 let temp = temp.replace('\0', "");//去除掉“\0”字符
                                 let son = Self::new_bare(&self, &temp);
-                                children_vec.insert(temp, son);
+                                son.get_inode();
+                                self.children.write().insert(temp, son);
                             }
                             Err(e) => {
                                 info!("no valid name {:?}", e);
@@ -344,7 +345,7 @@ impl Dentry {
     }
     pub fn get_dentry_from_path(path: &String) -> Option<Arc<Self>> {
         if !path.starts_with('/') {
-            panic!("path should start with /");
+            panic!("path {} should start with /", path);
         }
         let mut dentry_now = DENTRY_ROOT.clone();
         if path == "/" {
@@ -402,7 +403,7 @@ pub async fn dentry_test() {
     // Dentry::unbind(&DENTRY_ROOT);
     // print!("list all children:   ");
     // {DENTRY_ROOT.children.read().iter().for_each(|x| print!("-{}-    ", x.name.read()));println!("");}
-    info!("-------------start baisc get_inode test-------------");
+    info!("-------------start baisc get_inode test-----------------------------------------");
     {
         info!("test 0");
         if let Some(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0")) {
@@ -423,8 +424,8 @@ pub async fn dentry_test() {
             info!("no such file or directory: /test_dir0/test_dir1/file_b");
         }
     }
-    info!("-------------finished baisc get_inode test-------------");
-    info!("-------------start confuse get_inode test-------------");
+    info!("-------------finished baisc get_inode test----------------------------------------");
+    info!("-------------start confuse get_inode test-----------------------------------------");
         // info!("test 3");
         // test_inode!("////test_dir0");
         // info!("test 4");
@@ -435,13 +436,13 @@ pub async fn dentry_test() {
         test_inode!("/././././././././././././././././no_exist");
         test_inode!("/musl/busybox_testcode.sh");
         test_inode!("/musl");
-    info!("-------------finished confuse get_inode test-------------");
-    info!("-------------start dentry mkdir test-------------");
+    info!("-------------finished confuse get_inode test----------------------------------");
+    info!("-------------start dentry mkdir test------------------------------------------");
         mkdir("/musl/basic/mnt/test_mkdir", 0);
         test_inode!("/musl/basic/mnt/test_mkdir");
-    info!("-------------finished dentry mkdir test------------");
+    info!("-------------finished dentry mkdir test---------------------------------------");
     
-    info!("-------------start dentry write and read test");
+    info!("-------------start dentry write and read test---------------------------------");
         if let Some(file) = open_file("/musl/basic/mnt/test_mkdir/file_a", OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
             let mut file = file.file().unwrap();
             let buf = alloc::vec![1, 20];

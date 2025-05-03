@@ -123,10 +123,11 @@ pub trait FileTrait: Send + Sync {
         unimplemented!("not support!");
     }
     fn set_flags(&self, flags: OpenFlags){
-        unimplemented!("not support!");
+        // unimplemented!("not support!");
     }
     fn get_flags(&self) -> OpenFlags {
-        unimplemented!("not support!");
+        // unimplemented!("not support!");
+        OpenFlags::O_RDWR
     }
     /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
     async fn pread(&self, mut buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize>{
