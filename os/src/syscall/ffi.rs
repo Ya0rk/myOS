@@ -1,5 +1,5 @@
 use core::fmt::{self, Display};
-use num_enum::FromPrimitive;
+use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
 use crate::sync::timer::get_time_s;
@@ -27,8 +27,8 @@ impl Utsname {
         Self {
             sysname: Self::copy_bytes("YooOs"),
             nodename: Self::copy_bytes("Ya0rk"),
-            release: Self::copy_bytes("1.1"),
-            version: Self::copy_bytes("1.1"),
+            release: Self::copy_bytes("6.1"),
+            version: Self::copy_bytes("6.1"),
             machine: Self::copy_bytes("riscv64"),
             domainname: Self::copy_bytes("Ya0rk"),
         }
@@ -76,6 +76,7 @@ pub enum SysCode {
     SYSCALL_SENDFILE  = 71,
     // SYSCALL_PSELECT   = 72, // todo in io.rs
     SYSCALL_PPOLL     = 73,
+    SYSCALL_READLINKAT= 78,
     SYSCALL_FSTATAT   = 79,
     SYSCALL_FSTAT     = 80,
     SYSCALL_SYNC      = 81,
@@ -127,6 +128,7 @@ pub enum SysCode {
     SYSCALL_MMAP      = 222,
     SYSCALL_ACCEPT4   = 242,
     SYSCALL_WAIT4     = 260,
+    SYSCALL_PRLIMIT64 = 261,
     GETRANDOM         = 278,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
@@ -142,6 +144,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_READLINKAT => "readlinkat",
+            Self::SYSCALL_PRLIMIT64 => "prlimit64",
             Self::SYSCALL_GET_ROBUST_LIST => "get_robust_list",
             Self::SYSCALL_SET_ROBUST_LIST => "set_robust_list",
             Self::SYSCALL_FUTEX => "futex",
@@ -544,4 +548,65 @@ impl From<i32> for SyslogCmd {
             _ => panic!("Invalid value for SyslogCmd"),
         }
     }
+}
+
+/// 资源限制结构体
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RLimit64 {
+    pub rlim_cur: usize, // 实际生效的限制，进程可以自由降低或者提高，但是不能超过硬限制
+    pub rlim_max: usize, // 硬限制，只有root用户可以修改
+}
+
+impl RLimit64 {
+    pub fn new_bare() -> Self {
+        Self {
+            rlim_cur: 0,
+            rlim_max: 0
+        }
+    }
+    pub fn new(rlim_cur: usize, rlim_max: usize) -> Self {
+        Self {
+            rlim_cur,
+            rlim_max
+        }
+    }
+}
+
+#[repr(i32)]
+#[derive(TryFromPrimitive, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RlimResource {
+    /// 最大 CPU 时间（秒），超时触发 `SIGXCPU`
+    Cpu = 0,
+    /// 最大文件大小（字节），超限触发 `SIGXFSZ`
+    Fsize = 1,
+    /// 数据段（堆/初始化数据）大小（字节）
+    Data = 2,
+    /// 进程栈的最大大小（字节）
+    Stack = 3,
+    /// 核心转储（core dump）文件大小（字节）
+    Core = 4,
+    /// 驻留集大小（Resident Set Size，已废弃或未严格实现）
+    Rss = 5,
+    /// 用户可创建的最大进程数
+    Nproc = 6,
+    /// 文件描述符（File Descriptor）数量上限
+    Nofile = 7,
+    /// 可锁定在内存中的地址空间大小（字节）
+    Memlock = 8,
+    /// 进程虚拟内存（地址空间）总大小（字节）
+    AddressSpace = 9,
+    /// 文件锁数量（Linux 2.4 后废弃）
+    Locks = 10,
+    /// 待处理（Pending）信号队列的最大信号数
+    Sigpending = 11,
+    /// POSIX 消息队列的最大字节数
+    Msgqueue = 12,
+    /// 进程 `nice` 值的可调整上限
+    Nice = 13,
+    /// 实时优先级（`sched_rt_priority`）的上限
+    Rtprio = 14,
+    /// 实时任务在不阻塞下的最大 CPU 时间（微秒）
+    Rttime = 15,
+    // 注：`RLIMIT_NLIMITS`（16）是总数，非实际资源类型
 }

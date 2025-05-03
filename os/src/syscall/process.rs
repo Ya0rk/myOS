@@ -1,12 +1,13 @@
 use core::mem::size_of;
-use crate::config::INITPROC_PID;
+use crate::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, UContext, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
 use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
-use crate::syscall::ffi::{CloneFlags, SyslogCmd, Utsname, WaitOptions, LOGINFO};
+use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
+use crate::syscall::RLimit64;
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, MANAGER
 };
@@ -16,6 +17,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use log::{debug, info};
 use lwext4_rust::bindings::true_;
+use num_enum::TryFromPrimitive;
 use zerocopy::IntoBytes;
 
 use super::ffi::Sysinfo;
@@ -700,3 +702,46 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
     Ok(0)
 }
 
+
+/// 设置或获取另一个进程的rlimit资源限制（如文件句柄数，内存等）
+/// pid: target process id, 如果pid为0，那么就使用当前进程
+/// resource: 指定的资源类型
+/// new_limit: 指向新的资源限制结构体；若为null，仅获取当前限制
+/// old_limit: 用于返回旧的资源限制结构体；若为null，不返回旧值
+pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usize) -> SysResult<usize> {
+    info!("[sys_prlimit64] start");
+    let task = match pid {
+        0 => current_task().unwrap(),
+        p if p > 0 => get_task_by_pid(p).ok_or(Errno::ESRCH)?,
+        _ => return Err(Errno::EINVAL),
+    };
+
+    let rs = RlimResource::try_from_primitive(resource).map_err(|_| Errno::EINVAL)?;
+    // 获取当前限制
+    if old_limit != 0 {
+        let old_ptr = unsafe{ old_limit as *mut RLimit64 };
+        let now_limit = match rs {
+            RlimResource::Nofile => task.fd_table.lock().rlimit,
+            RlimResource::Stack => RLimit64::new(USER_STACK_SIZE, USER_STACK_SIZE),
+            RlimResource::Data => RLimit64::new(KERNEL_HEAP_SIZE, KERNEL_HEAP_SIZE),
+            _ => RLimit64::new_bare(),
+        };
+        unsafe {
+            *old_ptr = now_limit;
+        }
+    }
+
+    // 修改当前限制
+    if new_limit != 0 {
+        let new_limit = unsafe{ *(new_limit as *const RLimit64) };
+        match rs {
+            RlimResource::Nofile => {
+                task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;
+                task.fd_table.lock().rlimit.rlim_max = new_limit.rlim_max;
+            }
+            _ => unimplemented!()
+        }
+    }
+
+    Ok(0)
+}

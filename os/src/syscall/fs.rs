@@ -1,7 +1,7 @@
 use core::cell::SyncUnsafeCell;
 use core::ops::Add;
 use alloc::boxed::Box;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::vec;
@@ -940,6 +940,34 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
     }
 
     inode.set_timestamps(new_time);
+
+    Ok(0)
+}
+
+/// read value of a symbolic link
+/// TODO(YJJ):有待完善link
+pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let pathname = translated_str(token, pathname as *const u8);
+    info!("[sys_readlinkat] start, pathname = {}.", pathname);
+
+    let pathname = Path::string2path(pathname);
+    if !pathname.is_absolute() {
+        if dirfd == AT_FDCWD {
+            let cwd = task.get_current_path();
+            todo!()
+        }
+    } else {
+        // 忽略dirfd
+        // 参考Pantheon
+        let info = "/musl".to_string();
+        let buf = unsafe{ buf as *mut u8 };
+        let len = core::cmp::min(info.len(), bufsiz);
+        unsafe { 
+            buf.copy_from(info.as_ptr(), len);
+        }
+    }
 
     Ok(0)
 }
