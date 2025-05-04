@@ -50,11 +50,12 @@ impl FileTrait for DevZero {
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    fn read_dentry(&self) -> Option<Vec<Dirent>>{
-        None
+    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
+        0
     }
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        todo!()
+        // todo!()
+        Ok(())
     }
     fn is_dir(&self) -> bool {
         todo!()

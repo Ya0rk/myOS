@@ -38,7 +38,7 @@ impl Ext4Inode {
         let mut file_size = 0u64;
         if types == InodeTypes::EXT4_DE_DIR || types == InodeTypes::EXT4_INODE_MODE_DIRECTORY {
             // file_size = ext4file.lock().file_size();
-            file_size = 4096;
+            file_size = 0;
             info!("[Ext4Inode::new] path = {}, size = {} bbbbbbbbbbb",path, file_size);
         } else {
             info!("[Ext4Inode::new] path = {}, types = {:?}", path, types);
@@ -230,7 +230,7 @@ impl InodeTrait for Ext4Inode {
     async fn read_all(&self) -> SysResult<Vec<u8>> {
         info!("[read_all] read all file, size = {}", self.get_size());
         let mut buf = vec![0; self.get_size()];
-        info!("got enough buf");
+        // info!("got enough buf");
         self.read_at(0, &mut buf).await;
         Ok(buf)
     }

@@ -113,7 +113,7 @@ pub trait FileTrait: Send + Sync {
     fn is_dir(&self) -> bool;
 
     fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
-        todo!()
+        unimplemented!("File Trait read_dents");
     }
 
     // TODO: 缓存未命中处理
@@ -138,9 +138,6 @@ pub trait FileTrait: Send + Sync {
         unimplemented!("not support!");
     }
     fn lseek(&self, _offset: isize, _whence: usize) -> SysResult<usize> {
-        unimplemented!("not support!");
-    }
-    fn read_dentry(&self) -> Option<Vec<Dirent>> {
         unimplemented!("not support!");
     }
 
