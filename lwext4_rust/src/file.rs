@@ -4,7 +4,7 @@
 //! 它为 Rust 接口与底层 EXT4 C 实现之间提供了桥接。
 
 use crate::bindings::*;
-use alloc::{ffi::CString, vec::Vec};
+use alloc::{ffi::CString, string::String, vec::Vec};
 
 /// 表示 EXT4 文件系统中的一个文件。
 ///
@@ -716,9 +716,9 @@ impl Ext4File {
             ext4_dir_open(&mut d, c_path);
             drop(CString::from_raw(c_path));
             let mut offset = 0;
-            let mut de = ext4_dir_entry_next(&mut d);
+            let mut de: *const ext4_direntry = ext4_dir_entry_next(&mut d);
             while !de.is_null() {
-                let dentry = &(*de);
+                let dentry: &ext4_direntry = &(*de);
                 // 创建 8 字节对齐的目录项
                 let mut name = [0u8; 256];
                 let name_len = dentry.name_length as usize;
@@ -726,7 +726,7 @@ impl Ext4File {
                 let mut len = name_len + 19;
                 let align = 8 - len % 8;
                 len += align;
-                offset += dentry.entry_length;
+                offset += len;
                 entries.push(OsDirent {
                     d_ino: dentry.inode as u64,
                     d_off: offset as i64,
@@ -734,6 +734,10 @@ impl Ext4File {
                     d_type: dentry.inode_type,
                     d_name: name,
                 });
+                // info!("[read_dir_from] \n\tname: {}\n\td_off: {}\n\tlen: {}", 
+                //     String::from_utf8(name.to_vec()).unwrap(),
+                //     offset,
+                //     dentry.entry_length);
                 de = ext4_dir_entry_next(&mut d);
             }
             ext4_dir_close(&mut d);
