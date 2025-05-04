@@ -72,7 +72,7 @@ impl InodeTrait for Ext4Inode {
             lock_file.file_open(path, O_RDONLY).expect("[ext4Inode new]: file open fail!");
             let size = lock_file.file_size() as usize;
             lock_file.file_close().expect("[ext4Inode new]: file close fail!");
-            // {info!("get size !");}
+            // {info!("get size !");} 
             size
         } else {
             lock_file.file_size() as usize

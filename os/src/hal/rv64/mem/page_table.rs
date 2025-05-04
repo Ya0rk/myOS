@@ -8,9 +8,11 @@
 // }
 
 
-use crate::mm::{PhysPageNum, VirtAddr, VirtPageNum, PhysAddr};
+use crate::mm::{PhysPageNum, VirtAddr, VirtPageNum, PhysAddr, PageTable};
 
 use crate::hal::config::{PPN_SHIFT, PPN_LEN, PA_LEN, KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
+
+
 
 bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -83,22 +85,164 @@ impl PageTableEntry {
     }
 }
 
-/// translate kernel virtual addr into physical addr
-pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {
-    (va.0 - KERNEL_ADDR_OFFSET).into()
+
+impl PageTable {
+    pub fn init_kernel_page_table() -> Self {
+        extern "C" {
+            fn stext();
+            fn etext();
+            fn srodata();
+            fn erodata();
+            fn sdata();
+            fn edata();
+            fn sbss_with_stack();
+            fn ebss();
+            fn ekernel();
+        }
+        let mut kernel_page_table = Self::new();
+        println!("kernel satp : {:#x}", kernel_page_table.token());
+        // map trampoline
+        // memory_set.map_trampoline();
+        // map kernel sections
+        println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
+        println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
+        println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
+        println!(
+            ".bss [{:#x}, {:#x})",
+            sbss_with_stack as usize, ebss as usize
+        );
+        println!("mapping .text section");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (stext as usize).into(),
+        //         (etext as usize).into(),
+        //         MapType::Direct,
+        //         MapPermission::R | MapPermission::X,
+        //     ),
+        //     None,
+        // );
+        // println!("aaa");
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (stext as usize).into()..(etext as usize).into(),
+            PTEFlags::R | PTEFlags::X,
+        );
+        println!("mapping .rodata section");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (srodata as usize).into(),
+        //         (erodata as usize).into(),
+        //         MapType::Direct,
+        //         MapPermission::R,
+        //     ),
+        //     None,
+        // );
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (srodata as usize).into()..(erodata as usize).into(),
+            PTEFlags::R,
+        );
+        println!("mapping .data section");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (sdata as usize).into(),
+        //         (edata as usize).into(),
+        //         MapType::Direct,
+        //         MapPermission::R | MapPermission::W,
+        //     ),
+        //     None,
+        // );
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (sdata as usize).into()..(edata as usize).into(),
+            PTEFlags::R | PTEFlags::W,
+        );
+        println!("mapping .bss section");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (sbss_with_stack as usize).into(),
+        //         (ebss as usize).into(),
+        //         MapType::Direct,
+        //         MapPermission::R | MapPermission::W,
+        //     ),
+        //     None,
+        // );
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (sbss_with_stack as usize).into()..(ebss as usize).into(),
+            PTEFlags::R | PTEFlags::W,
+        );
+        println!("mapping physical memory");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (ekernel as usize).into(),
+        //         MEMORY_END.into(),
+        //         MapType::Direct,
+        //         MapPermission::R | MapPermission::W,
+        //     ),
+        //     None,
+        // );
+        // TODO: la: use direct mapping instead of page mapping
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (ekernel as usize).into()..(MEMORY_END).into(),
+            PTEFlags::R | PTEFlags::W,
+        );
+        // ffff_ffc0_8020_0000
+        // ffff_ffc0_8800_0000
+        println!("mapping devices");
+        // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
+        // TODO: to adapt la
+        kernel_page_table.map_kernel_huge_page(
+            (0x0000_0000).into(),
+            PTEFlags::R | PTEFlags::W
+        );
+        kernel_page_table.map_kernel_huge_page(
+            (0x4000_0000).into(),
+            PTEFlags::R | PTEFlags::W
+        );
+        // for pair in MMIO {
+        //     memory_set.push(
+        //         MapArea::new(
+        //             ((*pair).0 + KERNEL_ADDR_OFFSET).into(),
+        //             ((*pair).0 + KERNEL_ADDR_OFFSET + (*pair).1).into(),
+        //             MapType::Direct,
+        //             MapPermission::R | MapPermission::W,
+        //         ),
+        //         None,
+        //     );
+        // }
+        // for pair in MMIO {
+        //     let base = (*pair).0 + KERNEL_ADDR_OFFSET;
+        //     kernel_page_table.map_kernel_range(
+        //         base.into()..(base + (*pair).1).into(),
+        //         PTEFlags::R | PTEFlags::W,
+        //     );
+        // }
+        println!("kernel memory set initialized");
+        kernel_page_table
+    }
 }
 
-/// translate kernel virtual page number into physical page number
-pub fn kpn_v2p(vpn: VirtPageNum) -> PhysPageNum {
-    (vpn.0 - KERNEL_PGNUM_OFFSET).into()
-}
 
-/// translate physical addr into kernel virtual addr
-pub fn kaddr_p2v(pa: PhysAddr) -> VirtAddr {
-    (pa.0 + KERNEL_ADDR_OFFSET).into()
-}
 
-/// translate physical page number into kernel virtual page number
-pub fn kpn_p2v(ppn: PhysPageNum) -> VirtPageNum {
-    (ppn.0 + KERNEL_PGNUM_OFFSET).into()
-}
+
+// /// translate kernel virtual addr into physical addr
+// pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {
+//     (va.0 - KERNEL_ADDR_OFFSET).into()
+// }
+
+// /// translate kernel virtual page number into physical page number
+// pub fn kpn_v2p(vpn: VirtPageNum) -> PhysPageNum {
+//     (vpn.0 - KERNEL_PGNUM_OFFSET).into()
+// }
+
+// /// translate physical addr into kernel virtual addr
+// pub fn kaddr_p2v(pa: PhysAddr) -> VirtAddr {
+//     (pa.0 + KERNEL_ADDR_OFFSET).into()
+// }
+
+// /// translate physical page number into kernel virtual page number
+// pub fn kpn_p2v(ppn: PhysPageNum) -> VirtPageNum {
+//     (ppn.0 + KERNEL_PGNUM_OFFSET).into()
+// }
