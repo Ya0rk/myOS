@@ -194,22 +194,22 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let cwd = task.get_current_path();
     info!("cwd = {}", cwd);
     // info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
-    if path.ends_with("busybox") {
-        path = "/musl/busybox".to_string();
-    }
-    // for temp in &mut argv {
-    //     if temp.ends_with("busybox") {
-    //         *temp = "/musl/busybox".to_string();
-    //     }
-    //     if temp.ends_with("./busybox_cmd.txt") {
-    //         *temp = "/musl/busybox_cmd.txt".to_string();
-    //     }
+    // if path.ends_with("busybox") {
+    //     path = "/musl/busybox".to_string();
     // }
-    if path.ends_with(".sh") {
-        path = "/musl/busybox".to_string();
-        argv.insert(0, "/musl/busybox".to_string());
-        argv.insert(1, "sh".to_string());
-    }
+    // // for temp in &mut argv {
+    // //     if temp.ends_with("busybox") {
+    // //         *temp = "/musl/busybox".to_string();
+    // //     }
+    // //     if temp.ends_with("./busybox_cmd.txt") {
+    // //         *temp = "/musl/busybox_cmd.txt".to_string();
+    // //     }
+    // // }
+    // if path.ends_with(".sh") {
+    //     path = "/musl/busybox".to_string();
+    //     argv.insert(0, "/musl/busybox".to_string());
+    //     argv.insert(1, "sh".to_string());
+    // }
     // for temp in &mut argv {
     //     if temp.ends_with("test.sh") {
     //         *temp = "tst.sh".to_string();
@@ -424,6 +424,21 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
         extract_proc_to_new_group(old_pgid, pgid, pid);
     }
     Ok(0)
+}
+
+pub fn sys_getpgid() -> SysResult<usize> {
+    info!("[sys_getpgid] start");
+    let target_task = current_task().unwrap();
+    // if pgid == 0{
+    //     let new_pgid = pid;
+    //     target_task.set_pgid(pid);
+    //     extract_proc_to_new_group(old_pgid, new_pgid, pid);
+    // } else {
+    //     target_task.set_pgid(pgid);
+    //     extract_proc_to_new_group(old_pgid, pgid, pid);
+    // }
+    let res = target_task.get_pgid();
+    Ok(res)
 }
 
 /// sigreturn() is a system call that is used to restore the state of a process after it has been interrupted by a signal.
