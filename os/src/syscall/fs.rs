@@ -1,4 +1,5 @@
 use core::cell::SyncUnsafeCell;
+use core::error;
 use core::ops::Add;
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -153,11 +154,11 @@ pub fn sys_fstatat(
     statbuf: *const u8, 
     flags: u32
 ) -> SysResult<usize> {
-    info!("[sys_fstatat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
     let cwd = task.get_current_path();
+    info!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
 
     // 计算目标路径
     let target_path = if path.starts_with("/") {
@@ -187,6 +188,7 @@ pub fn sys_fstatat(
     match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
         Some(FileClass::File(file)) => {
             file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             buffer.write(tempstat.as_bytes());
             return Ok(0);
         }
@@ -349,13 +351,15 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// 
 /// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
 pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
-    info!("[sys_getdents64] start");
+    info!("[sys_getdents64] start fd: {}, len: {}", fd, len);
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+        log::error!("[sys_getdents64] fd {} invalid", fd);
         return Err(Errno::EBADF);
     }
 
     if buf.is_null() {
+        log::error!("[sys_getdents64] buf is null");
         return Err(Errno::EFAULT);
     }
     // TODO: 有待修改
@@ -367,7 +371,6 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
     //     Some(dir_entrys) => dir_entrys,
     //     _ => return Err(Errno::EINVAL),
     // };
-
     // let mut res = 0;
     // let one_den_len = size_of::<Dirent>();
     // for den in dentrys {
@@ -378,6 +381,7 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
     //     res += one_den_len;
     // }
     let res = file.read_dents(buffer, len);
+    info!("[sys_getdents64] return = {}", res);
     Ok(res)
 }
 
@@ -698,17 +702,15 @@ pub fn sys_faccessat(
     mode: u32,
     _flags: u32,
 ) -> SysResult<usize> {
-    info!("[sys_faccessat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
-    let path = translated_str(token, pathname);
+    let mut path = translated_str(token, pathname);
+    info!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
-    let abs = if path.starts_with("/") {
-        // 绝对路径，忽略 dirfd
-        path
-    } else if dirfd == AT_FDCWD {
+    let abs = if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
         let current_path = current_task().unwrap().get_current_path();
+        path.insert(0, '.');
         join_path_2_absolute(current_path, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
