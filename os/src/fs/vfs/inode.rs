@@ -91,7 +91,7 @@ pub trait InodeTrait: Send + Sync {
     fn do_create(&self, _path: &str, _ty: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
         todo!()
     }
-
+    /// 确实应当剥夺walk去创造Inode的权利
     fn walk(&self, _path: &str) ->  Option<Arc<dyn InodeTrait>>{
         todo!()
     }
