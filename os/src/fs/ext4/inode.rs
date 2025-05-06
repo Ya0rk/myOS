@@ -282,8 +282,8 @@ impl InodeTrait for Ext4Inode {
         let mut lock_file = self.file.lock();
         // info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
         // INODE_CACHE.remove(child_abs_path);
-        match lock_file.links_cnt().unwrap() {
-            cnt if cnt <= 1 => {
+        match lock_file.links_cnt() {
+            Ok(cnt) if cnt <= 1 => {
                 lock_file.file_remove(child_abs_path);
             }
             _ => { return Ok(0); }

@@ -787,7 +787,7 @@ pub fn sys_faccessat(
     let abs = if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
         let current_path = current_task().unwrap().get_current_path();
-        path.insert(0, '.');
+        // path.insert(0, '.');
         join_path_2_absolute(current_path, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
