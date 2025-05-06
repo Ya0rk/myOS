@@ -138,7 +138,9 @@ pub trait FileTrait: Send + Sync {
         unimplemented!("not support!");
     }
     fn lseek(&self, _offset: isize, _whence: usize) -> SysResult<usize> {
-        unimplemented!("not support!");
+        info!("{}", self.get_name().unwrap());
+        // unimplemented!("not support!");
+        Ok(0)
     }
 
     // ppoll处理,代表数据到达，可以读取数据

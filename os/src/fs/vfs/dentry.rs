@@ -2,12 +2,12 @@ use alloc::{format, string::String, vec::{self, Vec}};
 use bitflags::parser::ParseError;
 use hashbrown::{HashMap, HashSet};
 use log::{debug, error, info, warn};
-use lwext4_rust::bindings::printf;
+use lwext4_rust::{bindings::{false_, printf, true_}, InodeTypes};
 use riscv::{interrupt::Mutex, register::fcsr::read};
 use sbi_rt::{NonRetentive, SharedPtr};
 use spin::{rwlock::RwLock};
 use core::hash::{Hash, Hasher};
-use crate::{fs::{ffi::InodeType, mkdir, open_file, path, root_inode, FileTrait, OpenFlags, Path}, utils::SysResult};
+use crate::{fs::{ffi::InodeType, mkdir, open_file, path, root_inode, FileClass, FileTrait, OpenFlags, Path}, utils::SysResult};
 use alloc::sync::{Arc, Weak};
 use super::{inode, InodeTrait, SuperBlockTrait};
 
@@ -91,7 +91,8 @@ impl Dentry {
         };
         let res = Arc::new(res);
         self.children.write().insert(name.clone(), res.clone());
-        res.bind(inode);
+        info!("[Dentry::new] {} insert child {} ", self.name.read(), name);
+        res.inode.write().push(inode);
         res
     }
 
@@ -259,9 +260,9 @@ impl Dentry {
     }
     /// 从一个dentry上获取inode
     fn get_inode(self: &Arc<Self>) -> Option<Arc<dyn InodeTrait>> {
-        // {
-        //     info!("[get_inode] {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
-        // }
+        {
+            info!("[get_inode] {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
+        }
         // 首先检查是否已有 inode（读锁）
         {
             let inode_guard = self.inode.read();
@@ -299,9 +300,9 @@ impl Dentry {
             inode_guard.push(this_inode.clone());
             this_inode
         };
-        {
-            self.flush_binding();
-        }
+        // {
+        //     self.flush_binding();
+        // }
         Some(res)
     }
 
@@ -372,6 +373,37 @@ impl Dentry {
             }
         }
         Some(dentry_now)
+    }
+
+    pub fn hard_link(old: String, new: String) -> bool {
+        info!("[hard_link] {} TO {}", &old, &new);
+        if let (Some(dentry) ,Some(inode)) = (Self::get_dentry_from_path(&old), Self::get_inode_from_path(&old)) {
+            if inode.node_type() == InodeType::Dir {
+                error!("[hard link] failed target is dir! {} TO {} ", &old, &new);
+                return false;
+            }
+            let path = Path::string2path(new.clone());
+            let parent_path = path.get_parent_abs();
+            let child_path_relative = path.get_filename();
+            if let Some(parent) = Self::get_dentry_from_path(&parent_path) {
+                inode.link(&new);
+                info!("[hard_link] inode info: cache: {}, size: {}", inode.get_page_cache().is_none(), inode.get_size());
+                if let Some(new_dentry) = parent.clone().get_child(&new) {
+                    new_dentry.unbind();
+                    new_dentry.bind(inode);
+                    true
+                } else {
+                    parent.new(&child_path_relative, inode);
+                    true
+                }
+            } else {
+                error!("[hard link] failed to get target parent {} TO {} ", &old, &new);
+                false
+            }
+        } else {
+            error!("[hard link] failed to get origin {} TO {} ", &old, &new);
+            false
+        }
     }
 
 }
@@ -487,6 +519,36 @@ pub async fn dentry_test() {
     // {if let Some(x) = DENTRY_ROOT.get_inode() {
     //     info!("root dentry stat is {:?}", x.fstat());
     // }}
+
+    info!("--------------------------------------test hard link--------------------------------------");
+    mkdir("/test_dir", 0);
+    let flags = OpenFlags::O_RDWR | OpenFlags::O_CREAT;
+    if let Some(FileClass::File(file)) = open_file("/test_dir/filea", flags) {
+        info!("Successfully create /test_dir/filea");
+        let buf = [1; 256];
+        file.write(&buf).await;
+        info!("/test_dir/filea write\n{:?}", buf);
+    } else {
+        error!("Failed to create /test_dir/filea");
+    }
+    match Dentry::hard_link("/test_dir/filea".into(), "/test_dir/fileb".into()) {
+        true => {
+            info!("link succeed");
+        }
+        false => {
+            error!("link failed");
+        }
+    }
+    if let Some(FileClass::File(file)) = open_file("/test_dir/fileb", OpenFlags::O_RDONLY) {
+        info!("Successfully open /test_dir/fileb");
+        let mut buf = [0; 256];
+        file.read(&mut buf).await;
+        info!("/test_dir/fileb read \n{:?}", buf);
+    } else {
+        error!("Failed to open /test_dir/fileb");
+        
+    }
+    info!("--------------------------------------finish hard link test-------------------------------------------");
     info!("finished dentry test");
     // panic!("dentry test");
 }
