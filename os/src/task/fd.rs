@@ -2,13 +2,16 @@
 use alloc::{sync::Arc, vec::Vec};
 use log::info;
 use lwext4_rust::bindings::O_WRONLY;
-use crate::{hal::config::RLIMIT_NOFILE, fs::{FileTrait, OpenFlags, Stdin, Stdout}, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, utils::{Errno, SysResult}};
+use crate::{
+    fs::{FileTrait, OpenFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, syscall::RLimit64, utils::{Errno, SysResult}
+};
 
 use super::current_task;
 
 #[derive(Clone)]
 pub struct FdTable {
     pub table: Vec<FdInfo>, // 将fd作为下标idx
+    pub rlimit: RLimit64,
 }
 
 #[derive(Clone)]
@@ -73,7 +76,8 @@ impl FdTable {
         fd_table.push(stdout);
         fd_table.push(stderr);
         FdTable {
-            table: fd_table
+            table: fd_table,
+            rlimit: RLimit64 { rlim_cur: RLIMIT_NOFILE, rlim_max: RLIMIT_NOFILE }
         }
     }
 
@@ -131,7 +135,7 @@ impl FdTable {
 
     // 在指定位置加入Fd
     pub fn put_in(&mut self, info: FdInfo, idx: usize) -> SysResult {
-        if idx > RLIMIT_NOFILE {
+        if idx > self.rlimit.rlim_cur {
             return Err(Errno::EMFILE);
         }
         if idx >= self.table_len() {

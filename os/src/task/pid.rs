@@ -49,7 +49,7 @@ impl PidAllocator {
 }
 
 ///Bind pid lifetime to `PidHandle`
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Pid(pub usize);
 
 impl fmt::Display for Pid {
@@ -61,6 +61,12 @@ impl fmt::Display for Pid {
 impl From<Pid> for usize {
     fn from(value: Pid) -> Self {
         value.0
+    }
+}
+
+impl From<usize> for Pid {
+    fn from(value: usize) -> Self {
+        Pid(value)
     }
 }
 

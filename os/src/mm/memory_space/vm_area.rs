@@ -368,9 +368,9 @@ impl VmArea {
             right_vma.offset += right_vma.start_va() - self.start_va();
             right = Some(right_vma)
         }
-        log::info!("[VmArea::split] left: {left:?}");
-        log::info!("[VmArea::split] middle: {middle:?}");
-        log::info!("[VmArea::split] right: {right:?}");
+        // log::info!("[VmArea::split] left: {left:?}");
+        // log::info!("[VmArea::split] middle: {middle:?}");
+        // log::info!("[VmArea::split] right: {right:?}");
         (left, middle, right)
     }
 

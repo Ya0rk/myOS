@@ -4,17 +4,21 @@ mod ffi;
 mod mm;
 mod io;
 mod net;
+mod sync;
 mod io_async;
 
 use fs::*;
 use log::info;
+use mm::sys_mprotect;
 use mm::{sys_brk, sys_mmap, sys_munmap};
 use process::*;
 use io::*;
 use net::*;
+use sync::*;
 use ffi::SysCode;
 pub use ffi::CloneFlags;
 pub use ffi::ShutHow;
+pub use ffi::RLimit64;
 use crate::sync::TimeSpec;
 use crate::utils::SysResult;
 
@@ -25,6 +29,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     match syscode {
         SysCode::SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as u32),
         SysCode::SYSCALL_READLINKAT => sys_readlinkat(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as usize),
+        SysCode::SYSCALL_GETPGID => sys_getpgid(args[0] as usize),
+        SysCode::SYSCALL_TGKILL => sys_tgkill(args[0] as usize, args[1] as usize, args[2] as i32),
+        SysCode::SYSCALL_READLINKAT => sys_readlinkat(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as usize),
+        SysCode::SYSCALL_PRLIMIT64 => sys_prlimit64(args[0] as usize, args[1] as i32, args[2] as usize, args[3] as usize),
+        SysCode::SYSCALL_GET_ROBUST_LIST => sys_get_robust_list(args[0] as usize, args[1] as usize, args[2] as usize),
+        SysCode::SYSCALL_SET_ROBUST_LIST => sys_set_robust_list(args[0] as usize, args[1] as usize),
+        SysCode::SYSCALL_FUTEX => sys_futex(args[0] as u32, args[1] as i32, args[2] as u32, args[3] as u32, args[4] as u32, args[5] as u32).await,
         SysCode::SYSCALL_UTIMENSAT => sys_utimensat(args[0] as isize, args[1] as usize, args[2] as *const [TimeSpec; 2], args[3] as i32),
         SysCode::SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as usize),
         SysCode::SYSCALL_SYSLOG => sys_log(args[0] as i32, args[1] as usize, args[2] as usize),
@@ -100,6 +111,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_SOCKETPAIR => sys_socketpair(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_GETSOCKOPT => sys_getsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),
         SysCode::SYSCALL_WRITEV => sys_writev(args[0] as usize, args[1] as usize, args[2] as usize).await,
+        SysCode::SYSCALL_MPROTECT => sys_mprotect(args[0] as *const u8, args[1] as usize, args[2] as i32),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

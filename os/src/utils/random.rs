@@ -31,7 +31,7 @@ impl LcgRng {
             let rand = self.next();
             let rand_bytes = rand.to_le_bytes();
             let chunk_size = (buf.len() - offset).min(4);
-            buf[offset..].copy_from_slice(&rand_bytes[..chunk_size]);
+            buf[offset..chunk_size+offset].copy_from_slice(&rand_bytes[..chunk_size]);
             offset += chunk_size;
         }
         buf.len()

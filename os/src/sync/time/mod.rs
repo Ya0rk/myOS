@@ -22,6 +22,9 @@ pub const CLOCK_PROCESS_CPUTIME_ID: usize = 2;
 /// 线程消耗的CPU时间，统计当前线程在所有CPU核心上的执行时间
 pub const CLOCK_THREAD_CPUTIME_ID: usize = 3;
 
+/// 获取较为粗糙的时间
+pub const CLOCK_REALTIME_COARSE: usize = 5;
+
 /// 包含系统挂起时间的单调时钟，从系统启动开始计算
 pub const CLOCK_BOOTTIME: usize = 7;
 

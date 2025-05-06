@@ -12,7 +12,7 @@ const TESTCASES: &[&str] = &[
     // "time-test",
     // "test-splice.sh",
     "busybox_testcode.sh",
-    "lua_testcode.sh",
+    // "lua_testcode.sh",
     // "netperf_testcode.sh",
     // "libc-bench",
     // "libctest_testcode.sh",
@@ -31,14 +31,15 @@ pub fn conert_str2byte(input: &str) -> Vec<u8> {
 }
 
 fn run_cmd(cmd: &str) {
-    chdir(&conert_str2byte("musl"));
+    let cd = "/glibc/";
+    chdir(&conert_str2byte(cd));
     if fork() == 0 {
-        let path = ["/musl/", cmd].concat();
-        println!("aaaaaaaaaaaa");
+        let path = [cd, cmd].concat();
+        let busybox = [cd, "busybox"].concat();
         execve(
-            "/musl/busybox\0",
+            &busybox,
             &[
-                "/musl/busybox\0",
+                &busybox,
                 "sh\0",
                 &path,
             ],

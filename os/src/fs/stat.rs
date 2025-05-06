@@ -14,16 +14,15 @@ pub struct Kstat {
     pub st_rdev: u32,  // 设备 ID（如果是特殊文件）
     pub __pad: u64,
     pub st_size: i64,    // 总大小，以字节为单位
-    pub st_blksize: i64, // 文件系统 I/O 的块大小
+    pub st_blksize: i32, // 文件系统 I/O 的块大小
     pub __pad2: i32,
-    pub st_blocks: u64,     // 分配的 512B 块数
-    pub st_atime_sec: i64,  // 上次访问时间
-    pub st_atime_nsec: i64, // 上次访问时间（纳秒精度）
-    pub st_mtime_sec: i64,  // 上次修改时间
-    pub st_mtime_nsec: i64, // 上次修改时间（纳秒精度）
-    pub st_ctime_sec: i64,  // 上次状态变化的时间
-    pub st_ctime_nsec: i64, // 上次状态变化的时间（纳秒精度）
-    pub __unused: [u32; 2],
+    pub st_blocks: i64,     // 分配的 512B 块数
+    pub st_atime_sec: isize,  // 上次访问时间
+    pub st_atime_nsec: isize, // 上次访问时间（纳秒精度）
+    pub st_mtime_sec: isize,  // 上次修改时间
+    pub st_mtime_nsec: isize, // 上次修改时间（纳秒精度）
+    pub st_ctime_sec: isize,  // 上次状态变化的时间
+    pub st_ctime_nsec: isize, // 上次状态变化的时间（纳秒精度）
 }
 
 impl Kstat {
@@ -47,11 +46,11 @@ impl Kstat {
             st_mtime_nsec: 0,
             st_ctime_sec: 0,
             st_ctime_nsec: 0,
-            __unused: [0; 2],
+            // __unused: [0; 2],
         }
     }
 
-    pub fn init(&mut self, st_size: i64, st_blksize: i64, st_blocks: u64) {
+    pub fn init(&mut self, st_size: i64, st_blksize: i32, st_blocks: i64) {
         self.st_nlink = 1;
         self.st_size = st_size;
         self.st_blksize = st_blksize;
@@ -78,15 +77,15 @@ pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeS
         st_rdev: 0, // 如果需要，可以根据具体情况设置
         __pad: 0,   // 填充字段
         st_size: size as i64,
-        st_blksize: BLOCK_SIZE as i64,
+        st_blksize: BLOCK_SIZE as i32,
         __pad2: 0,  // 填充字段
-        st_blocks: stat.st_blocks as u64,
-        st_atime_sec: atime.tv_sec as i64,
-        st_atime_nsec: atime.tv_nsec as i64,
-        st_mtime_sec: mtime.tv_sec as i64,
-        st_mtime_nsec: mtime.tv_nsec as i64,
-        st_ctime_sec: ctime.tv_sec as i64,
-        st_ctime_nsec: ctime.tv_nsec as i64,
-        __unused: [0; 2], // 填充字段
+        st_blocks: stat.st_blocks as i64,
+        st_atime_sec: atime.tv_sec as isize,
+        st_atime_nsec: atime.tv_nsec as isize,
+        st_mtime_sec: mtime.tv_sec as isize,
+        st_mtime_nsec: mtime.tv_nsec as isize,
+        st_ctime_sec: ctime.tv_sec as isize,
+        st_ctime_nsec: ctime.tv_nsec as isize,
+        // __unused: [0; 2], // 填充字段
     }
 }

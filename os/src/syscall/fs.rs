@@ -16,7 +16,7 @@ use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{TimeSpec, TimeStamp};
 use crate::syscall::ffi::IoVec;
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
-use crate::utils::{Errno, SysResult};
+use crate::utils::{backtrace, Errno, SysResult};
 use super::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, AT_REMOVEDIR};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
@@ -120,16 +120,18 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
             }
             // 将iov中的结构体一个个取出，转化为UserBuffer
             for i in 0..iovcnt {
-                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
-                let len = (unsafe { *iov_st }).iov_len;
+                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *const IoVec;
+                let len = (unsafe { &*iov_st }).iov_len;
                 if len == 0 {
                     continue;
                 }
-                let base = (unsafe { *iov_st }).iov_base;
-                let buffer = unsafe{core::slice::from_raw_parts(base as *mut u8, len)};
+                let base = (unsafe { &*iov_st }).iov_base;
+                let buffer = unsafe{core::slice::from_raw_parts(base as *const u8, len)};
+                // info!("aaaaaaaaaaaa");
                 let write_len = file.write(buffer).await?;
                 res += write_len;
             }
+            // info!("nnnnnnnnnnnn");
             Ok(res)
         }
         _ => Err(Errno::EBADCALL),
@@ -157,6 +159,7 @@ pub fn sys_fstatat(
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
+    info!("pathname = {},", path);
     let cwd = task.get_current_path();
     info!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
 
@@ -174,6 +177,7 @@ pub fn sys_fstatat(
         }
         let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_fstatat] not found fd");
         let other_cwd = inode.get_name()?;
+        info!("othercwd = {}", other_cwd);
         join_path_2_absolute(other_cwd, path)
     };
 
@@ -190,6 +194,7 @@ pub fn sys_fstatat(
             file.fstat(&mut tempstat)?;
             info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             buffer.write(tempstat.as_bytes());
+            info!("mmmmmmmmmmm");
             return Ok(0);
         }
         _ => return Err(Errno::ENOENT),
@@ -1017,6 +1022,8 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
     Ok(0)
 }
 
+/// read value of a symbolic link
+/// TODO(YJJ):有待完善link
 pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
@@ -1039,7 +1046,5 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
             buf.copy_from(info.as_ptr(), len);
         }
     }
-
     Ok(0)
 }
-

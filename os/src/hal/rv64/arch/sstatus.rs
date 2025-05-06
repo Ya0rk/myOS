@@ -125,7 +125,6 @@ impl Sstatus {
         let v: u8 = unsafe { core::mem::transmute(fs) };
         self.bits.set_bits(13..15, v as usize);
     }
-
 }
 
 pub fn read() -> Sstatus {

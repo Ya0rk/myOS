@@ -53,6 +53,15 @@ impl TimeSpec {
             tv_nsec: time.subsec_nanos() as usize,
         }
     }
+    
+    /// 获取较为粗糙的时间，这里使用秒
+    pub fn get_coarse_time() -> Self {
+        let ts = get_time_s();
+        TimeSpec {
+            tv_sec: ts, 
+            tv_nsec: 0 
+        }
+    }
 }
 
 impl From<TimeSpec> for Duration {

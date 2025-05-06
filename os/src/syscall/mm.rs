@@ -83,7 +83,24 @@ pub fn sys_munmap(addr: *const u8, length: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let length_aligned = align_up_by_page(length);
     task.with_mut_memory_space(|m| {
-        m.unmap(addr.into()..(addr+length).into())
+        m.unmap(addr.into()..(addr+length_aligned).into())
     });
     Ok(0)
+}
+
+pub fn sys_mprotect(addr: *const u8, length: usize, prot: i32) -> SysResult<usize>{
+    let addr = addr as usize;
+    if (!is_aligned_to_page(addr)) {
+        return Err(Errno::EINVAL);
+    }
+    let task = current_task().unwrap();
+    let length_aligned = align_up_by_page(length);
+    task.with_mut_memory_space(|m| {
+        m.mprotect(
+            addr.into()..(addr + length_aligned).into(),
+            MmapProt::from_bits(prot).
+                ok_or(Errno::EINVAL)?
+                .into(),
+        )
+    }).map(|_| 0)
 }

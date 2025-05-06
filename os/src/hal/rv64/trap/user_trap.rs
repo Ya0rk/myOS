@@ -18,6 +18,8 @@ use riscv::register::scause::{self, Exception, Interrupt, Trap};
 /// handle user interrupt, exception, or system call from user space
 pub async fn user_trap_handler() {
     // 设置kernel的trap handler entry
+
+    use crate::sync::TIMER_QUEUE;
     set_trap_handler(IndertifyMode::Kernel);
     let scause = scause::read();
     let stval = stval::read();
@@ -101,6 +103,7 @@ pub async fn user_trap_handler() {
             task.set_zombie();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
+            TIMER_QUEUE.handle_expired();
             set_next_trigger();
             yield_now().await;
         }

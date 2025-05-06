@@ -1,21 +1,24 @@
 use core::mem::size_of;
-use crate::hal::config::INITPROC_PID;
+use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, UContext, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
-use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
+use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID};
 use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
-use crate::syscall::ffi::{CloneFlags, SyslogCmd, Utsname, WaitOptions, LOGINFO};
+use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
+use crate::syscall::RLimit64;
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, MANAGER
 };
 use crate::utils::{Errno, SysResult, RNG};
 use alloc::ffi::CString;
 use alloc::string::{String, ToString};
+use alloc::task;
 use alloc::vec::Vec;
 use log::{debug, info};
 use lwext4_rust::bindings::true_;
+use num_enum::TryFromPrimitive;
 use zerocopy::IntoBytes;
 
 use super::ffi::Sysinfo;
@@ -194,27 +197,17 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let cwd = task.get_current_path();
     info!("cwd = {}", cwd);
     // info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
-    // if path.ends_with("busybox") {
-    //     path = "/musl/busybox".to_string();
-    // }
-    // // for temp in &mut argv {
-    // //     if temp.ends_with("busybox") {
-    // //         *temp = "/musl/busybox".to_string();
-    // //     }
-    // //     if temp.ends_with("./busybox_cmd.txt") {
-    // //         *temp = "/musl/busybox_cmd.txt".to_string();
-    // //     }
-    // // }
-    // if path.ends_with(".sh") {
-    //     path = "/musl/busybox".to_string();
-    //     argv.insert(0, "/musl/busybox".to_string());
-    //     argv.insert(1, "sh".to_string());
-    // }
-    // for temp in &mut argv {
-    //     if temp.ends_with("test.sh") {
-    //         *temp = "tst.sh".to_string();
-    //     }
-    // }
+
+    if path.ends_with("busybox") {
+        path = [cwd.clone(), "busybox".to_string()].concat();
+    }
+
+    if path.ends_with(".sh") {
+        path = [cwd.clone(), "busybox".to_string()].concat();
+        argv.insert(0, path.clone());
+        argv.insert(1, "sh".to_string());
+    }
+
     info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
@@ -361,7 +354,7 @@ pub fn sys_clock_gettime(
     clock_id: usize,
     timespec: *const u8,
 ) -> SysResult<usize> {
-    info!("[sys_clock_gettime] start");
+    info!("[sys_clock_gettime] start, clock id = {}", clock_id);
     if timespec.is_null() {
         info!("[sys_clock_gettime] timespec is null");
         return Err(Errno::EBADCALL);
@@ -371,6 +364,7 @@ pub fn sys_clock_gettime(
         CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::new(),
         CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
         CLOCK_THREAD_CPUTIME_ID => TimeSpec::thread_cputime_now(),
+        CLOCK_REALTIME_COARSE => TimeSpec::get_coarse_time(),
         CLOCK_BOOTTIME => TimeSpec::boottime_now(),
         _ => return Err(Errno::EINVAL),
     };
@@ -424,28 +418,6 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
         extract_proc_to_new_group(old_pgid, pgid, pid);
     }
     Ok(0)
-}
-
-pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
-    info!("[sys_getpgid] start pid: {}", pid);
-    let target_task = current_task().unwrap();
-    // if pgid == 0{
-    //     let new_pgid = pid;
-    //     target_task.set_pgid(pid);
-    //     extract_proc_to_new_group(old_pgid, new_pgid, pid);
-    // } else {
-    //     target_task.set_pgid(pgid);
-    //     extract_proc_to_new_group(old_pgid, pgid, pid);
-    // }
-    let task =  match pid {
-        0 => {
-            current_task().unwrap()
-        }
-        _ => {
-            get_task_by_pid(pid).ok_or(Errno::ESRCH)?
-        }
-    };
-    Ok(task.get_pgid())
 }
 
 /// sigreturn() is a system call that is used to restore the state of a process after it has been interrupted by a signal.
@@ -719,5 +691,95 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
         _ => { unimplemented!() }
     }
     
+    Ok(0)
+}
+
+
+/// 设置或获取另一个进程的rlimit资源限制（如文件句柄数，内存等）
+/// pid: target process id, 如果pid为0，那么就使用当前进程
+/// resource: 指定的资源类型
+/// new_limit: 指向新的资源限制结构体；若为null，仅获取当前限制
+/// old_limit: 用于返回旧的资源限制结构体；若为null，不返回旧值
+pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usize) -> SysResult<usize> {
+    info!("[sys_prlimit64] start");
+    let task = match pid {
+        0 => current_task().unwrap(),
+        p if p > 0 => get_task_by_pid(p).ok_or(Errno::ESRCH)?,
+        _ => return Err(Errno::EINVAL),
+    };
+
+    let rs = RlimResource::try_from_primitive(resource).map_err(|_| Errno::EINVAL)?;
+    // 获取当前限制
+    if old_limit != 0 {
+        let old_ptr = unsafe{ old_limit as *mut RLimit64 };
+        let now_limit = match rs {
+            RlimResource::Nofile => task.fd_table.lock().rlimit,
+            RlimResource::Stack => RLimit64::new(USER_STACK_SIZE, USER_STACK_SIZE),
+            RlimResource::Data => RLimit64::new(KERNEL_HEAP_SIZE, KERNEL_HEAP_SIZE),
+            _ => RLimit64::new_bare(),
+        };
+        unsafe {
+            *old_ptr = now_limit;
+        }
+    }
+
+    // 修改当前限制
+    if new_limit != 0 {
+        let new_limit = unsafe{ *(new_limit as *const RLimit64) };
+        match rs {
+            RlimResource::Nofile => {
+                task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;
+                task.fd_table.lock().rlimit.rlim_max = new_limit.rlim_max;
+            }
+            _ => unimplemented!()
+        }
+    }
+
+    Ok(0)
+}
+
+/// send a signal to a thread
+/// tgkill() sends the signal sig to the thread with the thread ID tid
+/// in the thread group tgid.
+pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SysResult<usize> {
+    info!("[sys_tgkill] start, tgid = {}, tid = {}", tgid, tid);
+    if sig < 0 || sig as usize > MAX_SIGNUM {
+        return Err(Errno::EINVAL);
+    }
+    let signom = SigNom::from(sig as usize);
+    // 如果task是leader，那么tgid = pid；我们的内核中只存在process，没有线程
+    let task = get_task_by_pid(tgid as usize).ok_or(Errno::ESRCH)?;
+    let target = task.thread_group
+                    .lock()
+                    .get(tid)
+                    .ok_or(Errno::ESRCH)?
+                    .upgrade()
+                    .unwrap();
+    let siginfo = SigInfo::new(
+        signom, 
+        SigCode::TKILL, 
+        SigErr::empty(), 
+        SigDetails::Kill { pid: task.get_pid(), uid: 0 }
+    );
+    target.thread_recv_siginfo(siginfo);
+    
+    Ok(0)
+}
+
+pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
+    info!("[sys_getpgid] start, pid = {}", pid);
+    let task = match pid {
+        0 => current_task().unwrap(),
+        _ => {
+            get_task_by_pid(pid).ok_or(Errno::ESRCH)?
+        }
+    };
+
+    Ok(task.get_pgid())
+}
+
+/// high-resolution sleep with specifiable clock
+pub fn sys_clock_nanosleep() -> SysResult<usize> {
+
     Ok(0)
 }
