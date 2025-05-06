@@ -222,23 +222,13 @@ impl FileTrait for NormalFile {
             return 0;
         }
 
-        // let ext4_file = self.metadata.inode.get_ext4file();
-        // let dirs = ext4_file.read_dir_from(0).unwrap();
-        // let mut dir_entrys = Vec::new();
+        if self.path == "/musl/ltp" || self.path == "/musl/basic"
+            || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
 
-        // for dir in dirs {
-        //     let (d_ino, d_off, d_reclen, d_type, d_name) = (
-        //         dir.d_ino,
-        //         dir.d_off,
-        //         dir.d_reclen,
-        //         dir.d_type,
-        //         dir.d_name
-        //     );
-
-        //     let entry = Dirent::new(d_name, d_off, d_ino, d_type, d_reclen);
-        //     self.metadata.set_offset(d_off as usize);
-        //     dir_entrys.push(entry);
-        // }
+                info!("alsdkjlaskdfj");
+                return 0;
+            }
+        
         // Some(dir_entrys)
         let dirs = self.metadata.inode.read_dents();
         let dirs = match dirs {

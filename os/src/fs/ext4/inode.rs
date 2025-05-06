@@ -244,7 +244,7 @@ impl InodeTrait for Ext4Inode {
     /// 应当剥夺walk创造inode的权力todo
     fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
-        info!("{} walk path is {}", file.file_path.to_str().unwrap(), path);
+        // info!("{} walk path is {}", file.file_path.to_str().unwrap(), path);
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
             // info!("is a dir");
             let page_cache = None;
@@ -280,7 +280,7 @@ impl InodeTrait for Ext4Inode {
     fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
         // mayby bug? 这个用的parent cnt
         let mut lock_file = self.file.lock();
-        info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
+        // info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
         // INODE_CACHE.remove(child_abs_path);
         match lock_file.links_cnt().unwrap() {
             cnt if cnt <= 1 => {
@@ -293,7 +293,7 @@ impl InodeTrait for Ext4Inode {
 
     fn link(&self, new_path: &str) -> SysResult<usize> {
         let mut file = self.file.lock();
-        info!("[link] {} to {}", file.file_path.to_str().unwrap(), new_path);
+        // info!("[link] {} to {}", file.file_path.to_str().unwrap(), new_path);
         file.link(new_path);
         Ok(0)
     }

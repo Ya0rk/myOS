@@ -95,6 +95,7 @@ pub fn create_init_files() -> SysResult {
     // let muslinode = Ext4Inode::new("/musl", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
     // mkdir("/glibc", 0);
     open_file("/musl/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    open_file("/glibc/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     open_file("/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     mkdir("/bin", 0);
     // let glibcinode = Ext4Inode::new("/glibc", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));

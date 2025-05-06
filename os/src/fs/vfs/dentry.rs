@@ -261,7 +261,7 @@ impl Dentry {
     /// 从一个dentry上获取inode
     fn get_inode(self: &Arc<Self>) -> Option<Arc<dyn InodeTrait>> {
         {
-            info!("[get_inode] {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
+            // info!("[get_inode] {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
         }
         // 首先检查是否已有 inode（读锁）
         {
