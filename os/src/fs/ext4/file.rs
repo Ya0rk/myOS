@@ -33,6 +33,7 @@ impl NormalFile {
 
     // 判断是否存在同名文件
     pub fn is_child(&self, path: &str) -> bool {
+        info!("[is_child {}", path);
         if let 
             Some(_) = 
             self.parent

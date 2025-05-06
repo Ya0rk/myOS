@@ -39,12 +39,12 @@ impl Ext4Inode {
         if types == InodeTypes::EXT4_DE_DIR || types == InodeTypes::EXT4_INODE_MODE_DIRECTORY {
             // file_size = ext4file.lock().file_size();
             file_size = 0;
-            info!("[Ext4Inode::new] path = {}, size = {} bbbbbbbbbbb",path, file_size);
+            // info!("[Ext4Inode::new] path = {}, size = {} bbbbbbbbbbb",path, file_size);
         } else {
             info!("[Ext4Inode::new] path = {}, types = {:?}", path, types);
             ext4file.lock().file_open(path, O_RDONLY);
             file_size = ext4file.lock().file_size();
-            info!("[Ext4Inode::new] path = {}, size = {} aaaaaaaaaaa",path, file_size);
+            // info!("[Ext4Inode::new] path = {}, size = {} aaaaaaaaaaa",path, file_size);
             ext4file.lock().file_close();
         }
 
@@ -240,6 +240,8 @@ impl InodeTrait for Ext4Inode {
     /// 在当前文件夹下查找该路径的的文件
     /// 
     /// 返回一个InodeTrait
+    /// 
+    /// 应当剥夺walk创造inode的权力todo
     fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
         info!("{} walk path is {}", file.file_path.to_str().unwrap(), path);
@@ -278,6 +280,7 @@ impl InodeTrait for Ext4Inode {
     fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
         // mayby bug? 这个用的parent cnt
         let mut lock_file = self.file.lock();
+        info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
         // INODE_CACHE.remove(child_abs_path);
         match lock_file.links_cnt().unwrap() {
             cnt if cnt <= 1 => {
@@ -290,6 +293,7 @@ impl InodeTrait for Ext4Inode {
 
     fn link(&self, new_path: &str) -> SysResult<usize> {
         let mut file = self.file.lock();
+        info!("[link] {} to {}", file.file_path.to_str().unwrap(), new_path);
         file.link(new_path);
         Ok(0)
     }

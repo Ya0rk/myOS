@@ -94,7 +94,9 @@ pub fn create_init_files() -> SysResult {
     // mkdir("/musl", 0);
     // let muslinode = Ext4Inode::new("/musl", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
     // mkdir("/glibc", 0);
+    open_file("/musl/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     open_file("/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    mkdir("/bin", 0);
     // let glibcinode = Ext4Inode::new("/glibc", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
     //创建/proc/mounts文件系统使用情况
     if let Some(FileClass::File(mountsfile)) =
@@ -217,6 +219,7 @@ fn create_open_file(
                 parent_dentry.add_child(&path.get_filename(), flags).unwrap()
             } else {
                 // no need to create
+                info!("[create_file] path = {} no need to creat", target_abs_path);
                 return None;
             }
             
