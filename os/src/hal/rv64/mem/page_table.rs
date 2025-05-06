@@ -15,7 +15,7 @@ use crate::mm::{PhysPageNum, VirtAddr, VirtPageNum, PhysAddr, PageTable};
 
 use crate::hal::config::{PPN_SHIFT, PPN_LEN, PA_LEN, KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 // use paste::paste;
-use crate::{impl_flag_check, impl_flag_set};
+use crate::{impl_flag_checker, impl_flag_setter};
 
 
 bitflags! {
@@ -60,7 +60,7 @@ bitflags! {
 
 impl PTEFlags {
 
-    impl_flag_check!(
+    impl_flag_checker!(
         pub U,
         pub V,
         pub R,
@@ -70,7 +70,7 @@ impl PTEFlags {
         pub COW
     );
 
-    impl_flag_set!(
+    impl_flag_setter!(
         pub U,
         pub V,
         pub R,

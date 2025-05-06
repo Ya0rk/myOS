@@ -8,7 +8,8 @@ macro_rules! impl_flag_checker {
     ($($vis:vis $flag:ident),+) => {
         paste::paste!{
             $(  
-                #[allow(unused)]  
+                #[allow(unused)] 
+                // #[inline(always)] 
                 $vis fn [<is_ $flag>](&self) -> bool {
                     self.contains(Self::$flag)
                 }
@@ -25,6 +26,7 @@ macro_rules! impl_flag_setter {
         paste::paste!{  
             $(
                 #[allow(unused)]
+                // #[inline(always)] 
                 $vis fn [<set_ $flag>](&mut self, val: bool) -> &mut Self {
                     self.set(Self::$flag, val);
                     self

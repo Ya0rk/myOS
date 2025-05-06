@@ -13,7 +13,7 @@ TODO:
 - tlb refill
 - compatibility check
 - asid
--
+- 
 
 
 
@@ -36,8 +36,19 @@ bitflags!{
         /// should never be used
         const PLV_KERN = 0b00 << 2;
 
-        /// cache type (not used yet)
-        const MAT_NOCACHE = 0b01 << 4;
+        /// cache type: coherent cached
+        const MAT_CC = 0b01 << 4;
+
+        /// cache type: strongly-ordered uncached
+        const MAT_SUC = 0b00 << 4;
+
+        /// cached type: weakly-ordered uncached
+        /// NOTE: should never be used
+        const MAT_WUC = 0b10 << 4;
+
+        /// cached type: preserved
+        /// NOTE: used to clear MAT flag bits
+        const MAT_P = 0b11 << 4;
 
         /// Designates a global mapping OR Whether the page is huge page.
         const G = 1 << 6;
@@ -72,17 +83,24 @@ impl PTEFlags {
         pub W,
         NX,
         pub G,
-        pub COW
+        pub D,
+        pub COW,
+        pub RPLV
     );
 
     impl_flag_setter!(
         PLV_USER,
+        MAT_CC,
+        MAT_SUC,
+        MAT_WUC,
         pub V,
         NR,
         pub W,
         NX,
         pub G,
-        pub COW
+        pub D,
+        pub COW,
+        pub RPLV
     );
     pub fn new_valid() -> Self {
         let flags = Self::V;
@@ -105,6 +123,22 @@ impl PTEFlags {
     }
     pub fn set_X(&mut self, val: bool) -> &mut Self {
         self.set_NX(!val)
+    }
+
+
+    /// Must clear bits before set
+    pub fn clear_MAT(&mut self) -> &mut Self {
+        self.remove(Self::MAT_P);
+        self
+    }
+    pub fn enable_MAT_CC(&mut self) -> &mut Self {
+        self.clear_MAT().set_MAT_CC(true)
+    }
+    pub fn enable_MAT_SUC(&mut self) -> &mut Self {
+        self.clear_MAT().set_MAT_SUC(true)
+    }
+    pub fn enable_MAT_WUC(&mut self) -> &mut Self {
+        self.clear_MAT().set_MAT_WUC(true)
     }
 }
 
@@ -131,7 +165,9 @@ impl From<MapPerm> for PTEFlags {
             .set_G(!perm.contains(MapPerm::U) )
             .set_R( perm.contains(MapPerm::R) )
             .set_W( perm.contains(MapPerm::W) )
+            .set_D( perm.contains(MapPerm::W) )
             .set_X( perm.contains(MapPerm::X) )
+            .set_RPLV( false )
         
 
         // ret |= PTEFlags::V;
@@ -244,7 +280,7 @@ impl PageTable {
         // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (stext as usize).into()..(etext as usize).into(),
-            PTEFlags::R | PTEFlags::X,
+            MapPerm::R | MapPerm::X,
         );
         println!("mapping .rodata section");
         // memory_set.push(
@@ -259,7 +295,7 @@ impl PageTable {
         // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (srodata as usize).into()..(erodata as usize).into(),
-            PTEFlags::R,
+            MapPerm::R,
         );
         println!("mapping .data section");
         // memory_set.push(
@@ -274,7 +310,7 @@ impl PageTable {
         // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (sdata as usize).into()..(edata as usize).into(),
-            PTEFlags::R | PTEFlags::W,
+            MapPerm::R | MapPerm::W,
         );
         println!("mapping .bss section");
         // memory_set.push(
@@ -289,7 +325,7 @@ impl PageTable {
         // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
             (sbss_with_stack as usize).into()..(ebss as usize).into(),
-            PTEFlags::R | PTEFlags::W,
+            MapPerm::R | MapPerm::W,
         );
         println!("mapping physical memory");
         // memory_set.push(
@@ -310,6 +346,7 @@ impl PageTable {
         // ffff_ffc0_8020_0000
         // ffff_ffc0_8800_0000
         println!("mapping devices");
+        // NOTE: LA架构不使用巨页，甚至不使用页表实现直接映射，而是使用0x8000_0000_0000_0000的直接映射窗口，其为强序非缓存的。
         // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
 
         // SCRIPT: remove device space mapping from pgtbl, which has been taken over by direct mapping currently
