@@ -70,42 +70,23 @@ bitflags! {
 impl From<PTEFlags> for MapPerm {
     fn from(flags: PTEFlags) -> Self {
         let mut ret = Self::from_bits(0).unwrap();
-        if flags.contains(PTEFlags::U) {
+        if flags.is_U() {
             ret |= MapPerm::U
         }
-        if flags.contains(PTEFlags::R) {
+        if flags.is_R() {
             ret |= MapPerm::R;
         }
-        if flags.contains(PTEFlags::W) {
+        if flags.is_W() {
             ret |= MapPerm::W;
         }
-        if flags.contains(PTEFlags::X) {
+        if flags.is_X() {
             ret |= MapPerm::X;
         }
         ret
     }
 }
 
-impl From<MapPerm> for PTEFlags {
-    fn from(perm: MapPerm) -> Self {
-        let mut ret = Self::from_bits(0).unwrap();
-        if perm.contains(MapPerm::U) {
-            ret |= PTEFlags::U;
-        } else {
-            ret |= PTEFlags::G;
-        }
-        if perm.contains(MapPerm::R) {
-            ret |= PTEFlags::R;
-        }
-        if perm.contains(MapPerm::W) {
-            ret |= PTEFlags::W;
-        }
-        if perm.contains(MapPerm::X) {
-            ret |= PTEFlags::X;
-        }
-        ret
-    }
-}
+
 
 /// A contiguous virtual memory area.
 #[derive(Clone)]
@@ -274,12 +255,13 @@ impl VmArea {
     /// Will alloc new pages for `VmArea` according to `VmAreaType`.
     pub fn map(&mut self, page_table: &mut PageTable) {
         // NOTE: set pte flag with global mapping for kernel memory
+        // NOTE: here is used PTEFlags::from<MapPerm>()
         let pte_flags: PTEFlags = self.map_perm.into();
 
         for vpn in self.range_vpn() {
             let page = Page::new();
             // page.clear();
-            page_table.map(vpn, page.ppn(), pte_flags);
+            page_table.map_leaf(vpn, page.ppn(), pte_flags);
             self.pages.insert(vpn, page);
         }
     }
@@ -290,7 +272,7 @@ impl VmArea {
         let pte_flags: PTEFlags = self.map_perm.into();
         for vpn in range_vpn {
             let page = Page::new();
-            page_table.map(vpn, page.ppn(), pte_flags);
+            page_table.map_leaf(vpn, page.ppn(), pte_flags);
             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
             self.pages.insert(vpn, page);
         }
@@ -440,7 +422,7 @@ impl VmArea {
                 // unmap old page and map new page
                 pte_flags.remove(PTEFlags::COW);
                 pte_flags.insert(PTEFlags::W);
-                page_table.map_force(vpn, page.ppn(), pte_flags);
+                page_table.map_leaf_force(vpn, page.ppn(), pte_flags);
                 // NOTE: track `Page` with great care
                 self.pages.insert(vpn, page);
                 unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
@@ -466,7 +448,7 @@ impl VmArea {
                     // lazy allcation for heap
                     page = Page::new();
                     page.fill_zero();
-                    page_table.map(vpn, page.ppn(), self.map_perm.into());
+                    page_table.map_leaf(vpn, page.ppn(), self.map_perm.into());
                     self.pages.insert(vpn, page);
                     unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                 }
@@ -479,7 +461,7 @@ impl VmArea {
                         if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
                             let page = block_on(async { file.get_page_at(offset_aligned).await }).unwrap()
                                 ;
-                            page_table.map(vpn, page.ppn(), self.map_perm.into());
+                            page_table.map_leaf(vpn, page.ppn(), self.map_perm.into());
                             self.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         } else {
@@ -488,7 +470,7 @@ impl VmArea {
                             if access_type.contains(PageFaultAccessType::WRITE) {
                                 let new_page = Page::new();
                                 new_page.copy_from_slice(page.get_bytes_array());
-                                page_table.map(vpn, new_page.ppn(), self.map_perm.into());
+                                page_table.map_leaf(vpn, new_page.ppn(), self.map_perm.into());
                                 self.pages.insert(vpn, new_page);
                             } else {
                                 let (pte_flags, ppn) = {
@@ -497,7 +479,7 @@ impl VmArea {
                                     new_flags.remove(PTEFlags::W);
                                     (new_flags, page.ppn())
                                 };
-                                page_table.map(vpn, ppn, pte_flags);
+                                page_table.map_leaf(vpn, ppn, pte_flags);
                                 self.pages.insert(vpn, page);
                             }
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
@@ -509,7 +491,7 @@ impl VmArea {
                             // private anonymous area
                             page = Page::new();
                             page.fill_zero();
-                            page_table.map(vpn, page.ppn(), self.map_perm.into());
+                            page_table.map_leaf(vpn, page.ppn(), self.map_perm.into());
                             self.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         }

@@ -1,4 +1,26 @@
-use crate::mm::address::*;
+
+use crate::mm::memory_space::vm_area::MapPerm;
+use crate::mm::{PhysPageNum, VirtAddr, VirtPageNum, PhysAddr, PageTable};
+
+use crate::hal::config::{PPN_SHIFT, PPN_LEN, PA_LEN, KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
+// use paste::paste;
+use crate::{impl_flag_checker, impl_flag_setter};
+
+/*
+
+TODO:
+- kernel page table
+- tlb refill
+- compatibility check
+- asid
+-
+
+
+
+
+*/
+
+
 
 
 bitflags!{
@@ -9,15 +31,16 @@ bitflags!{
         /// dirty
         const D = 1 << 1;
 
-        /// privilege
+        /// privilege 
         const PLV_USER = 0b11 << 2;
+        /// should never be used
         const PLV_KERN = 0b00 << 2;
 
-        /// cache type
+        /// cache type (not used yet)
         const MAT_NOCACHE = 0b01 << 4;
 
         /// Designates a global mapping OR Whether the page is huge page.
-        const GH = 1 << 6;
+        const G = 1 << 6;
 
         /// Page is existing.
         const P = 1 << 7;
@@ -26,7 +49,7 @@ bitflags!{
         /// Mapping to this page is copied but not yet the page itself
         const COW = 1 << 9;
         /// Is a Global Page if using huge page(GH bit).
-        const G = 1 << 12;
+        // const G = 1 << 12;
         /// Page is not readable.
         const NR = 1 << 61;
         /// Page is not executable.
@@ -36,6 +59,97 @@ bitflags!{
         /// Whether the privilege Level is restricted. When RPLV is 0, the PTE
         /// can be accessed by any program with privilege Level highter than PLV.
         const RPLV = 1 << 63;
+    }
+}
+
+
+impl PTEFlags {
+
+    impl_flag_checker!(
+        PLV_USER,
+        pub V,
+        NR,
+        pub W,
+        NX,
+        pub G,
+        pub COW
+    );
+
+    impl_flag_setter!(
+        PLV_USER,
+        pub V,
+        NR,
+        pub W,
+        NX,
+        pub G,
+        pub COW
+    );
+    pub fn new_valid() -> Self {
+        let flags = Self::V;
+        flags
+    }
+    pub fn is_U(&self) -> bool {
+        self.is_PLV_USER()
+    }
+    pub fn is_R(&self) -> bool {
+        !self.is_NR()
+    }
+    pub fn is_X(&self) -> bool {
+        !self.is_NX()
+    }
+    pub fn set_U(&mut self, val: bool) -> &mut Self {
+        self.set_PLV_USER(val)
+    }
+    pub fn set_R(&mut self, val: bool) -> &mut Self {
+        self.set_NR(!val)
+    }
+    pub fn set_X(&mut self, val: bool) -> &mut Self {
+        self.set_NX(!val)
+    }
+}
+
+// impl_flag_set!(PTEFlags, PLV_USER);
+// impl_flag_set!(PTEFlags, V);
+// impl_flag_set!(PTEFlags, NR);
+// impl_flag_set!(PTEFlags, W);
+// impl_flag_set!(PTEFlags, NX);
+// impl_flag_set!(PTEFlags, GH);
+// impl_flag_set!(PTEFlags, COW);
+// impl_flag_check!(PTEFlags, PLV_USER);
+// impl_flag_check!(PTEFlags, V);
+// impl_flag_check!(PTEFlags, NR);
+// impl_flag_check!(PTEFlags, W);
+// impl_flag_check!(PTEFlags, NX);
+// impl_flag_check!(PTEFlags, GH);
+// impl_flag_check!(PTEFlags, COW);
+
+
+impl From<MapPerm> for PTEFlags {
+    fn from(perm: MapPerm) -> Self {
+        *Self::new_valid()
+            .set_U( perm.contains(MapPerm::U) )
+            .set_G(!perm.contains(MapPerm::U) )
+            .set_R( perm.contains(MapPerm::R) )
+            .set_W( perm.contains(MapPerm::W) )
+            .set_X( perm.contains(MapPerm::X) )
+        
+
+        // ret |= PTEFlags::V;
+        // if perm.contains(MapPerm::U) {
+        //     ret |= PTEFlags::U;
+        // } else {
+        //     ret |= PTEFlags::G;
+        // }
+        // if perm.contains(MapPerm::R) {
+        //     ret |= PTEFlags::R;
+        // }
+        // if perm.contains(MapPerm::W) {
+        //     ret |= PTEFlags::W;
+        // }
+        // if perm.contains(MapPerm::X) {
+        //     ret |= PTEFlags::X;
+        // }
+        // ret
     }
 }
 
@@ -72,21 +186,161 @@ impl PageTableEntry {
     }
     ///Check PTE valid
     pub fn is_valid(&self) -> bool {
-        self.flags().contains(PTEFlags::V)
+        self.flags().is_V()
     }
     ///Check PTE readable
     pub fn readable(&self) -> bool {
-        !self.flags().contains(PTEFlags::NR)
+        self.flags().is_R()
     }
     ///Check PTE writable
     pub fn writable(&self) -> bool {
-        self.flags().contains(PTEFlags::W)
+        self.flags().is_W()
     }
     ///Check PTE executable
     pub fn executable(&self) -> bool {
-        !self.flags().contains(PTEFlags::NX)
+        self.flags().is_X()
     }
     pub fn set_flags(&mut self, flags: PTEFlags) {
-        self.bits = (self.ppn() << PPN_SHIFT) | flags.bits() as usize;
+        self.bits = ((self.bits >> PPN_SHIFT) << PPN_SHIFT) | flags.bits() as usize;
+    }
+}
+
+impl PageTable {
+    pub fn init_kernel_page_table() -> Self {
+        extern "C" {
+            fn stext();
+            fn etext();
+            fn srodata();
+            fn erodata();
+            fn sdata();
+            fn edata();
+            fn sbss_with_stack();
+            fn ebss();
+            fn ekernel();
+        }
+        let mut kernel_page_table = Self::new();
+        println!("kernel satp : {:#x}", kernel_page_table.token());
+        // map trampoline
+        // memory_set.map_trampoline();
+        // map kernel sections
+        println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
+        println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
+        println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
+        println!(
+            ".bss [{:#x}, {:#x})",
+            sbss_with_stack as usize, ebss as usize
+        );
+        println!("mapping .text section");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (stext as usize).into(),
+        //         (etext as usize).into(),
+        //         MapType::Direct,
+        //         MapPermission::R | MapPermission::X,
+        //     ),
+        //     None,
+        // );
+        // println!("aaa");
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (stext as usize).into()..(etext as usize).into(),
+            PTEFlags::R | PTEFlags::X,
+        );
+        println!("mapping .rodata section");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (srodata as usize).into(),
+        //         (erodata as usize).into(),
+        //         MapType::Direct,
+        //         MapPermission::R,
+        //     ),
+        //     None,
+        // );
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (srodata as usize).into()..(erodata as usize).into(),
+            PTEFlags::R,
+        );
+        println!("mapping .data section");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (sdata as usize).into(),
+        //         (edata as usize).into(),
+        //         MapType::Direct,
+        //         MapPermission::R | MapPermission::W,
+        //     ),
+        //     None,
+        // );
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (sdata as usize).into()..(edata as usize).into(),
+            PTEFlags::R | PTEFlags::W,
+        );
+        println!("mapping .bss section");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (sbss_with_stack as usize).into(),
+        //         (ebss as usize).into(),
+        //         MapType::Direct,
+        //         MapPermission::R | MapPermission::W,
+        //     ),
+        //     None,
+        // );
+        // TODO: to avoid exposed flag bits
+        kernel_page_table.map_kernel_range(
+            (sbss_with_stack as usize).into()..(ebss as usize).into(),
+            PTEFlags::R | PTEFlags::W,
+        );
+        println!("mapping physical memory");
+        // memory_set.push(
+        //     MapArea::new(
+        //         (ekernel as usize).into(),
+        //         MEMORY_END.into(),
+        //         MapType::Direct,
+        //         MapPermission::R | MapPermission::W,
+        //     ),
+        //     None,
+        // );
+        // TODO: la: use direct mapping instead of page mapping
+        // TODO: to avoid exposed flag bits
+        // kernel_page_table.map_kernel_range(
+        //     (ekernel as usize).into()..(MEMORY_END).into(),
+        //     PTEFlags::R | PTEFlags::W,
+        // );
+        // ffff_ffc0_8020_0000
+        // ffff_ffc0_8800_0000
+        println!("mapping devices");
+        // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
+
+        // SCRIPT: remove device space mapping from pgtbl, which has been taken over by direct mapping currently
+
+        // kernel_page_table.map_kernel_huge_page(
+        //     (0x0000_0000).into(),
+        //     PTEFlags::R | PTEFlags::W
+        // );
+        // kernel_page_table.map_kernel_huge_page(
+        //     (0x4000_0000).into(),
+        //     PTEFlags::R | PTEFlags::W
+        // );
+        // for pair in MMIO {
+        //     memory_set.push(
+        //         MapArea::new(
+        //             ((*pair).0 + KERNEL_ADDR_OFFSET).into(),
+        //             ((*pair).0 + KERNEL_ADDR_OFFSET + (*pair).1).into(),
+        //             MapType::Direct,
+        //             MapPermission::R | MapPermission::W,
+        //         ),
+        //         None,
+        //     );
+        // }
+        // for pair in MMIO {
+        //     let base = (*pair).0 + KERNEL_ADDR_OFFSET;
+        //     kernel_page_table.map_kernel_range(
+        //         base.into()..(base + (*pair).1).into(),
+        //         PTEFlags::R | PTEFlags::W,
+        //     );
+        // }
+        println!("kernel memory set initialized");
+        kernel_page_table
     }
 }

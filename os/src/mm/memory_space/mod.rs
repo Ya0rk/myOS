@@ -390,7 +390,7 @@ impl MemorySpace {
                             new_page.copy_from_slice(page.get_bytes_array());
                             // new_page.copy_from_page(&page);
                             self.page_table_mut()
-                                .map(vpn, new_page.ppn(), map_perm.into());
+                                .map_leaf(vpn, new_page.ppn(), map_perm.into());
                             vm_area.pages.insert(vpn, new_page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         } else {
@@ -401,7 +401,7 @@ impl MemorySpace {
                                 (new_flags, page.ppn())
                             };
                             info!("[map_elf] lazy alloc: vpn: {:#x} offset: {:#x} ppn: {:#x}", vpn.0, offset_aligned, ppn.0 );
-                            self.page_table_mut().map(vpn, ppn, pte_flags);
+                            self.page_table_mut().map_leaf(vpn, ppn, pte_flags);
                             vm_area.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         }
@@ -540,7 +540,7 @@ impl MemorySpace {
         if pages.is_empty() {
             for vpn in vm_area.range_vpn() {
                 let page = Page::new();
-                self.page_table_mut().map(vpn, page.ppn(), map_perm.into());
+                self.page_table_mut().map_leaf(vpn, page.ppn(), map_perm.into());
                 pages.push(Arc::downgrade(&page));
                 vm_area.pages.insert(vpn, page);
             }
@@ -549,7 +549,7 @@ impl MemorySpace {
             let mut pages = pages.iter();
             for vpn in vm_area.range_vpn() {
                 let page = pages.next().unwrap().upgrade().unwrap();
-                self.page_table_mut().map(vpn, page.ppn(), map_perm.into());
+                self.page_table_mut().map_leaf(vpn, page.ppn(), map_perm.into());
                 vm_area.pages.insert(vpn, page.clone());
             }
         }
@@ -732,7 +732,7 @@ impl MemorySpace {
                             (new_flags, page.ppn())
                         }
                     };
-                    memory_space.page_table_mut().map(vpn, ppn, pte_flags);
+                    memory_space.page_table_mut().map_leaf(vpn, ppn, pte_flags);
                 } else {
                     // lazy allocated area
                 }
@@ -847,11 +847,11 @@ impl MemorySpace {
                         new_flags.remove(PTEFlags::W);
                         (new_flags, page.ppn())
                     };
-                    page_table.map(vpn, ppn, pte_flags);
+                    page_table.map_leaf(vpn, ppn, pte_flags);
                     vma.pages.insert(vpn, page);
                     unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                 } else {
-                    page_table.map(vpn, page.ppn(), perm.into());
+                    page_table.map_leaf(vpn, page.ppn(), perm.into());
                     vma.pages.insert(vpn, page);
                     unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                 }

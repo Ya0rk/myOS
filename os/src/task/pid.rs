@@ -1,6 +1,7 @@
 use core::fmt;
 
 use crate::hal::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, INITPROC_PID};
+use crate::mm::memory_space::vm_area::MapPerm;
 use crate::mm::page_table::{ KERNEL_PAGE_TABLE};
 use crate::hal::mem::page_table::PTEFlags;
 use crate::mm::{VirtAddr};
@@ -98,8 +99,8 @@ impl KernelStack {
                 kernel_stack_bottom, 
                 kernel_stack_top
             );
-        let flags = PTEFlags::V | PTEFlags::R | PTEFlags::W;
-        KERNEL_PAGE_TABLE.lock().map_kernel_range(kernel_stack_bottom.into()..kernel_stack_top.into(), flags);
+        // let flags = PTEFlags::V | PTEFlags::R | PTEFlags::W;
+        KERNEL_PAGE_TABLE.lock().map_kernel_range(kernel_stack_bottom.into()..kernel_stack_top.into(), MapPerm::RW);
         KernelStack { pid: pid_handle.0 }
     }
     #[allow(unused)]

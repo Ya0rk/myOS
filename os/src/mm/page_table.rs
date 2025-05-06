@@ -4,6 +4,7 @@ use core::arch::asm;
 use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
 use super::address::{kaddr_p2v, kpn_v2p, KernelAddr};
+use super::memory_space::vm_area::MapPerm;
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 use crate::hal::mem::page_table::{PTEFlags, PageTableEntry};
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
@@ -197,7 +198,7 @@ impl PageTable {
             }
             if !pte.is_valid() {
                 let frame = frame_alloc().expect("no free space to allocate!");
-                *pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
+                *pte = PageTableEntry::new(frame.ppn, PTEFlags::new_valid());
                 self.frames.push(frame);
             }
             ppn = pte.ppn();
@@ -227,40 +228,40 @@ impl PageTable {
     }
     // #[allow(unused)]
     /// 建立虚拟地址和物理地址的映射
-    pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+    pub fn map_leaf(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
         debug_assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
         // TODO: to avoid exposed flag bits
-        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        *pte = PageTableEntry::new(ppn, flags);
     }
-    pub fn map_force(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+    pub fn map_leaf_force(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
         // assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
         // TODO: to avoid exposed flag bits
-        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        *pte = PageTableEntry::new(ppn, flags);
     }
 
-    pub fn map_kernel_range(&mut self, range_va: Range<VirtAddr>, flags: PTEFlags) {
+    pub fn map_kernel_range(&mut self, range_va: Range<VirtAddr>, perm: MapPerm) {
         // println!("[map kernel range] range_va:{:?}", range_va);
         let range_vpn = range_va.start.floor()..range_va.end.ceil();
         println!("[map_kernel_range] map area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
         for vpn in range_vpn {
             let ppn = kpn_v2p(vpn);
             // println!("[map vpn] vpn:{:#x}, ppn:{:#x}", vpn.0, ppn.0);
-            self.map(vpn, ppn, flags);
+            self.map_leaf(vpn, ppn, perm.into());
         }
     }    
 
-    pub fn map_kernel_huge_page(&mut self, base_pa: PhysAddr, flags: PTEFlags) {
+    pub fn map_kernel_huge_page(&mut self, base_pa: PhysAddr, perm: MapPerm) {
         // TODO: to avoid exposed flag bits
-        assert!(flags.intersects(PTEFlags::R | PTEFlags::W | PTEFlags::X));
+        assert!(perm.intersects(MapPerm::RWX));
         let base_vpn: VirtPageNum = kaddr_p2v(base_pa).into();
         let pte = &mut self.root_ppn.get_pte_array()[base_vpn.indexes()[0]];
         // TODO: to avoid exposed flag bits
-        *pte = PageTableEntry::new(base_pa.into(), flags | PTEFlags::V);
+        *pte = PageTableEntry::new(base_pa.into(), perm.into());
     }
     pub fn unmap_kernel_range(&mut self, range_va: Range<VirtAddr>) {
-        let range_vpn = range_va.start.floor()..range_va.end.ceil();
+        let range_vpn: Range<VirtPageNum> = range_va.start.floor()..range_va.end.ceil();
         info!("[unmap_kernel_range] unmap area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
         for vpn in range_vpn {
             let ppn = kpn_v2p(vpn);
@@ -290,7 +291,7 @@ impl PageTable {
     }
     /// 获取根页表 ppn
     pub fn token(&self) -> usize {
-        todo!("to adapt la");
+        // todo!("to adapt la");
         8usize << 60 | self.root_ppn.0
     }
     pub unsafe fn switch(&self) {
