@@ -216,7 +216,7 @@ impl Future for PipeReadFuture<'_> {
         let size = inner.available_read(self.buf.len() - self.cur);
         if size > 0 {
             let len = min(self.buf.len(), size);
-            self.buf.copy_from_slice(&inner.read_nbyte(len));
+            self.buf[..len].copy_from_slice(&inner.read_nbyte(len));
             self.cur += size;
             while let Some(waker) = inner.writer_waker.pop_front() {
                 waker.wake();

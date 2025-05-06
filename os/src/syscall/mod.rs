@@ -27,6 +27,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_GETPGID => sys_getpgid(args[0] as usize),
+        SysCode::SYSCALL_TGKILL => sys_tgkill(args[0] as usize, args[1] as usize, args[2] as i32),
         SysCode::SYSCALL_READLINKAT => sys_readlinkat(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_PRLIMIT64 => sys_prlimit64(args[0] as usize, args[1] as i32, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_GET_ROBUST_LIST => sys_get_robust_list(args[0] as usize, args[1] as usize, args[2] as usize),

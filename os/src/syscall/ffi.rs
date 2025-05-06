@@ -90,14 +90,17 @@ pub enum SysCode {
     SYSCALL_NANOSLEEP = 101,
     SYSCALL_CLOCK_SETTIME = 112,
     SYSCALL_CLOCK_GETTIME = 113,
+    SYSCALL_CLOCK_NANOSLEEP = 115,
     SYSCALL_SYSLOG    = 116,
     SYSCALL_YIELD     = 124,
     SYSCALL_KILL      = 129,
+    SYSCALL_TGKILL    = 131,
     SYSCALL_SIGACTION = 134,
     SYSCALL_SIGPROCMASK = 135,
     SYSCALL_SIGRETURN = 139,
     SYSCALL_TIMES     = 153,
     SYSCALL_SETPGID   = 154,
+    SYSCALL_GETPGID   = 155,
     SYSCALL_SETSID    = 157,
     SYSCALL_UNAME     = 160,
     SYSCALL_GETTIMEOFDAY  = 169,
@@ -145,6 +148,9 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_CLOCK_NANOSLEEP => "clock_nanosleep",
+            Self::SYSCALL_GETPGID => "getpgid",
+            Self::SYSCALL_TGKILL => "tgkill",
             Self::SYSCALL_READLINKAT => "readlinkat",
             Self::SYSCALL_PRLIMIT64 => "prlimit64",
             Self::SYSCALL_GET_ROBUST_LIST => "get_robust_list",

@@ -4,7 +4,7 @@ use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, UContext, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
-use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
+use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID};
 use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
 use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
 use crate::syscall::RLimit64;
@@ -14,6 +14,7 @@ use crate::task::{
 use crate::utils::{Errno, SysResult, RNG};
 use alloc::ffi::CString;
 use alloc::string::{String, ToString};
+use alloc::task;
 use alloc::vec::Vec;
 use log::{debug, info};
 use lwext4_rust::bindings::true_;
@@ -363,7 +364,7 @@ pub fn sys_clock_gettime(
     clock_id: usize,
     timespec: *const u8,
 ) -> SysResult<usize> {
-    info!("[sys_clock_gettime] start");
+    info!("[sys_clock_gettime] start, clock id = {}", clock_id);
     if timespec.is_null() {
         info!("[sys_clock_gettime] timespec is null");
         return Err(Errno::EBADCALL);
@@ -373,6 +374,7 @@ pub fn sys_clock_gettime(
         CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::new(),
         CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
         CLOCK_THREAD_CPUTIME_ID => TimeSpec::thread_cputime_now(),
+        CLOCK_REALTIME_COARSE => TimeSpec::get_coarse_time(),
         CLOCK_BOOTTIME => TimeSpec::boottime_now(),
         _ => return Err(Errno::EINVAL),
     };
@@ -742,6 +744,52 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
             _ => unimplemented!()
         }
     }
+
+    Ok(0)
+}
+
+/// send a signal to a thread
+/// tgkill() sends the signal sig to the thread with the thread ID tid
+/// in the thread group tgid.
+pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SysResult<usize> {
+    info!("[sys_tgkill] start, tgid = {}, tid = {}", tgid, tid);
+    if sig < 0 || sig as usize > MAX_SIGNUM {
+        return Err(Errno::EINVAL);
+    }
+    let signom = SigNom::from(sig as usize);
+    // 如果task是leader，那么tgid = pid；我们的内核中只存在process，没有线程
+    let task = get_task_by_pid(tgid as usize).ok_or(Errno::ESRCH)?;
+    let target = task.thread_group
+                    .lock()
+                    .get(tid)
+                    .ok_or(Errno::ESRCH)?
+                    .upgrade()
+                    .unwrap();
+    let siginfo = SigInfo::new(
+        signom, 
+        SigCode::TKILL, 
+        SigErr::empty(), 
+        SigDetails::Kill { pid: task.get_pid(), uid: 0 }
+    );
+    target.thread_recv_siginfo(siginfo);
+    
+    Ok(0)
+}
+
+pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
+    info!("[sys_getpgid] start, pid = {}", pid);
+    let task = match pid {
+        0 => current_task().unwrap(),
+        _ => {
+            get_task_by_pid(pid).ok_or(Errno::ESRCH)?
+        }
+    };
+
+    Ok(task.get_pgid())
+}
+
+/// high-resolution sleep with specifiable clock
+pub fn sys_clock_nanosleep() -> SysResult<usize> {
 
     Ok(0)
 }

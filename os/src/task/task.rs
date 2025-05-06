@@ -37,7 +37,7 @@ pub struct TaskControlBlock {
     pgid:           AtomicUsize, // 所属进程组id号
     task_status:    SpinNoIrqLock<TaskStatus>,
 
-    thread_group:   Shared<ThreadGroup>,
+    pub thread_group:   Shared<ThreadGroup>,
     pub memory_space:   Shared<MemorySpace>,
     parent:         Shared<Option<Weak<TaskControlBlock>>>,
     pub children:   Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
@@ -538,7 +538,6 @@ impl TaskControlBlock {
     pub fn add_thread_group_member(&self, task: Arc<TaskControlBlock>) {
         self.thread_group.lock().add(task);
     }
-
     /// 删除线程组中的一个成员
     pub fn remove_thread_group_member(&self, pid: usize) {
         self.thread_group.lock().remove(pid.into());

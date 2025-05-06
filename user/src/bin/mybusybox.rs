@@ -11,8 +11,8 @@ use user_lib::{chdir, execve, fork, wait, yield_};
 const TESTCASES: &[&str] = &[
     // "time-test",
     // "test-splice.sh",
-    // "busybox_testcode.sh",
-    "lua_testcode.sh",
+    "busybox_testcode.sh",
+    // "lua_testcode.sh",
     // "netperf_testcode.sh",
     // "libc-bench",
     // "libctest_testcode.sh",
@@ -36,7 +36,6 @@ fn run_cmd(cmd: &str) {
     if fork() == 0 {
         let path = [cd, cmd].concat();
         let busybox = [cd, "busybox"].concat();
-        println!("aaaaaaaaaaaa");
         execve(
             &busybox,
             &[
