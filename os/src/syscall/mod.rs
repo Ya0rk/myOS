@@ -23,6 +23,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as u32),
+        SysCode::SYSCALL_READLINKAT => sys_readlinkat(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_UTIMENSAT => sys_utimensat(args[0] as isize, args[1] as usize, args[2] as *const [TimeSpec; 2], args[3] as i32),
         SysCode::SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as usize),
         SysCode::SYSCALL_SYSLOG => sys_log(args[0] as i32, args[1] as usize, args[2] as usize),
@@ -76,7 +78,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_LSEEK => sys_lseek(args[0] as usize, args[1] as isize, args[2] as usize),
         SysCode::SYSCALL_SETSID => sys_setsid(),
         SysCode::SYSCALL_SETPGID => sys_setpgid(args[0] as usize, args[1] as usize),
-        SysCode::SYSCALL_GETPGID => sys_getpgid(),
+        SysCode::SYSCALL_GETPGID => sys_getpgid(args[0] as usize),
         SysCode::SYSCALL_SIGRETURN => sys_sigreturn(),
         SysCode::SYSCALL_SYSINFO => sys_sysinfo(args[0] as *mut u8),
         SysCode::SYSCALL_READV => sys_readv(args[0] as usize, args[1] as usize, args[2] as usize).await,

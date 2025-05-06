@@ -76,6 +76,7 @@ pub enum SysCode {
     SYSCALL_SENDFILE  = 71,
     // SYSCALL_PSELECT   = 72, // todo in io.rs
     SYSCALL_PPOLL     = 73,
+    SYSCALL_READLINKAT = 78,
     SYSCALL_FSTATAT   = 79,
     SYSCALL_FSTAT     = 80,
     SYSCALL_SYNC      = 81,
@@ -125,6 +126,7 @@ pub enum SysCode {
     SYSCALL_MMAP      = 222,
     SYSCALL_ACCEPT4   = 242,
     SYSCALL_WAIT4     = 260,
+    SYSCALL_RENAMEAT2 = 276,
     GETRANDOM         = 278,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
@@ -140,6 +142,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_RENAMEAT2 => "renameat2",
+            Self::SYSCALL_READLINKAT => "readlinkat",
             Self::SYSCALL_UTIMENSAT => "utimensat",
             Self::SYSCALL_KILL => "kill",
             Self::SYSCALL_SYSLOG => "syslog",

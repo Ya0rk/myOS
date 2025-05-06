@@ -426,8 +426,8 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
     Ok(0)
 }
 
-pub fn sys_getpgid() -> SysResult<usize> {
-    info!("[sys_getpgid] start");
+pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
+    info!("[sys_getpgid] start pid: {}", pid);
     let target_task = current_task().unwrap();
     // if pgid == 0{
     //     let new_pgid = pid;
@@ -437,8 +437,15 @@ pub fn sys_getpgid() -> SysResult<usize> {
     //     target_task.set_pgid(pgid);
     //     extract_proc_to_new_group(old_pgid, pgid, pid);
     // }
-    let res = target_task.get_pgid();
-    Ok(res)
+    let task =  match pid {
+        0 => {
+            current_task().unwrap()
+        }
+        _ => {
+            get_task_by_pid(pid).ok_or(Errno::ESRCH)?
+        }
+    };
+    Ok(task.get_pgid())
 }
 
 /// sigreturn() is a system call that is used to restore the state of a process after it has been interrupted by a signal.

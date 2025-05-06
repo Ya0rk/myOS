@@ -2,7 +2,7 @@ use core::cell::SyncUnsafeCell;
 use core::error;
 use core::ops::Add;
 use alloc::boxed::Box;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::vec;
@@ -10,7 +10,7 @@ use log::info;
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dirent, FileClass, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{TimeSpec, TimeStamp};
@@ -192,7 +192,7 @@ pub fn sys_fstatat(
             buffer.write(tempstat.as_bytes());
             return Ok(0);
         }
-        _ => return Err(Errno::EBADCALL),
+        _ => return Err(Errno::ENOENT),
     }
 }
 
@@ -626,14 +626,98 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
     Ok(0)
 }
 
-/// make a new name for a file: a hard link
-pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
-    info!("[sys_linkat] start");
+pub fn sys_renameat2(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let old_path = translated_str(token, oldpath);
     let new_path = translated_str(token, newpath);
     let cwd = task.get_current_path();
+    info!("[sys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: {} ", &olddirfd, &old_path, &newdirfd, &new_path);
+
+    let old_path = if old_path.starts_with("/") {
+        old_path
+    } else {
+        if olddirfd == AT_FDCWD {
+            join_path_2_absolute(cwd.clone(), old_path)
+        } else {
+            match task.get_file_by_fd(olddirfd as usize) {
+                Some(file) => {
+                    join_path_2_absolute(file.get_name()?, old_path)
+                }
+                None => {
+                    return Err(Errno::EBADF);
+                }
+            }
+        }
+    };
+
+    let new_path = if new_path.starts_with("/") {
+        new_path
+    } else {
+        if newdirfd == AT_FDCWD {
+            join_path_2_absolute(cwd.clone(), new_path)
+        } else {
+            match task.get_file_by_fd(newdirfd as usize) {
+                Some(file) => {
+                    join_path_2_absolute(file.get_name()?, new_path)
+                }
+                None => {
+                    return Err(Errno::EBADF);
+                }
+            }
+        }
+    };
+    Ok(0)
+}
+
+/// make a new name for a file: a hard link
+pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let old_path = translated_str(token, oldpath);
+    let new_path = translated_str(token, newpath);
+    let cwd = task.get_current_path();
+    info!("[sys_linkat] start old: {}, new: {} ", &old_path, &new_path);
+
+    let old_path = if old_path.starts_with("/") {
+        old_path
+    } else {
+        if olddirfd == AT_FDCWD {
+            join_path_2_absolute(cwd.clone(), old_path)
+        } else {
+            match task.get_file_by_fd(olddirfd as usize) {
+                Some(file) => {
+                    join_path_2_absolute(file.get_name()?, old_path)
+                }
+                None => {
+                    return Err(Errno::EBADF);
+                }
+            }
+        }
+    };
+
+    if let Some(inode) = Dentry::get_inode_from_path(&old_path) {
+        if inode.node_type() == InodeType::Dir {
+            return Err(Errno::EISDIR);
+        }
+    }
+
+    let new_path = if old_path.starts_with("/") {
+        new_path
+    } else {
+        if newdirfd == AT_FDCWD {
+            join_path_2_absolute(cwd.clone(), old_path.clone())
+        } else {
+            match task.get_file_by_fd(newdirfd as usize) {
+                Some(file) => {
+                    join_path_2_absolute(file.get_name()?, new_path)
+                }
+                None => {
+                    return Err(Errno::EACCES);
+                }
+            }
+        }
+    };
 
     if olddirfd == AT_FDCWD {
         if let Some(file_class) = open(&cwd, &old_path, OpenFlags::O_RDWR) {
@@ -944,3 +1028,30 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
 
     Ok(0)
 }
+
+pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let pathname = translated_str(token, pathname as *const u8);
+    info!("[sys_readlinkat] start, pathname = {}.", pathname);
+
+    let pathname = Path::string2path(pathname);
+    if !pathname.is_absolute() {
+        if dirfd == AT_FDCWD {
+            let cwd = task.get_current_path();
+            todo!()
+        }
+    } else {
+        // 忽略dirfd
+        // 参考Pantheon
+        let info = "/glibc/".to_string();
+        let buf = unsafe{ buf as *mut u8 };
+        let len = core::cmp::min(info.len(), bufsiz);
+        unsafe { 
+            buf.copy_from(info.as_ptr(), len);
+        }
+    }
+
+    Ok(0)
+}
+
