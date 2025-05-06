@@ -12,7 +12,7 @@ const TESTCASES: &[&str] = &[
     // "time-test",
     // "test-splice.sh",
     "busybox_testcode.sh",
-    // "lua_testcode.sh",
+    "lua_testcode.sh",
     // "netperf_testcode.sh",
     // "libc-bench",
     // "libctest_testcode.sh",

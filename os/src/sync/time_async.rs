@@ -1,9 +1,9 @@
 use core::{future::Future, pin::Pin, task::{Context, Poll}, time::Duration};
 
-use alloc::{collections::binary_heap::BinaryHeap, vec::Vec};
+use alloc::{collections::binary_heap::BinaryHeap, sync::Arc, vec::Vec};
 use log::info;
 use spin::Lazy;
-use crate::utils::Errno;
+use crate::{task::TaskControlBlock, utils::{Errno, SysResult}};
 
 use super::{timer::{time_duration, Timer}, SpinNoIrqLock};
 
@@ -93,6 +93,36 @@ impl<F: Future> Future for TimeoutFuture<F> {
             this.timer_registered = true;
         }
 
+        Poll::Pending
+    }
+}
+
+/// 用来空转,如果被信号kill、stop打断，那么返回剩余时间
+pub struct IdelFuture {
+    pub task: Arc<TaskControlBlock>,
+    pub deadline: Duration // 空转的时间
+}
+
+impl IdelFuture {
+    pub fn new(task: Arc<TaskControlBlock>, deadline: Duration) -> Self {
+        Self {
+            task,
+            deadline
+        }
+    }
+}
+
+impl Future for IdelFuture {
+    type Output = SysResult<Duration>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe { Pin::get_unchecked_mut(self) };
+        if this.task.rv_intr() {
+            let cur = time_duration();
+            let left = this.deadline - cur;
+            info!("[idelfuture] be interupt");
+            return Poll::Ready(Ok(left));
+        }
         Poll::Pending
     }
 }

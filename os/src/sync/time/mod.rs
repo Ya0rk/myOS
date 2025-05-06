@@ -28,5 +28,7 @@ pub const CLOCK_REALTIME_COARSE: usize = 5;
 /// 包含系统挂起时间的单调时钟，从系统启动开始计算
 pub const CLOCK_BOOTTIME: usize = 7;
 
+pub const TIMER_ABSTIME: usize = 1;
+
 pub const UTIME_NOW: usize = 0x3fffffff;
 pub const UTIME_OMIT: usize = 0x3ffffffe;

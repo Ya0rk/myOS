@@ -1,11 +1,12 @@
 use core::mem::size_of;
+use core::time::Duration;
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, UContext, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
-use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID};
-use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
+use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
+use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, IdelFuture, TimeSpec, TimeVal, TimeoutFuture, Tms};
 use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
 use crate::syscall::RLimit64;
 use crate::task::{
@@ -779,7 +780,71 @@ pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
 }
 
 /// high-resolution sleep with specifiable clock
-pub fn sys_clock_nanosleep() -> SysResult<usize> {
+/// clock_nanosleep() suspends the execution of the calling thread
+/// until either at least the time specified by t has elapsed, or a
+/// signal is delivered that causes a signal handler to be called or
+/// that terminates the process.
+pub async fn sys_clock_nanosleep(clockid: usize, flags: usize, t: usize, remain: usize) -> SysResult<usize> {
+    info!("[sys_clock_nanosleep] start, clockid = {}, flags = {}", clockid, flags);
+    match clockid {
+        CLOCK_REALTIME | CLOCK_MONOTONIC => {
+            let cur = time_duration();
+            let task = current_task().unwrap();
+            let deadline = Duration::from(unsafe { *(t as *const TimeSpec) });
+            if flags == TIMER_ABSTIME {
+                if deadline.le(&cur) {
+                    return Ok(0);
+                }
+                sleep_for((deadline - cur).into()).await;
+                return Ok(0);
+            }
 
+            sleep_for(deadline.into()).await;
+            let userremain = remain as *mut TimeSpec;
+            if !userremain.is_null() {
+                unsafe { *userremain = TimeSpec::from(Duration::ZERO) };
+            }
+            return Ok(0);
+        }
+        _ => unimplemented!()
+    }
     Ok(0)
 }
+
+// pub async fn sys_clock_nanosleep(
+//         _clock_id: usize,
+//         flags: isize,
+//         request: usize,
+//         remain: usize,
+// ) -> SysResult<usize> {
+//     /// for clock_nanosleep
+//     pub const TIMER_ABSTIME: usize = 1;
+//     let req = unsafe { *(request as *const TimeSpec) };
+//     let request_d: Duration = req.into();
+//     let has_remain = if (remain as *mut TimeSpec).is_null() {
+//         false
+//     } else {
+//         true
+//     };
+//     let current = time_duration();
+//     if flags as usize == TIMER_ABSTIME {
+//         // request time is absolutely
+//         if request_d.le(&current) {
+//             return Ok(0);
+//         }
+//         let sleep = request_d - current;
+//         sleep_for(sleep.into()).await; 
+//         // ksleep(sleep).await;
+//         return Ok(0);
+//     } else {
+//         // request time is relative
+//         // ksleep(request_d).await;
+//         sleep_for(req).await;
+//         if has_remain {
+//             unsafe {
+//                 *(remain as *mut TimeSpec) = Duration::ZERO.into();
+//             }
+//         }
+//         return Ok(0);
+//     }
+// }

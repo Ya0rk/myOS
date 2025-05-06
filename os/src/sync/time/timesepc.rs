@@ -70,6 +70,15 @@ impl From<TimeSpec> for Duration {
     }
 }
 
+impl From<Duration> for TimeSpec {
+    fn from(value: Duration) -> Self {
+        Self {
+            tv_sec: value.as_secs() as usize,
+            tv_nsec: value.subsec_nanos() as usize
+        }
+    }
+}
+
 impl Display for TimeSpec {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "tv_sec = {}, tv_nsec = {}", self.tv_sec, self.tv_nsec)

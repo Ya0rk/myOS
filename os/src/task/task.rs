@@ -584,6 +584,12 @@ impl TaskControlBlock {
 
     }
 
+    /// 进程收到kill或者stop信号
+    pub fn rv_intr(&self) -> bool {
+        let (res, _, _) = self.sig_pending.lock().has_expected(SigMask::SIGKILL | SigMask::SIGSTOP);
+        res
+    }
+
     /// 获取当前进程的pgid：组id
     pub fn get_pgid(&self) -> usize {
         self.pgid.load(core::sync::atomic::Ordering::Relaxed)

@@ -215,19 +215,20 @@ impl FileTrait for NormalFile {
         self.metadata.inode.is_dir()
     }
 
-    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
-        info!("[read_dents] {}, len: {}, now file offset: {}", self.path, len, self.metadata.offset());
+    fn read_dents(&self, mut ub: &mut [u8], len: usize) -> usize {
+        // info!("[read_dents] {}, len: {}, now file offset: {}", self.path, len, self.metadata.offset());
         if !self.is_dir() {
-            info!("[read_dents] {} is not a dir", self.path);
+            // info!("[read_dents] {} is not a dir", self.path);
             return 0;
         }
 
-        if self.path == "/musl/ltp" || self.path == "/musl/basic"
-            || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
-
+        // 做特殊处理，避免du处理时间太长
+        if self.path == "/musl/ltp" || self.path == "/musl/basic" || self.path == "/musl/basic"
+            || self.path == "/glibc/ltp" || self.path == "/glibc/basic" || self.path == "/glibc/basic" 
+            || self.path == "/musl/lib" || self.path == "/glibc/lib" {
                 info!("alsdkjlaskdfj");
                 return 0;
-            }
+        }
         
         // Some(dir_entrys)
         let dirs = self.metadata.inode.read_dents();
@@ -240,31 +241,22 @@ impl FileTrait for NormalFile {
         let mut res = 0;
         let file_now_offset = self.metadata.offset();
         for den in dirs {
-            info!(
-                "[read_dents] \n\tname: {}\n\td_off: {:#X}\n\td_reclen: {:#X}", 
-                String::from_utf8(den.d_name.to_vec()).unwrap(),
-                den.off(),
-                den.len());
-            // if res + one_den_len > len {
-            //     break;
-            // }
-            // ub.write_at(res, den.as_bytes());
-            // self.metadata.set_offset(den.off());
-            // res += one_den_len;
-            // if (self.metadata.get_offset )
-            // ub.write_at(offset, den.as_bytes());
-            // offset = den.off();
-            // self.metadata.set_offset(offset);
-            if res + den.len() > len {
+            let den_len = den.len();
+            // info!(
+            //     "[read_dents] \n\tname: {}\n\td_off: {:#X}\n\td_reclen: {:#X}", 
+            //     String::from_utf8(den.d_name.to_vec()).unwrap(),
+            //     den.off(),
+            //     den_len);
+            if res + den_len > len {
                 break
             };
-            if den.off() - den.len() >= file_now_offset {
-                ub.write_at(res, den.as_bytes());
-                res += den.len();
+            if den.off() - den_len >= file_now_offset {
+                ub[res..res+den_len].copy_from_slice(den.as_bytes());
+                res += den_len;
             };
         };
         self.metadata.set_offset(file_now_offset + res);
-        info!("[read_dents] path {} return {}", self.path, res);
+        // info!("[read_dents] path {} return {}", self.path, res);
         res
     }
     
