@@ -603,7 +603,7 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
 
     if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
         let file = file_class.file()?;
-        info!("[unlink] file path = {}", file.path);
+        // info!("[unlink] file path = {}", file.path);
         let is_dir = file.is_dir();
         if is_dir && flags != AT_REMOVEDIR {
             return Err(Errno::EISDIR);
@@ -665,6 +665,7 @@ pub fn sys_renameat2(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpa
 
 /// make a new name for a file: a hard link
 pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
+    info!("[sys_linkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let old_path = translated_str(token, oldpath);

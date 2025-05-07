@@ -80,6 +80,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
 /// 根据signo分发处理函数
 fn default_func(task: &Arc<TaskControlBlock>, signo: SigNom) {
+    info!("[default_func] signo = {}", signo as i32);
     match signo {
         SigNom::SIGCHLD | SigNom::SIGURG  | SigNom::SIGWINCH => {}, // no Core Dump
         SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => do_signal_stop(task, signo),   // no core dump
@@ -91,7 +92,7 @@ fn default_func(task: &Arc<TaskControlBlock>, signo: SigNom) {
 /// 沙西所有子线程
 fn do_group_exit(task: &Arc<TaskControlBlock>, signo: SigNom) {
     task.kill_all_thread();
-    info!("[do_goroup_exit] exit code = {}", signo as i32);
+    info!("[do_goroup_exit] signo = {}", signo as i32);
     task.set_exit_code(signo as i32);
 }
 

@@ -1,9 +1,9 @@
-use core::{intrinsics::atomic_load_relaxed, time::Duration};
+use core::{intrinsics::{atomic_load_acquire, atomic_load_relaxed}, time::Duration};
 use log::info;
 use num_enum::TryFromPrimitive;
 use riscv::addr::AddressL2;
 use crate::{
-    signal::copy2user, sync::{TimeSpec, TimeoutFuture}, task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEXBUCKET, ROBUST_LIST_HEAD_SIZE}, utils::{Errno, SysResult}
+    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEXBUCKET, ROBUST_LIST_HEAD_SIZE}, utils::{Errno, SysResult}
 };
 
 const FUTEX_BITSET_MATCH_ANY: u32 = 0xffffffff;
@@ -27,7 +27,9 @@ pub async fn sys_futex(
     let mut op = FutexOp::from_bits(futex_op).ok_or(Errno::EINVAL)?;
     info!("[sys_futex] start, futex_op = {:?}", op);
     if uaddr == 0 { return Err(Errno::EACCES); }
+    info!("dddddddddd");
     let key = FutexHashKey::get_futex_key(uaddr as usize, op);
+    info!("get key");
     if op.contains(FutexOp::FUTEX_CLOCK_REALTIME) {
         let cmd = op & !FutexOp::FUTEX_MUSK;
         if cmd != FutexOp::FUTEX_WAIT_BITSET {
@@ -35,31 +37,38 @@ pub async fn sys_futex(
         }
     }
     let use_op = op & !FutexOp::FUTEX_MUSK;
+    info!("[sys_futex] use_op = {:?}", use_op);
 
     match use_op {
         FutexOp::FUTEX_WAIT => {
-            // 如果futex word中仍然保存着参数val给定的值，那么当前线程则进入睡眠，等待FUTEX_WAKE的操作唤醒它。
-            let now_val = unsafe{ atomic_load_relaxed(uaddr as *const u32) };
-            // 如果uaddr指向地址的值 != val，那么就返回错误
+            info!("[sys_futex] wait, uaddr = {:#x}", uaddr);
+            // // 如果futex word中仍然保存着参数val给定的值，那么当前线程则进入睡眠，等待FUTEX_WAKE的操作唤醒它。
+            let now_val = unsafe{ atomic_load_acquire(uaddr as *const u32) };
+            info!("[futex] wait, now_val = {}, val = {}", now_val, val);
+            // // 如果uaddr指向地址的值 != val，那么就返回错误
             if now_val != val { return Err(Errno::EAGAIN); }
 
+            info!("[sys_futex] wait, now_val = {}, val = {}, timeout = {}", now_val, val, timeout);
             let res = do_futex_wait(uaddr, val, timeout, FUTEX_BITSET_MATCH_ANY, key).await;
             return res;
         }
         FutexOp::FUTEX_WAIT_BITSET => {
-            let now_val = unsafe{ atomic_load_relaxed(uaddr as *const u32) };
+            let now_val = unsafe{ atomic_load_acquire(uaddr as *const u32) };
             if now_val != val { return Err(Errno::EAGAIN); }
 
             let res = do_futex_wait(uaddr, val, timeout, val3, key).await;
             return res;
         }
         FutexOp::FUTEX_WAKE => {
-            // 最多唤醒val个等待在futex word上的线程。Val或者等于1（唤醒1个等待线程）或者等于INT_MAX（唤醒全部等待线程）
+            // // 最多唤醒val个等待在futex word上的线程。Val或者等于1（唤醒1个等待线程）或者等于INT_MAX（唤醒全部等待线程）
+            info!("[sys_futex] wake, val = {}", val);
             let res = do_futex_wake(uaddr, val, FUTEX_BITSET_MATCH_ANY, key);
+            yield_now().await;
             return res;
         }
         FutexOp::FUTEX_WAKE_BITSET => {
             let res = do_futex_wake(uaddr, val, val3, key);
+            yield_now().await;
             return res;
         }
         FutexOp::FUTEX_REQUEUE => {
@@ -107,6 +116,7 @@ async fn do_futex_wait(uaddr: u32, val: u32, timeout: u32, bitset: u32, key: Fut
         return Err(Errno::EINVAL);
     }
     let futex_future = FutexFuture::new(uaddr, key, bitset, val);
+    info!("[do_futex_wait] uaddr = {:x}", uaddr);
 
     match timeout {
         // 此时不需要等待，立即执行
@@ -114,13 +124,14 @@ async fn do_futex_wait(uaddr: u32, val: u32, timeout: u32, bitset: u32, key: Fut
         _ => {
             let tp = unsafe{ *(timeout as *const TimeSpec) };
             let timeout = Duration::from(tp);
+            info!("[do_futex_wait] timeout = {:?}", timeout);
             if let Err(Errno::ETIMEDOUT) = TimeoutFuture::new(futex_future, timeout).await {
                 info!("[do_futex_wait] time out.");
-                let pid = Pid::from(current_task().unwrap().get_pid());
-                if FUTEXBUCKET.lock().check_is_inqueue(key, pid.clone()) {
-                    FUTEXBUCKET.lock().remove(key, pid);
-                    return Err(Errno::EINVAL);
-                }
+                // let pid = Pid::from(current_task().unwrap().get_pid());
+                // if FUTEXBUCKET.lock().check_is_inqueue(key, pid.clone()) {
+                //     FUTEXBUCKET.lock().remove(key, pid);
+                //     return Err(Errno::EINVAL);
+                // }
             };
         }
     }

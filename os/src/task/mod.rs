@@ -12,7 +12,7 @@ pub mod executor;
 
 pub use futex::*;
 pub use fd::{FdTable, FdInfo, sock_map_fd};
-pub use pid::{KernelStack, Pid, PidAllocator};
+pub use pid::{Pid, PidAllocator};
 pub use task::{TaskControlBlock, TaskStatus};
 pub use processor::CPU;
 pub use sched::TaskFuture;

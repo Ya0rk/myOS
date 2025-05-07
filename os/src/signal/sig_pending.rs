@@ -96,6 +96,21 @@ impl SigPending {
         }
     }
 
+    /// 获取信号，不会将其从队列删除
+    pub fn get_expected_one(&self, expect: SigMask) -> Option<SigInfo> {
+        match self.has_expected(expect) {
+            (true, i, q) => {
+                let siginfo = match q {
+                    WhichQueue::Fifo => self.fifo.get(i as usize),
+                    WhichQueue::Prio => self.prio.get(i as usize),
+                    WhichQueue::None => unimplemented!()
+                };
+                return siginfo.cloned();
+            },
+            (false, _, _) => return None
+        }
+    }
+
     pub fn has_expected(&self, expect: SigMask) -> (bool, isize, WhichQueue) {
         let intersection = self.mask & expect;
         if intersection.is_empty() {

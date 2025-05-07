@@ -1,6 +1,7 @@
-use core::{cmp::min, future::Future, intrinsics::atomic_load_relaxed, task::{Poll, Waker}};
+use core::{cmp::min, future::Future, intrinsics::{atomic_load_acquire, atomic_load_relaxed}, sync::atomic::{AtomicU32, Ordering}, task::{Poll, Waker}};
 use alloc::{sync::Arc, vec::Vec};
 use hashbrown::HashMap;
+use log::info;
 use spin::Lazy;
 use crate::{
     mm::{address::{kaddr_v2p}, PhysAddr, VirtAddr},
@@ -59,6 +60,7 @@ impl FutexBucket {
     }
     /// 用于删除特定的futex，主要场景分为两种：超时或者被信号打断
     pub fn remove(&mut self, key: FutexHashKey, pid: Pid) {
+        info!("[futex queue] remove pid = {}", pid);
         let queue = self.0.get_mut(&key).expect("[remove] no such queue");
         queue.retain(|(p, _, _)| *p != pid); // 删除队列中pid的任务
         if queue.is_empty() {  // 队列为空，就删除整个队列，避免内存泄露
@@ -68,17 +70,19 @@ impl FutexBucket {
     // 唤醒在队列中的任务, 同时将这些任务从队列中清除
     pub fn to_wake(&mut self, key: FutexHashKey, bitset: u32, num: u32) -> usize {
         let mut res = 0;
-        let queue = self.0.get_mut(&key).expect("[to_wake] no such queue.");
-        for (_, waker, tb) in queue.pop() {
-            if res >= num as usize { break; }
-            if bitset & tb == 0 {
-                continue;
+        // let queue = self.0.get_mut(&key).expect("[to_wake] no such queue.");
+        if let Some(queue) = self.0.get_mut(&key) {
+            for (_, waker, tb) in queue.pop() {
+                if res >= num as usize { break; }
+                if bitset & tb == 0 {
+                    continue;
+                }
+                waker.wake();
+                res += 1;
             }
-            waker.wake();
-            res += 1;
-        }
-        if queue.is_empty() {
-            self.0.remove(&key);
+            if queue.is_empty() {
+                self.0.remove(&key);
+            }
         }
         return res;
     }
@@ -134,18 +138,20 @@ impl Future for FutexFuture {
 
     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
         let this = self.get_mut();
+        let task = current_task().unwrap();
+        let pid = Pid::from(task.get_pid());
         if !this.is_register {
             // 说明还没有加入全局hash 桶
             // 在入队前要判断是否是期望值
-            let now = unsafe{ atomic_load_relaxed(this.val as *const u32) };
-            let task = current_task().unwrap();
-            let pid = Pid::from(task.get_pid());
-
+            info!("mmmmmmmmmmm");
+            let now = unsafe{ atomic_load_acquire(this.uaddr as *const u32) };
+            
+            info!("llllllllllllllll");
             if  now != this.val {
                 // 如果不相等，说明有其他任务释放了锁，此时就不需要将其加入队列，否则可能造成无法唤醒
                 return Poll::Ready(());
             }
-
+            info!("[futex_future] aaaaaa");
             // 加入hash 桶
             FUTEXBUCKET.lock().add(this.key, pid, cx.waker().clone(), this.bitset);
             this.is_register = true;
@@ -171,8 +177,6 @@ impl RobustList {
         }
     }
 }
-
-
 
 bitflags! {
     #[repr(C)]

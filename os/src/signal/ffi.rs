@@ -207,6 +207,7 @@ pub enum SigNom {
     SIGPWR = 30,      // 电源故障（UPS 电池低电量）
     SIGSYS = 31,      // 无效系统调用
     SIGTIMER = 32,    // 定时器信号（某些系统如 Solaris 使用）
+    SIGCANCEL = 33,  // 取消信号（某些系统如 Solaris 使用）
     SIGRTMAX = 64,    // 最大实时信号编号（实际可用信号可能更少）
 }
 

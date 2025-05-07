@@ -11,11 +11,11 @@ use user_lib::{chdir, execve, fork, wait, yield_};
 const TESTCASES: &[&str] = &[
     // "time-test",
     // "test-splice.sh",
-    "busybox_testcode.sh",
-    "lua_testcode.sh",
+    // "busybox_testcode.sh",
+    // "lua_testcode.sh",
     // "netperf_testcode.sh",
     // "libc-bench",
-    // "libctest_testcode.sh",
+    "libctest_testcode.sh",
     // "iozone_testcode.sh",
     // "unixbench_testcode.sh",
     // "cyclictest_testcode.sh",
@@ -31,7 +31,7 @@ pub fn conert_str2byte(input: &str) -> Vec<u8> {
 }
 
 fn run_cmd(cmd: &str) {
-    let cd = "/glibc/";
+    let cd = "/musl/";
     chdir(&conert_str2byte(cd));
     if fork() == 0 {
         let path = [cd, cmd].concat();

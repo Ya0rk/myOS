@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
 use super::{add_proc_group_member, FdInfo, FdTable, RobustList, ThreadGroup};
-use super::{pid_alloc, KernelStack, Pid};
+use super::{pid_alloc, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
 use crate::fs::{init, FileClass, FileTrait};
@@ -732,7 +732,7 @@ impl TaskControlBlock {
     /// waker
     /// 获取当前进程的waker
     pub fn get_task_waker(&self) -> &Option<Waker> {
-        unsafe { & *self.waker.get() }
+        unsafe { &*self.waker.get() }
     }
     /// 判断当前进程是否有waker
     pub fn has_waker(&self) -> bool {
