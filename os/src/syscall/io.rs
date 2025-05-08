@@ -55,7 +55,7 @@ pub async fn sys_ppoll(
     tmo_p: usize,
     sigmask: usize,
 ) -> SysResult<usize> {
-    // info!("[sys_ppoll] start");
+    info!("[sys_ppoll] start fds: {}, nfds: {}, tmo_p: {}, sigmask: {}", fds, nfds, tmo_p, sigmask);
     if fds == 0 { return Err(Errno::EFAULT); }
     let task = current_task().unwrap();
     // 使用 Guard 管理信号掩码, 函数结束时自动回复sigmask
