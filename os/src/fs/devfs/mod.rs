@@ -12,12 +12,14 @@ pub use urandom::*;
 
 
 use spin::Mutex;
+use crate::sync::SpinNoIrqLock;
+
 use super::FileTrait;
 use alloc::{collections::btree_set::BTreeSet, string::{String, ToString}, sync::Arc};
 
 
 lazy_static!{
-    pub static ref DEVICES: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+    pub static ref DEVICES: SpinNoIrqLock<BTreeSet<String>> = SpinNoIrqLock::new(BTreeSet::new());
 }
 
 pub fn register_device(abs_path: &str) {

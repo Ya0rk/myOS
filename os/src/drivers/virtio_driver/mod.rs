@@ -8,18 +8,17 @@ use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 use core::ptr::NonNull;
 
 use crate::{
-    drivers::DevError,
-    mm::{
+    drivers::DevError, mm::{
         frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PageTable, PhysPageNum,
         StepByOne, VirtAddr,
-    }, task::current_user_token,
+    }, sync::SpinNoIrqLock, task::current_user_token
 };
 use alloc::{sync::Arc, vec::Vec};
 use lazy_static::*;
 lazy_static! {
     /// 实现 Trait BlockDevice时对内部操作加锁
     // pub static ref BLOCK_DEVICE: Arc<dyn BlockDevice> = Arc::new(BlockDeviceImpl::new());
-    static ref QUEUE_FRAMES: Mutex<Vec<Arc<FrameTracker>>> = Mutex::new(Vec::new());
+    static ref QUEUE_FRAMES: SpinNoIrqLock<Vec<Arc<FrameTracker>>> = SpinNoIrqLock::new(Vec::new());
 }
 
 pub struct VirtIoHalImpl;

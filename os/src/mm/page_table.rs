@@ -3,6 +3,7 @@
 use core::arch::asm;
 use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
+use crate::sync::SpinNoIrqLock;
 use super::address::{kaddr_p2v, kpn_v2p, KernelAddr};
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
@@ -86,7 +87,7 @@ pub unsafe fn switch_pgtable(page_table_token: usize) {
 
 // TODO: 优化结构
 lazy_static! {
-    pub static ref KERNEL_PAGE_TABLE: Arc<Mutex<PageTable>> = Arc::new(Mutex::new(PageTable::init_kernel_page_table()));
+    pub static ref KERNEL_PAGE_TABLE: Arc<SpinNoIrqLock<PageTable>> = Arc::new(SpinNoIrqLock::new(PageTable::init_kernel_page_table()));
 }
 
 

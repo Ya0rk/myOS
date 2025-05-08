@@ -415,11 +415,11 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
         target_task.set_pgid(pid);
         extract_proc_to_new_group(old_pgid, new_pgid, pid);
     } else {
-        info!("stage 1");
+        // info!("stage 1");
         target_task.set_pgid(pgid);
-        info!("stage 2");
+        // info!("stage 2");
         extract_proc_to_new_group(old_pgid, pgid, pid);
-        info!("stage 3");
+        // info!("stage 3");
     }
     Ok(0)
 }
@@ -645,7 +645,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
     match target {
         Target::Specify(p) => {
             let cur_task = current_task().unwrap();
-            if cur_task.get_pid() == 4 && p == 10 { return Ok(0); } // TODO(YJJ):这里是为了通过kill测试，好像是测试用例有问题?
+            // if cur_task.get_pid() == 4 && p == 10 { return Ok(0); } // TODO(YJJ):这里是为了通过kill测试，好像是测试用例有问题?
             let recv_task = get_task_by_pid(p).ok_or(Errno::ESRCH)?;
             if recv_task.is_leader() && signum != SigNom::NOSIG {
                 let sender_pid = cur_task.get_pid();
