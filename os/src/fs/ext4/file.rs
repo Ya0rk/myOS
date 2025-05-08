@@ -216,7 +216,7 @@ impl FileTrait for NormalFile {
     fn read_dents(&self, mut ub: usize, len: usize) -> usize {
         info!("[read_dents] {}, len: {}, now file offset: {}", self.path, len, self.metadata.offset());
         if !self.is_dir() {
-            info!("[read_dents] {} is not a dir", self.path);
+            // info!("[read_dents] {} is not a dir", self.path);
             return 0;
         }
 
@@ -245,22 +245,13 @@ impl FileTrait for NormalFile {
         let mut res = 0;
         let file_now_offset = self.metadata.offset();
         for den in dirs {
-            info!(
-                "[read_dents] \n\tname: {}\n\td_off: {:#X}\n\td_reclen: {:#X}", 
-                String::from_utf8(den.d_name.to_vec()).unwrap(),
-                den.off(),
-                den.len());
-            // if res + one_den_len > len {
-            //     break;
-            // }
-            // ub.write_at(res, den.as_bytes());
-            // self.metadata.set_offset(den.off());
-            // res += one_den_len;
-            // if (self.metadata.get_offset )
-            // ub.write_at(offset, den.as_bytes());
-            // offset = den.off();
-            // self.metadata.set_offset(offset);
-            if res + den.len() > len {
+            let den_len = den.len();
+            // info!(
+            //     "[read_dents] \n\tname: {}\n\td_off: {:#X}\n\td_reclen: {:#X}", 
+            //     String::from_utf8(den.d_name.to_vec()).unwrap(),
+            //     den.off(),
+            //     den_len);
+            if res + den_len > len {
                 break
             };
             if den.off() - den.len() >= file_now_offset {
@@ -270,7 +261,7 @@ impl FileTrait for NormalFile {
             };
         };
         self.metadata.set_offset(file_now_offset + res);
-        info!("[read_dents] path {} return {}", self.path, res);
+        // info!("[read_dents] path {} return {}", self.path, res);
         res
     }
     

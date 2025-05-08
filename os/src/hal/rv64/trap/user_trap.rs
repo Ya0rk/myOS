@@ -19,7 +19,7 @@ use riscv::register::scause::{self, Exception, Interrupt, Trap};
 pub async fn user_trap_handler() {
     // 设置kernel的trap handler entry
 
-    use crate::sync::TIMER_QUEUE;
+    use crate::{sync::TIMER_QUEUE};
     set_trap_handler(IndertifyMode::Kernel);
     let scause = scause::read();
     let stval = stval::read();

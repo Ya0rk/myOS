@@ -43,6 +43,12 @@ pub enum SigDetails {
     None
 }
 
+pub enum WhichQueue {
+    Fifo,
+    Prio,
+    None
+}
+
 lazy_static! {
     /// 优先级较高的信号
     static ref PRIO_SIG: SigMask = SigMask::SIGSEGV | SigMask::SIGBUS
@@ -76,18 +82,56 @@ impl SigPending {
 
     /// 用于wait4中取出SIGCHLD信号，所以只需要遍历fifo队列
     pub fn take_expected_one(&mut self, expect: SigMask) -> Option<SigInfo> {
+        match self.has_expected(expect) {
+            (true, i, q) => {
+                let siginfo = match q {
+                    WhichQueue::Fifo => self.fifo.remove(i as usize),
+                    WhichQueue::Prio => self.prio.remove(i as usize),
+                    WhichQueue::None => unimplemented!()
+                };
+                self.mask.unset_sig(siginfo.unwrap().signo as usize);
+                return siginfo;
+            },
+            (false, _, _) => return None
+        }
+    }
+
+    /// 获取信号，不会将其从队列删除
+    pub fn get_expected_one(&self, expect: SigMask) -> Option<SigInfo> {
+        match self.has_expected(expect) {
+            (true, i, q) => {
+                let siginfo = match q {
+                    WhichQueue::Fifo => self.fifo.get(i as usize),
+                    WhichQueue::Prio => self.prio.get(i as usize),
+                    WhichQueue::None => unimplemented!()
+                };
+                return siginfo.cloned();
+            },
+            (false, _, _) => return None
+        }
+    }
+
+    pub fn has_expected(&self, expect: SigMask) -> (bool, isize, WhichQueue) {
         let intersection = self.mask & expect;
         if intersection.is_empty() {
-            return None;
+            return (false, -1, WhichQueue::None);
         }
+
         for i in 0..self.fifo.len() {
             let signo = self.fifo[i].signo as usize;
             if intersection.have(signo) {
-                self.mask.unset_sig(signo);
-                return self.fifo.remove(i);
+                return (true, i as isize, WhichQueue::Fifo);
             }
         }
-        None
+
+        for i in 0..self.prio.len() {
+            let signo = self.prio[i].signo as usize;
+            if intersection.have(signo) {
+                return (true, i as isize, WhichQueue::Prio);
+            }
+        }
+
+        return (false, -1, WhichQueue::None);
     }
 
     pub fn add(&mut self, siginfo: SigInfo) {

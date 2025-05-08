@@ -6,7 +6,7 @@ use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
 use super::{add_proc_group_member, FdInfo, FdTable, RobustList, ThreadGroup};
-use super::{pid_alloc, KernelStack, Pid};
+use super::{pid_alloc, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
 use crate::fs::{init, FileClass, FileTrait};
@@ -584,6 +584,12 @@ impl TaskControlBlock {
 
     }
 
+    /// 进程收到kill或者stop信号
+    pub fn rv_intr(&self) -> bool {
+        let (res, _, _) = self.sig_pending.lock().has_expected(SigMask::SIGKILL | SigMask::SIGSTOP);
+        res
+    }
+
     /// 获取当前进程的pgid：组id
     pub fn get_pgid(&self) -> usize {
         self.pgid.load(core::sync::atomic::Ordering::Relaxed)
@@ -726,7 +732,7 @@ impl TaskControlBlock {
     /// waker
     /// 获取当前进程的waker
     pub fn get_task_waker(&self) -> &Option<Waker> {
-        unsafe { & *self.waker.get() }
+        unsafe { &*self.waker.get() }
     }
     /// 判断当前进程是否有waker
     pub fn has_waker(&self) -> bool {

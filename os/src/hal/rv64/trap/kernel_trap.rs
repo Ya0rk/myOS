@@ -16,7 +16,7 @@ use riscv::register::{scause::{self, Exception, Interrupt, Trap}, stval, sepc};
 pub fn kernel_trap_handler() {
     use log::info;
 
-    use crate::{sync::TIMER_QUEUE, task::get_current_cpu};
+    use crate::{sync::TIMER_QUEUE, task::{get_current_cpu}};
     let scause = scause::read();
     let stval = stval::read();
     let sepc = sepc::read();

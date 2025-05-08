@@ -1,16 +1,16 @@
-use core::{future::Future, pin::Pin, task::{Context, Poll}, time::Duration};
+use core::{cmp::Reverse, future::Future, pin::Pin, task::{Context, Poll}, time::Duration};
 
-use alloc::{collections::binary_heap::BinaryHeap, vec::Vec};
+use alloc::{collections::binary_heap::BinaryHeap, sync::Arc, vec::Vec};
 use log::info;
 use spin::Lazy;
-use crate::utils::Errno;
+use crate::{task::TaskControlBlock, utils::{Errno, SysResult}};
 
 use super::{timer::{time_duration, Timer}, SpinNoIrqLock};
 
 // TODO(YJJ):使用时间轮和最小堆混合时间管理器来优化时间复杂度===========
 
 pub struct TimerQueue {
-    timers: SpinNoIrqLock<BinaryHeap<Timer>>, // 直接使用最小堆
+    timers: SpinNoIrqLock<BinaryHeap<Reverse<Timer>>>, // 直接使用最小堆
 }
 
 impl TimerQueue {
@@ -23,7 +23,7 @@ impl TimerQueue {
     /// 添加定时器（O(log n)）
     pub fn add(&self, timer: Timer) {
         let mut heap = self.timers.lock();
-        heap.push(timer);
+        heap.push(Reverse(timer));
     }
 
     /// 处理过期事件（O(k log n) k为过期事件数）
@@ -34,10 +34,11 @@ impl TimerQueue {
         {
             let mut heap = self.timers.lock();
             while let Some(timer) = heap.peek() {
-                if timer.expire_ns > current_ns {
+                if timer.0.expire_ns > current_ns {
                     break;
                 }
                 if let Some(timer) = heap.pop() {
+                    let timer = timer.0;
                     wake_list.extend(timer.waker);
                 }
             }
@@ -93,6 +94,36 @@ impl<F: Future> Future for TimeoutFuture<F> {
             this.timer_registered = true;
         }
 
+        Poll::Pending
+    }
+}
+
+/// 用来空转,如果被信号kill、stop打断，那么返回剩余时间
+pub struct IdelFuture {
+    pub task: Arc<TaskControlBlock>,
+    pub deadline: Duration // 空转的时间
+}
+
+impl IdelFuture {
+    pub fn new(task: Arc<TaskControlBlock>, deadline: Duration) -> Self {
+        Self {
+            task,
+            deadline
+        }
+    }
+}
+
+impl Future for IdelFuture {
+    type Output = SysResult<Duration>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe { Pin::get_unchecked_mut(self) };
+        if this.task.rv_intr() {
+            let cur = time_duration();
+            let left = this.deadline - cur;
+            info!("[idelfuture] be interupt");
+            return Poll::Ready(Ok(left));
+        }
         Poll::Pending
     }
 }

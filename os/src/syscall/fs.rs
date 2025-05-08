@@ -178,7 +178,6 @@ pub fn sys_fstatat(
         }
         let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_fstatat] not found fd");
         let other_cwd = inode.get_name()?;
-        info!("othercwd = {}", other_cwd);
         join_path_2_absolute(other_cwd, path)
     };
 
@@ -195,10 +194,9 @@ pub fn sys_fstatat(
             file.fstat(&mut tempstat)?;
             info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             buffer.write(tempstat.as_bytes());
-            info!("mmmmmmmmmmm");
             return Ok(0);
         }
-        _ => return Err(Errno::ENOENT),
+        _ => return Err(Errno::ENOENT)
     }
 }
 
@@ -356,7 +354,7 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// len：buf的大小。
 /// 
 /// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
-pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
+pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     info!("[sys_getdents64] start fd: {}, len: {}", fd, len);
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
@@ -364,6 +362,7 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
         return Err(Errno::EBADF);
     }
 
+    let buf = buf as *mut u8;
     if buf.is_null() {
         log::error!("[sys_getdents64] buf is null");
         return Err(Errno::EFAULT);
@@ -604,7 +603,7 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
 
     if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
         let file = file_class.file()?;
-        info!("[unlink] file path = {}", file.path);
+        // info!("[unlink] file path = {}", file.path);
         let is_dir = file.is_dir();
         if is_dir && flags != AT_REMOVEDIR {
             return Err(Errno::EISDIR);
@@ -666,6 +665,7 @@ pub fn sys_renameat2(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpa
 
 /// make a new name for a file: a hard link
 pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
+    info!("[sys_linkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let old_path = translated_str(token, oldpath);
@@ -788,7 +788,7 @@ pub fn sys_faccessat(
     let abs = if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
         let current_path = current_task().unwrap().get_current_path();
-        path.insert(0, '.');
+        // path.insert(0, '.');
         join_path_2_absolute(current_path, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点

@@ -34,7 +34,7 @@ pub use stdio::{Stdin, Stdout};
 pub use crate::mm::page::Page;
 pub use pre_data::*;
 use crate::mm::page::PageType;
-use devfs::{find_device, open_device_file, register_device};
+use devfs::{find_device, open_device_file, register_device, DevZero};
 use ffi::{MOUNTS, MEMINFO, LOCALTIME, ADJTIME};
 use ext4::file::NormalFile;
 use crate::mm::UserBuffer;
@@ -134,12 +134,13 @@ pub fn create_init_files() -> SysResult {
     //注册设备/dev/numm
     register_device("/dev/null");
     
-    register_device("/proc");
-
     //创建./dev/misc文件夹
     mkdir("/dev/misc", 0);
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
+
+    // mkdir("/tmp", 0);
+    open_file("/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
 
     //创建/etc文件夹
     mkdir("/etc", 0);
@@ -186,7 +187,7 @@ fn create_open_file(
     flags: OpenFlags,
 ) -> Option<FileClass> {
     info!(
-        "[create_file] flags={:?}, abs_path={}, parent_path={}",
+        "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
         flags, target_abs_path, parent_path
     );
 
@@ -197,7 +198,7 @@ fn create_open_file(
             if inode.node_type() == InodeType::Dir {
                 inode
             } else {
-                info!("[create_file] failed inode type is {:?}", inode.node_type());
+                info!("[create_open_file] failed inode type is {:?}", inode.node_type());
                 return None;
             }
         } else {
@@ -205,7 +206,7 @@ fn create_open_file(
         }
     };
     let parent_dentry = Dentry::get_dentry_from_path(&(parent_path.into())).unwrap();
-    info!("[create_file] got parent inode");
+    // info!("[create_file] got parent inode");
     // 通过Dentry直接返回target_inode,如果节点存在就直接返回
     // 如果节点不存在就检查创建的标志位,
     // 如果需要创建就创建一个,使用InodeTrait::do_create方法
@@ -220,13 +221,13 @@ fn create_open_file(
                 parent_dentry.add_child(&path.get_filename(), flags).unwrap()
             } else {
                 // no need to create
-                info!("[create_file] path = {} no need to creat", target_abs_path);
+                info!("[create_open_file] path = {} no need to creat", target_abs_path);
                 return None;
             }
             
         }
     };
-    info!("[create_file] got target inode");
+    // info!("[create_file] got target inode");
 
     let res = {
         let osinode = NormalFile::new(
@@ -247,7 +248,7 @@ pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
 }
 
 pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
-    info!("[fs_open] cwd = {}, path = {}", cwd, path);
+    info!("[fs_open] cwd = {}, path = {}, flags = {:?}", cwd, path, flags);
     let abs_path = Path::string2path(
         join_path_2_absolute(
             cwd.to_string(), 

@@ -1,11 +1,12 @@
 use core::mem::size_of;
+use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, UContext, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
-use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID};
-use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
+use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
+use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
+use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, IdelFuture, TimeSpec, TimeVal, TimeoutFuture, Tms};
 use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
 use crate::syscall::RLimit64;
 use crate::task::{
@@ -514,7 +515,7 @@ pub fn sys_sigaction(
     act: usize,
     old_act: usize,
 ) -> SysResult<usize> {
-    info!("sys_sigaction");
+    info!("[sys_sigaction] start");
     // 作为强转的暂存器
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -779,7 +780,95 @@ pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
 }
 
 /// high-resolution sleep with specifiable clock
-pub fn sys_clock_nanosleep() -> SysResult<usize> {
+/// clock_nanosleep() suspends the execution of the calling thread
+/// until either at least the time specified by t has elapsed, or a
+/// signal is delivered that causes a signal handler to be called or
+/// that terminates the process.
+pub async fn sys_clock_nanosleep(clockid: usize, flags: usize, t: usize, remain: usize) -> SysResult<usize> {
+    info!("[sys_clock_nanosleep] start, clockid = {}, flags = {}", clockid, flags);
+    match clockid {
+        CLOCK_REALTIME | CLOCK_MONOTONIC => {
+            let cur = time_duration();
+            let task = current_task().unwrap();
+            let deadline = Duration::from(unsafe { *(t as *const TimeSpec) });
+            if flags == TIMER_ABSTIME {
+                if deadline.le(&cur) {
+                    return Ok(0);
+                }
+                sleep_for((deadline - cur).into()).await;
+                return Ok(0);
+            }
 
+            sleep_for(deadline.into()).await;
+            let userremain = remain as *mut TimeSpec;
+            if !userremain.is_null() {
+                unsafe { *userremain = TimeSpec::from(Duration::ZERO) };
+            }
+            return Ok(0);
+        }
+        _ => unimplemented!()
+    }
+    Ok(0)
+}
+
+
+pub async fn sys_sigtimedwait(set: usize, info: usize, timeout: usize) -> SysResult<usize> {
+    info!("[sys_sigtimedwait] start");
+    Ok(0)
+    // let task = current_task().unwrap();
+    // let mut set = unsafe{ *(set as *mut SigMask) };
+    // set.remove(SigMask::SIGKILL | SigMask::SIGCONT);
+
+    // let may = task.sig_pending.lock().get_expected_one(set);
+    // match may {
+    //     Some(siginfo) => return Ok(siginfo.signo as usize),
+    //     None => task.sig_pending.lock().need_wake |= set | SigMask::SIGKILL | SigMask::SIGCONT,   
+    // }
+
+    // let tmp = timeout as *mut TimeSpec;
+    // if tmp.is_null() {
+    //     suspend_now().await;
+    // }
+    // let timeout = unsafe { *(timeout as *mut TimeSpec) };
+    // if !timeout.check_valid() {
+    //     return Err(Errno::EINVAL);
+    // }
+    // sleep_for(timeout).await;
+
+    // let mut sig_pending = task.sig_pending.lock();
+    // match sig_pending.take_expected_one(set) {
+    //     Some(siginfo) => {
+    //         let userinfo = info as *mut SigInfo;
+    //         if !userinfo.is_null() {
+    //             unsafe { *userinfo = siginfo };
+    //         }
+
+    //         return Ok(siginfo.signo as usize)
+    //     }
+    //     None => return Err(Errno::EAGAIN),
+    // }
+}
+
+/// send a signal to a thread
+/// tkill() is an obsolete predecessor to tgkill().  It allows only
+/// the target thread ID to be specified, which may result in the
+/// wrong thread being signaled if a thread terminates and its thread
+/// ID is recycled.  Avoid using this system call.
+pub fn sys_tkill(tid: usize, sig: i32) -> SysResult<usize> {
+    info!("[sys_tkill] start, tid = {}, sig = {}", tid, sig);
+    if sig < 0 || sig as usize > MAX_SIGNUM {
+        return Err(Errno::EINVAL);
+    }
+    let signom = SigNom::from(sig as usize);
+    let target = get_task_by_pid(tid).ok_or(Errno::ESRCH)?;
+    let task = current_task().unwrap();
+    let sender_pid = task.get_pid();
+    let siginfo = SigInfo::new(
+        signom,
+        SigCode::TKILL,
+        SigErr::empty(),
+        SigDetails::Kill { pid: sender_pid, uid: 0 }
+    );
+    target.thread_recv_siginfo(siginfo);
     Ok(0)
 }

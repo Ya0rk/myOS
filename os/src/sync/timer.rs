@@ -10,24 +10,6 @@ pub const USEC_PER_SEC: usize = 1_000_000;
 pub const NSEC_PER_SEC: usize = 1_000_000_000;
 pub const TIME_SLICE_DUATION: Duration = Duration::new(0, (NSEC_PER_SEC / TICKS_PER_SEC) as u32);
 
-// #[cfg(target_arch = "riscv64")]
-// use riscv::register::time;
-
-// #[cfg(target_arch = "riscv64")]
-// #[inline(always)]
-// /// 获取开机以来，晶振片过了几个时钟周期
-// pub fn get_time() -> usize {
-//     time::read()
-//     // unimplemented!()
-// }
-// #[cfg(target_arch = "loongarch64")]
-// #[inline(always)]
-// /// 获取开机以来，晶振片过了几个时钟周期
-// pub fn get_time() -> usize {
-//     // time::read()
-//     unimplemented!("loongarch64")
-// }
-
 use crate::hal::arch::get_time;
 
 /// 获取时间：单位s
@@ -90,7 +72,8 @@ impl Timer {
 // 实现按过期时间排序（最小堆）
 impl Ord for Timer {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.expire_ns.cmp(&other.expire_ns).reverse() // 反向实现最小堆
+        // self.expire_ns.cmp(&other.expire_ns).reverse() // 反向实现最小堆
+        self.expire_ns.cmp(&other.expire_ns)
     }
 }
 

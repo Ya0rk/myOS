@@ -27,6 +27,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_TKILL => sys_tkill(args[0] as usize, args[1] as i32),
+        SysCode::SYSCALL_SIGTIMEDWAIT => sys_sigtimedwait(args[0] as usize, args[1] as usize, args[2] as usize).await,
+        SysCode::SYSCALL_CLOCK_NANOSLEEP => sys_clock_nanosleep(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
         SysCode::SYSCALL_RENAMEAT2 => sys_renameat2(args[0] as isize, args[1] as *const u8, args[2] as isize, args[3] as *const u8, args[4] as u32),
         SysCode::SYSCALL_READLINKAT => sys_readlinkat(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_GETPGID => sys_getpgid(args[0] as usize),
@@ -61,7 +64,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_OPENAT => sys_openat(args[0] as isize, args[1] as *const u8, args[2] as u32, args[3] as usize),
         SysCode::SYSCALL_CLOSE => sys_close(args[0]),
         SysCode::SYSCALL_PIPE2 => sys_pipe2(args[0] as *mut u32, args[1] as i32),
-        SysCode::SYSCALL_GETDENTS64 => sys_getdents64(args[0] as usize, args[1] as *const u8, args[2] as usize),
+        SysCode::SYSCALL_GETDENTS64 => sys_getdents64(args[0] as usize, args[1] as usize, args[2] as usize),
         SysCode::SYSCALL_READ => sys_read(args[0], args[1] as usize, args[2]).await,
         SysCode::SYSCALL_WRITE => sys_write(args[0], args[1] as usize, args[2]).await,
         SysCode::SYSCALL_FSTAT => sys_fstat(args[0] as usize, args[1] as *const u8),

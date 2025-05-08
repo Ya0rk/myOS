@@ -310,7 +310,7 @@ impl Dentry {
         // if INODE_CACHE.has_inode(path) {
         //     return INODE_CACHE.get(path)
         // }
-        info!("[get_inode_from_path] {}", path);
+        // info!("[get_inode_from_path] {}", path);
         if !path.starts_with('/') {
             panic!("path should start with /");
         }
@@ -333,12 +333,12 @@ impl Dentry {
                     dentry_now.get_inode();
                 }
                 None => {
-                    info!("no such file or directory: {}", path_now);
+                    info!("[get_inode_from_path] no such file or directory: {}", path_now);
                     return None;
                 }
             }
         }
-        info!("[get_inode_from_path] successful {}", path);
+        // info!("[get_inode_from_path] successful {}", path);
         // if let Some(inode) = dentry_now.get_inode() {
         //     INODE_CACHE.insert(path, inode);
         // };
