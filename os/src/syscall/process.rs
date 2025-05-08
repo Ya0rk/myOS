@@ -197,13 +197,12 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
     info!("cwd = {}", cwd);
-    // info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
 
-    if path.ends_with("busybox") {
-        path = [cwd.clone(), "busybox".to_string()].concat();
-    }
+    // if path.ends_with("busybox") {
+    //     path = [cwd.clone(), "busybox".to_string()].concat();
+    // }
 
-    if path.ends_with(".sh") {
+    if path.ends_with(".sh") || path.ends_with("iperf3"){
         path = [cwd.clone(), "busybox".to_string()].concat();
         argv.insert(0, path.clone());
         argv.insert(1, "sh".to_string());
@@ -399,7 +398,7 @@ pub fn sys_setsid() -> SysResult<usize> {
 /// both process groups must be part of the same session. 
 /// In this case, the pgid specifies an existing process group to be joined and the session ID of that group must match the session ID of the joining process.
 pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
-    info!("[sys_setpgid] start");
+    info!("[sys_setpgid] start pid: {} pgid: {}", pid, pgid);
     if (pgid as isize) < 0 {
         return Err(Errno::EINVAL);
     }
@@ -410,13 +409,17 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
 
     let old_pgid = target_task.get_pgid();
     let pid = target_task.get_pid();
+    info!("[sys_setpgid] pid is {pid} old_pgid is {old_pgid}");
     if pgid == 0{
         let new_pgid = pid;
         target_task.set_pgid(pid);
         extract_proc_to_new_group(old_pgid, new_pgid, pid);
     } else {
+        info!("stage 1");
         target_task.set_pgid(pgid);
+        info!("stage 2");
         extract_proc_to_new_group(old_pgid, pgid, pid);
+        info!("stage 3");
     }
     Ok(0)
 }
@@ -515,7 +518,7 @@ pub fn sys_sigaction(
     act: usize,
     old_act: usize,
 ) -> SysResult<usize> {
-    info!("[sys_sigaction] start");
+    info!("[sys_sigaction] start signum: {signum}, act:{act}, old_act: {old_act}");
     // 作为强转的暂存器
     #[repr(C)]
     #[derive(Clone, Copy)]
