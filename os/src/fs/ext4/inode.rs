@@ -293,7 +293,7 @@ impl InodeTrait for Ext4Inode {
 
     fn link(&self, new_path: &str) -> SysResult<usize> {
         let mut file = self.file.lock();
-        // info!("[link] {} to {}", file.file_path.to_str().unwrap(), new_path);
+        info!("[ext4_link] {} to {}", file.file_path.to_str().unwrap(), new_path);
         file.link(new_path);
         Ok(0)
     }
