@@ -112,7 +112,7 @@ pub trait FileTrait: Send + Sync {
     fn fstat(&self, stat: &mut Kstat) -> SysResult;
     fn is_dir(&self) -> bool;
 
-    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
+    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
         unimplemented!("File Trait read_dents");
     }
 

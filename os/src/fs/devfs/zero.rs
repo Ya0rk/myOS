@@ -50,7 +50,7 @@ impl FileTrait for DevZero {
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
+    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
         0
     }
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {

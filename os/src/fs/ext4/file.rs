@@ -3,9 +3,7 @@ use async_trait::async_trait;
 use log::info;
 use sbi_spec::pmu::cache_event::NODE;
 use crate::{
-    hal::config::PATH_MAX, 
-    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
-    mm::{UserBuffer, page::Page}, utils::{Errno, SysResult}
+    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 
@@ -215,19 +213,26 @@ impl FileTrait for NormalFile {
         self.metadata.inode.is_dir()
     }
 
-    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
+    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
         info!("[read_dents] {}, len: {}, now file offset: {}", self.path, len, self.metadata.offset());
         if !self.is_dir() {
             info!("[read_dents] {} is not a dir", self.path);
             return 0;
         }
 
+
+        let ub = if let Ok(Some(buf)) = user_slice_mut::<u8>(ub.into(), len) {
+            buf
+        } else {
+            return 0;
+        };
+
         if self.path == "/musl/ltp" || self.path == "/musl/basic"
             || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
 
                 info!("alsdkjlaskdfj");
                 return 0;
-            }
+        }
         
         // Some(dir_entrys)
         let dirs = self.metadata.inode.read_dents();
@@ -259,7 +264,8 @@ impl FileTrait for NormalFile {
                 break
             };
             if den.off() - den.len() >= file_now_offset {
-                ub.write_at(res, den.as_bytes());
+                // ub.write_at(res, den.as_bytes());
+                ub[res..res + den.len()].copy_from_slice(den.as_bytes());
                 res += den.len();
             };
         };

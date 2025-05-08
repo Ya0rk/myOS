@@ -11,7 +11,11 @@ use user_lib::{chdir, execve, fork, wait, yield_};
 const TESTCASES: &[&str] = &[
     // "time-test",
     // "test-splice.sh",
+<<<<<<< Updated upstream
     "busybox_testcode.sh",
+=======
+    // "busybox_testcode.sh",
+>>>>>>> Stashed changes
     // "lua_testcode.sh",
     // "netperf_testcode.sh",
     // "libc-bench",

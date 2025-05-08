@@ -11,6 +11,7 @@ use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::mm::user_ptr::{user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{TimeSpec, TimeStamp};
@@ -370,10 +371,10 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
     // TODO: 有待修改
 
     let token = task.get_user_token();
-    let mut buffer = UserBuffer::new(translated_byte_buffer(token, buf, len));
+    // let mut buffer = UserBuffer::new(translated_byte_buffer(token, buf, len));
     let file = task.get_file_by_fd(fd).unwrap();
-    
-    let res = file.read_dents(buffer, len);
+    // let buffer = user_slice_mut((buf as usize).into(), len)?.unwrap();
+    let res = file.read_dents(buf as usize, len);
     info!("[sys_getdents64] return = {}", res);
     Ok(res)
 }
