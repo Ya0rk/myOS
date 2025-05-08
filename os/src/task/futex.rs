@@ -1,11 +1,11 @@
-use core::{cmp::min, future::Future, intrinsics::{atomic_load_acquire, atomic_load_relaxed}, sync::atomic::{AtomicU32, Ordering}, task::{Poll, Waker}};
+use core::{cell::UnsafeCell, cmp::min, future::Future, intrinsics::{atomic_load_acquire, atomic_load_relaxed}, sync::atomic::{AtomicU32, Ordering}, task::{Poll, Waker}};
 use alloc::{sync::Arc, vec::Vec};
 use hashbrown::HashMap;
 use log::info;
 use spin::Lazy;
 use crate::{
-    mm::{address::{kaddr_v2p}, PhysAddr, VirtAddr},
-    sync::SpinNoIrqLock, utils::{Errno, SysResult}
+    mm::{address::kaddr_v2p, PhysAddr, VirtAddr},
+    sync::{SpinNoIrqLock, SyncUnsafeCell}, utils::{Errno, SysResult}
 };
 use super::{current_task, Pid};
 
@@ -114,21 +114,21 @@ impl FutexBucket {
 
 
 pub struct FutexFuture {
-    pub uaddr: u32,
+    pub uaddr: Arc<SyncUnsafeCell<u32>>,
     pub key: FutexHashKey,
     pub bitset: u32, // 位掩码，用于唤醒判断
     pub val: u32, // 期望的值，在入队列前需要判断是否相等
-    pub is_register: bool,
+    pub is_register: UnsafeCell<bool>,
 }
 
 impl FutexFuture {
     pub fn new(uaddr: u32, key: FutexHashKey, bitset:u32, val: u32) -> Self {
         FutexFuture {
-            uaddr,
+            uaddr: Arc::new(SyncUnsafeCell::new(uaddr)),
             key,
             bitset,
             val,
-            is_register: false
+            is_register: UnsafeCell::new(false)
         }
     }
 }
@@ -140,11 +140,12 @@ impl Future for FutexFuture {
         let this = self.get_mut();
         let task = current_task().unwrap();
         let pid = Pid::from(task.get_pid());
-        if !this.is_register {
+        let uaddr = unsafe { *this.uaddr.get() };
+        if ! unsafe { *this.is_register.get() } {
             // 说明还没有加入全局hash 桶
             // 在入队前要判断是否是期望值
             info!("mmmmmmmmmmm");
-            let now = unsafe{ atomic_load_acquire(this.uaddr as *const u32) };
+            let now = unsafe{ atomic_load_acquire(uaddr as *const u32) };
             
             info!("llllllllllllllll");
             if  now != this.val {
@@ -154,7 +155,8 @@ impl Future for FutexFuture {
             info!("[futex_future] aaaaaa");
             // 加入hash 桶
             FUTEXBUCKET.lock().add(this.key, pid, cx.waker().clone(), this.bitset);
-            this.is_register = true;
+            // this.is_register = true;
+            unsafe { *this.is_register.get() = true };
             return Poll::Pending
         }
 

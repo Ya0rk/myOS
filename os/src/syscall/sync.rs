@@ -127,11 +127,11 @@ async fn do_futex_wait(uaddr: u32, val: u32, timeout: u32, bitset: u32, key: Fut
             info!("[do_futex_wait] timeout = {:?}", timeout);
             if let Err(Errno::ETIMEDOUT) = TimeoutFuture::new(futex_future, timeout).await {
                 info!("[do_futex_wait] time out.");
-                // let pid = Pid::from(current_task().unwrap().get_pid());
-                // if FUTEXBUCKET.lock().check_is_inqueue(key, pid.clone()) {
-                //     FUTEXBUCKET.lock().remove(key, pid);
-                //     return Err(Errno::EINVAL);
-                // }
+                let pid = Pid::from(current_task().unwrap().get_pid());
+                if FUTEXBUCKET.lock().check_is_inqueue(key, pid.clone()) {
+                    FUTEXBUCKET.lock().remove(key, pid);
+                    return Err(Errno::EINVAL);
+                }
             };
         }
     }
