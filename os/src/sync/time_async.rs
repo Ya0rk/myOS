@@ -45,6 +45,7 @@ impl TimerQueue {
         } // 提前释放锁
         
         for waker in wake_list {
+            info!("[TimerQueue] wake up task");
             waker.wake(); // 在锁外执行唤醒
         }
     }

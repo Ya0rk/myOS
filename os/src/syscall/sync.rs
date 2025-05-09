@@ -39,7 +39,7 @@ pub async fn sys_futex(
 
     match use_op {
         FutexOp::FUTEX_WAIT => {
-            info!("[sys_futex] wait, uaddr = {:#x}", uaddr);
+            info!("[sys_futex] wait, uaddr = {:#x}, taskid = {}", uaddr, current_task().unwrap().get_pid());
             // // 如果futex word中仍然保存着参数val给定的值，那么当前线程则进入睡眠，等待FUTEX_WAKE的操作唤醒它。
             let now_val = unsafe{ atomic_load_acquire(uaddr as *const u32) };
             info!("[futex] wait, now_val = {}, val = {}", now_val, val);
@@ -125,8 +125,8 @@ async fn do_futex_wait(uaddr: u32, val: u32, timeout: u32, bitset: u32, key: Fut
             info!("[do_futex_wait] timeout = {:?}", timeout);
             if let Err(Errno::ETIMEDOUT) = TimeoutFuture::new(futex_future, timeout).await {
                 info!("[do_futex_wait] time out.");
-                let pid = Pid::from(current_task().unwrap().get_pid());
-                if FUTEXBUCKET.lock().check_is_inqueue(key, pid.clone()) {
+                let pid = current_task().unwrap().get_pid();
+                if FUTEXBUCKET.lock().check_is_inqueue(key, pid) {
                     FUTEXBUCKET.lock().remove(key, pid);
                     return Err(Errno::EINVAL);
                 }

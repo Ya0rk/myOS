@@ -7,7 +7,7 @@ use crate::{
     mm::{address::kaddr_v2p, PhysAddr, VirtAddr},
     sync::{SpinNoIrqLock, SyncUnsafeCell}, utils::{Errno, SysResult}
 };
-use super::{current_task, Pid};
+use super::{current_task, Pid, TaskControlBlock};
 
 pub const FUTEX_BITSET_MATCH_ANY: u32 = 0xffffffff;
 
@@ -36,19 +36,19 @@ impl FutexHashKey {
 pub static FUTEXBUCKET: Lazy<SpinNoIrqLock<FutexBucket>> = Lazy::new(|| SpinNoIrqLock::new(FutexBucket::new()));
 
 /// 每个hash key对应一个vec，其中是（进程id，进程waker, bitset位掩码）三元组，waker用来唤醒进程
-pub struct FutexBucket(pub HashMap<FutexHashKey, Vec<(Pid, Waker, u32)>>);
+pub struct FutexBucket(pub HashMap<FutexHashKey, Vec<(usize, Waker, u32)>>);
 
 impl FutexBucket {
     pub fn new() -> Self {
         Self(HashMap::new())
     }
-    pub fn check_is_inqueue(&self, key: FutexHashKey, pid: Pid) -> bool {
+    pub fn check_is_inqueue(&self, key: FutexHashKey, pid: usize) -> bool {
         match self.0.get(&key) {
             Some(queue) => queue.iter().any(|(p, _, _)| *p == pid),
             None => false
         }
     }
-    pub fn add(&mut self, key: FutexHashKey, pid: Pid, waker: Waker, bitset: u32) {
+    pub fn add(&mut self, key: FutexHashKey, pid: usize, waker: Waker, bitset: u32) {
         match self.0.get_mut(&key) {
             Some(queue) => {
                 queue.push((pid, waker, bitset));
@@ -61,7 +61,7 @@ impl FutexBucket {
         }
     }
     /// 用于删除特定的futex，主要场景分为两种：超时或者被信号打断
-    pub fn remove(&mut self, key: FutexHashKey, pid: Pid) {
+    pub fn remove(&mut self, key: FutexHashKey, pid: usize) {
         info!("[futex queue] remove pid = {}", pid);
         let queue = self.0.get_mut(&key).expect("[remove] no such queue");
         queue.retain(|(p, _, _)| *p != pid); // 删除队列中pid的任务
@@ -71,16 +71,19 @@ impl FutexBucket {
     }
     // 唤醒在队列中的任务, 同时将这些任务从队列中清除
     pub fn to_wake(&mut self, key: FutexHashKey, bitset: u32, num: u32) -> usize {
+        if num == 0 {
+            return 0;
+        }
         let mut res = 0;
         // let queue = self.0.get_mut(&key).expect("[to_wake] no such queue.");
         if let Some(queue) = self.0.get_mut(&key) {
-            for (_, waker, tb) in queue.pop() {
-                if res >= num as usize { break; }
+            while let Some((_, waker, tb)) = queue.pop() {
                 if bitset & tb == 0 {
                     continue;
                 }
                 waker.wake();
                 res += 1;
+                if res >= num as usize { break; }
             }
             if queue.is_empty() {
                 self.0.remove(&key);
@@ -117,6 +120,7 @@ impl FutexBucket {
 
 pub struct FutexFuture {
     pub uaddr: Arc<SyncUnsafeCell<u32>>,
+    pub task: Arc<TaskControlBlock>,
     pub key: FutexHashKey,
     pub bitset: u32, // 位掩码，用于唤醒判断
     pub val: u32, // 期望的值，在入队列前需要判断是否相等
@@ -127,6 +131,7 @@ impl FutexFuture {
     pub fn new(uaddr: u32, key: FutexHashKey, bitset:u32, val: u32) -> Self {
         FutexFuture {
             uaddr: Arc::new(SyncUnsafeCell::new(uaddr)),
+            task: current_task().unwrap(),
             key,
             bitset,
             val,
@@ -140,8 +145,9 @@ impl Future for FutexFuture {
 
     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
         let this = self.get_mut();
-        let task = current_task().unwrap();
-        let pid = Pid::from(task.get_pid());
+        // let task = current_task().unwrap().clone();
+        let pid = this.task.get_pid();
+        info!("[futex_future] poll pid = {}", pid);
         let uaddr = unsafe { *this.uaddr.get() };
         if ! unsafe { *this.is_register.get() } {
             // 说明还没有加入全局hash 桶

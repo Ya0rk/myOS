@@ -42,7 +42,10 @@ pub fn kernel_trap_handler() {
                     _ => unreachable!(),
                 };
 
-                let result = current_task().unwrap().with_mut_memory_space(|m| {
+                let task = current_task().unwrap();
+                // task.switch_pgtable();
+                let result = task.with_mut_memory_space(|m| {
+                    // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
                     m.handle_page_fault(stval.into(), access_type)
                 });
             },
