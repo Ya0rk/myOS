@@ -214,11 +214,11 @@ pub enum SigNom {
 
 impl SigMask {
     pub fn set_sig(&mut self, sig_num: usize) {
-        *self |= (SigMask::from_bits(1 << sig_num)).unwrap();
+        self.insert((SigMask::from_bits(1 << sig_num)).unwrap());
     }
 
     pub fn unset_sig(&mut self, sig_num: usize) {
-        *self -= (SigMask::from_bits(1 << sig_num)).unwrap();
+        self.remove((SigMask::from_bits(1 << sig_num)).unwrap());
     }
 
     pub fn have(&self, sig_num: usize) -> bool {
@@ -232,20 +232,20 @@ pub const SIG_IGN:usize = 1;
 #[allow(non_camel_case_types)]
 #[repr(usize)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum SigHandler {
+pub enum SigHandlerType {
     /// 恢复信号的默认行为
-    SIG_DFL = 0,
+    DEFAULT = 0,
     /// 忽略该信号（如防止 SIGCHLD 产生僵尸进程）
-    SIG_IGN = 1,
+    IGNORE = 1,
     /// 用户自定义的信号处理函数
     Customized { handler: usize },
 }
 
-impl SigHandler {
+impl SigHandlerType {
     pub fn default(sig: SigNom) -> Self {
         match sig {
-            SigNom::SIGCHLD | SigNom::SIGURG | SigNom::SIGWINCH => Self::SIG_IGN,
-            _ => Self::SIG_DFL,
+            SigNom::SIGCHLD | SigNom::SIGURG | SigNom::SIGWINCH => Self::IGNORE,
+            _ => Self::DEFAULT,
         }
     }
 }
