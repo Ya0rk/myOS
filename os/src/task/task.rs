@@ -10,6 +10,7 @@ use super::{pid_alloc, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
 use crate::fs::{init, FileClass, FileTrait};
+use crate::hal::config::INITPROC_PID;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
@@ -314,9 +315,9 @@ impl TaskControlBlock {
         // info!("[do_exit] Task pid = {} exit;", self.get_pid());
         let pid = self.get_pid();
 
-        // 如果是idle进程
-        if pid == 0 {
-            info!("Idle process exit with exit_code {} ...", self.get_exit_code());
+        // 如果是init进程
+        if pid == INITPROC_PID {
+            info!("init process exit with exit_code {} ...", self.get_exit_code());
             shutdown(false);
         }
 

@@ -15,11 +15,11 @@ use crate::{
 /// uaddr2: 第二个用户空间地址（用于某些复杂操作，如 FUTEX_REQUEUE）
 /// val3: 在wait中表示位掩码；在wake中需要用来和uaddr做判断
 pub async fn sys_futex(
-    uaddr: u32,
+    uaddr: usize,
     futex_op: i32,
     val: u32,
-    timeout: u32, // val2
-    uaddr2: u32,
+    timeout: usize, // val2
+    uaddr2: usize,
     val3: u32,
 ) -> SysResult<usize> {
     let mut op = FutexOp::from_bits(futex_op).ok_or(Errno::EINVAL)?;
@@ -109,7 +109,7 @@ pub async fn sys_futex(
 /// 否则执行下一步，即调用futex_wait_queue_me。
 /// 后者主要做了几件事：1、将当前的task插入等待队列；2、启动定时任务；3、触发重新调度。
 /// 接下来当task能够继续执行时会判断自己是如何被唤醒的，并释放hrtimer退出。
-async fn do_futex_wait(uaddr: u32, val: u32, timeout: u32, bitset: u32, key: FutexHashKey) -> SysResult<usize> {
+async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key: FutexHashKey) -> SysResult<usize> {
     if bitset == 0 {
         return Err(Errno::EINVAL);
     }
@@ -137,7 +137,7 @@ async fn do_futex_wait(uaddr: u32, val: u32, timeout: u32, bitset: u32, key: Fut
     return Ok(0);
 }
 
-fn do_futex_wake(uaddr: u32, wake_n: u32, bitset: u32, key: FutexHashKey) -> SysResult<usize> {
+fn do_futex_wake(uaddr: usize, wake_n: u32, bitset: u32, key: FutexHashKey) -> SysResult<usize> {
     if bitset == 0 {
         return Err(Errno::EINVAL);
     }

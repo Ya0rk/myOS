@@ -92,7 +92,7 @@ impl FutexBucket {
         return res;
     }
     /// 将key中剩下的futex移动到newkey队列中
-    pub fn requeue(&mut self, key: FutexHashKey, new_key: FutexHashKey, max_num: u32) -> SysResult<()> {
+    pub fn requeue(&mut self, key: FutexHashKey, new_key: FutexHashKey, max_num: usize) -> SysResult<()> {
         let mut migrated = {
             let mut old_lock_queue = self.0.remove(&key).ok_or(Errno::EINVAL)?;
             let have = old_lock_queue.len();
@@ -119,7 +119,7 @@ impl FutexBucket {
 
 
 pub struct FutexFuture {
-    pub uaddr: Arc<SyncUnsafeCell<u32>>,
+    pub uaddr: Arc<SyncUnsafeCell<usize>>,
     pub task: Arc<TaskControlBlock>,
     pub key: FutexHashKey,
     pub bitset: u32, // 位掩码，用于唤醒判断
@@ -128,7 +128,7 @@ pub struct FutexFuture {
 }
 
 impl FutexFuture {
-    pub fn new(uaddr: u32, key: FutexHashKey, bitset:u32, val: u32) -> Self {
+    pub fn new(uaddr: usize, key: FutexHashKey, bitset:u32, val: u32) -> Self {
         FutexFuture {
             uaddr: Arc::new(SyncUnsafeCell::new(uaddr)),
             task: current_task().unwrap(),

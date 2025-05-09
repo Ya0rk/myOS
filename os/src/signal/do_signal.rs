@@ -31,7 +31,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
         let sig_handler = task.handler.lock().fetch_signal_handler(signo).sa;
 
-        info!("[do_signal] find a signal: {} ." , signo);
+        info!("[do_signal] task id = {}, find a signal: {}, handler = {}." , task.get_pid(), signo, sig_handler.sa_handler);
 
         // if intr && action.flags.contains(SigActionFlag::SA_RESTART) {
         //     cx.sepc -= 4;

@@ -548,6 +548,7 @@ pub fn sys_sigaction(
         let mut new_act = unsafe { *(act as *const SigAction) };
         let signo = SigNom::from(signum);
         new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
+        info!("[sys_sigaction] taskid = {}, sa_handler = {:?}", task.get_pid(), new_act.sa_handler);
         match new_act.sa_handler {
             SIG_DFL => {
                 let new_kaction = KSigAction::new(signo);
