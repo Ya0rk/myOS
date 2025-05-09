@@ -1,4 +1,5 @@
 use core::cell::SyncUnsafeCell;
+use core::cmp::max;
 use core::error;
 use core::ops::Add;
 use alloc::boxed::Box;
@@ -11,6 +12,7 @@ use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::mm::user_ptr::{user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{TimeSpec, TimeStamp};
@@ -71,7 +73,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 ///```
 /// len: 数组的长度
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
-    info!("[sys_readv] start");
+    // info!("[sys_readv] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -105,7 +107,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
 /// system call writes iovcnt buffers from the file associated
 /// with the file descriptor fd into the buffers described by iov
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
-    info!("[sys_writev] fd = {}", fd);
+    // info!("[sys_writev] fd = {}", fd);
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -368,12 +370,11 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     }
     // TODO: 有待修改
 
-    let buffer = unsafe{ core::slice::from_raw_parts_mut(buf, len) };
-    // let token = task.get_user_token();
+    let token = task.get_user_token();
     // let mut buffer = UserBuffer::new(translated_byte_buffer(token, buf, len));
     let file = task.get_file_by_fd(fd).unwrap();
-    
-    let res = file.read_dents(buffer, len);
+    // let buffer = user_slice_mut((buf as usize).into(), len)?.unwrap();
+    let res = file.read_dents(buf as usize, len);
     info!("[sys_getdents64] return = {}", res);
     Ok(res)
 }
@@ -392,6 +393,7 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
     let token = task.get_user_token();
     let cwd: String = task.get_current_path();
     let length: usize = cwd.len();
+    info!("[sys_getcwd] cwd is {}", cwd);
 
     if length > PATH_MAX {
         return Err(Errno::ENAMETOOLONG);
@@ -671,7 +673,7 @@ pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath:
     let old_path = translated_str(token, oldpath);
     let new_path = translated_str(token, newpath);
     let cwd = task.get_current_path();
-    info!("[sys_linkat] start old: {}, new: {} ", &old_path, &new_path);
+    info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: {}", &olddirfd, &old_path, &newdirfd, &new_path);
 
     let old_path = if old_path.starts_with("/") {
         old_path
@@ -721,12 +723,6 @@ pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath:
                 return Err(Errno::EEXIST);
             }
             file.get_inode().link(&new_path);
-            let new_file = NormalFile::new(
-                file.metadata.flags.read().clone(),
-                file.parent.clone(),
-                file.metadata.inode.clone(),
-                new_path
-            );
         }
     }
     Ok(0)
@@ -1024,27 +1020,61 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
 }
 
 /// read value of a symbolic link
+/// 一个符号链接当中获得真实的路径地址
+/// 注意到当前没有真正地实现,返回值全为0,代表不支持该功能
 /// TODO(YJJ):有待完善link
 pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let pathname = translated_str(token, pathname as *const u8);
-    info!("[sys_readlinkat] start, pathname = {}.", pathname);
+    info!("[sys_readlinkat] start, dirfd: {}, pathname: {}.", dirfd, pathname);
 
     let pathname = Path::string2path(pathname);
     if !pathname.is_absolute() {
         if dirfd == AT_FDCWD {
             let cwd = task.get_current_path();
-            todo!()
+            todo!();
+            log::error!("case which is no abs path hasn't implement");
+            return Ok(0); 
         }
     } else {
         // 忽略dirfd
         // 参考Pantheon
-        let info = "/glibc/".to_string();
-        let buf = unsafe{ buf as *mut u8 };
-        let len = core::cmp::min(info.len(), bufsiz);
-        unsafe { 
-            buf.copy_from(info.as_ptr(), len);
+        // let info = "/glibc/".to_string();
+        // let buf = unsafe{ buf as *mut u8 };
+        // let len = core::cmp::min(info.len(), bufsiz);
+        // unsafe { 
+        //     buf.copy_from(info.as_ptr(), len);
+        // }
+
+        // 由于暂时没有实现软链接,所以先这么做吧,把这个文件重定向到/musl/busybox
+        if pathname.get() == "/proc/self/exe" {
+            let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
+                buf
+            } else {
+                return Err(Errno::EFAULT);
+            };
+            let path_bytes = "/musl/busybox\0".as_bytes();
+            if path_bytes.len() > bufsiz {
+                ub[0..bufsiz].copy_from_slice(&path_bytes[0..bufsiz]);
+                return Ok(bufsiz);
+            } else {
+                ub[0..path_bytes.len()].copy_from_slice(&path_bytes[0..path_bytes.len()]);
+                return Ok(path_bytes.len());
+            }
+        }
+
+        if let Some(FileClass::File(file)) = open_file(&pathname.get(), OpenFlags::O_RDONLY) {
+            let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
+                buf
+            } else {
+                return Err(Errno::EFAULT);
+            };
+            let c_path = alloc::format!("{}\0", file.path);
+            let path_bytes = c_path.as_bytes();
+            let len = max(path_bytes.len(), bufsiz);
+            ub[0..len].copy_from_slice(&path_bytes[0..len]);
+            return Ok(len);
         }
     }
     Ok(0)

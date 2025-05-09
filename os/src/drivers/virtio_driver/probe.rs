@@ -3,6 +3,8 @@
 
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
+use crate::sync::SpinNoIrqLock;
+
 use super::VirtIoHalImpl;
 use lazy_static::*;
 use spin::RwLock;
@@ -35,11 +37,11 @@ use spin::mutex::Mutex;
 use alloc::boxed::Box;
 
 lazy_static! {
-    pub static ref BLOCKDEVICE_ADDR_REG: Mutex<Option<usize>> = Mutex::new(None);
+    pub static ref BLOCKDEVICE_ADDR_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
 }
 
 lazy_static! {
-    pub static ref BLOCKDEVICE_SIZE_REG: Mutex<Option<usize>> = Mutex::new(None);
+    pub static ref BLOCKDEVICE_SIZE_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
 }
 
 

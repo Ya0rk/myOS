@@ -4,7 +4,7 @@ use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
+use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
 use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, IdelFuture, TimeSpec, TimeVal, TimeoutFuture, Tms};
 use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
@@ -197,13 +197,12 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
     info!("cwd = {}", cwd);
-    // info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
 
-    if path.ends_with("busybox") {
-        path = [cwd.clone(), "busybox".to_string()].concat();
-    }
+    // if path.ends_with("busybox") {
+    //     path = [cwd.clone(), "busybox".to_string()].concat();
+    // }
 
-    if path.ends_with(".sh") {
+    if path.ends_with(".sh") || path.ends_with("iperf3"){
         path = [cwd.clone(), "busybox".to_string()].concat();
         argv.insert(0, path.clone());
         argv.insert(1, "sh".to_string());
@@ -241,17 +240,24 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
 
     // 缩小 locked_child 的作用域
     let target_task = {
-        let locked_child = task.children.lock().clone();
+        let locked_child = task.children.lock();
         match pid {
             // pid = -1: 等待任意子进程
             -1 => {
                 info!("wait any child");
-                locked_child.values().find(|task| task.is_zombie() ).cloned()// 这里过滤掉了自己
+                locked_child.values().find(|task| 
+                    task.is_zombie() 
+                    && task.thread_group.lock().thread_num() == 1
+                ).cloned()
             }
             // pid > 0：等待进程id为pid的子进程
             p if p > 0 => {
                 info!("wait target pid = {}", p);
-                locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
+                locked_child.values().find(|task| 
+                    task.is_zombie() 
+                    && p as usize == task.get_pid()
+                    && task.thread_group.lock().thread_num() == 1
+                ).cloned()
             }
             // pid < -1: 等待进程组标识符与pid绝对值相等的所有子进程
             p if p < -1 => {
@@ -266,7 +272,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
             info!("[sys_wait4] find a target zombie child task pid = {}.", zombie_child.get_pid());
             let zombie_pid = zombie_child.get_pid();
             let exit_code = zombie_child.get_exit_code();
-            task.do_wait4(zombie_pid, wstatus as *mut i32, exit_code);
+            task.do_wait4(zombie_pid, wstatus, exit_code);
             return Ok(zombie_pid);
         }
         None => {
@@ -302,8 +308,8 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
                     None => return Err(Errno::EINTR),
                 }
             };
-            info!("[sys_wait4]: task {} find a child: pid = {}, exit_code = {}.", task.get_pid(), child_pid, exit_code);
-            task.do_wait4(child_pid, wstatus as *mut i32, exit_code);
+            info!("[sys_wait4]: task {} find a child: pid = {}, exit_code = {} , exitcode << 8 = {}.", task.get_pid(), child_pid, exit_code, (exit_code & 0xFF) << 8);
+            task.do_wait4(child_pid, wstatus, exit_code);
             return Ok(child_pid);
         }
     }
@@ -399,7 +405,7 @@ pub fn sys_setsid() -> SysResult<usize> {
 /// both process groups must be part of the same session. 
 /// In this case, the pgid specifies an existing process group to be joined and the session ID of that group must match the session ID of the joining process.
 pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
-    info!("[sys_setpgid] start");
+    info!("[sys_setpgid] start pid: {} pgid: {}", pid, pgid);
     if (pgid as isize) < 0 {
         return Err(Errno::EINVAL);
     }
@@ -410,13 +416,17 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
 
     let old_pgid = target_task.get_pgid();
     let pid = target_task.get_pid();
+    info!("[sys_setpgid] pid is {pid} old_pgid is {old_pgid}");
     if pgid == 0{
         let new_pgid = pid;
         target_task.set_pgid(pid);
         extract_proc_to_new_group(old_pgid, new_pgid, pid);
     } else {
+        // info!("stage 1");
         target_task.set_pgid(pgid);
+        // info!("stage 2");
         extract_proc_to_new_group(old_pgid, pgid, pid);
+        // info!("stage 3");
     }
     Ok(0)
 }
@@ -515,27 +525,27 @@ pub fn sys_sigaction(
     act: usize,
     old_act: usize,
 ) -> SysResult<usize> {
-    info!("[sys_sigaction] start");
+    info!("[sys_sigaction] start signum: {signum}, act:{act}, old_act: {old_act}");
     // 作为强转的暂存器
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    struct ActionUtil {
-        sa_handler: usize,
-        pub sa_flags: SigActionFlag,
-        pub sa_restorer: usize,
-        pub sa_mask: SigMask,
-    }
+    // #[repr(C)]
+    // #[derive(Clone, Copy)]
+    // struct ActionUtil {
+    //     sa_handler: usize,
+    //     pub sa_flags: SigActionFlag,
+    //     pub sa_restorer: usize,
+    //     pub sa_mask: SigMask,
+    // }
     if signum > MAX_SIGNUM || signum == 9 || signum == 19 {
         return Err(Errno::EINVAL);
     }
     let task = current_task().unwrap();
     if old_act != 0 {
         let old_act = old_act as *mut SigAction;
-        let cur_act = &task.handler.lock().actions[signum].sa as *const SigAction;
+        let cur_act = &task.handler.lock().actions[signum-1].sa as *const SigAction;
         unsafe { old_act.copy_from(cur_act, 1) };
     }
     if act != 0 {
-        let mut new_act = unsafe { *(act as *const ActionUtil) };
+        let mut new_act = unsafe { *(act as *const SigAction) };
         let signo = SigNom::from(signum);
         new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
         match new_act.sa_handler {
@@ -545,25 +555,27 @@ pub fn sys_sigaction(
             },
             SIG_IGN => {
                 let new_act = SigAction { 
-                    sa_handler: SigHandler::SIG_IGN, 
+                    sa_handler: SIG_IGN, 
                     sa_flags: new_act.sa_flags, 
                     sa_restorer: new_act.sa_restorer, 
                     sa_mask: new_act.sa_mask 
                 };
                 let new_kaction = KSigAction {
-                    sa: new_act
+                    sa: new_act,
+                    sa_type: SigHandlerType::IGNORE
                 };
                 task.handler.lock().set_action(signum, new_kaction);
             },
             handler => {
                 let new_act = SigAction {
-                    sa_handler: SigHandler::Customized { handler },
+                    sa_handler: handler,
                     sa_flags: new_act.sa_flags,
                     sa_restorer: new_act.sa_restorer,
                     sa_mask: new_act.sa_mask
                 };
                 let new_kaction = KSigAction {
-                    sa: new_act
+                    sa: new_act,
+                    sa_type: SigHandlerType::Customized { handler }
                 };
                 task.handler.lock().set_action(signum, new_kaction);
             }
@@ -614,7 +626,7 @@ pub fn sys_log(cmd: i32, buf: usize, len: usize) -> SysResult<usize> {
 
 /// send signal to a process
 pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
-    info!("[sys_kill] start, to kill pid = {}", pid);
+    info!("[sys_kill] start, to kill pid = {}, signum = {}", pid, signum);
     if signum == 0 { return Ok(0); }
     if signum > MAX_SIGNUM { return Err(Errno::EINVAL); }
 
@@ -642,7 +654,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
     match target {
         Target::Specify(p) => {
             let cur_task = current_task().unwrap();
-            if cur_task.get_pid() == 4 && p == 10 { return Ok(0); } // TODO(YJJ):这里是为了通过kill测试，好像是测试用例有问题?
+            // if cur_task.get_pid() == 4 && p == 10 { return Ok(0); } // TODO(YJJ):这里是为了通过kill测试，好像是测试用例有问题?
             let recv_task = get_task_by_pid(p).ok_or(Errno::ESRCH)?;
             if recv_task.is_leader() && signum != SigNom::NOSIG {
                 let sender_pid = cur_task.get_pid();

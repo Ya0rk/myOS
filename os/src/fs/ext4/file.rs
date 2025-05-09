@@ -3,9 +3,7 @@ use async_trait::async_trait;
 use log::info;
 use sbi_spec::pmu::cache_event::NODE;
 use crate::{
-    hal::config::PATH_MAX, 
-    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
-    mm::{UserBuffer, page::Page}, utils::{Errno, SysResult}
+    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 
@@ -33,7 +31,7 @@ impl NormalFile {
 
     // 判断是否存在同名文件
     pub fn is_child(&self, path: &str) -> bool {
-        info!("[is_child {}", path);
+        info!("[is_child] ? {}", path);
         if let 
             Some(_) = 
             self.parent
@@ -215,17 +213,23 @@ impl FileTrait for NormalFile {
         self.metadata.inode.is_dir()
     }
 
-    fn read_dents(&self, mut ub: &mut [u8], len: usize) -> usize {
-        // info!("[read_dents] {}, len: {}, now file offset: {}", self.path, len, self.metadata.offset());
+    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
+        info!("[read_dents] {}, len: {}, now file offset: {}", self.path, len, self.metadata.offset());
         if !self.is_dir() {
             // info!("[read_dents] {} is not a dir", self.path);
             return 0;
         }
 
-        // 做特殊处理，避免du处理时间太长
-        if self.path == "/musl/ltp" || self.path == "/musl/basic" || self.path == "/musl/basic"
-            || self.path == "/glibc/ltp" || self.path == "/glibc/basic" || self.path == "/glibc/basic" 
-            || self.path == "/musl/lib" || self.path == "/glibc/lib" {
+
+        let ub = if let Ok(Some(buf)) = user_slice_mut::<u8>(ub.into(), len) {
+            buf
+        } else {
+            return 0;
+        };
+
+        if self.path == "/musl/ltp" || self.path == "/musl/basic"
+            || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
+
                 info!("alsdkjlaskdfj");
                 return 0;
         }
@@ -250,9 +254,10 @@ impl FileTrait for NormalFile {
             if res + den_len > len {
                 break
             };
-            if den.off() - den_len >= file_now_offset {
-                ub[res..res+den_len].copy_from_slice(den.as_bytes());
-                res += den_len;
+            if den.off() - den.len() >= file_now_offset {
+                // ub.write_at(res, den.as_bytes());
+                ub[res..res + den.len()].copy_from_slice(den.as_bytes());
+                res += den.len();
             };
         };
         self.metadata.set_offset(file_now_offset + res);

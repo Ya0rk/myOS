@@ -27,9 +27,6 @@ pub fn init(first: bool) {
         heap_allocator::init_heap();
         frame_allocator::init_frame_allocator();
     }
-    // unsafe {
-    //     KERNEL_PAGE_TABLE = Some(Arc::new(Mutex::new(PageTable::init_kernel_page_table())));
-    // }
     #[cfg(target_arch = "riscv64")]
     switch_to_kernel_pgtable(); // 切换到kernel page table
 }

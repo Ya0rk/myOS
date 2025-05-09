@@ -7,7 +7,7 @@ use crate::drivers::{BaseDriver, BlockDriver, DevResult, DeviceType};
 use super::as_dev_err;
 
 pub struct VirtIoBlkDev<H: Hal> {
-    inner: Mutex<VirtIOBlk<'static, H>>,
+    inner: SpinNoIrqLock<VirtIOBlk<'static, H>>,
 }
 
 unsafe impl<H: Hal> Send for VirtIoBlkDev<H> {}
@@ -17,7 +17,7 @@ impl<H: Hal> VirtIoBlkDev<H> {
     pub fn new(header: &'static mut VirtIOHeader) -> Self {
         info!("create a new VirtIoBlkDev ddddddddddddddd");
         Self {
-            inner: Mutex::new(VirtIOBlk::new(header).expect("VirtIOBlk create failed")),
+            inner: SpinNoIrqLock::new(VirtIOBlk::new(header).expect("VirtIOBlk create failed")),
         }
     }
 }

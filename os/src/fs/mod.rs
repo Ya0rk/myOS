@@ -96,7 +96,7 @@ pub fn create_init_files() -> SysResult {
     // mkdir("/glibc", 0);
     open_file("/musl/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     open_file("/glibc/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
-    open_file("/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    // open_file("/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     mkdir("/bin", 0);
     // let glibcinode = Ext4Inode::new("/glibc", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
     //创建/proc/mounts文件系统使用情况

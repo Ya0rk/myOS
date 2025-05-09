@@ -112,7 +112,7 @@ pub trait FileTrait: Send + Sync {
     fn fstat(&self, stat: &mut Kstat) -> SysResult;
     fn is_dir(&self) -> bool;
 
-    fn read_dents(&self, mut ub: &mut [u8], len: usize) -> usize {
+    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
         unimplemented!("File Trait read_dents");
     }
 
@@ -145,7 +145,8 @@ pub trait FileTrait: Send + Sync {
 
     // ppoll处理,代表数据到达，可以读取数据
     async fn pollin(&self) -> bool {
-        info!("[pollin] use defaule implement");
+        // info!("[Filetrait::pollin] file: {}", self.get_name().unwrap());
+        // info!("[pollin] use defaule implement");
         true
     }
     // ppoll处理，代表可以写入数据，如 socket 发送缓冲区有空闲

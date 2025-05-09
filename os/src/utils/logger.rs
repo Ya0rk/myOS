@@ -1,5 +1,6 @@
+use alloc::task;
 use log::{Level, LevelFilter, Metadata, Record};
-use crate::task::get_current_hart_id;
+use crate::task::{current_task, get_current_hart_id};
 
 #[cfg(feature = "error")]
 const LOG_LEVEL: log::LevelFilter = LevelFilter::Error;
@@ -18,12 +19,18 @@ impl log::Log for SimpleLogger {
         true
     }
     fn log(&self, record: &Record) {
+        let task_id: isize = if let Some(task) = current_task() {
+            task.get_pid() as isize
+        } else {
+            -1
+        };
         if self.enabled(record.metadata()) {
             println!(
-                "\x1b[{}m[{}] [HARTID{}] {}\x1b[0m",
+                "\x1b[{}m[{}][HARTID{}][TASK{}]{}\x1b[0m",
                 level_color(record.level()),
                 record.level(),
                 get_current_hart_id(),
+                task_id,
                 record.args()
             );
         }

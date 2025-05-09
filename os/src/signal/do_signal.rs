@@ -1,10 +1,7 @@
 use core::alloc::Layout;
 use alloc::sync::Arc;
 use log::info;
-use crate::{mm::translated_byte_buffer,
-    signal::{SigActionFlag, SigHandler, SigNom, UContext},
-    task::TaskControlBlock,
-    hal::trap::__sigret_helper
+use crate::{hal::trap::__sigret_helper, mm::translated_byte_buffer, signal::{SigActionFlag, SigHandlerType, SigNom, UContext, SIG_DFL, SIG_IGN}, task::TaskControlBlock
 };
 
 /// 这里包含了所有默认的信号处理方式
@@ -43,9 +40,9 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
         //     intr = false;
         // }
         match sig_handler.sa_handler {
-            SigHandler::SIG_IGN => {}
-            SigHandler::SIG_DFL => { default_func(task, siginfo.signo); }
-            SigHandler::Customized { handler } => {
+            SIG_IGN => {}
+            SIG_DFL => { default_func(task, siginfo.signo); }
+            handler => {
                 // 如果没有SA_NODEFER，在执行当前信号处理函数期间，自动阻塞当前信号
                 if !sig_handler
                     .sa_flags

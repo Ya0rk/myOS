@@ -6,16 +6,17 @@ extern crate alloc;
 extern crate user_lib;
 
 use alloc::vec::Vec;
-use user_lib::{chdir, execve, fork, wait, yield_};
+use user_lib::{chdir, execve, fork, getpid, wait, yield_};
 
 const TESTCASES: &[&str] = &[
     // "time-test",
     // "test-splice.sh",
     // "busybox_testcode.sh",
+    // "busybox_testcode.sh",
     // "lua_testcode.sh",
     // "netperf_testcode.sh",
     // "libc-bench",
-    "libctest_testcode.sh",
+    // "libctest_testcode.sh",
     // "iozone_testcode.sh",
     // "unixbench_testcode.sh",
     // "cyclictest_testcode.sh",
@@ -31,26 +32,28 @@ pub fn conert_str2byte(input: &str) -> Vec<u8> {
 }
 
 fn run_cmd(cmd: &str) {
+    println!("task run cmd: {}", cmd);
     let cd = "/musl/";
     chdir(&conert_str2byte(cd));
     if fork() == 0 {
-        let path = [cd, cmd].concat();
-        let busybox = [cd, "busybox"].concat();
+        println!("task run cmd child: {}, pid: {}", cmd, getpid());
         execve(
-            &busybox,
+            "/musl/busybox\0",
             &[
-                &busybox,
+                "/musl/busybox\0",
                 "sh\0",
-                &path,
+                "-c\0",
+                cmd,
             ],
             &[
-                "PATH=/\0",
+                "PATH=/bin:/\0",
+                "HOME=/\0",
                 "LD_LIBRARY_PATH=/\0",
                 "TERM=screen\0",
             ],
         );
     } else {
-        println!("hhhhhhhahahah");
+        println!("task run cmd parent: {}", cmd);
         let mut exit_code: i32 = 0;
         let tid = wait(&mut exit_code);
         if tid == -1 {
@@ -66,12 +69,15 @@ fn main() -> i32 {
     // run_cmd(
     //     "busybox ln -s /lib/glibc/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1 ",
     // );
-
+    run_cmd("/musl/busybox --install /bin\0");
     if fork() == 0 {
-        for test in TESTCASES {
-            run_cmd(test);
-        }
+        // for test in TESTCASES {
+        //     run_cmd(test);
+        // }
+        println!("main run sh");
+        run_cmd("/bin/sh\0");
     } else {
+        println!("main parent");
         loop {
             let mut exit_code: i32 = 0;
             let pid = wait(&mut exit_code);

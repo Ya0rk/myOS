@@ -3,10 +3,8 @@ use log::info;
 use num_enum::TryFromPrimitive;
 use riscv::addr::AddressL2;
 use crate::{
-    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEXBUCKET, ROBUST_LIST_HEAD_SIZE}, utils::{Errno, SysResult}
+    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEXBUCKET, FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE}, utils::{Errno, SysResult}
 };
-
-const FUTEX_BITSET_MATCH_ANY: u32 = 0xffffffff;
 
 /// fast user-space locking
 /// uaddr就是用户态下共享内存的地址，里面存放的是一个对齐的整型计数器。
