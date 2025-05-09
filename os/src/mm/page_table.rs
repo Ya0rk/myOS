@@ -3,10 +3,11 @@
 use core::arch::asm;
 use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
+use crate::hal::arch::kernel_token_write;
 use super::address::{kaddr_p2v, kpn_v2p, KernelAddr};
 use super::memory_space::vm_area::MapPerm;
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
-use crate::hal::mem::page_table::{PTEFlags, PageTableEntry};
+use crate::hal::mem::page_table::*;
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -126,11 +127,11 @@ use spin::Mutex;
 
 
 
-pub unsafe fn switch_pgtable(page_table_token: usize) {
+pub unsafe fn switch_user_page_table(user_token: usize) {
     // unimplemented!()
     // satp::write(page_table_token);
     // asm!("sfence.vma");
-    crate::hal::arch::satp_write(page_table_token);
+    crate::hal::arch::user_token_write(user_token);
     crate::hal::arch::sfence();
     // hal::arch::switch_pagetable(page_table_token);
 
@@ -163,19 +164,8 @@ impl PageTable {
             frames: vec![frame],
         }
     }
-    pub fn new_from_kernel() -> Self {
-        let frame = frame_alloc().unwrap();
-        let kernel_page_table = KERNEL_PAGE_TABLE.lock();
-        let kernel_root_ppn = kernel_page_table.root_ppn;
-        // TODO: refine KERNEL_PGNUM_OFFSET to KERNEL_PGNUM_START
-        // 第一级页表
-        let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
-        frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
-        PageTable {
-            root_ppn: frame.ppn,
-            frames: vec![frame],
-        }
-    }
+
+
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
         Self {
@@ -289,23 +279,23 @@ impl PageTable {
             (aligned_pa_usize + offset).into()
         })
     }
-    /// 获取根页表 ppn
-    pub fn token(&self) -> usize {
-        // todo!("to adapt la");
-        8usize << 60 | self.root_ppn.0
-    }
-    pub unsafe fn switch(&self) {
-        switch_pgtable(self.token());
+
+
+    pub unsafe fn enable(&self) {
+        switch_user_page_table(self.token());
     }
 
 }
 
 
+
+/// NOTE: should be used no more than init phase
+pub fn enable_kernel_pgtable() {
+    // unsafe { KERNEL_PAGE_TABLE.lock().enable(); }
+    kernel_token_write( KERNEL_PAGE_TABLE.lock().token() );
+
+}
 // TODO: all below is to be discarded
-
-pub fn switch_to_kernel_pgtable() {
-    unsafe { KERNEL_PAGE_TABLE.lock().switch(); }
-}
 /// translate a pointer to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token);

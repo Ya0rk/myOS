@@ -13,6 +13,8 @@ pub use loongarch64::time::get_timer_freq;
 use core::{arch::asm, intrinsics::unreachable};
 use log::{debug, info};
 
+use crate::hal::PAGE_SIZE_BITS;
+
 
 
 pub fn tp_read() -> usize {
@@ -45,9 +47,23 @@ pub fn satp_read() -> usize {
 }
 /// in loongarch satp named pgd
 pub fn satp_write(satp: usize) {
-    loongarch64::register::pgdl::set_base(satp)
+    loongarch64::register::pgdl::set_base(satp << PAGE_SIZE_BITS)
 }
 
+pub fn user_token_write(token: usize) {
+    info!("[user_token_write] token: {:#x}", token);
+    loongarch64::register::pgdl::set_base(token << PAGE_SIZE_BITS);
+}
+pub fn user_token_read() -> usize {
+    loongarch64::register::pgdl::read().base() >> PAGE_SIZE_BITS
+}
+
+pub fn kernel_token_write(token: usize) {
+    loongarch64::register::pgdh::set_base(token << PAGE_SIZE_BITS);
+}
+pub fn kernel_token_read() -> usize {
+    loongarch64::register::pgdh::read().base() >> PAGE_SIZE_BITS
+}
 
 /// dbar为内存屏障功能，当执行dbar 0的时候只有当该指令前面的load/store指令执行完毕后，后面的load/store的指令才会执行
 /// invtlb op, rj, rk指令用于无效TLB中的内容
@@ -103,7 +119,7 @@ pub fn shutdown(failuer: bool) -> ! {
     }
     loop {
         unsafe  {
-            asm!("idle 0");
+            asm!("idle 1");
         }
     }
     unreachable!()

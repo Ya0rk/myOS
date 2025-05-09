@@ -9,9 +9,12 @@
 
 
 
+use alloc::vec;
+
 use crate::board::MEMORY_END;
 use crate::mm::memory_space::vm_area::MapPerm;
-use crate::mm::{PhysPageNum, VirtAddr, VirtPageNum, PhysAddr, PageTable};
+use crate::mm::page_table::KERNEL_PAGE_TABLE;
+use crate::mm::{frame_alloc, PageTable, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 
 use crate::hal::config::{PPN_SHIFT, PPN_LEN, PA_LEN, KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 // use paste::paste;
@@ -304,6 +307,28 @@ impl PageTable {
         // }
         println!("kernel memory set initialized");
         kernel_page_table
+    }
+
+
+    // only in rv
+    pub fn new_user() -> Self {
+        let frame = frame_alloc().unwrap();
+        let kernel_page_table = KERNEL_PAGE_TABLE.lock();
+        let kernel_root_ppn = kernel_page_table.root_ppn;
+        // TODO: refine KERNEL_PGNUM_OFFSET to KERNEL_PGNUM_START
+        // 第一级页表
+        let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
+        frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
+        PageTable {
+            root_ppn: frame.ppn,
+            frames: vec![frame],
+        }
+    }
+    // TODO: support ASID
+    /// 获取根页表 ppn
+    pub fn token(&self) -> usize {
+        // todo!("to adapt la");
+        8usize << 60 | self.root_ppn.0
     }
 }
 

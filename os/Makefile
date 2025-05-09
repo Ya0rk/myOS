@@ -1,6 +1,6 @@
 # Building
-ARCH := riscv64
-# ARCH := loongarch64
+# ARCH := riscv64
+ARCH := loongarch64
 ifeq ($(ARCH), riscv64)
 	TARGET := riscv64gc-unknown-none-elf
 endif
@@ -15,11 +15,11 @@ APPS := ../user/src/bin/*
 
 # fs image
 FS = lwext4_rust
-FS_IMG := ../$(FS)/ext4.img
-# FS_IMG := ../sdcard-rv.img
+# FS_IMG := ../$(FS)/ext4.img
+FS_IMG := ../sdcard-la.img
 
 # cpu hart
-CPUS ?= 2
+CPUS ?= 1
 
 # BOARD
 BOARD := qemu
@@ -84,7 +84,7 @@ fdtdump:
 PHONY = fdtdump
 
 # build: env $(KERNEL_BIN) fs-img
-build: env $(KERNEL_BIN) initproc copy_to_fs
+build: env $(KERNEL_BIN) initproc # copy_to_fs
 PHONY += build
 
 initproc:
@@ -204,12 +204,12 @@ LAgdb:
 	qemu-system-loongarch64 \
 		-m 1G \
 		-smp 1 \
-		-kernel ./target/loongarch64-unknown-none/debug/os \
+		-kernel ./target/loongarch64-unknown-none/release/os \
 		-vga none \
 		-nographic \
 		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
 		-drive file=$(FS_IMG),if=none,format=raw,id=mydev \
-		-device virtio-blk-pci,drive=mydev,id=virtio-disk0 
+		-device virtio-blk-pci,drive=mydev,id=virtio-disk0 \
 		-s -S
 PHONY += LAgdb
 

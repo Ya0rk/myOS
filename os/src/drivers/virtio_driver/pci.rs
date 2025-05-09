@@ -190,7 +190,7 @@ fn dump_bar_contents(
                 let ptr = start.add(i as usize * 32);
                 ptr::copy(ptr, buf.as_mut_ptr(), 32);
                 if buf.iter().any(|b| *b != 0xff) {
-                    info!("  {:?}: {:x?}", ptr, buf);
+                    // info!("  {:?}: {:x?}", ptr, buf);
                 }
             }
         }

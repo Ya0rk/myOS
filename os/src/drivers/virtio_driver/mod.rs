@@ -3,6 +3,7 @@ pub mod probe;
 mod pci;
 
 pub use blk::*;
+use log::info;
 use spin::Mutex;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 use core::ptr::NonNull;
@@ -10,9 +11,8 @@ use core::ptr::NonNull;
 use crate::{
     drivers::DevError,
     mm::{
-        frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PageTable, PhysPageNum,
-        StepByOne, VirtAddr,
-    }, task::current_user_token,
+        frame_alloc, frame_dealloc, page_table::switch_user_page_table, FrameTracker, KernelAddr, PageTable, PhysPageNum, StepByOne, VirtAddr
+    }, task::{current_kernel_token, current_user_token},
 };
 use alloc::{sync::Arc, vec::Vec};
 use lazy_static::*;
@@ -62,11 +62,29 @@ unsafe impl Hal for VirtIoHalImpl {
 
     unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
         let vaddr = buffer.as_ptr() as *mut u8 as usize;
+        // info!("[share] buffer vaddr is {:#x}, user token is {:#x}, kernel token is {:#x}", vaddr, current_user_token(), current_kernel_token());
+        match vaddr >> 60 {
+            0x9 | 0x8 => {
+                vaddr & 0x0fff_ffff_ffff_ffff
+            },
+            0xF => {
+                PageTable::from_token(current_kernel_token())
+                .translate_va(VirtAddr::from(vaddr))
+                .unwrap()
+                .0
+            },
+            0x0 => {
+                PageTable::from_token(current_user_token())
+                .translate_va(VirtAddr::from(vaddr))
+                .unwrap()
+                .0
+            },
+            _ => {
+                panic!("Invalid Virtual Address");
+            }
+        }
         // Nothing to do, as the host already has access to all memory.
-        PageTable::from_token(current_user_token())
-            .translate_va(VirtAddr::from(vaddr))
-            .unwrap()
-            .0
+        
         // 注意到现在采取直接映射模式,在entry中有设置
         // vaddr
     }

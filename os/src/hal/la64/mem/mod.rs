@@ -1,5 +1,11 @@
 pub mod page_table;
+pub mod tlb;
 
+
+use loongarch64::register::estat::{self, Exception, Trap};
+use loongarch64::register::{
+    badv, ecfg, eentry, prmd, pwch, pwcl, stlbps, ticlr, tlbidx, tlbrehi, tlbrentry,
+};
 
 pub const PS_4K: usize = 0x0c;
 pub const _PS_16K: usize = 0x0e;
@@ -7,6 +13,24 @@ pub const _PS_2M: usize = 0x15;
 pub const _PS_1G: usize = 0x1e;
 
 pub const PAGE_SIZE_SHIFT: usize = 12;
+
+
+pub fn mmu_init() {
+    // pg
+    pwcl::set_pte_width(8); // 64-bits
+    pwcl::set_ptbase(PAGE_SIZE_SHIFT);
+    pwcl::set_ptwidth(PAGE_SIZE_SHIFT - 3);
+
+    pwcl::set_dir1_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3);
+    pwcl::set_dir1_width(PAGE_SIZE_SHIFT - 3);
+
+    pwch::set_dir3_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3 + PAGE_SIZE_SHIFT - 3);
+    pwch::set_dir3_width(PAGE_SIZE_SHIFT - 3);
+
+
+
+}
+
 
 pub fn tlb_init(tlbrentry: usize) {
     // // setup PWCTL
@@ -22,17 +46,6 @@ pub fn tlb_init(tlbrentry: usize) {
     tlbidx::set_ps(PS_4K);
     stlbps::set_ps(PS_4K);
     tlbrehi::set_ps(PS_4K);
-
-    // set hardware
-    pwcl::set_pte_width(8); // 64-bits
-    pwcl::set_ptbase(PAGE_SIZE_SHIFT);
-    pwcl::set_ptwidth(PAGE_SIZE_SHIFT - 3);
-
-    pwcl::set_dir1_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3);
-    pwcl::set_dir1_width(PAGE_SIZE_SHIFT - 3);
-
-    pwch::set_dir3_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3 + PAGE_SIZE_SHIFT - 3);
-    pwch::set_dir3_width(PAGE_SIZE_SHIFT - 3);
 
     tlbrentry::set_tlbrentry(tlbrentry & 0xFFFF_FFFF_FFFF);
     // pgdl::set_base(kernel_pgd_base);

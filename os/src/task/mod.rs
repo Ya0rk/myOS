@@ -29,7 +29,7 @@ pub use manager::{
 pub use sched::{spawn_user_task, spawn_kernel_task};
 pub use processor::{
     init_processors, current_task, current_trap_cx, 
-    current_user_token, take_current_task, 
+    current_user_token, current_kernel_token, take_current_task, 
     get_current_hart_id, get_current_cpu
 };
 
@@ -54,6 +54,7 @@ use crate::fs::open_file;
 // }
 ///Add init process to the manager
 pub async fn add_initproc() {
+    println!("[add_initproc] enter add_initproc");
     let initproc = flush_preload().await;
     TaskControlBlock::new(initproc).await;
     // if let Some(file) = open_file("initproc", OpenFlags::O_RDONLY) {

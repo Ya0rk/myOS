@@ -7,7 +7,7 @@ use loongarch64::register::estat::{Exception, Interrupt, Trap};
 
 #[no_mangle]
 pub fn kernel_trap_handler() {
-    info!("kernel trap");
+    // info!("kernel trap");
     let estat = estat::read();
     let crmd = crmd::read();
     let era = era::read();
@@ -18,7 +18,7 @@ pub fn kernel_trap_handler() {
     match estat.cause() {
         Trap::Interrupt(Interrupt::Timer) => {
             // 清除时钟专断
-            info!("timer interrupt from kernel");
+            // info!("timer interrupt from kernel");
             ticlr::clear_timer_interrupt();
         }
         Trap::Interrupt(Interrupt::HWI0) => {
@@ -30,5 +30,5 @@ pub fn kernel_trap_handler() {
         }
     }
     era::set_pc(era.pc());
-    info!("kernel trap end");
+    // info!("kernel trap end");
 }

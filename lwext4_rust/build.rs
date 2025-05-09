@@ -34,6 +34,7 @@ fn main() {
 
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     let lwext4_lib = &format!("lwext4-{}", arch);
+    println!("lwext4_lib: {lwext4_lib}");
     let lwext4_lib_path = &format!("c/lwext4/lib{}.a", lwext4_lib);
     if !Path::new(lwext4_lib_path).exists() {
         let status = Command::new("make")

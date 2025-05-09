@@ -170,14 +170,14 @@ fn check_addr_valid(addr: usize, offset: usize) {
 
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
-        check_addr_valid(v, PA_WIDTH_SV39);
+        // check_addr_valid(v, PA_WIDTH_SV39);
         Self(v)
     }
 }
 
 impl From<usize> for PhysPageNum {
     fn from(v: usize) -> Self {
-        check_addr_valid(v, PPN_WIDTH_SV39);
+        // check_addr_valid(v, PPN_WIDTH_SV39);
         Self(v)
     }
 }
@@ -185,7 +185,7 @@ impl From<usize> for PhysPageNum {
 impl From<usize> for VirtAddr {
     fn from(v: usize) -> Self {
         // 拓展虚拟地址到512GB，在这之前需要做检查
-        check_addr_valid(v, VA_WIDTH_SV39);
+        // check_addr_valid(v, VA_WIDTH_SV39);
         Self(v)
     }
 }

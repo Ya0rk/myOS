@@ -16,7 +16,7 @@ use spin::Mutex;
 pub use frame_allocator::FrameTracker;
 // pub use memory_set::{MemorySet, KERNEL_SPACE};
 pub use ffi::{MapPermission, MapType};
-use page_table::{switch_to_kernel_pgtable, KERNEL_PAGE_TABLE};
+use page_table::{enable_kernel_pgtable, KERNEL_PAGE_TABLE};
 pub use userbuffer::UserBuffer;
 // pub use map_area::MapArea;
 pub use page_table::{PageTable};
@@ -34,5 +34,5 @@ pub fn init(first: bool) {
     //     KERNEL_PAGE_TABLE = Some(Arc::new(Mutex::new(PageTable::init_kernel_page_table())));
     // }
     #[cfg(target_arch = "riscv64")]
-    switch_to_kernel_pgtable(); // 切换到kernel page table
+    enable_kernel_pgtable(); // 切换到kernel page table
 }

@@ -174,7 +174,7 @@ impl MemorySpace {
     /// Create a new user memory space that inherits kernel page table.
     pub fn new_user() -> Self {
         Self {
-            page_table: SyncUnsafeCell::new(PageTable::new_from_kernel()),
+            page_table: SyncUnsafeCell::new(PageTable::new_user()),
             areas: SyncUnsafeCell::new(RangeMap::new()),
         }
     }
@@ -755,6 +755,7 @@ impl MemorySpace {
 
     /// Push `VmArea` into `MemorySpace` and map it in page table, also copy
     /// `data` at `offset` of `vma`.
+    /// TODO: too slow, considering to abandon it
     pub fn push_vma_with_data(&mut self, mut vma: VmArea, offset: usize, data: &[u8]) {
         vma.map(self.page_table_mut());
         vma.fill_zero();
@@ -968,7 +969,7 @@ impl MemorySpace {
     }
 
     pub unsafe fn switch_page_table(&self) {
-        self.page_table().switch();
+        self.page_table().enable();
     }
 
     pub fn recycle_data_pages(&mut self) {

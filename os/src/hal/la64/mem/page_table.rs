@@ -2,7 +2,7 @@
 use crate::mm::memory_space::vm_area::MapPerm;
 use crate::mm::{PhysPageNum, VirtAddr, VirtPageNum, PhysAddr, PageTable};
 
-use crate::hal::config::{PPN_SHIFT, PPN_LEN, PA_LEN, KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
+use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 // use paste::paste;
 use crate::{impl_flag_checker, impl_flag_setter};
 
@@ -22,8 +22,8 @@ TODO:
 
 
 
-
 bitflags!{
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct PTEFlags: usize {
         /// valid
         const V = 1 << 0;
@@ -197,9 +197,9 @@ pub struct PageTableEntry {
     pub bits: usize,
 }
 
-const static PPN_SHIFT: usize = 12;
-const static PA_LEN: usize = 56;
-const static PPN_LEN: usize = 44;
+const PPN_SHIFT: usize = 12;
+const PA_LEN: usize = 56;
+const PPN_LEN: usize = 44;
 
 impl PageTableEntry {
     ///Create a PTE from ppn
@@ -345,7 +345,9 @@ impl PageTable {
         // );
         // ffff_ffc0_8020_0000
         // ffff_ffc0_8800_0000
-        println!("mapping devices");
+
+
+        // println!("mapping devices");
         // NOTE: LA架构不使用巨页，甚至不使用页表实现直接映射，而是使用0x8000_0000_0000_0000的直接映射窗口，其为强序非缓存的。
         // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
 
@@ -379,5 +381,16 @@ impl PageTable {
         // }
         println!("kernel memory set initialized");
         kernel_page_table
+    }
+
+
+    // NOTE: user pagetable should be initialized as a bare one
+    pub fn new_user() -> Self {
+        Self::new()
+    }
+    /// 获取根页表 ppn
+    pub fn token(&self) -> usize {
+        // todo!("to adapt la");
+        self.root_ppn.0
     }
 }

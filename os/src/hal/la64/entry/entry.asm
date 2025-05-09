@@ -1,4 +1,5 @@
 # 目前仅支持单核启动
+# TODO: 重构
     .section .text.entry
     .globl _start
 _start:

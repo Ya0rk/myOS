@@ -89,6 +89,7 @@ impl From<PTEFlags> for MapPerm {
 
 
 /// A contiguous virtual memory area.
+/// ADDITION: only in user space
 #[derive(Clone)]
 pub struct VmArea {
     /// Aligned `VirtAddr` range for the `VmArea`.
@@ -226,6 +227,8 @@ impl VmArea {
         }
     }
 
+
+    // [LA_MMU] only user page table
     pub fn set_perm_and_flush(&mut self, page_table: &mut PageTable, perm: MapPerm) {
         self.set_perm(perm);
         let pte_flags = perm.into();
@@ -373,6 +376,8 @@ impl VmArea {
 
     // FIXME: should kill user program if it deref a invalid pointer, e.g. try to
     // write at a read only area?
+    // NOTE: maybe a page fault on kernel space?
+    // DO NOT CONSIDER THIS DESIGN TEMPORARILY
     pub fn handle_page_fault(
         &mut self,
         page_table: &mut PageTable,

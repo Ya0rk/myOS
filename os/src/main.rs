@@ -16,6 +16,7 @@
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![feature(map_try_insert)]
+#![feature(naked_functions)]
 
 #![allow(unused)]
 extern crate alloc;
@@ -45,6 +46,7 @@ pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
+use hal::mem::{mmu_init, tlb::{self, tlb_fill}, tlb_init};
 use log::info;
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
@@ -77,6 +79,9 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // 载入用户进程
     // 设置时钟中断
     // 开始调度执行
+
+    mmu_init();
+    tlb_init(tlb_fill as usize);
     println!("hello world!");
     println!("hart id is {:#X}, dt_root is {:#x}", hart_id, dt_root);
 
@@ -90,6 +95,10 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         println!("start init mm");
         mm::init(true);
         println!("finished mm::init");
+
+        // loop {};
+
+
         
         // TODO:后期可以丰富打印的初始化信息
         println!(
@@ -108,19 +117,23 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         #[cfg(feature = "test")]
         {
             // mm::remap_test();
-            info!("start path test");
-            // fs::path_test();
-            info!(" start dentry test");
-            fs::vfs::dentry_test();
+            // info!("start path test");
+            // // fs::path_test();
+            // info!(" start dentry test");
+            // fs::vfs::dentry_test();
         }
+
+        info!("[a] src/main.rs:126");
 
         spawn_kernel_task(async move {
             task::add_initproc().await
         });
-        INIT_FINISHED.store(true, Ordering::SeqCst);
-        START_HART_ID.store(hart_id, Ordering::SeqCst);
-        #[cfg(feature = "mul_hart")]
-        hal::entry::boot::boot_all_harts(hart_id);
+        info!("[a] src/main.rs:131");
+        // INIT_FINISHED.store(true, Ordering::SeqCst);
+        // START_HART_ID.store(hart_id, Ordering::SeqCst);
+        // #[cfg(feature = "mul_hart")]
+        // hal::entry::boot::boot_all_harts(hart_id);
+        
     } else {
 
         hal::trap::init();
@@ -129,12 +142,13 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     
     unsafe { sync::enable_timer_interrupt() };
     timer::set_next_trigger();
+    info!("[a] src/main.rs:145");
     // 列出目前的应用
-    let finish = AtomicBool::new(false);
-    if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
-        finish.store(fs::list_apps(), Ordering::SeqCst);
-    }
-    while !finish.load(Ordering::SeqCst) {}
+    // let finish = AtomicBool::new(false);
+    // if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
+    //     finish.store(fs::list_apps(), Ordering::SeqCst);
+    // }
+    // while !finish.load(Ordering::SeqCst) {}
     executor::run();
     panic!("Unreachable in rust_main!");
 }
