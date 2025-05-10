@@ -187,19 +187,30 @@ impl TaskControlBlock {
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().clone())
         };
-        let sig = match flag.contains(CloneFlags::SIGCHLD) {
-            true  => self.handler.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
-            false => new_shared(self.handler.lock().deref().clone()), // 一个新的副本，子进程可以独立修改
+        let sig = match flag.contains(CloneFlags::CLONE_SIGHAND) { // 修改这里的致命判断错误
+            true  => {
+                info!("[process_fork] sigchld");
+                self.handler.clone() // 和父进程共享，只是增加父进程sig的引用计数，效率高
+            }
+            false => {
+                info!("[process_fork] sigchld false");
+                // 一个新的副本，子进程可以独立修改
+                new_shared(self.handler.lock().clone())
+            }
         };
 
         // modify kernel_sp in trap_cx
         let trap_cx = self.get_trap_cx_mut();
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
-        let mut child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
-        unsafe { sfence(); }
-
-        let memory_space = new_shared(child_memory_space);
+        let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
+            true  => self.memory_space.clone(),
+            false => {
+                let child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
+                unsafe { sfence(); }
+                new_shared(child_memory_space)
+            }
+        };
 
         let new_task = Arc::new(TaskControlBlock {
             pid,
@@ -252,24 +263,39 @@ impl TaskControlBlock {
         let sig_stack = SyncUnsafeCell::new(None);
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let thread_group = self.thread_group.clone();
-        let memory_space = self.memory_space.clone();
         let parent = self.parent.clone();
         let children = self.children.clone();
         let current_path = self.current_path.clone();
-        let robust_list = new_shared(RobustList::new());
+        let robust_list = self.robust_list.clone();
         let waker = SyncUnsafeCell::new(None);
         let trap_cx = SyncUnsafeCell::new(*self.get_trap_cx());
         let time_data = SyncUnsafeCell::new(TimeData::new());
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
         let exit_code = AtomicI32::new(0);
-        let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
+        let fd_table = match flag.contains(CloneFlags::CLONE_FILES) { // 修改这里的致命错误
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().deref().clone())
         };
-        let sig = match flag.contains(CloneFlags::SIGCHLD) {
-            true  => self.handler.clone(), // 和父进程共享，只是增加父进程sig的引用计数，效率高
-            false => new_shared(self.handler.lock().deref().clone()), // 一个新的副本，子进程可以独立修改
+        let sig = match flag.contains(CloneFlags::CLONE_SIGHAND) {
+            true  => {
+                info!("[thread_fork] sigchld");
+                self.handler.clone() // 和父进程共享，只是增加父进程sig的引用计数，效率高
+            }
+            false => {
+                info!("[thread_fork] sigchld false");
+                // 一个新的副本，子进程可以独立修改
+                new_shared(self.handler.lock().clone())
+            }
+        };
+
+        let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
+            true  => self.memory_space.clone(),
+            false => {
+                let child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
+                unsafe { sfence(); }
+                new_shared(child_memory_space)
+            }
         };
         
         info!(

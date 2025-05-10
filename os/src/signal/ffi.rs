@@ -169,7 +169,7 @@ bitflags! {
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 #[repr(i32)]
 pub enum SigNom {
     // 标准信号常量定义（基于 Linux/x86 架构）
@@ -264,3 +264,25 @@ impl From<usize> for SigNom {
 pub const SIGBLOCK: usize = 0;
 pub const SIGUNBLOCK: usize = 1;
 pub const SIGSETMASK: usize = 2;
+
+#[derive(Default, Copy, Clone)]
+#[repr(C)]
+pub struct LinuxSigInfo {
+    pub si_signo: i32,
+    pub si_errno: i32,
+    pub si_code: i32,
+    pub _pad: [i32; 29],
+    _align: [u64; 0],
+}
+
+impl LinuxSigInfo {
+    pub fn new(signo: i32, code: i32) -> Self {
+        Self {
+            si_signo: signo,
+            si_errno: 0,
+            si_code: code,
+            _pad: [0; 29],
+            _align: [0; 0],
+        }
+    }
+}

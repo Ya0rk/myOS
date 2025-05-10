@@ -84,13 +84,13 @@ impl TrapContext {
     /// new_sp: 信号处理栈的sp
     /// 
     /// sigret: 信号处理完后返回到sigreturn系统调用
-    pub fn flash(&mut self, handler: usize, new_sp: usize, sigret: usize, signo: usize, x3: usize, x4: usize) {
-        self.sepc = handler;
-        self.set_sp(new_sp);
-        self.user_x[1] = sigret;
-        self.user_x[3] = x3;
-        self.user_x[4] = x4;
-        self.user_x[10] = signo;
+    pub fn flash(&mut self, user_func: usize, sp: usize, sigret: usize, signo: usize, gp: usize, tp: usize) {
+        self.sepc = user_func;   // 返回到用户自定义函数
+        self.set_sp(sp);         // x2:信号处理栈的sp
+        self.user_x[1] = sigret; // ra:返回到sigreturn系统调用
+        self.user_x[3] = gp;     // gp:保存gp指针
+        self.user_x[4] = tp;     // tp:保存tp指针
+        self.user_x[10] = signo; // a0:信号编号
 
     }
 }

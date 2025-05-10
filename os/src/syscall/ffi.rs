@@ -254,7 +254,7 @@ bitflags! {
         /// 子进程退出时发送 SIGCHLD 信号（传统 fork() 行为）
         const SIGCHLD = (1 << 4) | (1 << 0);
         /// 共享虚拟内存（线程的典型行为）
-        const CLONE_VM = 1 << 8;
+        const CLONE_VM = 0x0000100;
         /// 共享文件系统信息（根目录/工作目录等）
         const CLONE_FS = 1 << 9;
         /// 共享打开的文件描述符表

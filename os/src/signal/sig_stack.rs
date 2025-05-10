@@ -48,8 +48,7 @@ pub struct UContext {
 #[repr(C)]
 struct MContext {
     pub user_x: [usize; 32],
-    pub sepc:   usize, // 从fpstate中拿一个来保存sepc
-    pub fpstate: [usize; 65],
+    pub fpstate: [usize; 66],
 }
 
 impl Default for SignalStack {
@@ -63,21 +62,19 @@ impl Default for SignalStack {
 }
 
 impl UContext {
-    pub fn new(old_sigmask: &SigMask, sig_stack: Option<SignalStack>, trap_cx: &TrapContext) -> Self {
-        let sepc = trap_cx.sepc;
-        let user_x: [usize; 32] = trap_cx.user_x;
+    pub fn new(old_sigmask: SigMask, sig_stack: Option<SignalStack>, trap_cx: &TrapContext) -> Self {
+        let mut user_x: [usize; 32] = trap_cx.user_x;
+        // 将old sepc暂时存储在user_x[0]中,这个sepc用于sigreturn时恢复
+        // 这里的sepc是信号处理函数的返回地址
+        user_x[0] = trap_cx.sepc;
         Self {
             uc_flags: 0,
             uc_link: 0,
             uc_stack: sig_stack.unwrap_or_default(),
-            uc_sigmask: old_sigmask.clone(),
+            uc_sigmask: old_sigmask,
             uc_sig: [0; 16],
-            uc_mcontext: MContext::new(sepc, user_x)
+            uc_mcontext: MContext::new(user_x)
         }
-    }
-
-    pub fn get_sepc(&self) -> usize {
-        self.uc_mcontext.sepc
     }
 
     pub fn get_userx(&self) -> [usize; 32] {
@@ -86,11 +83,10 @@ impl UContext {
 }
 
 impl MContext {
-    fn new(old_sepc: usize, user_reg: [usize; 32]) -> Self {
+    fn new(user_reg: [usize; 32]) -> Self {
         Self {
             user_x: user_reg,
-            sepc:   old_sepc,
-            fpstate: [0; 65]
+            fpstate: [0; 66]
         }
     }
 }

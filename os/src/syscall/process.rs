@@ -443,6 +443,7 @@ pub fn sys_sigreturn() -> SysResult<usize> {
     let sig_mask = ucontext.uc_sigmask;
     let trap_cx = task.get_trap_cx_mut();
     let sepc = ucontext.get_userx()[0];
+    // 恢复trap_cx到之前状态,这些值都保存在ucontext中
     trap_cx.set_sepc(sepc); // 恢复sepc
     trap_cx.user_x = ucontext.get_userx(); // 恢复寄存器
     task.set_blocked(sig_mask); // 恢复信号屏蔽字
@@ -526,15 +527,6 @@ pub fn sys_sigaction(
     old_act: usize,
 ) -> SysResult<usize> {
     info!("[sys_sigaction] start signum: {signum}, act:{act}, old_act: {old_act}");
-    // 作为强转的暂存器
-    // #[repr(C)]
-    // #[derive(Clone, Copy)]
-    // struct ActionUtil {
-    //     sa_handler: usize,
-    //     pub sa_flags: SigActionFlag,
-    //     pub sa_restorer: usize,
-    //     pub sa_mask: SigMask,
-    // }
     if signum > MAX_SIGNUM || signum == 9 || signum == 19 {
         return Err(Errno::EINVAL);
     }
@@ -548,7 +540,7 @@ pub fn sys_sigaction(
         let mut new_act = unsafe { *(act as *const SigAction) };
         let signo = SigNom::from(signum);
         new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
-        info!("[sys_sigaction] taskid = {}, sa_handler = {:?}", task.get_pid(), new_act.sa_handler);
+        info!("[sys_sigaction] taskid = {}, sa_handler = {:#x}", task.get_pid(), new_act.sa_handler);
         match new_act.sa_handler {
             SIG_DFL => {
                 let new_kaction = KSigAction::new(signo);

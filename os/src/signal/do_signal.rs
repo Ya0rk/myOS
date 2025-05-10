@@ -1,7 +1,7 @@
 use core::alloc::Layout;
 use alloc::sync::Arc;
 use log::info;
-use crate::{hal::trap::__sigret_helper, mm::translated_byte_buffer, signal::{SigActionFlag, SigHandlerType, SigNom, UContext, SIG_DFL, SIG_IGN}, task::TaskControlBlock
+use crate::{hal::trap::__sigret_helper, mm::translated_byte_buffer, signal::{LinuxSigInfo, SigActionFlag, SigHandlerType, SigNom, UContext, SIG_DFL, SIG_IGN}, task::TaskControlBlock
 };
 
 /// 这里包含了所有默认的信号处理方式
@@ -10,9 +10,9 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
     let trap_cx = task.get_trap_cx_mut();
     let all_len = task.sig_pending.lock().len();
     let mut cur = 0;
+    let old_sigmask = *task.get_blocked();
 
-    while let Some(siginfo) = task.sig_pending.lock().take_one() {
-        let old_sigmask = task.get_blocked();
+    while let Some(siginfo) = task.sig_pending.lock().take_one(old_sigmask) {    
         cur += 1;
         // 避免队列中全是被阻塞的信号，造成死循环
         if cur > all_len {
@@ -29,70 +29,71 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
             continue;
         }
 
-        let sig_handler = task.handler.lock().fetch_signal_handler(signo).sa;
+        let k_action = task.handler.lock().fetch_signal_handler(signo);
+        let sig_action = k_action.sa;
+        info!("[do_signal] task id = {}, find a signal: {}, handler = {:#x}." , task.get_pid(), signo, sig_action.sa_handler);
 
-        info!("[do_signal] task id = {}, find a signal: {}, handler = {}." , task.get_pid(), signo, sig_handler.sa_handler);
-
-        // if intr && action.flags.contains(SigActionFlag::SA_RESTART) {
-        //     cx.sepc -= 4;
-        //     cx.restore_last_user_a0();
-        //     log::info!("[do_signal] restart syscall");
-        //     intr = false;
-        // }
-        match sig_handler.sa_handler {
-            SIG_IGN => {}
-            SIG_DFL => { default_func(task, siginfo.signo); }
-            handler => {
+        match k_action.sa_type {
+            SigHandlerType::IGNORE => {}
+            SigHandlerType::DEFAULT => { default_func(task, siginfo.signo); }
+            SigHandlerType::Customized { handler } => {
                 // 如果没有SA_NODEFER，在执行当前信号处理函数期间，自动阻塞当前信号
-                if !sig_handler
+                if !sig_action
                     .sa_flags
                     .contains(SigActionFlag::SA_NODEFER) {
                         task.get_blocked_mut().set_sig(signo);
                 }
 
                 // 可能有其他信号也需要阻塞
-                *task.get_blocked_mut() |= sig_handler.sa_mask;
+                *task.get_blocked_mut() |= sig_action.sa_mask;
                 trap_cx.float_regs.save();
 
                 let old_sp = trap_cx.get_sp();
-                // 指向ucontext地址
-                let mut new_sp = old_sp - Layout::new::<UContext>().pad_to_align().size();
-                task.set_ucontext(new_sp);
 
                 let sig_stack = task.get_sig_stack_mut().take();
+                let mut new_sp = match sig_stack {
+                    Some(sig_stack) => {
+                        // 用户自定义的栈
+                        let mut new_sp = sig_stack.ss_sp + sig_stack.ss_size;
+                        new_sp -= size_of::<UContext>();
+                        new_sp
+                    }
+                    None => {
+                        // 普通栈
+                        old_sp - size_of::<UContext>()
+                    }
+                };
+                // 将ucontext指针保存在tcb中
+                task.set_ucontext(new_sp);
+
                 let token = task.get_user_token();
                 // 保存当前的user 状态,在sigreturn中恢复
+                // 包括本来的sepc，后序在sigreturn中恢复
                 let ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx);
-                copy2user(token, new_sp as *mut UContext, &ucontext);
+                // 将ucontext拷贝到用户栈中
+                unsafe { core::ptr::write(new_sp as *mut UContext, ucontext) };
 
-                if sig_handler.sa_flags.contains(SigActionFlag::SA_SIGINFO) {
-                    // log::error!("[SA_SIGINFO] set ucontext {ucontext:?}");
-                    // a2
-                    trap_cx.user_x[12] = new_sp;
-                    #[derive(Default, Copy, Clone)]
-                    #[repr(C)]
-                    pub struct LinuxSigInfo {
-                        pub si_signo: i32,
-                        pub si_errno: i32,
-                        pub si_code: i32,
-                        pub _pad: [i32; 29],
-                        _align: [u64; 0],
-                    }
-                    let mut siginfo_v = LinuxSigInfo::default();
-                    siginfo_v.si_signo = signo as i32;
-                    siginfo_v.si_code = siginfo.sigcode as i32;
+                if sig_action.sa_flags.contains(SigActionFlag::SA_SIGINFO) {
+                    // 若信号处理函数通过 sigaction 注册时设置了此标志，表示处理函数需要接收以下参数：
+                    // void handler(int sig, siginfo_t *info, void *ucontext);
+                    // a0(x10): 信号编号,在后面的trap_cx.flash中设置
+                    // a1(x11): 信号信息结构体指针
+                    // a2(x12): ucontext 结构体指针
+                    trap_cx.user_x[12] = new_sp; // a2
+                    let mut siginfo_v = LinuxSigInfo::new(signo as i32, siginfo.sigcode as i32);
                     new_sp -= size_of::<LinuxSigInfo>();
-
-                    copy2user(token, new_sp as *mut LinuxSigInfo, &siginfo_v);
-                    // let siginfo_ptr: UserWritePtr<LinuxSigInfo> = new_sp.into();
-                    // siginfo_ptr.write(&task, siginfo_v)?;
-                    trap_cx.user_x[11] = new_sp;
+                    // 将siginfo_v拷贝到用户栈中
+                    unsafe { core::ptr::write(new_sp as *mut LinuxSigInfo, siginfo_v) };
+                    // copy2user(token, new_sp as *mut LinuxSigInfo, &siginfo_v);
+                    trap_cx.user_x[11] = new_sp; // a1
                 }
 
-                let x3 = ucontext.get_userx()[3];
-                let x4 = ucontext.get_userx()[4];
-                ucontext.get_userx()[0] = trap_cx.get_sepc();
-                // 修改trap_cx，函数trap return后返回到信号处理函数
+                let x3 = ucontext.get_userx()[3]; // gp
+                let x4 = ucontext.get_userx()[4]; // tp
+                
+                // 修改trap_cx，函数trap return后返回到用户自定义的函数，
+                // 自定义函数执行完后返回到sigreturn,这里的__sigret_helper是一个汇编，触发sigreturn
+                // 这里的sigreturn是一个系统调用，返回到内核态
                 trap_cx.flash(handler, new_sp, __sigret_helper as usize, signo, x3, x4);
                 break;
             }
@@ -104,8 +105,9 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
 /// 根据signo分发处理函数
 fn default_func(task: &Arc<TaskControlBlock>, signo: SigNom) {
-    info!("[default_func] signo = {}", signo as i32);
+    info!("[default_func] signo = {:?}", signo);
     match signo {
+        // TODO(YJJ):有待完善
         SigNom::SIGCHLD | SigNom::SIGURG  | SigNom::SIGWINCH => {}, // no Core Dump
         SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => do_signal_stop(task, signo),   // no core dump
         SigNom::SIGCONT => do_signal_continue(task, signo),         // no core dump

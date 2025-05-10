@@ -1028,7 +1028,6 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
 /// read value of a symbolic link
 /// 一个符号链接当中获得真实的路径地址
 /// 注意到当前没有真正地实现,返回值全为0,代表不支持该功能
-/// TODO(YJJ):有待完善link
 pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
@@ -1044,15 +1043,6 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
             return Ok(0); 
         }
     } else {
-        // 忽略dirfd
-        // 参考Pantheon
-        // let info = "/glibc/".to_string();
-        // let buf = unsafe{ buf as *mut u8 };
-        // let len = core::cmp::min(info.len(), bufsiz);
-        // unsafe { 
-        //     buf.copy_from(info.as_ptr(), len);
-        // }
-
         // 由于暂时没有实现软链接,所以先这么做吧,把这个文件重定向到/musl/busybox
         if pathname.get() == "/proc/self/exe" {
             let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
