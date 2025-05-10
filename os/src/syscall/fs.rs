@@ -16,7 +16,7 @@ use crate::mm::user_ptr::{user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{TimeSpec, TimeStamp};
-use crate::syscall::ffi::IoVec;
+use crate::syscall::ffi::{IoVec, StatFs};
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{backtrace, Errno, SysResult};
 use super::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, AT_REMOVEDIR};
@@ -192,6 +192,12 @@ pub fn sys_fstatat(
     // 检查路径是否有效并打开文件
     match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
         Some(FileClass::File(file)) => {
+            file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
+            buffer.write(tempstat.as_bytes());
+            return Ok(0);
+        }
+        Some(FileClass::Abs(file)) => {
             file.fstat(&mut tempstat)?;
             info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             buffer.write(tempstat.as_bytes());
@@ -1077,5 +1083,14 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
             return Ok(len);
         }
     }
+    Ok(0)
+}
+
+pub fn sys_statfs(path: usize, buf: usize) -> SysResult<usize> {
+    info!("[sys_statfs] start");
+    let stat = StatFs::new().to_u8();
+    let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, core::mem::size_of::<StatFs>()) };
+    buf.copy_from_slice(&stat);
+
     Ok(0)
 }

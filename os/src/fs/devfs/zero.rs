@@ -1,6 +1,6 @@
 use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
 use log::info;
-use crate::{fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -53,12 +53,13 @@ impl FileTrait for DevZero {
     fn read_dents(&self, mut ub: usize, len: usize) -> usize {
         0
     }
-    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        // todo!()
+    fn fstat(&self, stat: &mut Kstat) -> SysResult {
+        *stat = Kstat::new();
+        stat.st_mode = S_IFCHR;
         Ok(())
     }
     fn is_dir(&self) -> bool {
-        todo!()
+        false
     }
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()

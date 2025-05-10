@@ -442,7 +442,7 @@ pub fn sys_sigreturn() -> SysResult<usize> {
     let sig_stack = ucontext.uc_stack;
     let sig_mask = ucontext.uc_sigmask;
     let trap_cx = task.get_trap_cx_mut();
-    let sepc = ucontext.get_sepc();
+    let sepc = ucontext.get_userx()[0];
     trap_cx.set_sepc(sepc); // 恢复sepc
     trap_cx.user_x = ucontext.get_userx(); // 恢复寄存器
     task.set_blocked(sig_mask); // 恢复信号屏蔽字

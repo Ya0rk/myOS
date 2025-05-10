@@ -131,7 +131,7 @@ pub fn create_init_files() -> SysResult {
     register_device("/dev/tty");
     //注册设备/dev/zero
     register_device("/dev/zero");
-    //注册设备/dev/numm
+    //注册设备/dev/null
     register_device("/dev/null");
     
     //创建./dev/misc文件夹
@@ -186,10 +186,10 @@ fn create_open_file(
     parent_path: &str,
     flags: OpenFlags,
 ) -> Option<FileClass> {
-    info!(
-        "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
-        flags, target_abs_path, parent_path
-    );
+    // info!(
+    //     "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
+    //     flags, target_abs_path, parent_path
+    // );
 
     // 逻辑为获得一个Option<Arc InodeTrait>如果返回None直接返回None,因为代表父母节点都没有
     // 如果父母节点存在, 那么当父母节点是Dir的时候获得inode,如果父母节点不是Dir页直接返回None
@@ -199,6 +199,7 @@ fn create_open_file(
                 inode
             } else {
                 info!("[create_open_file] failed inode type is {:?}", inode.node_type());
+                // inode
                 return None;
             }
         } else {

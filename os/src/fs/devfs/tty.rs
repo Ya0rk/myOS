@@ -1,5 +1,5 @@
 use alloc::{string::{String, ToString}, sync::Arc};
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, task::get_init_proc, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, task::get_init_proc, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -49,21 +49,13 @@ impl FileTrait for DevTty {
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    // fn poll(&self, events: PollEvents) -> PollEvents {
-    //     let mut revents = PollEvents::empty();
-    //     if events.contains(PollEvents::IN) {
-    //         revents |= PollEvents::IN;
-    //     }
-    //     if events.contains(PollEvents::OUT) {
-    //         revents |= PollEvents::OUT;
-    //     }
-    //     revents
-    // }
-    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        todo!()
+    fn fstat(&self, stat: &mut Kstat) -> SysResult {
+        *stat = Kstat::new();
+        stat.st_mode = S_IFCHR;
+        Ok(())
     }
     fn is_dir(&self) -> bool {
-        todo!()
+        false
     }
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()

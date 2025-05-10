@@ -56,7 +56,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
                 let old_sp = trap_cx.get_sp();
                 // 指向ucontext地址
-                let new_sp = old_sp - Layout::new::<UContext>().pad_to_align().size();
+                let mut new_sp = old_sp - Layout::new::<UContext>().pad_to_align().size();
                 task.set_ucontext(new_sp);
 
                 let sig_stack = task.get_sig_stack_mut().take();
@@ -65,9 +65,36 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 let ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx);
                 copy2user(token, new_sp as *mut UContext, &ucontext);
 
-                // 修改trap_cx，函数trap return后返回到信号处理函数
-                trap_cx.flash(handler, new_sp, __sigret_helper as usize, signo);
+                if sig_handler.sa_flags.contains(SigActionFlag::SA_SIGINFO) {
+                    // log::error!("[SA_SIGINFO] set ucontext {ucontext:?}");
+                    // a2
+                    trap_cx.user_x[12] = new_sp;
+                    #[derive(Default, Copy, Clone)]
+                    #[repr(C)]
+                    pub struct LinuxSigInfo {
+                        pub si_signo: i32,
+                        pub si_errno: i32,
+                        pub si_code: i32,
+                        pub _pad: [i32; 29],
+                        _align: [u64; 0],
+                    }
+                    let mut siginfo_v = LinuxSigInfo::default();
+                    siginfo_v.si_signo = signo as i32;
+                    siginfo_v.si_code = siginfo.sigcode as i32;
+                    new_sp -= size_of::<LinuxSigInfo>();
 
+                    copy2user(token, new_sp as *mut LinuxSigInfo, &siginfo_v);
+                    // let siginfo_ptr: UserWritePtr<LinuxSigInfo> = new_sp.into();
+                    // siginfo_ptr.write(&task, siginfo_v)?;
+                    trap_cx.user_x[11] = new_sp;
+                }
+
+                let x3 = ucontext.get_userx()[3];
+                let x4 = ucontext.get_userx()[4];
+                ucontext.get_userx()[0] = trap_cx.get_sepc();
+                // 修改trap_cx，函数trap return后返回到信号处理函数
+                trap_cx.flash(handler, new_sp, __sigret_helper as usize, signo, x3, x4);
+                break;
             }
         }
 

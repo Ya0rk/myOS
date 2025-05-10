@@ -2,7 +2,7 @@ use core::fmt::{self, Display};
 use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
-use crate::sync::timer::get_time_s;
+use crate::{hal::config::{BLOCK_SIZE, PATH_MAX}, sync::timer::get_time_s};
 
 #[derive(IntoBytes, Immutable)]
 #[allow(unused)]
@@ -58,6 +58,7 @@ pub enum SysCode {
     SYSCALL_LINKAT    = 37,
     SYSCALL_UMOUNT2   = 39,
     SYSCALL_MOUNT     = 40,
+    SYSCALL_STATFS    = 43,
     SYSCALL_FTRUNCATE64 = 46,
     SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR     = 49,
@@ -151,6 +152,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_STATFS => "statfs",
             Self::SYSCALL_TKILL => "tkill",
             Self::SYSCALL_SIGTIMEDWAIT => "sigtimedwait",
             Self::SYSCALL_RENAMEAT2 => "renameat2",
@@ -625,4 +627,62 @@ pub enum RlimResource {
     /// 实时任务在不阻塞下的最大 CPU 时间（微秒）
     Rttime = 15,
     // 注：`RLIMIT_NLIMITS`（16）是总数，非实际资源类型
+}
+
+
+#[derive(Default, Debug, Clone, Copy, IntoBytes, Immutable)]
+#[repr(C)]
+pub struct StatFs {
+    /// 是个 magic number，每个知名的 fs 都各有定义，但显然我们没有
+    pub f_type: i64,
+    /// 最优传输块大小
+    pub f_bsize: i64,
+    /// 总的块数
+    pub f_blocks: u64,
+    /// 还剩多少块未分配
+    pub f_bfree: u64,
+    /// 对用户来说，还有多少块可用
+    pub f_bavail: u64,
+    /// 总的 inode 数
+    pub f_files: u64,
+    /// 空闲的 inode 数
+    pub f_ffree: u64,
+    /// 文件系统编号，但实际上对于不同的OS差异很大，所以不会特地去用
+    pub f_fsid: [i32; 2],
+    /// 文件名长度限制，这个OS默认FAT已经使用了加长命名
+    pub f_namelen: isize,
+    /// 片大小
+    pub f_frsize: isize,
+    /// 一些选项，但其实也没用到
+    pub f_flags: isize,
+    /// 空余 padding
+    pub f_spare: [isize; 4],
+}
+
+impl StatFs {
+    pub fn new() -> Self {
+        Self {
+            f_type: 1,
+            f_bsize: BLOCK_SIZE as i64,
+            f_blocks: 1 << 20,
+            f_bfree: 1 << 18,
+            f_bavail: 1 << 16,
+            f_files: 1 << 10,
+            f_ffree: 100,
+            f_fsid: [0; 2],
+            f_namelen: PATH_MAX as isize,
+            f_frsize: 4096,
+            f_flags: 1 as isize,
+            f_spare: [0; 4],
+        }
+    }
+
+    pub fn to_u8(&self) -> [u8; core::mem::size_of::<Self>()] {
+        let mut buf = [0; core::mem::size_of::<Self>()];
+        let bytes = self.as_bytes();
+        for i in 0..core::mem::size_of::<Self>() {
+            buf[i] = bytes[i];
+        }
+        buf
+    }
 }
