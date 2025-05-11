@@ -63,7 +63,10 @@ impl FutexBucket {
     /// 用于删除特定的futex，主要场景分为两种：超时或者被信号打断
     pub fn remove(&mut self, key: FutexHashKey, pid: usize) {
         info!("[futex queue] remove pid = {}", pid);
-        let queue = self.0.get_mut(&key).expect("[remove] no such queue");
+        let queue = match self.0.get_mut(&key) {
+            Some(queue) => queue,
+            None => return
+        };
         queue.retain(|(p, _, _)| *p != pid); // 删除队列中pid的任务
         if queue.is_empty() {  // 队列为空，就删除整个队列，避免内存泄露
             self.0.remove(&key);
@@ -77,8 +80,9 @@ impl FutexBucket {
         let mut res = 0;
         // let queue = self.0.get_mut(&key).expect("[to_wake] no such queue.");
         if let Some(queue) = self.0.get_mut(&key) {
-            while let Some((_, waker, tb)) = queue.pop() {
+            while let Some((pid, waker, tb)) = queue.pop() {
                 if bitset & tb == 0 {
+                    queue.push((pid, waker, tb)); // 如果不满足条件，就放回去
                     continue;
                 }
                 waker.wake();
@@ -147,8 +151,8 @@ impl Future for FutexFuture {
         let this = self.get_mut();
         // let task = current_task().unwrap().clone();
         let pid = this.task.get_pid();
-        info!("[futex_future] poll pid = {}", pid);
         let uaddr = unsafe { *this.uaddr.get() };
+        info!("[futex_future] poll pid = {}, uaddr = {:#x}", pid, uaddr);
         if ! unsafe { *this.is_register.get() } {
             // 说明还没有加入全局hash 桶
             // 在入队前要判断是否是期望值

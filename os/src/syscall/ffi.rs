@@ -256,51 +256,51 @@ bitflags! {
         /// 共享虚拟内存（线程的典型行为）
         const CLONE_VM = 0x0000100;
         /// 共享文件系统信息（根目录/工作目录等）
-        const CLONE_FS = 1 << 9;
+        const CLONE_FS = 0x0000200;
         /// 共享打开的文件描述符表
-        const CLONE_FILES = 1 << 10;
+        const CLONE_FILES = 0x0000400;
         /// 共享信号处理函数和阻塞信号掩码
-        const CLONE_SIGHAND = 1 << 11;
+        const CLONE_SIGHAND = 0x00000800;
         /// 在父进程中返回子进程的 pidfd（进程文件描述符）
-        const CLONE_PIDFD = 1 << 12;
+        const CLONE_PIDFD = 0x00001000;
         /// 允许调试器继续跟踪子进程
         const CLONE_PTRACE = 1 << 13;
         /// 父进程阻塞，直到子进程调用 exec() 或退出（类似 vfork()）
         const CLONE_VFORK = 1 << 14;
         /// 子进程与调用者共享父进程（而非成为调用者的子进程）
-        const CLONE_PARENT = 1 << 15;
+        const CLONE_PARENT = 0x00008000;
         /// 将子进程放入同一线程组（实现 POSIX 线程）
-        const CLONE_THREAD = 1 << 16;
+        const CLONE_THREAD = 0x00010000;
         /// 创建新的挂载命名空间（Mount Namespace）
         const CLONE_NEWNS = 1 << 17;
         /// 共享 System V 信号量的 SEM_UNDO 状态
-        const CLONE_SYSVSEM = 1 << 18;
+        const CLONE_SYSVSEM = 0x00040000;
         /// 为子进程设置新的线程本地存储（TLS）
-        const CLONE_SETTLS = 1 << 19;
+        const CLONE_SETTLS = 0x00080000;
         /// 将子进程的线程ID（TID）写入父进程的指定地址
-        const CLONE_PARENT_SETTID = 1 << 20;
+        const CLONE_PARENT_SETTID = 0x00100000;
         /// 子进程退出时清除其线程ID（用于线程库同步）
-        const CLONE_CHILD_CLEARTID = 1 << 21;
+        const CLONE_CHILD_CLEARTID = 0x00200000;
         /// （已废弃）早期标记线程为"分离状态"
-        const CLONE_DETACHED = 1 << 22;
+        const CLONE_DETACHED = 0x00400000;
         /// 禁止调试进程强制启用 CLONE_PTRACE
-        const CLONE_UNTRACED = 1 << 23;
+        const CLONE_UNTRACED = 0x00800000;
         /// 将子进程的线程ID写入子进程的指定地址
-        const CLONE_CHILD_SETTID = 1 << 24;
+        const CLONE_CHILD_SETTID = 0x01000000;
         /// 创建新的 Cgroup 命名空间
-        const CLONE_NEWCGROUP = 1 << 25;
+        const CLONE_NEWCGROUP = 0x02000000;
         /// 创建新的 UTS 命名空间（隔离主机名和域名）
-        const CLONE_NEWUTS = 1 << 26;
+        const CLONE_NEWUTS = 0x04000000;
         /// 创建新的 IPC 命名空间（隔离 System V IPC/POSIX 消息队列）
-        const CLONE_NEWIPC = 1 << 27;
+        const CLONE_NEWIPC = 0x08000000;
         /// 创建新的用户命名空间（隔离用户/组 ID）
-        const CLONE_NEWUSER = 1 << 28;
+        const CLONE_NEWUSER = 0x10000000;
         /// 创建新的 PID 命名空间（隔离进程 ID）
-        const CLONE_NEWPID = 1 << 29;
+        const CLONE_NEWPID = 0x20000000;
         /// 创建新的网络命名空间（隔离网络设备、端口等）
-        const CLONE_NEWNET = 1 << 30;
+        const CLONE_NEWNET = 0x40000000;
         /// 共享 I/O 上下文（优化块设备 I/O 调度）
-        const CLONE_IO = 1 << 31;
+        const CLONE_IO = 0x80000000;
     }
 }
 

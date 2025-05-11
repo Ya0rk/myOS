@@ -375,7 +375,7 @@ pub fn sys_clock_gettime(
         CLOCK_BOOTTIME => TimeSpec::boottime_now(),
         _ => return Err(Errno::EINVAL),
     };
-    unsafe { tp.write_volatile(time) };
+    unsafe { core::ptr::write(tp, time) };
     Ok(0)
 }
 
@@ -486,11 +486,13 @@ pub fn sys_sigprocmask(
     let task = current_task().unwrap();
     if old_set != 0 {
         let mut old_set = old_set as *mut SigMask;
-        unsafe { *old_set = *task.get_blocked_mut() };
+        unsafe{ core::ptr::write(old_set, *task.get_blocked()) };
     }
 
     if set != 0 {
-        let mut set = SigMask::from_bits(set).ok_or(Errno::EINVAL)?;
+        let set = set as *mut SigMask;
+        let mut set = unsafe { core::ptr::read(set) };
+        info!("[sys_sigprocmask] taskid = {} ,set = {:#x}, set = {:?}, how = {}", task.get_pid(), set, set, how);
         set.remove(SigMask::SIGKILL | SigMask::SIGCONT);
         match how {
             SIGBLOCK => {
@@ -707,7 +709,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
 /// new_limit: 指向新的资源限制结构体；若为null，仅获取当前限制
 /// old_limit: 用于返回旧的资源限制结构体；若为null，不返回旧值
 pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usize) -> SysResult<usize> {
-    info!("[sys_prlimit64] start");
+    info!("[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}", pid, resource, new_limit, old_limit);
     let task = match pid {
         0 => current_task().unwrap(),
         p if p > 0 => get_task_by_pid(p).ok_or(Errno::ESRCH)?,
@@ -725,7 +727,7 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
             _ => RLimit64::new_bare(),
         };
         unsafe {
-            *old_ptr = now_limit;
+            core::ptr::write(old_ptr, now_limit);
         }
     }
 

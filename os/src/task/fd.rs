@@ -135,7 +135,7 @@ impl FdTable {
 
     // 在指定位置加入Fd
     pub fn put_in(&mut self, info: FdInfo, idx: usize) -> SysResult {
-        if idx > self.rlimit.rlim_cur {
+        if idx > self.rlimit.rlim_max {
             return Err(Errno::EMFILE);
         }
         if idx >= self.table_len() {

@@ -31,7 +31,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
         let k_action = task.handler.lock().fetch_signal_handler(signo);
         let sig_action = k_action.sa;
-        info!("[do_signal] task id = {}, find a signal: {}, handler = {:#x}." , task.get_pid(), signo, sig_action.sa_handler);
+        info!("[do_signal] task id = {}, find a signal: {}, handler = {:#x}, flags = {:?}." , task.get_pid(), signo, sig_action.sa_handler, sig_action.sa_flags);
 
         match k_action.sa_type {
             SigHandlerType::IGNORE => {}

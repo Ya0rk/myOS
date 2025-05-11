@@ -440,7 +440,7 @@ impl TaskControlBlock {
     /// 为task设置可以被唤醒的信号，当task接收到这些信号时，会被唤醒
     pub fn set_wake_up_signal(&self, signal: SigMask) {
         let mut sig_pending = self.sig_pending.lock();
-        sig_pending.need_wake = signal;
+        sig_pending.need_wake = signal | SigMask::SIGKILL | SigMask::SIGSTOP;
     }
 
     /// 通知父进程

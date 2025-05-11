@@ -113,6 +113,10 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
     if bitset == 0 {
         return Err(Errno::EINVAL);
     }
+    let task = current_task().unwrap();
+    let wake_up_sig = *task.get_blocked();
+    task.set_wake_up_signal(wake_up_sig);
+
     let futex_future = FutexFuture::new(uaddr, key, bitset, val);
     info!("[do_futex_wait] uaddr = {:x}", uaddr);
 
@@ -132,6 +136,13 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
                 }
             };
         }
+    }
+
+    if task.sig_pending.lock().has_expected(wake_up_sig).0 {
+        // 这里需要判断是否是被信号唤醒的
+        info!("[do_futex_wait] wake up by signal");
+        FUTEXBUCKET.lock().remove(key, task.get_pid());
+        return Err(Errno::EINTR);
     }
 
     return Ok(0);
