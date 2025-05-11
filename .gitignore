@@ -11,6 +11,7 @@
 *.diff
 *.a
 *.log
+*.ans
 
 os/src/link_app.S
 os/src/linker.ld
