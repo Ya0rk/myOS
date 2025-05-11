@@ -10,9 +10,9 @@ _start:
     lu52i.d     $t0, $t0, -1792     # CA, PLV0, 0x9000 xxxx xxxx xxxx
     csrwr       $t0, 0x181          # LOONGARCH_CSR_DMWIN1
     # 临时设置,为了pci服务
-    ori         $t0, $zero, 0x1
-    lu52i.d     $t0, $t0, 0x0
-    csrwr       $t0, 0x182
+    # ori         $t0, $zero, 0x1
+    # lu52i.d     $t0, $t0, 0x0
+    # csrwr       $t0, 0x182
     # 临时设置结束
 
     # Enable PG 
