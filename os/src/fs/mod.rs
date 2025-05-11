@@ -186,7 +186,7 @@ fn create_open_file(
     parent_path: &str,
     flags: OpenFlags,
 ) -> Option<FileClass> {
-    info!(
+    debug!(
         "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
         flags, target_abs_path, parent_path
     );
@@ -198,7 +198,7 @@ fn create_open_file(
             if inode.node_type() == InodeType::Dir {
                 inode
             } else {
-                info!("[create_open_file] failed inode type is {:?}", inode.node_type());
+                debug!("[create_open_file] failed inode type is {:?}", inode.node_type());
                 return None;
             }
         } else {
@@ -221,7 +221,7 @@ fn create_open_file(
                 parent_dentry.add_child(&path.get_filename(), flags).unwrap()
             } else {
                 // no need to create
-                info!("[create_open_file] path = {} no need to creat", target_abs_path);
+                debug!("[create_open_file] path = {} no need to creat", target_abs_path);
                 return None;
             }
             
@@ -273,7 +273,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
 /// - path: 文件夹目录（绝对路径）
 /// - mode: 创建模式
 pub fn mkdir(target_abs_path: &str, mode: usize) -> SysResult<()> {
-    info!("[mkdir] new dir abs_path is {}", target_abs_path);
+    debug!("[mkdir] new dir abs_path is {}", target_abs_path);
 
     let abs_path = Path::string2path(target_abs_path.into());
 
@@ -283,7 +283,7 @@ pub fn mkdir(target_abs_path: &str, mode: usize) -> SysResult<()> {
     }
 
     
-    info!(
+    debug!(
         "[mkdir] path {}, mode {}",
         target_abs_path, mode
     );

@@ -107,7 +107,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
 /// system call writes iovcnt buffers from the file associated
 /// with the file descriptor fd into the buffers described by iov
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
-    info!("[sys_writev] fd = {}", fd);
+    // info!("[sys_writev] fd = {}", fd);
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -161,7 +161,7 @@ pub fn sys_fstatat(
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
-    info!("pathname = {},", path);
+    info!("[fsstatat] pathname {},", path);
     let cwd = task.get_current_path();
     info!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
 
