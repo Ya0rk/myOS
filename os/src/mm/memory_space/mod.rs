@@ -1020,7 +1020,7 @@ pub fn init_stack(
     // --------------------------------------------------------------------------------
     // 在构建栈的时候，我们从底向上塞各个东西
 
-    info!("[init_stack] in");
+    info!("[init_stack] in with sp:{:#x}", sp_init.0);
     let mut sp = sp_init.to_usize();
     debug_assert!(sp & 0xf == 0);
 
@@ -1099,4 +1099,16 @@ pub fn init_stack(
     info!("[init_stack] out");
     // 返回值
     (sp, argc, arg_ptr_ptr, env_ptr_ptr)
+}
+
+
+
+pub fn test_la_memory_space() {
+    info!("[test_la_memory_space] in");
+    let mut memory_space = MemorySpace::new_user();
+    let sp = memory_space.alloc_stack(USER_STACK_SIZE);
+    unsafe {memory_space.switch_page_table();}
+    let mut x: usize;
+    unsafe {x = *((sp.0 - 0x1000) as *const usize);}
+    info!("[test_la_memory_space] read x: {x:#x}");
 }

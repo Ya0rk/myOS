@@ -67,6 +67,7 @@ endif
 ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS =  -machine virt 
 	QEMU_ARGS += -m 1G
+	QEMU_ARGS += -D ../qemu.log -d mmu,page,in_asm,int,pcall,cpu_reset,guest_errors,exec,cpu
 	QEMU_ARGS += -nographic 
 	QEMU_ARGS += -kernel $(KERNEL_ELF)
 	QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0

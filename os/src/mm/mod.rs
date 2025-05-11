@@ -33,6 +33,6 @@ pub fn init(first: bool) {
     // unsafe {
     //     KERNEL_PAGE_TABLE = Some(Arc::new(Mutex::new(PageTable::init_kernel_page_table())));
     // }
-    #[cfg(target_arch = "riscv64")]
+    // #[cfg(target_arch = "riscv64")]
     enable_kernel_pgtable(); // 切换到kernel page table
 }

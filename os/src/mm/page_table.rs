@@ -142,7 +142,8 @@ pub unsafe fn switch_user_page_table(user_token: usize) {
 
 // pub static mut KERNEL_PAGE_TABLE: Option<Arc<Mutex<PageTable>>> = None;
 lazy_static! {
-    pub static ref KERNEL_PAGE_TABLE: Arc<Mutex<PageTable>> = Arc::new(Mutex::new(PageTable::init_kernel_page_table()));
+    // pub static ref KERNEL_PAGE_TABLE: Arc<Mutex<PageTable>> = Arc::new(Mutex::new(PageTable::init_kernel_page_table()));
+    pub static ref KERNEL_PAGE_TABLE: Arc<Mutex<PageTable>> = Arc::new(Mutex::new(PageTable::new()));
 }
 
 // pub fn get_kernel_page_table() -> &'static Arc<Mutex<PageTable>> {
@@ -219,10 +220,12 @@ impl PageTable {
     // #[allow(unused)]
     /// 建立虚拟地址和物理地址的映射
     pub fn map_leaf(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+        info!("[map_leaf] {:#x} to {:#x}", vpn.0, ppn.0);
         let pte = self.find_pte_create(vpn).unwrap();
         debug_assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
         // TODO: to avoid exposed flag bits
         *pte = PageTableEntry::new(ppn, flags);
+        info!("[map_leaf] pte is {:#x}", pte.bits);
     }
     pub fn map_leaf_force(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();

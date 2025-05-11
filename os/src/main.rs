@@ -48,6 +48,7 @@ pub mod hal;
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use hal::mem::{mmu_init, tlb::{self, tlb_fill}, tlb_init};
 use log::info;
+use mm::memory_space::test_la_memory_space;
 use sync::{block_on, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
@@ -113,6 +114,8 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         fs::init();
         // 此时完成初始化工作，准备载入进程开始执行
 
+        
+
         // 测试代码应当放在这里
         #[cfg(feature = "test")]
         {
@@ -121,6 +124,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // // fs::path_test();
             // info!(" start dentry test");
             // fs::vfs::dentry_test();
+            // test_la_memory_space();
         }
 
         info!("[a] src/main.rs:126");

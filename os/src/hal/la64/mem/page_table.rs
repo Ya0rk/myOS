@@ -84,6 +84,7 @@ impl PTEFlags {
         NX,
         pub G,
         pub D,
+        pub P,
         pub COW,
         pub RPLV
     );
@@ -99,6 +100,7 @@ impl PTEFlags {
         NX,
         pub G,
         pub D,
+        pub P,
         pub COW,
         pub RPLV
     );
@@ -167,6 +169,7 @@ impl From<MapPerm> for PTEFlags {
             .set_W( perm.contains(MapPerm::W) )
             .set_D( perm.contains(MapPerm::W) )
             .set_X( perm.contains(MapPerm::X) )
+            .set_P( true )
             .set_RPLV( false )
         
 
