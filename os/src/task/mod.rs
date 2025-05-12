@@ -32,14 +32,26 @@ pub use processor::{
 
 use async_task::Task;
 use log::info;
-use crate::fs::flush_preload;
+use crate::fs::{autorun, gbshell, initproc, mbshell};
 use crate::{fs::FileClass, sync::block_on};
 use thread_group::ThreadGroup;
 use crate::fs::OpenFlags;
 use crate::fs::open_file;
+use cfg_if::cfg_if;
 
 ///Add init process to the manager
 pub async fn add_initproc() {
-    let initproc = flush_preload().await;
-    TaskControlBlock::new(initproc).await;
+     let file = if cfg!(feature = "autorun") {
+        autorun().await
+     } else if cfg!(feature = "gbshell") {
+        gbshell().await
+     } else if cfg!(feature = "mbshell") {
+        mbshell().await
+     } else if cfg!(feature = "initproc") {
+        initproc().await
+     } else {
+        mbshell().await
+     };
+
+    TaskControlBlock::new(file).await;
 }

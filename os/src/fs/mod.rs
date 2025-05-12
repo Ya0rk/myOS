@@ -6,15 +6,14 @@ mod mount;
 mod pipe;
 mod stat;
 mod stdio;
-pub mod vfs;
 mod path;
+pub mod vfs;
 pub mod pre_data;
 pub mod ext4;
 // pub mod tmp;
 pub mod ffi;
 
 use core::error;
-
 use ext4::{file, Ext4Inode};
 pub use ext4::{root_inode,ls};
 pub use ffi::*;

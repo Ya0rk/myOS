@@ -323,7 +323,7 @@ impl<K: KernelDevOp> Ext4BlockWrapper<K> {
     }
 
     pub fn lwext4_dir_ls(&self) -> Vec<String> {
-        // let path = &Self::to_u8_array_32("/"); // 列出musl目录下的内容
+        // let path = &Self::to_u8_array_32("/musl"); // 列出musl目录下的内容
         let path = &self.mount_point;
         let mut sss: [u8; 255] = [0; 255];
         let mut d: ext4_dir = unsafe { core::mem::zeroed() };

@@ -1,7 +1,7 @@
 use core::mem::size_of;
 use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
-use crate::fs::{open, open_file, FileClass, OpenFlags};
+use crate::fs::{join_path_2_absolute, open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
@@ -210,6 +210,7 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     }
 
     info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
+    // println!("[sys_exec] path = {}, argv = {:?}, env = {:?}", path, argv, env);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;

@@ -2,6 +2,8 @@
 // #![deny(warnings)]
 #![no_std]
 #![no_main]
+#![feature(cfg_match)]
+#![feature(stmt_expr_attributes)]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
 // #![feature(riscv_ext_intrinsics)]

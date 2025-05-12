@@ -40,6 +40,7 @@ smoltcp = { path = "../vendor/smoltcp-0.12.0", version = "0.12.0", default-featu
     "log",
 ] }
 bitvec-rs = { version="0.2.1", default-features = false }
+cfg-if = { version = "1.0.0", default-features = false }
 # loongarch64 = { git = "https://github.com/Godones/loongArch64", package = "loongArch64" }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
@@ -51,9 +52,13 @@ loongarch64 = { git = "https://github.com/Godones/loongArch64", package = "loong
 
 [features]
 board_qemu = []
-default = ["error", "test", "qemu_riscv", ]
+default = ["error", "test", "qemu_riscv", "autorun"]
 error = []
 warn = []
+autorun = []
+gbshell = []
+mbshell = []
+initproc = []
 info = []
 debug = []
 trace = []
