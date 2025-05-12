@@ -3,7 +3,9 @@ use alloc::{sync::Arc, vec::Vec};
 use log::info;
 use lwext4_rust::bindings::O_WRONLY;
 use crate::{
-    fs::{FileTrait, OpenFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, syscall::RLimit64, utils::{Errno, SysResult}
+    fs::{FileTrait, OpenFlags, Stdin, Stdout}, 
+    hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, 
+    net::Socket, syscall::RLimit64, utils::{Errno, SysResult}
 };
 
 use super::current_task;
@@ -135,7 +137,7 @@ impl FdTable {
 
     // 在指定位置加入Fd
     pub fn put_in(&mut self, info: FdInfo, idx: usize) -> SysResult {
-        if idx > self.rlimit.rlim_max {
+        if idx >= self.rlimit.rlim_max {
             return Err(Errno::EMFILE);
         }
         if idx >= self.table_len() {

@@ -139,6 +139,8 @@ pub fn create_init_files() -> SysResult {
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
 
+    mkdir("/dev/shm", 0); // libctest中的pthread_cancel_points测试用例需要
+
     // mkdir("/tmp", 0);
     open_file("/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
 

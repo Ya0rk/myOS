@@ -1,9 +1,12 @@
 use core::{intrinsics::{atomic_load_acquire, atomic_load_relaxed}, time::Duration};
+use alloc::task;
 use log::info;
 use num_enum::TryFromPrimitive;
 use riscv::addr::AddressL2;
 use crate::{
-    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEXBUCKET, FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE}, utils::{Errno, SysResult}
+    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, 
+    task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE}, 
+    utils::{Errno, SysResult}
 };
 
 /// fast user-space locking
@@ -25,9 +28,7 @@ pub async fn sys_futex(
     let mut op = FutexOp::from_bits(futex_op).ok_or(Errno::EINVAL)?;
     info!("[sys_futex] start, futex_op = {:?}", op);
     if uaddr == 0 { return Err(Errno::EACCES); }
-    info!("dddddddddd");
-    let key = FutexHashKey::get_futex_key(uaddr as usize, op);
-    info!("get key");
+    let key = FutexHashKey::get_futex_key(uaddr, op);
     if op.contains(FutexOp::FUTEX_CLOCK_REALTIME) {
         let cmd = op & !FutexOp::FUTEX_MUSK;
         if cmd != FutexOp::FUTEX_WAIT_BITSET {
@@ -42,7 +43,6 @@ pub async fn sys_futex(
             info!("[sys_futex] wait, uaddr = {:#x}, taskid = {}", uaddr, current_task().unwrap().get_pid());
             // // 如果futex word中仍然保存着参数val给定的值，那么当前线程则进入睡眠，等待FUTEX_WAKE的操作唤醒它。
             let now_val = unsafe{ atomic_load_acquire(uaddr as *const u32) };
-            info!("[futex] wait, now_val = {}, val = {}", now_val, val);
             // // 如果uaddr指向地址的值 != val，那么就返回错误
             if now_val != val { return Err(Errno::EAGAIN); }
 
@@ -78,7 +78,8 @@ pub async fn sys_futex(
             }
             let new_key = FutexHashKey::get_futex_key(uaddr2 as usize, op);
             // 将剩下的移动到newkey队列中
-            FUTEXBUCKET.lock().requeue(key, new_key, timeout)?;
+            let task = current_task().unwrap();
+            task.futex_list.lock().requeue(key, new_key, timeout)?;
             return Ok(wake_n);
         }
         FutexOp::FUTEX_CMP_REQUEUE => {
@@ -92,7 +93,8 @@ pub async fn sys_futex(
                 return Ok(wake_n);
             }
             let new_key = FutexHashKey::get_futex_key(uaddr2 as usize, op);
-            FUTEXBUCKET.lock().requeue(key, new_key, timeout)?;
+            let task = current_task().unwrap();
+            task.futex_list.lock().requeue(key, new_key, timeout)?;
             return Ok(wake_n);
         }
 
@@ -118,7 +120,7 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
     task.set_wake_up_signal(wake_up_sig);
 
     let futex_future = FutexFuture::new(uaddr, key, bitset, val);
-    info!("[do_futex_wait] uaddr = {:x}", uaddr);
+    info!("[do_futex_wait] uaddr = {:#x}", uaddr);
 
     match timeout {
         // 此时不需要等待，立即执行
@@ -129,9 +131,10 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
             info!("[do_futex_wait] timeout = {:?}", timeout);
             if let Err(Errno::ETIMEDOUT) = TimeoutFuture::new(futex_future, timeout).await {
                 info!("[do_futex_wait] time out.");
-                let pid = current_task().unwrap().get_pid();
-                if FUTEXBUCKET.lock().check_is_inqueue(key, pid) {
-                    FUTEXBUCKET.lock().remove(key, pid);
+                let pid = task.get_pid();
+                let mut binding = task.futex_list.lock();
+                if binding.check_is_inqueue(key, pid) {
+                    binding.remove(key, pid);
                     return Err(Errno::EINVAL);
                 }
             };
@@ -141,7 +144,7 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
     if task.sig_pending.lock().has_expected(wake_up_sig).0 {
         // 这里需要判断是否是被信号唤醒的
         info!("[do_futex_wait] wake up by signal");
-        FUTEXBUCKET.lock().remove(key, task.get_pid());
+        task.futex_list.lock().remove(key, task.get_pid());
         return Err(Errno::EINTR);
     }
 
@@ -153,7 +156,8 @@ fn do_futex_wake(uaddr: usize, wake_n: u32, bitset: u32, key: FutexHashKey) -> S
         return Err(Errno::EINVAL);
     }
 
-    return Ok(FUTEXBUCKET.lock().to_wake(key, bitset, wake_n));
+    let task = current_task().unwrap();
+    return Ok(task.futex_list.lock().to_wake(key, bitset, wake_n));
 }
 
 /// 主要作用是处理线程异常退出（如被强制终止或崩溃）时遗留的互斥锁（futex）问题，避免其他线程因无法获取锁而永久阻塞
@@ -181,7 +185,6 @@ pub fn sys_set_robust_list(head: usize, len: usize) -> SysResult<usize> {
 /// sizep.
 pub fn sys_get_robust_list(pid: usize, head: usize, sizep: usize) -> SysResult<usize> {
     info!("[sys_get_robust_list] start");
-
     let task = match pid {
         0 => current_task().unwrap(),
         p if pid > 0 => get_task_by_pid(p).ok_or(Errno::ESRCH)?,
@@ -190,8 +193,8 @@ pub fn sys_get_robust_list(pid: usize, head: usize, sizep: usize) -> SysResult<u
 
     let token = task.get_user_token();
     let data = task.robust_list.lock().head;
-    copy2user(token, head as *mut usize, &data);
-    copy2user(token, sizep as *mut usize, &ROBUST_LIST_HEAD_SIZE);
+    unsafe { core::ptr::write(head as *mut usize, data) };
+    unsafe { core::ptr::write(sizep as *mut usize, ROBUST_LIST_HEAD_SIZE) };
 
     Ok(0)
 }

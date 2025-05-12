@@ -5,7 +5,7 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, RobustList, ThreadGroup};
+use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, FutexBucket, RobustList, ThreadGroup};
 use super::{pid_alloc, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
@@ -17,7 +17,7 @@ use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, 
 use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
-use crate::task::{add_task, current_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEXBUCKET, FUTEX_BITSET_MATCH_ANY};
+use crate::task::{add_task, current_task, current_user_token, get_task_by_pid, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY};
 use crate::hal::trap::TrapContext;
 use crate::utils::SysResult;
 use alloc::collections::btree_map::BTreeMap;
@@ -45,6 +45,7 @@ pub struct TaskControlBlock {
     pub fd_table:   Shared<FdTable>,
     current_path:   Shared<String>,
     pub robust_list: Shared<RobustList>,
+    pub futex_list: Shared<FutexBucket>,
 
     // signal
     pub pending:        AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
@@ -98,6 +99,7 @@ impl TaskControlBlock {
             fd_table: new_shared(FdTable::new()),
             current_path: new_shared(String::from("/")), // root directory
             robust_list: new_shared(RobustList::new()),
+            futex_list: new_shared(FutexBucket::new()),
 
             pending: AtomicBool::new(false),
             ucontext: AtomicUsize::new(0),
@@ -183,6 +185,7 @@ impl TaskControlBlock {
         let robust_list = new_shared(RobustList::new());
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
+        let futex_list = new_shared(FutexBucket::new());
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().clone())
@@ -226,6 +229,7 @@ impl TaskControlBlock {
             fd_table,
             current_path,
             robust_list,
+            futex_list,
 
             pending,
             ucontext,
@@ -273,6 +277,7 @@ impl TaskControlBlock {
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
         let exit_code = AtomicI32::new(0);
+        let futex_list = self.futex_list.clone();
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) { // 修改这里的致命错误
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().deref().clone())
@@ -316,6 +321,7 @@ impl TaskControlBlock {
             handler: sig,
             sig_stack,
             robust_list,
+            futex_list,
 
             task_status,
             thread_group,
@@ -338,7 +344,7 @@ impl TaskControlBlock {
     }
     
     pub fn do_exit(&self) {
-        // info!("[do_exit] Task pid = {} exit;", self.get_pid());
+        info!("[do_exit] Task pid = {} exit;", self.get_pid());
         let pid = self.get_pid();
 
         // 如果是init进程
@@ -349,74 +355,71 @@ impl TaskControlBlock {
 
         if let Some(tidaddress) = self.get_child_cleartid() {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
-            unsafe{ *(tidaddress as *mut u32) = 0 };
-            // *translated_refmut( current_user_token(), tidaddress as *mut u32) = 0;
+            unsafe{ core::ptr::write(tidaddress as *mut usize, 0); }
             let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
-            let mut binding = FUTEXBUCKET.lock();
+            let mut binding = self.futex_list.lock();
             binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
             let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::FUTEX_PRIVATE);
             binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
         }
 
         if !self.is_leader() {
-            info!("[do_exit] task is not leader");
             self.children.lock().clear();
             self.remove_thread_group_member(pid);
+            info!("[do_exit] task is not leader, threadgroup len = {}", self.thread_group.lock().tasks.len());
             remove_task_by_pid(pid);
-        } else {
-            // 将当前进程的子进程移动到initproc下
-            // info!("[do_exit] task is leader");
-            let mut lock_child = self.children.lock();
-            if !lock_child.is_empty(){
-                info!("[do_exit] task has child");
-                let init_proc = get_init_proc();
-                for (child_pid, child) in 
-                    lock_child.
-                    iter()
-                {
-                    if child.is_zombie() {
-                        info!("[do_exit] child pdi = {} is zmobie", child_pid);
-                        let sig_info = SigInfo::new(
-                            SigNom::SIGCHLD, 
-                            SigCode::CLD_EXITED, 
-                            SigErr::empty(), 
-                            SigDetails::Chld { 
-                                pid: *child_pid, 
-                                status: child.get_status(),
-                                exit_code: child.get_exit_code()
-                            }
-                        );
-                        init_proc.proc_recv_siginfo(sig_info);
-                    }
-                    child.set_parent(Some(Arc::downgrade(&init_proc)));
-                    init_proc.add_child(child.clone());
-                }
-                lock_child.clear();
-            }
-            drop(lock_child);
-            // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
-            match self.get_parent() {
-                Some(parent) => {
-                    info!("[do_exit] task to info parent pid = {}, exit code = {}", parent.get_pid(), self.get_exit_code());
+            return; // 致命错误，这里是处理线程的分支
+        }
+
+        // 将当前进程的子进程移动到initproc下
+        // info!("[do_exit] task is leader");
+        let mut lock_child = self.children.lock();
+        if !lock_child.is_empty(){
+            info!("[do_exit] task has child");
+            let init_proc = get_init_proc();
+            for (child_pid, child) in 
+                lock_child.
+                iter()
+            {
+                if child.is_zombie() {
+                    info!("[do_exit] child pdi = {} is zmobie", child_pid);
                     let sig_info = SigInfo::new(
-               SigNom::SIGCHLD, 
-                SigCode::CLD_EXITED, 
-                 SigErr::empty(), 
-                 SigDetails::Chld { 
-                            pid, 
-                            status: self.get_status(), 
-                            // 这里需要将exitcode移回去，因为在sys_exit中位移过
-                            // exit_code: (self.get_exit_code() & 0xff00) >> 8
-                            exit_code: self.get_exit_code()
+                        SigNom::SIGCHLD, 
+                        SigCode::CLD_EXITED, 
+                        SigErr::empty(), 
+                        SigDetails::Chld { 
+                            pid: *child_pid, 
+                            status: child.get_status(),
+                            exit_code: child.get_exit_code()
                         }
                     );
-                    parent.proc_recv_siginfo(sig_info);
+                    init_proc.proc_recv_siginfo(sig_info);
                 }
-                None => panic!("this proc has no parent!"),
+                child.set_parent(Some(Arc::downgrade(&init_proc)));
+                init_proc.add_child(child.clone());
             }
+            lock_child.clear();
         }
-        if self.is_leader() {
-            self.set_zombie();
+        drop(lock_child);
+        // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
+        match self.get_parent() {
+            Some(parent) => {
+                info!("[do_exit] task to info parent pid = {}, exit code = {}", parent.get_pid(), self.get_exit_code());
+                let sig_info = SigInfo::new(
+            SigNom::SIGCHLD, 
+            SigCode::CLD_EXITED, 
+                SigErr::empty(), 
+                SigDetails::Chld { 
+                        pid, 
+                        status: self.get_status(), 
+                        // 这里需要将exitcode移回去，因为在sys_exit中位移过
+                        // exit_code: (self.get_exit_code() & 0xff00) >> 8
+                        exit_code: self.get_exit_code()
+                    }
+                );
+                parent.proc_recv_siginfo(sig_info);
+            }
+            None => panic!("this proc has no parent!"),
         }
         
         self.clear_fd_table();
@@ -578,7 +581,7 @@ impl TaskControlBlock {
     }
     /// 删除线程组中的一个成员
     pub fn remove_thread_group_member(&self, pid: usize) {
-        self.thread_group.lock().remove(pid.into());
+        self.thread_group.lock().remove(pid);
     }
 
     /// 将所有子线程设置为zombie
@@ -738,6 +741,9 @@ impl TaskControlBlock {
     /// 分配fd
     pub fn alloc_fd(&self, fd: FdInfo) -> usize{
         self.fd_table.lock().alloc_fd(fd).expect("task alloc fd fail")
+    }
+    pub fn dup(&self, fd: FdInfo) -> SysResult<usize> {
+        self.fd_table.lock().alloc_fd(fd)
     }
     /// 为以前分配了Fd的file，分配一个大于than的新fd
     pub fn alloc_fd_than(&self, fd: FdInfo, than: usize) -> usize{

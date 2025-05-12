@@ -1,7 +1,11 @@
 use core::alloc::Layout;
 use alloc::sync::Arc;
 use log::info;
-use crate::{hal::trap::__sigret_helper, mm::translated_byte_buffer, signal::{LinuxSigInfo, SigActionFlag, SigHandlerType, SigNom, UContext, SIG_DFL, SIG_IGN}, task::TaskControlBlock
+use crate::{
+    hal::trap::__sigret_helper, 
+    mm::translated_byte_buffer, 
+    signal::{LinuxSigInfo, SigActionFlag, SigHandlerType, SigNom, UContext, SIG_DFL, SIG_IGN}, 
+    task::TaskControlBlock
 };
 
 /// 这里包含了所有默认的信号处理方式
@@ -84,7 +88,6 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                     new_sp -= size_of::<LinuxSigInfo>();
                     // 将siginfo_v拷贝到用户栈中
                     unsafe { core::ptr::write(new_sp as *mut LinuxSigInfo, siginfo_v) };
-                    // copy2user(token, new_sp as *mut LinuxSigInfo, &siginfo_v);
                     trap_cx.user_x[11] = new_sp; // a1
                 }
 

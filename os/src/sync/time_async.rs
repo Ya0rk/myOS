@@ -5,12 +5,12 @@ use log::info;
 use spin::Lazy;
 use crate::{task::TaskControlBlock, utils::{Errno, SysResult}};
 
-use super::{timer::{time_duration, Timer}, SpinNoIrqLock};
+use super::{timer::{time_duration, TimerTranc}, SpinNoIrqLock};
 
 // TODO(YJJ):使用时间轮和最小堆混合时间管理器来优化时间复杂度===========
 
 pub struct TimerQueue {
-    timers: SpinNoIrqLock<BinaryHeap<Reverse<Timer>>>, // 直接使用最小堆
+    timers: SpinNoIrqLock<BinaryHeap<TimerTranc>>, // 直接使用最小堆
 }
 
 impl TimerQueue {
@@ -21,24 +21,23 @@ impl TimerQueue {
     }
 
     /// 添加定时器（O(log n)）
-    pub fn add(&self, timer: Timer) {
+    pub fn add(&self, timer: TimerTranc) {
         let mut heap = self.timers.lock();
-        heap.push(Reverse(timer));
+        heap.push(timer);
     }
 
     /// 处理过期事件（O(k log n) k为过期事件数）
     pub fn handle_expired(&self) {
         let mut wake_list = Vec::new();
-        let current_ns = time_duration().as_nanos() as u64;
+        let current_ns = time_duration();
         
         {
             let mut heap = self.timers.lock();
             while let Some(timer) = heap.peek() {
-                if timer.0.expire_ns > current_ns {
+                if timer.expire_ns >= current_ns {
                     break;
                 }
                 if let Some(timer) = heap.pop() {
-                    let timer = timer.0;
                     wake_list.extend(timer.waker);
                 }
             }
@@ -61,10 +60,10 @@ pub struct TimeoutFuture<F: Future> {
 }
 
 impl<F: Future> TimeoutFuture<F> {
-    pub fn new(inner: F, timeout: Duration) -> Self {
+    pub fn new(inner: F, span: Duration) -> Self {
         Self {
             inner,
-            deadline: time_duration() + timeout,
+            deadline: time_duration() + span,
             timer_registered: false,
         }
     }
@@ -83,6 +82,7 @@ impl<F: Future> Future for TimeoutFuture<F> {
 
         // 检查是否已经超时
         let current = time_duration();
+        info!("timeout future: checking time, current = {:?}, deadline = {:?}", current, this.deadline);
         if current >= this.deadline {
             info!("[TimeoutFuture] time use out");
             return Poll::Ready(Err(Errno::ETIMEDOUT));
@@ -91,7 +91,7 @@ impl<F: Future> Future for TimeoutFuture<F> {
         // 注册定时器（仅一次）
         if !this.timer_registered {
             let deadline = this.deadline;
-            TIMER_QUEUE.add(Timer::new(deadline, cx.waker().clone()));
+            TIMER_QUEUE.add(TimerTranc::new(deadline, cx.waker().clone()));
             this.timer_registered = true;
         }
 

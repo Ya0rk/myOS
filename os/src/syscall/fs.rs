@@ -429,7 +429,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.off_Ocloexec(true);
-    let new_fd = task.alloc_fd(new_temp_fd);
+    let new_fd = task.dup(new_temp_fd)?;
     // drop(inner);
     if new_fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -673,13 +673,13 @@ pub fn sys_renameat2(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpa
 
 /// make a new name for a file: a hard link
 pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
-    info!("[sys_linkat] start");
+    // info!("[sys_linkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let old_path = translated_str(token, oldpath);
     let new_path = translated_str(token, newpath);
     let cwd = task.get_current_path();
-    info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: {}", &olddirfd, &old_path, &newdirfd, &new_path);
+    // info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: {}", &olddirfd, &old_path, &newdirfd, &new_path);
 
     let old_path = if old_path.starts_with("/") {
         old_path

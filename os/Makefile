@@ -12,6 +12,7 @@ FS = lwext4_rust
 
 
 FS_IMG := ../sdcard-rv-test.img
+# FS_IMG_BAK = ../sdcard-rv-test-copy.img
 # FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 2
@@ -85,10 +86,6 @@ PHONY += env
 $(KERNEL_BIN): kernel
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
 
-# copy_to_fs: 
-# 	cd ../$(FS) && sh create_img.sh 
-# PHONY += copy_to_fs
-
 $(APPS):
 
 kernel:
@@ -120,6 +117,11 @@ PHONY += run
 qemu-version-check:
 	# sh scripts/qemu-ver-check.sh $(QEMU_NAME)
 PHONY += qemu-version-check
+
+# 复制镜像，然后操作复制后的copy镜像，防止镜像被破坏
+# copy_img:
+# 	@echo "Copying image $(FS_IMG_BAK)"
+# 	cp $(FS_IMG) $(FS_IMG_BAK)
 
 run-inner: qemu-version-check build
 	echo "Running QEMU with arguments: $(QEMU_ARGS)"
