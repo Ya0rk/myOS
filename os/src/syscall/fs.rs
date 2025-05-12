@@ -73,7 +73,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 ///```
 /// len: 数组的长度
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
-    info!("[sys_readv] start");
+    // info!("[sys_readv] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;

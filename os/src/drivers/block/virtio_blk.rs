@@ -13,10 +13,10 @@ use virtio_drivers::{Hal, VirtIOBlk, VirtIOHeader};
 #[allow(unused)]
 const VIRTIO0: usize = 0x10001000 + KERNEL_ADDR_OFFSET;
 
-pub struct VirtIOBlock(Mutex<VirtIOBlk<'static, VirtioHal>>);
+pub struct VirtIOBlock(SpinNoIrqLock<VirtIOBlk<'static, VirtioHal>>);
 
 lazy_static! {
-    static ref QUEUE_FRAMES: Mutex<Vec<FrameTracker>> = Mutex::new(Vec::new());
+    static ref QUEUE_FRAMES: SpinNoIrqLock<Vec<FrameTracker>> = SpinNoIrqLock::new(Vec::new());
 }
 
 impl BlockDevice for VirtIOBlock {
@@ -42,7 +42,7 @@ impl VirtIOBlock {
     #[allow(unused)]
     pub fn new() -> Self {
         unsafe {
-            Self(Mutex::new(
+            Self(SpinNoIrqLock::new(
                 VirtIOBlk::<VirtioHal>::new(&mut *(VIRTIO0 as *mut VirtIOHeader))
                     .expect("VirtIOBlk create failed"),
             ))

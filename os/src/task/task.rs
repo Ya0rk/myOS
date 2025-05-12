@@ -5,18 +5,18 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, FdInfo, FdTable, RobustList, ThreadGroup};
+use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, RobustList, ThreadGroup};
 use super::{pid_alloc, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
 use crate::fs::{init, FileClass, FileTrait};
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
-use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandler, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
+use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
-use crate::task::{add_task, current_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task};
+use crate::task::{add_task, current_task, current_user_token, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEXBUCKET, FUTEX_BITSET_MATCH_ANY};
 use crate::hal::trap::TrapContext;
 use crate::utils::SysResult;
 use alloc::collections::btree_map::BTreeMap;
@@ -322,10 +322,18 @@ impl TaskControlBlock {
 
         if let Some(tidaddress) = self.get_child_cleartid() {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
-            *translated_refmut( current_user_token(), tidaddress as *mut u32) = 0;
+            unsafe{ *(tidaddress as *mut u32) = 0 };
+            // *translated_refmut( current_user_token(), tidaddress as *mut u32) = 0;
+            let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
+            let mut binding = FUTEXBUCKET.lock();
+            binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
+            let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::FUTEX_PRIVATE);
+            binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
         }
 
         if !self.is_leader() {
+            info!("[do_exit] task is not leader");
+            self.children.lock().clear();
             self.remove_thread_group_member(pid);
             remove_task_by_pid(pid);
         } else {
@@ -388,16 +396,18 @@ impl TaskControlBlock {
         self.recycle_data_pages();        
     }
 
-    pub fn do_wait4(&self, pid: usize, wstatus: *mut i32, exit_code: i32) {
+    pub fn do_wait4(&self, pid: usize, wstatus: usize, exit_code: i32) {
         let zombie_child = self.remove_child(pid);
         // 将退出状态写入用户提供的指针
-        if !wstatus.is_null() {
+        if wstatus != 0 {
+            let wstatus = wstatus as *mut i32;
             unsafe { wstatus.write_volatile(exit_code)  };
             // *translated_refmut(self.get_user_token(), wstatus) = (exit_code & 0xff) << 8;
         }
         let (utime, stime) = zombie_child.get_time_data().get_ustime();
         self.get_time_data_mut().update_child_time_when_exit(utime, stime);
         remove_task_by_pid(pid);
+        remove_proc_group_member(zombie_child.get_pgid(), pid);
     }
 
     /// 为task设置可以被唤醒的信号，当task接收到这些信号时，会被唤醒
@@ -415,7 +425,7 @@ impl TaskControlBlock {
             .fetch_signal_handler(SigNom::SIGCHLD as usize);
 
         if si_signo == SigNom::SIGCHLD
-            && ( p_handler.sa.sa_handler == SigHandler::SIG_IGN
+            && ( p_handler.sa_type == SigHandlerType::IGNORE
             ||  p_handler.sa.sa_flags.contains(SigActionFlag::SA_NOCLDSTOP) ) 
         {
             return ;

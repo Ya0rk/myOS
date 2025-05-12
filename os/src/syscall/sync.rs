@@ -3,10 +3,8 @@ use log::info;
 use num_enum::TryFromPrimitive;
 use riscv::addr::AddressL2;
 use crate::{
-    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEXBUCKET, ROBUST_LIST_HEAD_SIZE}, utils::{Errno, SysResult}
+    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEXBUCKET, FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE}, utils::{Errno, SysResult}
 };
-
-const FUTEX_BITSET_MATCH_ANY: u32 = 0xffffffff;
 
 /// fast user-space locking
 /// uaddr就是用户态下共享内存的地址，里面存放的是一个对齐的整型计数器。
@@ -127,11 +125,11 @@ async fn do_futex_wait(uaddr: u32, val: u32, timeout: u32, bitset: u32, key: Fut
             info!("[do_futex_wait] timeout = {:?}", timeout);
             if let Err(Errno::ETIMEDOUT) = TimeoutFuture::new(futex_future, timeout).await {
                 info!("[do_futex_wait] time out.");
-                // let pid = Pid::from(current_task().unwrap().get_pid());
-                // if FUTEXBUCKET.lock().check_is_inqueue(key, pid.clone()) {
-                //     FUTEXBUCKET.lock().remove(key, pid);
-                //     return Err(Errno::EINVAL);
-                // }
+                let pid = Pid::from(current_task().unwrap().get_pid());
+                if FUTEXBUCKET.lock().check_is_inqueue(key, pid.clone()) {
+                    FUTEXBUCKET.lock().remove(key, pid);
+                    return Err(Errno::EINVAL);
+                }
             };
         }
     }

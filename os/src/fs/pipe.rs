@@ -1,6 +1,6 @@
 use core::{cmp::min, future::Future, task::{Poll, Waker}};
 use super::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags};
-use crate::{hal::config::PIPE_BUFFER_SIZE, mm::{page::Page, UserBuffer}, sync::{get_waker, once::LateInit}, utils::{Errno, SysResult}};
+use crate::{hal::config::PIPE_BUFFER_SIZE, mm::{page::Page, UserBuffer}, sync::{get_waker, once::LateInit, SpinNoIrqLock}, utils::{Errno, SysResult}};
 use alloc::{collections::vec_deque::VecDeque, string::{String, ToString}, sync::{Arc, Weak}, vec::Vec};
 use spin::Mutex;
 use async_trait::async_trait;
@@ -9,14 +9,14 @@ use alloc::boxed::Box;
 pub struct Pipe {
     flags: OpenFlags,
     other : LateInit<Weak<Pipe>>,
-    buffer: Arc<Mutex<PipeInner>>,
+    buffer: Arc<SpinNoIrqLock<PipeInner>>,
 }
 
 impl Pipe {
     /// make pipe: read end and wrtie end
     /// 创建一个管道并返回管道的读端和写端 (read_end, write_end)
     pub fn new() -> (Arc<Self>, Arc<Self>) {
-        let buffer = Arc::new(Mutex::new(PipeInner::new()));
+        let buffer = Arc::new(SpinNoIrqLock::new(PipeInner::new()));
         let read_end  = Arc::new(Self::read_end_with_buffer(buffer.clone()));
         let write_end = Arc::new(Self::write_end_with_buffer(buffer));
         read_end.other.init(Arc::downgrade(&write_end));
@@ -25,7 +25,7 @@ impl Pipe {
         (read_end, write_end)
     }
     /// 创建管道的读端
-    pub fn read_end_with_buffer(buffer: Arc<Mutex<PipeInner>>) -> Self {
+    pub fn read_end_with_buffer(buffer: Arc<SpinNoIrqLock<PipeInner>>) -> Self {
         Self {
             flags: OpenFlags::O_RDONLY,
             other: LateInit::new(),
@@ -33,7 +33,7 @@ impl Pipe {
         }
     }
     /// 创建管道的写端
-    pub fn write_end_with_buffer(buffer: Arc<Mutex<PipeInner>>) -> Self {
+    pub fn write_end_with_buffer(buffer: Arc<SpinNoIrqLock<PipeInner>>) -> Self {
         Self {
             flags: OpenFlags::O_WRONLY,
             other: LateInit::new(),

@@ -46,7 +46,7 @@ fn run_cmd(cmd: &str) {
                 cmd,
             ],
             &[
-                "PATH=/:/bin\0",
+                "PATH=/bin:/\0",
                 "HOME=/\0",
                 "LD_LIBRARY_PATH=/\0",
                 "TERM=screen\0",

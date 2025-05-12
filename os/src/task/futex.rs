@@ -9,6 +9,8 @@ use crate::{
 };
 use super::{current_task, Pid};
 
+pub const FUTEX_BITSET_MATCH_ANY: u32 = 0xffffffff;
+
 /// 用于计算hashkey，然后在全局hash桶中获取到对应的futex hash链表
 #[derive(PartialEq, Eq, Hash, Copy, Clone)]
 pub enum FutexHashKey {
