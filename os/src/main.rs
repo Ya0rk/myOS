@@ -94,6 +94,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             "[kernel] ---------- hart {} is starting... ----------",
             hart_id
         );
+        START_HART_ID.store(hart_id, Ordering::SeqCst);
         hal::trap::init();
         task::init_processors();
         
@@ -123,7 +124,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         });
         
         INIT_FINISHED.store(true, Ordering::SeqCst);
-        START_HART_ID.store(hart_id, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]
         hal::entry::boot::boot_all_harts(hart_id);
     } else {
@@ -135,11 +135,11 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     unsafe { sync::enable_timer_interrupt() };
     timer::set_next_trigger();
     // 列出目前的应用
-    let finish = AtomicBool::new(false);
-    if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
-        finish.store(fs::list_apps(), Ordering::SeqCst);
-    }
-    while !finish.load(Ordering::SeqCst) {}
+    // let finish = AtomicBool::new(false);
+    // if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
+    //     finish.store(fs::list_apps(), Ordering::SeqCst);
+    // }
+    // while !finish.load(Ordering::SeqCst) {}
     executor::run();
     panic!("Unreachable in rust_main!");
 }

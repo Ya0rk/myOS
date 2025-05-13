@@ -51,7 +51,7 @@ impl TaskQueue {
 
     /// 从任务队列窃取一半的normal task，可以减少窃取次数
     fn steal(&self) -> Option<VecDeque<Runnable>> {
-        info!("steal task---");
+        // info!("steal task---");
         let len = self.normal_len();
         if len == 0 {
             return None;
@@ -127,10 +127,10 @@ pub fn run() {
             // 如果自己的队列为空，尝试从其他队列中窃取任务
             // info!("bhao");
             steal_counter += 1;
-            if steal_counter > QUEUE_NUM * 2 {
-                // 如果多次窃取失败，可能没有任务了，退出循环
-                break;
-            }
+            // if steal_counter > QUEUE_NUM * 2 {
+            //     // 如果多次窃取失败，可能没有任务了，退出循环
+            //     break;
+            // }
             for i in 0..QUEUE_NUM {
                 if i == worker_id {
                     continue; // 跳过自己的队列
