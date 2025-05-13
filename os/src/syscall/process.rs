@@ -1,12 +1,12 @@
 use core::mem::size_of;
 use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
-use crate::fs::{open, open_file, FileClass, OpenFlags};
+use crate::fs::{join_path_2_absolute, open, open_file, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
-use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, IdelFuture, TimeSpec, TimeVal, TimeoutFuture, Tms};
+use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, IdelFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
 use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
 use crate::syscall::RLimit64;
 use crate::task::{
@@ -145,13 +145,18 @@ pub fn sys_clone(
 
     let new_pid = new_task.get_pid();
     let child_trap_cx = new_task.get_trap_cx_mut();
+    // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
+    // 只需要修改子进程返回值为0即可
+    child_trap_cx.user_x[10] = 0;
 
-    if flag.contains(CloneFlags::CLONE_SETTLS) {
-        child_trap_cx.set_tp(tls);
+    // 子进程不能使用父进程的栈，所以需要手动指定
+    if child_stack != 0 {
+        child_trap_cx.set_sp(child_stack);
     }
+    
     // 检查是否需要设置 parent_tid
     if flag.contains(CloneFlags::CLONE_PARENT_SETTID) {
-        *translated_refmut(token, ptid as *mut u32) = new_pid as u32;
+        unsafe{ core::ptr::write(ptid as *mut usize, new_pid as usize); }
     }
     // 检查是否需要设置子进程的 set_child_tid,clear_child_tid
 
@@ -159,8 +164,8 @@ pub fn sys_clone(
     // set_child_tid 会被设置为传递给 clone() 的 ctid 参数的值。
     // 新线程启动时，会将其线程 ID 写入该地址
     if flag.contains(CloneFlags::CLONE_CHILD_SETTID) {
+        unsafe { core::ptr::write(ctid as *mut usize, new_pid as usize); }
         new_task.set_child_settid(ctid);
-        *translated_refmut(token, ctid as *mut u32) = new_pid as u32;
     }
     // 检查是否需要设置child_cleartid,在线程退出时会将指向的地址清零
 
@@ -171,17 +176,13 @@ pub fn sys_clone(
         new_task.set_child_cleartid(ctid);
     }
 
-    // 子进程不能使用父进程的栈，所以需要手动指定
-    if child_stack != 0 {
-        child_trap_cx.set_sp(child_stack);
+    if flag.contains(CloneFlags::CLONE_SETTLS) {
+        child_trap_cx.set_tp(tls);
     }
-    // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
-    // 只需要修改子进程返回值为0即可
-    child_trap_cx.user_x[10] = 0;
+    
     // 将子进程加入任务管理器，这里可以快速找到进程
     add_task(&new_task);
     spawn_user_task(new_task);
-    // info!("[sys_fork] finished new pid = {}", new_pid);
 
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
@@ -210,6 +211,8 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
         argv.insert(1, "sh".to_string());
     }
 
+    info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
+    // println!("[sys_exec] path = {}, argv = {:?}, env = {:?}", path, argv, env);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;
@@ -369,14 +372,14 @@ pub fn sys_clock_gettime(
     }
     let tp = timespec as *mut TimeSpec;
     let time = match clock_id {
-        CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::new(),
+        CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration()),
         CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
         CLOCK_THREAD_CPUTIME_ID => TimeSpec::thread_cputime_now(),
         CLOCK_REALTIME_COARSE => TimeSpec::get_coarse_time(),
         CLOCK_BOOTTIME => TimeSpec::boottime_now(),
         _ => return Err(Errno::EINVAL),
     };
-    unsafe { tp.write_volatile(time) };
+    unsafe { core::ptr::write(tp, time) };
     Ok(0)
 }
 
@@ -423,11 +426,8 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
         target_task.set_pgid(pid);
         extract_proc_to_new_group(old_pgid, new_pgid, pid);
     } else {
-        // info!("stage 1");
         target_task.set_pgid(pgid);
-        // info!("stage 2");
         extract_proc_to_new_group(old_pgid, pgid, pid);
-        // info!("stage 3");
     }
     Ok(0)
 }
@@ -443,10 +443,11 @@ pub fn sys_sigreturn() -> SysResult<usize> {
     let sig_stack = ucontext.uc_stack;
     let sig_mask = ucontext.uc_sigmask;
     let trap_cx = task.get_trap_cx_mut();
-    let sepc = ucontext.get_sepc();
-    trap_cx.set_sepc(sepc); // 恢复sepc
+    let sepc = ucontext.get_userx()[0];
+    // 恢复trap_cx到之前状态,这些值都保存在ucontext中
+    trap_cx.set_sepc(sepc);                // 恢复sepc
     trap_cx.user_x = ucontext.get_userx(); // 恢复寄存器
-    task.set_blocked(sig_mask); // 恢复信号屏蔽字
+    task.set_blocked(sig_mask);            // 恢复信号屏蔽字
     // 恢复信号栈
     if sig_stack.ss_size != 0 {
         unsafe { *task.sig_stack.get() = Some(sig_stack) };
@@ -463,7 +464,8 @@ pub fn sys_sysinfo(sysinfo: *const u8) -> SysResult<usize> {
     }
     let proc_num = get_proc_num();
     let bind = Sysinfo::new(proc_num);
-    let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
+    // let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
+    let sysinfo = unsafe{ sysinfo as *mut Sysinfo };
     unsafe { core::ptr::write(sysinfo, bind) };
     Ok(0)
 }
@@ -486,28 +488,29 @@ pub fn sys_sigprocmask(
     let task = current_task().unwrap();
     if old_set != 0 {
         let mut old_set = old_set as *mut SigMask;
-        unsafe { *old_set = *task.get_blocked_mut() };
+        if old_set.is_null() {
+            info!("[sys_sigprocmask] old_set is null");
+            return Err(Errno::EFAULT);
+        }
+        unsafe{ core::ptr::write(old_set, *task.get_blocked()) };
     }
 
     if set != 0 {
-        let mut set = SigMask::from_bits(set).ok_or(Errno::EINVAL)?;
+        let set = set as *mut SigMask;
+        if set.is_null() {
+            info!("[sys_sigprocmask] set is null");
+            return Err(Errno::EFAULT);
+        }
+        let mut set = unsafe { core::ptr::read(set) };
+        info!("[sys_sigprocmask] taskid = {} ,set = {:#x}, set = {:?}, how = {}", task.get_pid(), set, set, how);
         set.remove(SigMask::SIGKILL | SigMask::SIGCONT);
         match how {
-            SIGBLOCK => {
-                *task.get_blocked_mut() |= set;
-            }
-            SIGUNBLOCK => {
-                task.get_blocked_mut().remove(set);
-            }
-            SIGSETMASK => {
-                *task.get_blocked_mut() = set;
-            }
-            _ => {
-                return Err(Errno::EINVAL);
-            }
+            SIGBLOCK   =>  task.get_blocked_mut().insert(set),
+            SIGUNBLOCK =>  task.get_blocked_mut().remove(set),
+            SIGSETMASK => *task.get_blocked_mut() = set,
+            _ => return Err(Errno::EINVAL),
         }
     }
-    // info!("[sys_sigprocmask] taskid = {} ,finished", task.get_pid());
     Ok(0)
 }
 
@@ -527,15 +530,6 @@ pub fn sys_sigaction(
     old_act: usize,
 ) -> SysResult<usize> {
     info!("[sys_sigaction] start signum: {signum}, act:{act}, old_act: {old_act}");
-    // 作为强转的暂存器
-    // #[repr(C)]
-    // #[derive(Clone, Copy)]
-    // struct ActionUtil {
-    //     sa_handler: usize,
-    //     pub sa_flags: SigActionFlag,
-    //     pub sa_restorer: usize,
-    //     pub sa_mask: SigMask,
-    // }
     if signum > MAX_SIGNUM || signum == 9 || signum == 19 {
         return Err(Errno::EINVAL);
     }
@@ -549,6 +543,7 @@ pub fn sys_sigaction(
         let mut new_act = unsafe { *(act as *const SigAction) };
         let signo = SigNom::from(signum);
         new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
+        info!("[sys_sigaction] taskid = {}, sa_handler = {:#x}", task.get_pid(), new_act.sa_handler);
         match new_act.sa_handler {
             SIG_DFL => {
                 let new_kaction = KSigAction::new(signo);
@@ -716,7 +711,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
 /// new_limit: 指向新的资源限制结构体；若为null，仅获取当前限制
 /// old_limit: 用于返回旧的资源限制结构体；若为null，不返回旧值
 pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usize) -> SysResult<usize> {
-    info!("[sys_prlimit64] start");
+    info!("[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}", pid, resource, new_limit, old_limit);
     let task = match pid {
         0 => current_task().unwrap(),
         p if p > 0 => get_task_by_pid(p).ok_or(Errno::ESRCH)?,
@@ -734,7 +729,7 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
             _ => RLimit64::new_bare(),
         };
         unsafe {
-            *old_ptr = now_limit;
+            core::ptr::write(old_ptr, now_limit);
         }
     }
 
@@ -861,6 +856,7 @@ pub async fn sys_sigtimedwait(set: usize, info: usize, timeout: usize) -> SysRes
     //     }
     //     None => return Err(Errno::EAGAIN),
     // }
+    // Ok(0)
 }
 
 /// send a signal to a thread

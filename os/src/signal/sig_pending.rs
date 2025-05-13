@@ -66,18 +66,21 @@ impl SigPending {
     }
 
     /// 取出一个信号，优先从prio队列获取
-    pub fn take_one(&mut self) -> Option<SigInfo> {
-        let sig_info = 
-                self.prio
-                .pop_front()
-                .or_else(|| self.fifo.pop_front());
-        match sig_info {
-            Some(one) => {
-                self.mask.unset_sig(one.signo as usize);
-                return Some(one);
-            }
-            None => return sig_info,
+    /// 参数mask：当前进程的信号掩码，不能取出掩码中的信号
+    pub fn take_one(&mut self, mask: SigMask) -> Option<SigInfo> {
+        if let Some(index) = self.prio.iter().position(|x| !mask.have(x.signo as usize)) {
+            let siginfo = self.prio.remove(index).unwrap();
+            self.mask.unset_sig(siginfo.signo as usize); // 这里的mask代表该信号是否在队列中，然后将其删去
+            return Some(siginfo);
         }
+
+        if let Some(index) = self.fifo.iter().position(|x| !mask.have(x.signo as usize)) {
+            let siginfo = self.fifo.remove(index).unwrap();
+            self.mask.unset_sig(siginfo.signo as usize);
+            return Some(siginfo);
+        }
+
+        return None;
     }
 
     /// 用于wait4中取出SIGCHLD信号，所以只需要遍历fifo队列

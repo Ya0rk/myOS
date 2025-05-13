@@ -12,6 +12,7 @@ FS = lwext4_rust
 
 
 FS_IMG := ../sdcard-rv-test.img
+FS_IMG_BAK = ../sdcard-rv-test-copy.img
 # FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 2
@@ -54,7 +55,7 @@ QEMU_ARGS += -m 1G
 QEMU_ARGS += -nographic 
 QEMU_ARGS += -bios $(BOOTLOADER) 
 QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
-QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+QEMU_ARGS += -drive file=$(FS_IMG_BAK),if=none,format=raw,id=x0
 QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 QEMU_ARGS += -smp $(CPUS)
 
@@ -84,10 +85,6 @@ PHONY += env
 
 $(KERNEL_BIN): kernel
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
-
-# copy_to_fs: 
-# 	cd ../$(FS) && sh create_img.sh 
-# PHONY += copy_to_fs
 
 $(APPS):
 
@@ -121,9 +118,16 @@ qemu-version-check:
 	# sh scripts/qemu-ver-check.sh $(QEMU_NAME)
 PHONY += qemu-version-check
 
-run-inner: qemu-version-check build
+# 复制镜像，然后操作复制后的copy镜像，防止镜像被破坏
+copy_img:
+	@echo "Copying image $(FS_IMG_BAK)"
+	cp $(FS_IMG) $(FS_IMG_BAK)
+PHONY += copy_img
+
+run-inner: qemu-version-check copy_img build
 	echo "Running QEMU with arguments: $(QEMU_ARGS)"
 	$(QEMU_NAME) $(QEMU_ARGS)
+	rm $(FS_IMG_BAK)
 PHONY += run-inner
 
 # debug: qemu-version-check build

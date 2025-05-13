@@ -6,15 +6,14 @@ mod mount;
 mod pipe;
 mod stat;
 mod stdio;
-pub mod vfs;
 mod path;
+pub mod vfs;
 pub mod pre_data;
 pub mod ext4;
 // pub mod tmp;
 pub mod ffi;
 
 use core::error;
-
 use ext4::{file, Ext4Inode};
 pub use ext4::{root_inode,ls};
 pub use ffi::*;
@@ -131,13 +130,15 @@ pub fn create_init_files() -> SysResult {
     register_device("/dev/tty");
     //注册设备/dev/zero
     register_device("/dev/zero");
-    //注册设备/dev/numm
+    //注册设备/dev/null
     register_device("/dev/null");
     
     //创建./dev/misc文件夹
     mkdir("/dev/misc", 0);
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
+
+    mkdir("/dev/shm", 0); // libctest中的pthread_cancel_points测试用例需要
 
     // mkdir("/tmp", 0);
     open_file("/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);

@@ -17,9 +17,25 @@ user_shell_end:
 
 
     .section .data
-    .globl busybox_start
-    .globl busybox_end
+    .globl mbshell_start
+    .globl mbshell_end
     .align 3
-busybox_start:
-	.incbin "../user/target/riscv64gc-unknown-none-elf/release/mybusybox"
-busybox_end:
+mbshell_start:
+	.incbin "../user/target/riscv64gc-unknown-none-elf/release/mbshell"
+mbshell_end:
+
+    .section .data
+    .globl gbshell_start
+    .globl gbshell_end
+    .align 3
+gbshell_start:
+	.incbin "../user/target/riscv64gc-unknown-none-elf/release/gbshell"
+gbshell_end:
+
+    .section .data
+    .globl autorun_start
+    .globl autorun_end
+    .align 3
+autorun_start:
+	.incbin "../user/target/riscv64gc-unknown-none-elf/release/autorun"
+autorun_end:

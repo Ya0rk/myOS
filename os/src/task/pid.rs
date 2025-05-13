@@ -40,6 +40,9 @@ impl PidAllocator {
     /// 删除一个pid，放入recycled中
     fn dealloc(&mut self, pid: usize) {
         assert!(pid < self.current, "pid {} is out of range", pid);
+        if pid == 8 {
+            info!("pid 8 dealloc");
+        }
         assert!(
             self.recycled.insert(pid), // 插入，如果失败说明 PID 已经回收过
             "pid {} has been deallocated!",

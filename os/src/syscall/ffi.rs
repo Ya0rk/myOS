@@ -2,7 +2,7 @@ use core::fmt::{self, Display};
 use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
-use crate::sync::timer::get_time_s;
+use crate::{hal::config::{BLOCK_SIZE, PATH_MAX}, sync::timer::get_time_s};
 
 #[derive(IntoBytes, Immutable)]
 #[allow(unused)]
@@ -58,6 +58,7 @@ pub enum SysCode {
     SYSCALL_LINKAT    = 37,
     SYSCALL_UMOUNT2   = 39,
     SYSCALL_MOUNT     = 40,
+    SYSCALL_STATFS    = 43,
     SYSCALL_FTRUNCATE64 = 46,
     SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR     = 49,
@@ -151,6 +152,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_STATFS => "statfs",
             Self::SYSCALL_TKILL => "tkill",
             Self::SYSCALL_SIGTIMEDWAIT => "sigtimedwait",
             Self::SYSCALL_RENAMEAT2 => "renameat2",
@@ -252,53 +254,53 @@ bitflags! {
         /// 子进程退出时发送 SIGCHLD 信号（传统 fork() 行为）
         const SIGCHLD = (1 << 4) | (1 << 0);
         /// 共享虚拟内存（线程的典型行为）
-        const CLONE_VM = 1 << 8;
+        const CLONE_VM = 0x0000100;
         /// 共享文件系统信息（根目录/工作目录等）
-        const CLONE_FS = 1 << 9;
+        const CLONE_FS = 0x0000200;
         /// 共享打开的文件描述符表
-        const CLONE_FILES = 1 << 10;
+        const CLONE_FILES = 0x0000400;
         /// 共享信号处理函数和阻塞信号掩码
-        const CLONE_SIGHAND = 1 << 11;
+        const CLONE_SIGHAND = 0x00000800;
         /// 在父进程中返回子进程的 pidfd（进程文件描述符）
-        const CLONE_PIDFD = 1 << 12;
+        const CLONE_PIDFD = 0x00001000;
         /// 允许调试器继续跟踪子进程
         const CLONE_PTRACE = 1 << 13;
         /// 父进程阻塞，直到子进程调用 exec() 或退出（类似 vfork()）
         const CLONE_VFORK = 1 << 14;
         /// 子进程与调用者共享父进程（而非成为调用者的子进程）
-        const CLONE_PARENT = 1 << 15;
+        const CLONE_PARENT = 0x00008000;
         /// 将子进程放入同一线程组（实现 POSIX 线程）
-        const CLONE_THREAD = 1 << 16;
+        const CLONE_THREAD = 0x00010000;
         /// 创建新的挂载命名空间（Mount Namespace）
         const CLONE_NEWNS = 1 << 17;
         /// 共享 System V 信号量的 SEM_UNDO 状态
-        const CLONE_SYSVSEM = 1 << 18;
+        const CLONE_SYSVSEM = 0x00040000;
         /// 为子进程设置新的线程本地存储（TLS）
-        const CLONE_SETTLS = 1 << 19;
+        const CLONE_SETTLS = 0x00080000;
         /// 将子进程的线程ID（TID）写入父进程的指定地址
-        const CLONE_PARENT_SETTID = 1 << 20;
+        const CLONE_PARENT_SETTID = 0x00100000;
         /// 子进程退出时清除其线程ID（用于线程库同步）
-        const CLONE_CHILD_CLEARTID = 1 << 21;
+        const CLONE_CHILD_CLEARTID = 0x00200000;
         /// （已废弃）早期标记线程为"分离状态"
-        const CLONE_DETACHED = 1 << 22;
+        const CLONE_DETACHED = 0x00400000;
         /// 禁止调试进程强制启用 CLONE_PTRACE
-        const CLONE_UNTRACED = 1 << 23;
+        const CLONE_UNTRACED = 0x00800000;
         /// 将子进程的线程ID写入子进程的指定地址
-        const CLONE_CHILD_SETTID = 1 << 24;
+        const CLONE_CHILD_SETTID = 0x01000000;
         /// 创建新的 Cgroup 命名空间
-        const CLONE_NEWCGROUP = 1 << 25;
+        const CLONE_NEWCGROUP = 0x02000000;
         /// 创建新的 UTS 命名空间（隔离主机名和域名）
-        const CLONE_NEWUTS = 1 << 26;
+        const CLONE_NEWUTS = 0x04000000;
         /// 创建新的 IPC 命名空间（隔离 System V IPC/POSIX 消息队列）
-        const CLONE_NEWIPC = 1 << 27;
+        const CLONE_NEWIPC = 0x08000000;
         /// 创建新的用户命名空间（隔离用户/组 ID）
-        const CLONE_NEWUSER = 1 << 28;
+        const CLONE_NEWUSER = 0x10000000;
         /// 创建新的 PID 命名空间（隔离进程 ID）
-        const CLONE_NEWPID = 1 << 29;
+        const CLONE_NEWPID = 0x20000000;
         /// 创建新的网络命名空间（隔离网络设备、端口等）
-        const CLONE_NEWNET = 1 << 30;
+        const CLONE_NEWNET = 0x40000000;
         /// 共享 I/O 上下文（优化块设备 I/O 调度）
-        const CLONE_IO = 1 << 31;
+        const CLONE_IO = 0x80000000;
     }
 }
 
@@ -625,4 +627,62 @@ pub enum RlimResource {
     /// 实时任务在不阻塞下的最大 CPU 时间（微秒）
     Rttime = 15,
     // 注：`RLIMIT_NLIMITS`（16）是总数，非实际资源类型
+}
+
+
+#[derive(Default, Debug, Clone, Copy, IntoBytes, Immutable)]
+#[repr(C)]
+pub struct StatFs {
+    /// 是个 magic number，每个知名的 fs 都各有定义，但显然我们没有
+    pub f_type: i64,
+    /// 最优传输块大小
+    pub f_bsize: i64,
+    /// 总的块数
+    pub f_blocks: u64,
+    /// 还剩多少块未分配
+    pub f_bfree: u64,
+    /// 对用户来说，还有多少块可用
+    pub f_bavail: u64,
+    /// 总的 inode 数
+    pub f_files: u64,
+    /// 空闲的 inode 数
+    pub f_ffree: u64,
+    /// 文件系统编号，但实际上对于不同的OS差异很大，所以不会特地去用
+    pub f_fsid: [i32; 2],
+    /// 文件名长度限制，这个OS默认FAT已经使用了加长命名
+    pub f_namelen: isize,
+    /// 片大小
+    pub f_frsize: isize,
+    /// 一些选项，但其实也没用到
+    pub f_flags: isize,
+    /// 空余 padding
+    pub f_spare: [isize; 4],
+}
+
+impl StatFs {
+    pub fn new() -> Self {
+        Self {
+            f_type: 1,
+            f_bsize: BLOCK_SIZE as i64,
+            f_blocks: 1 << 20,
+            f_bfree: 1 << 18,
+            f_bavail: 1 << 16,
+            f_files: 1 << 10,
+            f_ffree: 100,
+            f_fsid: [0; 2],
+            f_namelen: PATH_MAX as isize,
+            f_frsize: 4096,
+            f_flags: 1 as isize,
+            f_spare: [0; 4],
+        }
+    }
+
+    pub fn to_u8(&self) -> [u8; core::mem::size_of::<Self>()] {
+        let mut buf = [0; core::mem::size_of::<Self>()];
+        let bytes = self.as_bytes();
+        for i in 0..core::mem::size_of::<Self>() {
+            buf[i] = bytes[i];
+        }
+        buf
+    }
 }

@@ -8,21 +8,6 @@ extern crate user_lib;
 use alloc::vec::Vec;
 use user_lib::{chdir, execve, fork, getpid, wait, yield_};
 
-const TESTCASES: &[&str] = &[
-    // "time-test",
-    // "test-splice.sh",
-    // "busybox_testcode.sh",
-    // "busybox_testcode.sh",
-    // "lua_testcode.sh",
-    // "netperf_testcode.sh",
-    // "libc-bench",
-    // "libctest_testcode.sh",
-    // "iozone_testcode.sh",
-    // "unixbench_testcode.sh",
-    // "cyclictest_testcode.sh",
-    // "iperf_testcode.sh",
-    // "lmbench_testcode.sh",
-];
 
 /// 传入str引用转换为C风格字符串，使其可以被用作系统调用
 pub fn conert_str2byte(input: &str) -> Vec<u8> {
@@ -33,14 +18,14 @@ pub fn conert_str2byte(input: &str) -> Vec<u8> {
 
 fn run_cmd(cmd: &str) {
     println!("task run cmd: {}", cmd);
-    let cd = "/musl/";
+    let cd = "/glibc/";
     chdir(&conert_str2byte(cd));
     if fork() == 0 {
         println!("task run cmd child: {}, pid: {}", cmd, getpid());
         execve(
-            "/musl/busybox\0",
+            "/glibc/busybox\0",
             &[
-                "/musl/busybox\0",
+                "/glibc/busybox\0",
                 "sh\0",
                 "-c\0",
                 cmd,
@@ -69,11 +54,8 @@ fn main() -> i32 {
     // run_cmd(
     //     "busybox ln -s /lib/glibc/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1 ",
     // );
-    run_cmd("/musl/busybox --install /bin\0");
+    run_cmd("/glibc/busybox --install /bin\0");
     if fork() == 0 {
-        // for test in TESTCASES {
-        //     run_cmd(test);
-        // }
         println!("main run sh");
         run_cmd("/bin/sh\0");
     } else {

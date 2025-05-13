@@ -4,7 +4,7 @@ use super::{time::TimeSpec, yield_now, SpinNoIrqLock};
 use alloc::collections::binary_heap::BinaryHeap;
 use spin::Lazy;
 
-const TICKS_PER_SEC: usize = 100; // 设置每秒中断次数，可以计算出每次中断的时间间隔
+const TICKS_PER_SEC: usize = 10; // 设置每秒中断次数，可以计算出每次中断的时间间隔
 pub const MSEC_PER_SEC: usize = 1000;
 pub const USEC_PER_SEC: usize = 1_000_000;
 pub const NSEC_PER_SEC: usize = 1_000_000_000;
@@ -38,7 +38,7 @@ pub fn get_time_ns() -> usize {
 }
 
 pub fn time_duration() -> Duration {
-    Duration::from_nanos(get_time_us() as u64)
+    Duration::from_micros(get_time_us() as u64)
 }
 
 /// set the next timer interrupt
@@ -55,37 +55,37 @@ pub async fn sleep_for(ts: TimeSpec) {
 }
 
 #[derive(Debug)]
-pub struct Timer {
-    pub expire_ns: u64,       // 使用纳秒精度
+pub struct TimerTranc {
+    pub expire_ns: Duration,  // 使用纳秒精度
     pub waker: Option<Waker>, // 非空保证
 }
 
-impl Timer {
+impl TimerTranc {
     pub fn new(expire: Duration, waker: Waker) -> Self {
         Self {
-            expire_ns: expire.as_nanos() as u64,
+            expire_ns: expire,
             waker: Some(waker),
         }
     }
 }
 
 // 实现按过期时间排序（最小堆）
-impl Ord for Timer {
+impl Ord for TimerTranc {
     fn cmp(&self, other: &Self) -> Ordering {
-        // self.expire_ns.cmp(&other.expire_ns).reverse() // 反向实现最小堆
-        self.expire_ns.cmp(&other.expire_ns)
+        self.expire_ns.cmp(&other.expire_ns).reverse() // 反向实现最小堆
+        // self.expire_ns.cmp(&other.expire_ns)
     }
 }
 
-impl PartialOrd for Timer {
+impl PartialOrd for TimerTranc {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Eq for Timer {}
+impl Eq for TimerTranc {}
 
-impl PartialEq for Timer {
+impl PartialEq for TimerTranc {
     fn eq(&self, other: &Self) -> bool {
         self.expire_ns == other.expire_ns
     }

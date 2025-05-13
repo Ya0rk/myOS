@@ -1,12 +1,9 @@
 #![allow(unused)]
-
-
 use alloc::{collections::VecDeque, task};
 use log::info;
 use core::{future::Future, sync::atomic::{AtomicU32, AtomicUsize}};
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use crate::{hal::config::HART_NUM, sync::{SpinNoIrqLock, TIMER_QUEUE}, utils::{LcgRng, RNG}};
-
 use super::get_current_hart_id;
 
 const QUEUE_NUM: usize = HART_NUM;
@@ -115,17 +112,11 @@ pub fn has_task() -> bool {
 /// Run all tasks in the task queue
 pub fn run() {
     let mut steal_counter = 0;
+    let mut trycnt = 0;
     loop {
-        // 首先尝试从自己的队列中获取任务
-        let worker_id = get_current_hart_id();
-        if let Some(task) = TASK_QUEUES[worker_id].fetch() {
-            // info!("nihao");
-            task.run();
-            // info!("sssss");
-            steal_counter = 0; // 重置窃取计数器
-        } else {
-            // 如果自己的队列为空，尝试从其他队列中窃取任务
-            // info!("bhao");
+        let tasks = run_once();
+        if tasks == 0 {
+            trycnt += 1;
             steal_counter += 1;
             // if steal_counter > QUEUE_NUM * 2 {
             //     // 如果多次窃取失败，可能没有任务了，退出循环
@@ -141,6 +132,32 @@ pub fn run() {
                     break;
                 }
             }
+
+        } else {
+            trycnt = 0;
+            steal_counter = 0; // 重置窃取计数器
+        }
+        if trycnt > 0x10000000 {
+            println!("no task");
+            return;
         }
     }
+}
+
+pub fn run_once() -> usize {
+    let mut tasks = 0;
+    let mut steal_cnt = 0;
+    let worker_id = get_current_hart_id();
+    if let Some(task) = TASK_QUEUES[worker_id].fetch() {
+        task.run();
+        tasks += 1;
+    } else {
+        steal_cnt += 1;
+        if steal_cnt > QUEUE_NUM * 10 {
+            // 如果多次窃取失败，可能没有任务了，退出循环
+            println!("no task");
+            return 0;
+        }
+    }
+    tasks
 }

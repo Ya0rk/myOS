@@ -229,3 +229,6 @@ pub fn as_inode_type(types: InodeTypes) -> InodeType {
         }
     }
 }
+
+pub const S_IFCHR: u32 = 0o0020000;
+pub const S_IFDIR: u32 = 0o0040000;

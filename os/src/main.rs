@@ -2,6 +2,8 @@
 // #![deny(warnings)]
 #![no_std]
 #![no_main]
+#![feature(cfg_match)]
+#![feature(stmt_expr_attributes)]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
 // #![feature(riscv_ext_intrinsics)]
@@ -45,7 +47,7 @@ pub mod hal;
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use alloc::vec::{self, Vec};
 use log::info;
-use sync::{block_on, timer};
+use sync::{block_on, time_init, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
 
@@ -83,6 +85,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         mm::init(true);
         println!("finished mm::init");
         utils::logger_init();
+        sync::time_init();
 
         // info!("[rust_main] alloc a vec size is 1387650");
         // let mut buffer: Vec<u8> = alloc::vec![1; 1387650];
@@ -96,7 +99,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         );
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         hal::trap::init();
-        task::init_processors();
         
         let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
         info!("satrt probe fdt tree root: {:X}", dt_root);
@@ -118,7 +120,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         // spawn_kernel_task(async move {
         //     fs::vfs::dentry_test().await
         // });
-
+        task::init_processors();
         spawn_kernel_task(async move {
             task::add_initproc().await
         });

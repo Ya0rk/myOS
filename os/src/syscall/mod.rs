@@ -27,6 +27,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_STATFS => sys_statfs(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_TKILL => sys_tkill(args[0] as usize, args[1] as i32),
         SysCode::SYSCALL_SIGTIMEDWAIT => sys_sigtimedwait(args[0] as usize, args[1] as usize, args[2] as usize).await,
         SysCode::SYSCALL_CLOCK_NANOSLEEP => sys_clock_nanosleep(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
@@ -38,7 +39,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_PRLIMIT64 => sys_prlimit64(args[0] as usize, args[1] as i32, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_GET_ROBUST_LIST => sys_get_robust_list(args[0] as usize, args[1] as usize, args[2] as usize),
         SysCode::SYSCALL_SET_ROBUST_LIST => sys_set_robust_list(args[0] as usize, args[1] as usize),
-        SysCode::SYSCALL_FUTEX => sys_futex(args[0] as u32, args[1] as i32, args[2] as u32, args[3] as u32, args[4] as u32, args[5] as u32).await,
+        SysCode::SYSCALL_FUTEX => sys_futex(args[0] as usize, args[1] as i32, args[2] as u32, args[3] as usize, args[4] as usize, args[5] as u32).await,
         SysCode::SYSCALL_UTIMENSAT => sys_utimensat(args[0] as isize, args[1] as usize, args[2] as *const [TimeSpec; 2], args[3] as i32),
         SysCode::SYSCALL_KILL => sys_kill(args[0] as isize, args[1] as usize),
         SysCode::SYSCALL_SYSLOG => sys_log(args[0] as i32, args[1] as usize, args[2] as usize),

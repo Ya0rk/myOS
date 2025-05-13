@@ -232,6 +232,8 @@ impl PageTable {
     pub fn init_kernel_page_table() -> Self {
         extern "C" {
             fn stext();
+            fn sigret();
+            fn esigret();
             fn etext();
             fn srodata();
             fn erodata();
@@ -247,6 +249,7 @@ impl PageTable {
         // memory_set.map_trampoline();
         // map kernel sections
         println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
+        println!(".sigret [{:#x}, {:#x})", sigret as usize, esigret as usize);
         println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
         println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
         println!(
@@ -255,7 +258,17 @@ impl PageTable {
         );
         println!("mapping .text section");
         kernel_page_table.map_kernel_range(
-            (stext as usize).into()..(etext as usize).into(),
+            (stext as usize).into()..(sigret as usize).into(),
+            PTEFlags::R | PTEFlags::X,
+        );
+        println!("mapping .sigret section");
+        kernel_page_table.map_kernel_range(
+            (sigret as usize).into()..(esigret as usize).into(),
+            PTEFlags::R | PTEFlags::X | PTEFlags::U,
+        );
+        println!("mapping .text section left");
+        kernel_page_table.map_kernel_range(
+            (esigret as usize).into()..(etext as usize).into(),
             PTEFlags::R | PTEFlags::X,
         );
         println!("mapping .rodata section");

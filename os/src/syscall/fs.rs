@@ -16,7 +16,7 @@ use crate::mm::user_ptr::{user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{TimeSpec, TimeStamp};
-use crate::syscall::ffi::IoVec;
+use crate::syscall::ffi::{IoVec, StatFs};
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{backtrace, Errno, SysResult};
 use super::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, AT_REMOVEDIR};
@@ -192,6 +192,12 @@ pub fn sys_fstatat(
     // 检查路径是否有效并打开文件
     match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
         Some(FileClass::File(file)) => {
+            file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
+            buffer.write(tempstat.as_bytes());
+            return Ok(0);
+        }
+        Some(FileClass::Abs(file)) => {
             file.fstat(&mut tempstat)?;
             info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             buffer.write(tempstat.as_bytes());
@@ -423,7 +429,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.off_Ocloexec(true);
-    let new_fd = task.alloc_fd(new_temp_fd);
+    let new_fd = task.dup(new_temp_fd)?;
     // drop(inner);
     if new_fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -672,13 +678,13 @@ pub fn sys_renameat2(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpa
 
 /// make a new name for a file: a hard link
 pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
-    info!("[sys_linkat] start");
+    // info!("[sys_linkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let old_path = translated_str(token, oldpath);
     let new_path = translated_str(token, newpath);
     let cwd = task.get_current_path();
-    info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: {}", &olddirfd, &old_path, &newdirfd, &new_path);
+    // info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: {}", &olddirfd, &old_path, &newdirfd, &new_path);
 
     let old_path = if old_path.starts_with("/") {
         old_path
@@ -1027,7 +1033,6 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
 /// read value of a symbolic link
 /// 一个符号链接当中获得真实的路径地址
 /// 注意到当前没有真正地实现,返回值全为0,代表不支持该功能
-/// TODO(YJJ):有待完善link
 pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
@@ -1043,15 +1048,6 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
             return Ok(0); 
         }
     } else {
-        // 忽略dirfd
-        // 参考Pantheon
-        // let info = "/glibc/".to_string();
-        // let buf = unsafe{ buf as *mut u8 };
-        // let len = core::cmp::min(info.len(), bufsiz);
-        // unsafe { 
-        //     buf.copy_from(info.as_ptr(), len);
-        // }
-
         // 由于暂时没有实现软链接,所以先这么做吧,把这个文件重定向到/musl/busybox
         if pathname.get() == "/proc/self/exe" {
             let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
@@ -1082,5 +1078,14 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
             return Ok(len);
         }
     }
+    Ok(0)
+}
+
+pub fn sys_statfs(path: usize, buf: usize) -> SysResult<usize> {
+    info!("[sys_statfs] start");
+    let stat = StatFs::new().to_u8();
+    let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, core::mem::size_of::<StatFs>()) };
+    buf.copy_from_slice(&stat);
+
     Ok(0)
 }
