@@ -7,7 +7,7 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::vec;
-use log::info;
+use log::{debug, info};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
@@ -161,9 +161,9 @@ pub fn sys_fstatat(
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
-    info!("[fsstatat] pathname {},", path);
+    debug!("[sys_fsstatat] pathname {},", path);
     let cwd = task.get_current_path();
-    info!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
+    debug!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
 
     // 计算目标路径
     let target_path = if path.starts_with("/") {
@@ -502,6 +502,11 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
 
     // drop(inner);
 
+    // TODO
+    // 返回错误码有问题,应当返回EEXIST:目录存在;EACCES:权限不足;EROFS:文件系统只读;
+    // ENOSPC:没有足够的空间;ENAMETOOLONG:路径过长;ENOTDIR:不是目录;
+    // ELOOP:符号链接过多;ENOSPC:没有足够的空间;EFAULT:路径错误;等
+
     // 检查路径是否有效并创建目录
     match mkdir(target_path.as_str(), mode) {
         Ok(_) => Ok(0), // 成功
@@ -595,14 +600,14 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
 
 
 pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> {
-    info!("[sys_unlinkat] start");
+    // info!("[sys_unlinkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, path);
-    info!("[sys_unlink] start path = {}", path);
+    // info!("[sys_unlink] start path = {}", path);
     let is_relative = !path.starts_with("/");
     let base = task.get_current_path();
-
+    info!("[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}", fd, base, path, flags);
     if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
         let file = file_class.file()?;
         // info!("[unlink] file path = {}", file.path);
@@ -983,7 +988,7 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
         file.get_inode()
     } else {
         let res = match dirfd {
-            AT_FDCWD => { unimplemented!() }
+            T_FDCWD => { unimplemented!() }
             _ => {
                 let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EINVAL)?;
                 file.get_inode()

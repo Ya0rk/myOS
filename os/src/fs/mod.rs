@@ -41,7 +41,7 @@ use crate::mm::UserBuffer;
 use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
 use alloc::{sync::Arc, vec::Vec};
-use log::{debug, info};
+use log::{debug, error, info};
 
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
@@ -202,6 +202,7 @@ fn create_open_file(
                 return None;
             }
         } else {
+            error!("[create_open_file] failed to get parent inode {}", parent_path);
             return None;
         }
     };

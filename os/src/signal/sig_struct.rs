@@ -14,7 +14,7 @@ pub struct KSigAction {
 }
 
 /// 用户层信号处理配
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct SigAction {
     /// 信号处理函数类型，可能是自定义，也可能是默认
