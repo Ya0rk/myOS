@@ -163,7 +163,7 @@ pub fn sys_fstatat(
     let path = translated_str(token, pathname);
     info!("pathname = {},", path);
     let cwd = task.get_current_path();
-    info!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
+    info!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}, dirfd = {}", cwd, path, flags, dirfd);
 
     // 计算目标路径
     let target_path = if path.starts_with("/") {
@@ -322,7 +322,7 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
 /// 
 /// Success: 返回0; Fail: 返回-1
 pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
-    info!("sys_pipe start!");
+    info!("[sys_pipe] start!");
     let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
     let task = current_task().unwrap();
     let (read_fd, write_fd) = {
@@ -332,7 +332,7 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
             task.alloc_fd(FdInfo::new(write.clone(), OpenFlags::O_WRONLY)),
         )
     };
-    info!("taskid = {}, alloc read_fd = {}, write_fd = {}", task.get_pid(), read_fd, write_fd);
+    info!("[sys_pipe] taskid = {}, alloc read_fd = {}, write_fd = {}", task.get_pid(), read_fd, write_fd);
 
     let token = task.get_user_token();
     *translated_refmut(token, pipefd) = read_fd as u32;
@@ -841,7 +841,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
 /// 用于修改某个文件描述符的属性
 /// 第1个参数fd为待修改属性的文件描述符，第2个参数cmd为对应的操作命令，第3个参数为cmd的参数
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
-    info!("[sys_fcntl] start");
+    info!("[sys_fcntl] start, fd = {}", fd);
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {

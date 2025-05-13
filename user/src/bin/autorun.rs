@@ -11,10 +11,10 @@ use user_lib::{chdir, execve, fork, wait, yield_};
 const TESTCASES: &[&str] = &[
     // "./time-test\0",
     // "./test-splice.sh\0",
-    "./busybox_testcode.sh\0",
-    "./lua_testcode.sh\0",
+    // "./busybox_testcode.sh\0",
+    // "./lua_testcode.sh\0",
     // "./netperf_testcode.sh\0",
-    // "./libc-bench\0",
+    "./libcbench_testcode.sh\0",
     // "./libctest_testcode.sh\0",
     // "./iozone_testcode.sh\0",
     // "./unixbench_testcode.sh\0",

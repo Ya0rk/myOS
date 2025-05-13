@@ -79,12 +79,10 @@ impl FileTrait for TmpFile {
 
     async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         let mut total_write_size = 0usize;
-        // for slice in buf.buffers.iter() {
-            let old_offset = self.metadata.offset();
-            let write_size = self.metadata.inode.write_at(old_offset, buf).await;
-            self.metadata.set_offset(old_offset+write_size);
-            total_write_size += write_size;
-        // }
+        let old_offset = self.metadata.offset();
+        let write_size = self.metadata.inode.write_at(old_offset, buf).await;
+        self.metadata.set_offset(old_offset+write_size);
+        total_write_size += write_size;
         Ok(total_write_size)
     }
     fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {

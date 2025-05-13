@@ -323,7 +323,7 @@ pub fn sys_getrandom(
     buflen: usize,
     _flags: usize,
 ) -> SysResult<usize> {
-    info!("[sys_get_random] start");
+    info!("[sys_get_random] start, buflen = {}", buflen);
     let buffer = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
     Ok(RNG.lock().fill_buf(buffer))
 }
@@ -378,6 +378,7 @@ pub fn sys_clock_gettime(
         _ => return Err(Errno::EINVAL),
     };
     unsafe { core::ptr::write(tp, time) };
+    info!("[sys_clock_gettime] finish");
     Ok(0)
 }
 
@@ -877,5 +878,10 @@ pub fn sys_tkill(tid: usize, sig: i32) -> SysResult<usize> {
         SigDetails::Kill { pid: sender_pid, uid: 0 }
     );
     target.thread_recv_siginfo(siginfo);
+    Ok(0)
+}
+
+pub fn sys_madvise() -> SysResult<usize> {
+    info!("[sys_madvise] start");
     Ok(0)
 }

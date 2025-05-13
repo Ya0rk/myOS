@@ -129,10 +129,12 @@ pub enum SysCode {
     SYSCALL_SHUTDOWN  = 210,
     SYSCALL_BRK       = 214,
     SYSCALL_MUNMAP    = 215,
+    SYSCALL_MREMAP    = 216,
     SYSCALL_CLONE     = 220,
     SYSCALL_EXECVE    = 221,
     SYSCALL_MMAP      = 222,
     SYSCALL_MPROTECT  = 226,
+    SYSCALL_MADVISE   = 233,
     SYSCALL_ACCEPT4   = 242,
     SYSCALL_WAIT4     = 260,
     SYSCALL_RENAMEAT2 = 276,
@@ -152,6 +154,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_MREMAP => "mremap",
+            Self::SYSCALL_MADVISE => "madvise",
             Self::SYSCALL_STATFS => "statfs",
             Self::SYSCALL_TKILL => "tkill",
             Self::SYSCALL_SIGTIMEDWAIT => "sigtimedwait",

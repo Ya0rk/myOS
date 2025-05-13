@@ -142,6 +142,11 @@ pub fn create_init_files() -> SysResult {
 
     // mkdir("/tmp", 0);
     open_file("/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open_file("/usr", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open_file("/usr/share", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open_file("/usr/share/zoneinfo", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open_file("/usr/share/zoneinfo/UTC0", OpenFlags::O_CREAT | OpenFlags::O_RDWR );
+
 
     //创建/etc文件夹
     mkdir("/etc", 0);
