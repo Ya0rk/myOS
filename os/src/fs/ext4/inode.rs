@@ -6,8 +6,8 @@ use lwext4_rust::{
 };
 use riscv::register::mstatus::set_fs;
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, Dirent, open, page_cache::PageCache, root_inode, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat},
-    sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
+    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, open, page_cache::PageCache, root_inode, stat::as_inode_stat, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat},
+    sync::{new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult}
 };
 
@@ -289,8 +289,8 @@ impl InodeTrait for Ext4Inode {
         Ok(0)
     }
 
-    fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, > {
-        self.metadata.timestamp.lock()
+    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
+        &self.metadata.timestamp
     }
     // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
     //     self.file.lock()

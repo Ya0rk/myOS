@@ -175,7 +175,7 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// 获取时间戳，用于修改或访问
-    fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, >;
+    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp>;
 
     // /// 获取lwext4的ext4file
     // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
@@ -194,8 +194,7 @@ pub trait InodeTrait: Send + Sync {
 
 impl dyn InodeTrait {
     pub fn set_timestamps(&self, timestamp: TimeStamp) -> SysResult<usize> {
-        let mut mytime = self.get_timestamp();
-        mytime.set(timestamp);
+        self.get_timestamp().lock().set(timestamp);
         Ok(0)
     }
 

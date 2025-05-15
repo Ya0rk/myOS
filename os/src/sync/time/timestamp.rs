@@ -1,6 +1,7 @@
 use super::TimeSpec;
 
 /// 这个结构用来记录文件（inode）创建、访问和修改的时间
+#[derive(Clone)]
 pub struct TimeStamp {
     /// 上次被访问的时间
     pub atime: TimeSpec, 

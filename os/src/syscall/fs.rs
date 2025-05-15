@@ -1009,7 +1009,7 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
             UTIME_NOW => {} // sec设置为当前时间
             UTIME_OMIT => { // 保持不变
                 // 保持不变
-                let old_timestamp = inode.get_timestamp();
+                let old_timestamp = inode.get_timestamp().lock().clone();
                 new_time.atime = old_timestamp.atime;
             }
             _ => { new_time.atime = user_time[0]; }
@@ -1018,7 +1018,7 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
             UTIME_NOW => {} // sec设置为当前时间
             UTIME_OMIT => { // 保持不变
                 // 保持不变
-                let old_timestamp = inode.get_timestamp();
+                let old_timestamp = inode.get_timestamp().lock().clone();
                 new_time.mtime = old_timestamp.mtime;
             }
             _ => { new_time.mtime = user_time[1]; }
