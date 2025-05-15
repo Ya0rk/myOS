@@ -739,14 +739,11 @@ impl TaskControlBlock {
         self.fd_table.lock().get_fd(fd).unwrap()
     }
     /// 分配fd
-    pub fn alloc_fd(&self, fd: FdInfo) -> usize{
-        self.fd_table.lock().alloc_fd(fd).expect("task alloc fd fail")
-    }
-    pub fn dup(&self, fd: FdInfo) -> SysResult<usize> {
+    pub fn alloc_fd(&self, fd: FdInfo) -> SysResult<usize> {
         self.fd_table.lock().alloc_fd(fd)
     }
     /// 为以前分配了Fd的file，分配一个大于than的新fd
-    pub fn alloc_fd_than(&self, fd: FdInfo, than: usize) -> usize{
+    pub fn alloc_fd_than(&self, fd: FdInfo, than: usize) -> usize {
         self.fd_table.lock().alloc_fd_than(fd, than).expect("task alloc fd fail")
     }
     /// 删除fd

@@ -285,10 +285,10 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
     if let Some(fileclass) = open(cwd.as_str() , target_path.as_str(), flags) {
         let fd = match fileclass {
             FileClass::File(file) => {
-                task.alloc_fd(FdInfo::new(file, flags))
+                task.alloc_fd(FdInfo::new(file, flags))?
             },
             FileClass::Abs(file) => {
-                task.alloc_fd(FdInfo::new(file, flags))
+                task.alloc_fd(FdInfo::new(file, flags))?
             },
             _ => { unreachable!() }
         };
@@ -308,7 +308,7 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     info!("[sys_close] start, pid = {}, closed fd = {}", task.get_pid(), fd);
     if fd >= task.fd_table_len() {
-        return Err(Errno::EBADF);
+        return Err(Errno::EMFILE);
     }
     
     // 删除对应的fd
@@ -328,15 +328,17 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     let (read_fd, write_fd) = {
         let (read, write) = Pipe::new();
         (
-            task.alloc_fd(FdInfo::new(read.clone(),  OpenFlags::O_RDONLY)),
-            task.alloc_fd(FdInfo::new(write.clone(), OpenFlags::O_WRONLY)),
+            task.alloc_fd(FdInfo::new(read.clone(),  OpenFlags::O_RDONLY))?,
+            task.alloc_fd(FdInfo::new(write.clone(), OpenFlags::O_WRONLY))?,
         )
     };
     info!("[sys_pipe] taskid = {}, alloc read_fd = {}, write_fd = {}", task.get_pid(), read_fd, write_fd);
 
     let token = task.get_user_token();
-    *translated_refmut(token, pipefd) = read_fd as u32;
-    *translated_refmut(token, unsafe { pipefd.add(1) }) = write_fd as u32;
+    unsafe {
+        core::ptr::write(pipefd, read_fd as u32);
+        core::ptr::write(pipefd.add(1), write_fd as u32);
+    }
     Ok(0)
 }
 
@@ -429,7 +431,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.off_Ocloexec(true);
-    let new_fd = task.dup(new_temp_fd)?;
+    let new_fd = task.alloc_fd(new_temp_fd)?;
     // drop(inner);
     if new_fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -458,7 +460,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     }.ok_or(Errno::EINVAL)?;
 
     let task = current_task().unwrap();
-    // info!("[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = {}", task.get_pid());
+    info!("[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = {}", task.get_pid());
     
     if newfd > RLIMIT_NOFILE
     {

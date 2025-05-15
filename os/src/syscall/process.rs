@@ -6,7 +6,7 @@ use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
-use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, IdelFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
+use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
 use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
 use crate::syscall::RLimit64;
 use crate::task::{
@@ -340,6 +340,7 @@ pub fn sys_set_tid_address(tidptr: usize) -> SysResult<usize> {
 pub fn sys_exit_group(exit_code: i32) -> SysResult<usize> {
     info!("[sys_exit_group] start, exitcode = {}", exit_code);
     let task = current_task().unwrap();
+    info!("[sys_exit_group] start, taskid = {}, exitcode = {}", task.get_pid(), exit_code);
     task.kill_all_thread();
     task.set_exit_code(((exit_code & 0xFF) << 8) as i32);
     // task.set_exit_code(exit_code);

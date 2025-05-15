@@ -1,10 +1,7 @@
 use core::{intrinsics::unlikely, ptr::copy_nonoverlapping};
-
 use log::info;
 use smoltcp::wire::{IpAddress, IpEndpoint};
-
 use crate::utils::{Errno, SysResult};
-
 use super::{AF_INET, AF_INET6, AF_UNIX};
 
 
@@ -205,6 +202,22 @@ impl TryFrom<SockAddr> for IpEndpoint {
             }
             SockAddr::Unix(addr) => todo!(),
             _ => return Err(Errno::EINVAL),
+        }
+    }
+}
+
+
+pub fn do_addr127(endpoitn: &mut IpEndpoint) {
+    if endpoitn.addr.is_unspecified() {
+        match endpoitn.addr {
+            IpAddress::Ipv4(_) => {
+                info!("[do_addr127] ipv4 -> 127");
+                endpoitn.addr = IpAddress::v4(127, 0, 0, 1);
+            }
+            IpAddress::Ipv6(_) => {
+                info!("[do_addr127] ipv6 -> 127");
+                endpoitn.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1);
+            }
         }
     }
 }

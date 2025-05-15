@@ -105,6 +105,7 @@ impl FdTable {
             None => {
                 // 在最后加入
                 let new_fd = self.table_len();
+                // info!("newfd = {}, limit = {}", new_fd, self.rlimit.rlim_cur);
                 self.put_in(info, new_fd)?;
                 return Ok(new_fd);
             }
@@ -137,7 +138,7 @@ impl FdTable {
 
     // 在指定位置加入Fd
     pub fn put_in(&mut self, info: FdInfo, idx: usize) -> SysResult {
-        if idx >= self.rlimit.rlim_max {
+        if idx >= self.rlimit.rlim_cur {
             return Err(Errno::EMFILE);
         }
         if idx >= self.table_len() {
@@ -185,6 +186,6 @@ pub fn sock_map_fd(socket: Arc<dyn FileTrait>, cloexec_enable: bool) -> SysResul
     let fdInfo = FdInfo::new(socket, OpenFlags::O_RDWR);
     let new_info = fdInfo.off_Ocloexec(cloexec_enable);
     let task = current_task().expect("no current task");
-    let fd = task.alloc_fd(new_info);
+    let fd = task.alloc_fd(new_info)?;
     Ok(fd)
 }

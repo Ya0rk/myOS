@@ -5,7 +5,7 @@ use crate::{
     fs::{FileMeta, InodeTrait, Kstat, OpenFlags, Page, Pipe, RenameFlags}, 
     sync::SpinNoIrqLock, syscall::ShutHow, utils::SysResult
 };
-use super::{addr::{IpType, SockAddr}, SockMeta, Socket};
+use super::{addr::{IpType, Sock, SockAddr}, SockMeta, Socket};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
@@ -70,12 +70,15 @@ impl Socket for UnixSocket {
     fn enable_nagle(&self, action: u32) -> SysResult<()> {
         todo!()
     }
+    fn get_socktype(&self) -> SysResult<Sock> {
+        Ok(Sock::Unix)
+    }
 }
 
 #[async_trait]
 impl FileTrait for UnixSocket {
-    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
-        self
+    fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
+        Ok(self)
     }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         unimplemented!()

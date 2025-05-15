@@ -27,6 +27,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_SETSOCKOPT => sys_setsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),
+        SysCode::SYSCALL_CONNECT => sys_connect(args[0] as usize, args[1] as usize, args[2] as usize).await,
         SysCode::SYSCALL_MREMAP => sys_mremap(),
         SysCode::SYSCALL_MADVISE => sys_madvise(),
         SysCode::SYSCALL_STATFS => sys_statfs(args[0] as usize, args[1] as usize),
@@ -113,7 +115,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_GETPEERNAME => sys_getpeername(args[0] as usize, args[1] as usize,args[2] as usize),
         SysCode::SYSCALL_SENDTO => sys_sendto(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32, args[4] as usize, args[5] as usize).await,
         // TODO: 还需修改udp的recvfrom
-        SysCode::SYSCALL_SENDTO => sys_recvfrom(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32, args[4] as usize, args[5] as usize).await,
+        SysCode::SYSCALL_RECVFROM => sys_recvfrom(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as u32, args[4] as usize, args[5] as usize).await,
         SysCode::SYSCALL_SOCKETPAIR => sys_socketpair(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_GETSOCKOPT => sys_getsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),
         SysCode::SYSCALL_WRITEV => sys_writev(args[0] as usize, args[1] as usize, args[2] as usize).await,

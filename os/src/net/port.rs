@@ -4,6 +4,7 @@ use bitvec_rs::BitVec;
 use hashbrown::HashSet;
 use log::info;
 use smoltcp::iface::{SocketHandle, SocketSet};
+use smoltcp::wire::IpEndpoint;
 use crate::{sync::SpinNoIrqLock, utils::{Errno, SysResult, RNG}};
 use super::{addr::Sock, PORT_RANGE};
 
@@ -97,31 +98,52 @@ impl PortManager {
     }
 }
 
-#[derive(Clone)]
-pub struct Port {
-    pub port: u16,
-    pub domain: Sock,
-}
+// #[derive(Clone)]
+// pub struct Port {
+//     pub port: u16,
+//     pub domain: Sock,
+// }
 
-impl Port {
-    pub fn new(domain: Sock, port: u16) -> Self {
-        Port { port, domain }
-    }
-}
+// impl Port {
+//     pub fn new(domain: Sock, port: u16) -> Self {
+//         Port { port, domain }
+//     }
+// }
 
-impl From<Port> for u16 {
-    fn from(value: Port) -> Self {
-        value.port
-    }
-}
+// impl From<Port> for u16 {
+//     fn from(value: Port) -> Self {
+//         value.port
+//     }
+// }
 
-impl Drop for Port {
-    fn drop(&mut self) {
-        PORT_MANAGER.lock().dealloc(self.domain, self.port);
-    }
-}
+// impl Drop for Port {
+//     fn drop(&mut self) {
+//         info!("[port drop] port = {}", self.port);
+//         PORT_MANAGER.lock().dealloc(self.domain, self.port);
+//     }
+// }
 
-pub fn alloc_port(domain: Sock) -> SysResult<Port> {
+fn alloc_port(domain: Sock) -> SysResult<u16> {
     let port = PORT_MANAGER.lock().alloc(domain)?;
-    Ok(Port { port, domain })
+    Ok(port)
+}
+
+/// 检查出入的endpoint的port，分配port，并返回
+pub fn do_port(endpoint: &mut IpEndpoint, port_type: Sock) -> SysResult<u16> {
+    let p: u16;
+    if endpoint.port == 0 {
+        p = alloc_port(port_type)?;
+        endpoint.port = p;
+    } else {
+        let mut port_manager = PORT_MANAGER.lock();
+        p = endpoint.port;
+        // 标记已使用
+        if !port_manager.try_mark_used(&port_type, p) {
+            drop(port_manager);
+            info!("[do_port] port = {} is in use", p);
+            return Err(Errno::EADDRINUSE);
+        }
+        drop(port_manager);
+    }
+    return Ok(p);
 }

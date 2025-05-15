@@ -19,10 +19,11 @@ use crate::fs::FileTrait;
 use crate::fs::OpenFlags;
 use crate::fs::RenameFlags;
 use crate::mm::UserBuffer;
+use crate::net::addr::do_addr127;
 use crate::net::addr::Ipv4;
 use crate::net::addr::Ipv6;
 use crate::net::addr::Sock;
-use crate::net::alloc_port;
+use crate::net::do_port;
 use crate::net::net_async::TcpAcceptFuture;
 use crate::net::net_async::TcpRecvFuture;
 use crate::net::PORT_MANAGER;
@@ -38,10 +39,10 @@ use super::addr::IpType;
 use super::addr::SockAddr;
 use super::net_async::TcpSendFuture;
 use super::NetDev;
-use super::Port;
 use super::Socket;
 use super::TcpState;
 use super::SockMeta;
+use super::AF_INET;
 use super::BUFF_SIZE;
 use super::NET_DEV;
 use alloc::boxed::Box;
@@ -93,27 +94,18 @@ impl TcpSocket {
 
     pub fn do_bind(&self, mut local_point: IpEndpoint) -> SysResult<()> {
         let mut sockmeta = self.sockmeta.lock();
-        let mut p: Port;
-        let mut port_manager = PORT_MANAGER.lock();
+        let mut p: u16;
 
-        if local_point.port == 0 {
-            p = alloc_port(Sock::Tcp)?;
-            local_point.port = p.port;
-        } else {
-            if port_manager.tcp_used_ports.get(local_point.port as usize).unwrap() {
-                info!("[bind] The port {} is already in use.", local_point.port);
-                return Err(Errno::EADDRINUSE);
-            }
-            p = Port::new(Sock::Tcp, local_point.port);
-            port_manager.tcp_used_ports.set(local_point.port as usize, true);
-        }
+        // addr = 0.0.0.0代表本地
+        do_addr127(&mut local_point);
+        // 分配port
+        p = do_port(&mut local_point, Sock::Tcp)?;
         
-        drop(port_manager);
         sockmeta.local_end = Some(local_point);
         sockmeta.port = Some(p);
         drop(sockmeta);
 
-        info!("[bind] bind to port: {}", local_point.port);
+        info!("[TCP::bind] bind to port: {}", local_point.port);
         Ok(())
     }
 
@@ -128,8 +120,8 @@ impl TcpSocket {
             let context = binding.iface.context();
             match socket.connect(
             context,
-            local_end,
             remote_point,
+            local_end,
             ) {
                 Err(ConnectError::InvalidState) => return Err(Errno::EISCONN),
                 Err(ConnectError::Unaddressable) => return Err(Errno::EADDRNOTAVAIL),
@@ -149,6 +141,7 @@ impl TcpSocket {
         Ok(stat)
     }
 
+    /// 和udp的check addr相同
     fn check_addr(&self, mut endpoint: IpEndpoint) -> SysResult<()> {
         let mut sockmeta = self.sockmeta.lock();
         match sockmeta.domain {
@@ -159,11 +152,26 @@ impl TcpSocket {
                         IpType::Ipv6 => endpoint.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1),
                     }
                 }
-
-                
             }
             _ => return Err(Errno::EAFNOSUPPORT),
         }
+
+        if sockmeta.local_end.is_none() {
+            match sockmeta.iptype {
+                IpType::Ipv4 => {
+                    let addr = SockAddr::Inet4(Ipv4 {
+                        family: AF_INET,
+                        port: 0,
+                        addr: [127, 0, 0, 1],
+                        zero: [0u8; 8],
+                    });
+                    drop(sockmeta);
+                    self.bind(&addr);
+                }
+                IpType::Ipv6 => todo!(),
+            };
+        }
+
         Ok(())
     }
 
@@ -241,20 +249,21 @@ impl Socket for TcpSocket {
         let p = sockmeta.port.clone().ok_or(Errno::EINVAL)?;
         let local_end = sockmeta.local_end.ok_or(Errno::EINVAL)?;
 
-        let mut binding = SOCKET_SET.lock();
-        let socket = binding.get_mut::<tcp::Socket>(self.handle);
-        match socket.listen(local_end) {
-            Ok(_) => {
-                info!("[tcp listen] Listening on port: {}", p.port);
-                self.set_state(TcpState::Listen);
+        let res = self.with_socket(|socket| {
+            match socket.listen(local_end) {
+                Ok(_) => {
+                    info!("[tcp listen] Listening on port: {}", p);
+                    self.set_state(socket.state());
+                    return Ok(());
+                }
+                Err(_) => {
+                    info!("[tcp listen] Failed to listen on port: {}", p);
+                    return Err(Errno::EINVAL);
+                }
             }
-            Err(_) => {
-                info!("[tcp listen] Failed to listen on port: {}", p.port);
-                return Err(Errno::EINVAL);
-            }
-        }
+        });
 
-        Ok(())
+        res
     }
     async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
         if *self.state.lock() != TcpState::Listen {
@@ -276,13 +285,14 @@ impl Socket for TcpSocket {
         Ok((remote_end, newfd))
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {
+        info!("[Tcp::connect] start, remoteaddr = {:?}", addr);
         let mut remote_endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
         self.check_addr(remote_endpoint)?;
-        // yield_now().await;
+        yield_now().await;
 
+        let state = self.do_connect(remote_endpoint)?;
         loop {
             NET_DEV.lock().poll();
-            let state = self.do_connect(remote_endpoint)?;
             match state {
                 TcpState::Established => {
                     info!("[tcp connect] Connected to: {}", remote_endpoint);
@@ -307,6 +317,7 @@ impl Socket for TcpSocket {
         Ok(())
     }
     async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize> {
+        info!("[Tcp::send_msg] start, dest_addr = {:?}", dest_addr);
         let res = TcpSendFuture::new(buf, self).await?;
         Ok(res)
     }
@@ -429,12 +440,16 @@ impl Socket for TcpSocket {
         }
         Ok(())
     }
+
+    fn get_socktype(&self) -> SysResult<Sock> {
+        Ok(Sock::Tcp)
+    }
 }
 
 #[async_trait]
 impl FileTrait for TcpSocket {
-    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
-        self
+    fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
+        Ok(self)
     }
     fn get_inode(&self) -> Arc<dyn crate::fs::InodeTrait> {
         unimplemented!()

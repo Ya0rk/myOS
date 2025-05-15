@@ -1,13 +1,12 @@
 use alloc::sync::Arc;
 use async_trait::async_trait;
 use crate::{
-    fs::{FileTrait, OpenFlags}, syscall::ShutHow, 
+    fs::{FileMeta, FileTrait, OpenFlags}, syscall::ShutHow, 
     utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 use super::{
-    addr::{IpType, Sock, SockAddr}, 
-    tcp::TcpSocket, udp::UdpSocket, Port, SockClass, SocketType, AF_INET, AF_INET6
+    addr::{IpType, Sock, SockAddr}, tcp::TcpSocket, udp::UdpSocket, unix::UnixSocket, SockClass, SocketType, AF_INET, AF_INET6
 };
 use smoltcp::{socket::tcp, wire::IpEndpoint};
 pub type TcpState = tcp::State;
@@ -17,7 +16,7 @@ pub struct SockMeta {
     pub iptype: IpType,
     pub recv_buf_size: usize,
     pub send_buf_size: usize,
-    pub port: Option<Port>,
+    pub port: Option<u16>,
     pub shuthow: Option<ShutHow>,
     pub local_end: Option<IpEndpoint>,
     pub remote_end: Option<IpEndpoint>,
@@ -71,6 +70,8 @@ pub trait Socket: FileTrait {
     fn set_keep_alive(&self, action: u32) -> SysResult<()>;
 
     fn enable_nagle(&self, action: u32) -> SysResult<()>;
+
+    fn get_socktype(&self) -> SysResult<Sock>;
 }
 
 impl dyn Socket {

@@ -141,12 +141,7 @@ pub fn create_init_files() -> SysResult {
     mkdir("/dev/shm", 0); // libctest中的pthread_cancel_points测试用例需要
 
     // mkdir("/tmp", 0);
-    open_file("/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
-    open_file("/usr", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
-    open_file("/usr/share", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
-    open_file("/usr/share/zoneinfo", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
-    open_file("/usr/share/zoneinfo/UTC0", OpenFlags::O_CREAT | OpenFlags::O_RDWR );
-
+    // open_file("/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
 
     //创建/etc文件夹
     mkdir("/etc", 0);

@@ -69,6 +69,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // init_processors
     // probe
     // fs::init
+    // 初始化网络模块
     // 进行测试
     // 载入用户进程
     // 设置时钟中断
@@ -104,6 +105,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         crate::drivers::virtio_driver::probe::probe(dt_root as u64);
 
         fs::init();
+        net::init_net_dev();
         // 此时完成初始化工作，准备载入进程开始执行
 
         // 测试代码应当放在这里
