@@ -31,9 +31,10 @@ pub use stat::Kstat;
 pub use vfs::*;
 pub use stdio::{Stdin, Stdout};
 pub use crate::mm::page::Page;
+use crate::net::dev;
 pub use pre_data::*;
 use crate::mm::page::PageType;
-use devfs::{find_device, open_device_file, register_device, DevZero};
+use devfs::{find_device, open_device_file, register_device, DevNull, DevZero};
 use ffi::{MOUNTS, MEMINFO, LOCALTIME, ADJTIME};
 use ext4::file::NormalFile;
 use crate::mm::UserBuffer;
@@ -131,8 +132,8 @@ pub fn create_init_files() -> SysResult {
     //注册设备/dev/zero
     register_device("/dev/zero");
     //注册设备/dev/null
-    register_device("/dev/null");
-    
+    // register_device("/dev/null");
+    mkdir("/dev/null", 0);
     //创建./dev/misc文件夹
     mkdir("/dev/misc", 0);
     //注册设备/dev/misc/rtc
