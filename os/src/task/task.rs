@@ -728,7 +728,7 @@ impl TaskControlBlock {
     /// 通过fd获取文件
     pub fn get_file_by_fd(&self, fd: usize) -> Option<Arc<dyn FileTrait>> {
         // self.fd_table.lock().get_file_by_fd(fd).unwrap_or(None)
-        self.fd_table.lock().get_file_by_fd(fd).unwrap()
+        self.fd_table.lock().get_file_by_fd(fd).unwrap_or(None)
     }
     /// 获取当前进程的文件描述符表长度
     pub fn fd_table_len(&self) -> usize {

@@ -131,7 +131,9 @@ pub fn create_init_files() -> SysResult {
     //注册设备/dev/zero
     register_device("/dev/zero");
     //注册设备/dev/null
-    register_device("/dev/null");
+    // register_device("/dev/null");
+    open("/", "/dev/null", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open("/", "/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
     
     //创建./dev/misc文件夹
     mkdir("/dev/misc", 0);
