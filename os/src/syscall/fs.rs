@@ -993,7 +993,7 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
         let res = match dirfd {
             AT_FDCWD => { unimplemented!() }
             _ => {
-                let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EINVAL)?;
+                let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
                 file.get_inode()
             }
         };
