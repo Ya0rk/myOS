@@ -122,16 +122,16 @@ pub fn run() {
             //     // 如果多次窃取失败，可能没有任务了，退出循环
             //     break;
             // }
-            for i in 0..QUEUE_NUM {
-                if i == worker_id {
-                    continue; // 跳过自己的队列
-                }
-                if let Some(tasks) = TASK_QUEUES[i].steal() {
-                    TASK_QUEUES[worker_id].push_n_normal(tasks); // 将偷取的任务加入自己队列
-                    steal_counter = 0; // 重置窃取计数器
-                    break;
-                }
-            }
+            // for i in 0..QUEUE_NUM {
+            //     if i == worker_id {
+            //         continue; // 跳过自己的队列
+            //     }
+            //     if let Some(tasks) = TASK_QUEUES[i].steal() {
+            //         TASK_QUEUES[worker_id].push_n_normal(tasks); // 将偷取的任务加入自己队列
+            //         steal_counter = 0; // 重置窃取计数器
+            //         break;
+            //     }
+            // }
 
         } else {
             trycnt = 0;
