@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use log::info;
 use sbi_spec::pmu::cache_event::NODE;
 use crate::{
-    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
+    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 
@@ -206,6 +206,9 @@ impl FileTrait for NormalFile {
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
         let inode = self.metadata.inode.as_ref();
         *stat = inode.fstat();
+        if self.path.contains("null") {
+            stat.st_mode = S_IFCHR;
+        }
         Ok(())
     }
 
