@@ -1,7 +1,3 @@
-.section .text.usertrap
-    .globl __trap_from_user
-    .globl __return_to_user
-    .align 4
 
 FP_START = 56
 .altmacro
@@ -18,11 +14,11 @@ FP_START = 56
     fld.d $f\n, $sp, \m*8
 .endm
 
-.section .text
-    .globl __trap_from_user
-    .globl __return_to_user
-    .global __trap_from_kernel
-    .align 4
+# .section .text
+#     .globl __trap_from_user
+#     .globl __return_to_user
+#     .global __trap_from_kernel
+#     .align 4
 
 .equ CSR_SAVE, 0x30
 # 保存sepc
@@ -33,6 +29,11 @@ FP_START = 56
 .equ CSR_PGD, 0x1b
 
 # user -> kernel
+.section .text.usertrap
+    .globl __trap_from_user
+    .globl __return_to_user
+    .align 4
+
 __trap_from_user:
     #==================REMEMBER TO TURN OFF THE INTERRUPT !=======================
     # 交换sp和CSR_SAVE的值
@@ -135,10 +136,11 @@ __trap_from_user:
 __return_to_user:
     # a0: *TrapContext in user space(Constant),
 
-    # 将a0赋值给sp，现在sp指向TrapContext
-    move $sp, $a0
     # 将a0与CSR_SAVE交换，其实是想写入CSR_SAVE
     csrwr  $a0, CSR_SAVE
+    # 将a0赋值给sp，现在sp指向TrapContext
+    csrwr  $sp, CSR_SAVE
+# __trap_breakpoint:
     # now sp points to TrapContext in user space, start restoring based on it
 
     # 保存kernel寄存器(这些寄存器是callee saved)
@@ -163,11 +165,15 @@ __return_to_user:
     st.d $r20, $sp, 53*8
 
     # 保存sp
-    st.d $sp, $sp, 34*8
+    csrrd $a0, CSR_SAVE
+    st.d $a0, $sp, 34*8
+
+    # 保存ra
+    st.d $ra, $sp, 35*8
     # 保存fp
-    st.d $fp, $a0, 54*8
+    st.d $fp, $sp, 54*8
     # 保存线程指针tp
-    st.d $tp, $a0, 55*8
+    st.d $tp, $sp, 55*8
 
     # 恢复 FCSR
     ld.w $t0, $sp, 89*8
@@ -215,6 +221,8 @@ __return_to_user:
         .set m, m+1
     .endr
 
+    csrwr $sp, CSR_SAVE
+    csrrd $sp, CSR_SAVE
     # 修改栈指针，返回用户栈
     ld.d $sp, $sp, 3*8
     ertn
