@@ -43,7 +43,7 @@ pub fn ra_read() -> usize {
 
 /// in loongarch satp named pgd
 pub fn satp_read() -> usize {
-    loongarch64::register::pgdl::read().base()
+    loongarch64::register::pgdl::read().base() >> 12
 }
 /// in loongarch satp named pgd
 pub fn satp_write(satp: usize) {
