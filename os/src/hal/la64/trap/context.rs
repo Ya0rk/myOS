@@ -4,7 +4,7 @@ use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
 use loongarch64::register::*;
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct UserFloatRegs {
     f: [f64; 32], // 57-88
     fcsr: u32,    // 89
@@ -15,14 +15,14 @@ pub struct UserFloatRegs {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct TrapContext {
     /* 0-31 */ pub user_x: [usize; 32], 
     /*  32  */ pub sstatus: Sstatus,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
     /*  35  */ pub kernal_ra: usize,
-    /* 36-53*/ pub kernel_s: [usize; 12], // 保存callee saved寄存器(s0-s8 r12-r20)
+    /* 36-53*/ pub kernel_s: [usize; 18], // 保存callee saved寄存器(s0-s8 r12-r20)
     /*  54  */ pub kernel_fp: usize,
     /*  55  */ pub kernel_tp: usize,
     /*  56  */ pub float_regs: UserFloatRegs,
@@ -44,7 +44,7 @@ impl TrapContext {
             sepc: entry,
             kernel_sp: 0,
             kernal_ra: 0,
-            kernel_s: [0; 12],
+            kernel_s: [0; 18],
             kernel_fp: 0,
             kernel_tp: 0,
             float_regs: UserFloatRegs::new(),
@@ -60,13 +60,13 @@ impl TrapContext {
         self.float_regs = UserFloatRegs::new();
     }
     pub fn set_sp(&mut self, sp: usize) {
-        self.user_x[2] = sp;
+        self.user_x[3] = sp;
     }
     pub fn get_sp(&self) -> usize {
-        self.user_x[2]
+        self.user_x[3]
     }
     pub fn set_tp(&mut self, tp: usize) {
-        self.user_x[4] = tp;
+        self.user_x[2] = tp;
     }
     pub fn set_sepc(&mut self, sepc: usize) {
         self.sepc = sepc;
