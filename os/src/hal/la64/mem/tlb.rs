@@ -1,5 +1,6 @@
 #[naked]
 #[no_mangle]
+#[link_section=".text.tlb_handler"]
 pub unsafe extern "C" fn tlb_fill() {
     core::arch::naked_asm!(
         "
