@@ -1,7 +1,8 @@
 #![allow(unused_import_braces)]
 #![allow(unused)]
 use log::info;
-use crate::sync::{set_next_trigger, yield_now};
+use crate::hal::arch::sstatus::SPP;
+use crate::sync::{disable_interrupt, set_next_trigger, yield_now};
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, executor, get_current_hart_id};
 use super::{__return_to_user, set_trap_handler, IndertifyMode};
@@ -107,7 +108,6 @@ pub async fn user_trap_handler() {
 #[no_mangle]
 pub async fn user_trap_handler() {
 
-    // info!("kernel trap");
 
     use loongarch64::register::{badv, crmd, era, estat::{self, Exception, Interrupt, Trap}, ticlr, CpuMode};
 
@@ -115,6 +115,7 @@ pub async fn user_trap_handler() {
     let estat = estat::read();
     let crmd = crmd::read();
     let era = era::read();
+    // info!("[user_trap_handler] cause:{:?}, crmd:{:?}, era:{:#x}", estat.cause(), crmd, era.pc());
     let task= current_task().unwrap();
     if crmd.plv() != CpuMode::Ring0 {
         // 只有在内核态才会触发中断
@@ -135,27 +136,35 @@ pub async fn user_trap_handler() {
         Trap::Exception(e) => {
             match e {
                 Exception::Syscall => {
+                    era::set_pc(era.pc() + 4);
+
                     let mut cx = current_trap_cx();
+                    cx.sepc += 4;
                     let syscall_id = cx.user_x[11];
-                    let result = syscall(
-                        syscall_id,
-                        [cx.user_x[4],
+                    let args  = [cx.user_x[4],
                         cx.user_x[5],
                         cx.user_x[6],
                         cx.user_x[7],
                         cx.user_x[8],
-                        cx.user_x[9]]
+                        cx.user_x[9]];
+                    // info!("[user_trap_handler] syscall id:{}, args:{:?}", syscall_id, args);
+                    let result = syscall(
+                        syscall_id,
+                        args
                     ).await;
+                    
         
                     cx = current_trap_cx();
         
                     match result {
                         Ok(ret) => {
                             cx.user_x[4] = ret as usize;
+                            // info!("[syscall ret] OK:{}", ret);
                         }
                         Err(err) => {
                             if err as isize == -1 {
                                 cx.user_x[4] = err as usize;
+                                info!("[syscall ret] Err:{:?}", err);
                             } else {
                                 cx.user_x[4] = -(err as isize) as usize;
                                 info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
@@ -202,7 +211,7 @@ pub async fn user_trap_handler() {
             panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
         }
     }
-    era::set_pc(era.pc());
+    // era::set_pc(era.pc());
     // info!("kernel trap end");
 }
 
@@ -212,13 +221,19 @@ pub fn user_trap_return() {
     set_trap_handler(IndertifyMode::User);
 
     let trap_cx = current_trap_cx();
-    trap_cx.float_regs.trap_out_do_with_freg();
-
+    // trap_cx.float_regs.trap_out_do_with_freg();
+    // info!("[user_trap_return] 1");
+    trap_cx.sstatus.set_spp(SPP::User);
+    trap_cx.sstatus.set_pie(true);
+    
+    // disable_interrupt();
     let task = current_task().unwrap();
 
     task.get_time_data_mut().set_trap_out_time();
+    // info!("[user_trap_return] entering __return_to_user, cx:{:?}", *trap_cx);
     unsafe { __return_to_user(trap_cx); }
+    // info!("[user_trap_return] entering trap");
     task.get_time_data_mut().set_trap_in_time();
 
-    trap_cx.float_regs.trap_in_do_with_freg(trap_cx.sstatus);
+    // trap_cx.float_regs.trap_in_do_with_freg(trap_cx.sstatus);
 }
