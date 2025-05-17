@@ -1,6 +1,7 @@
 use core::fmt::{self, Write};
 use crate::{hal::arch::console_putchar, sync::SpinNoIrqLock};
 use lazy_static::*;
+use log::{error, info};
 
 struct Stdout;
 
@@ -18,7 +19,7 @@ lazy_static! {
 }
 pub fn print(args: fmt::Arguments) {
     // unsafe {
-        MUTEX_STDOUT.lock().write_fmt(args).unwrap();
+        MUTEX_STDOUT.lock().write_fmt(args);
     // }
 }
 
