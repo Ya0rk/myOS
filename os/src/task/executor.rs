@@ -48,7 +48,7 @@ impl TaskQueue {
 
     /// 从任务队列窃取一半的normal task，可以减少窃取次数
     fn steal(&self) -> Option<VecDeque<Runnable>> {
-        info!("steal task---");
+        // info!("steal task---");
         let len = self.normal_len();
         if len == 0 {
             return None;
@@ -118,22 +118,20 @@ pub fn run() {
         if tasks == 0 {
             trycnt += 1;
             steal_counter += 1;
-            if steal_counter > QUEUE_NUM * 0x100000 {
-                // 如果多次窃取失败，可能没有任务了，退出循环
-                println!("no task");
-                return;
-            }
-            let worker_id = get_current_hart_id();
-            for i in 0..QUEUE_NUM {
-                if i == worker_id {
-                    continue; // 跳过自己的队列
-                }
-                if let Some(tasks) = TASK_QUEUES[i].steal() {
-                    TASK_QUEUES[worker_id].push_n_normal(tasks); // 将偷取的任务加入自己队列
-                    steal_counter = 0; // 重置窃取计数器
-                    break;
-                }
-            }
+            // if steal_counter > QUEUE_NUM * 2 {
+            //     // 如果多次窃取失败，可能没有任务了，退出循环
+            //     break;
+            // }
+            // for i in 0..QUEUE_NUM {
+            //     if i == worker_id {
+            //         continue; // 跳过自己的队列
+            //     }
+            //     if let Some(tasks) = TASK_QUEUES[i].steal() {
+            //         TASK_QUEUES[worker_id].push_n_normal(tasks); // 将偷取的任务加入自己队列
+            //         steal_counter = 0; // 重置窃取计数器
+            //         break;
+            //     }
+            // }
 
         } else {
             trycnt = 0;

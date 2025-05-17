@@ -1,13 +1,13 @@
 use core::sync::atomic::Ordering;
 use async_trait::async_trait;
-use log::info;
+use log::{debug, info, warn};
 use lwext4_rust::{
     bindings::{EXT4_DE_DIR, EXT4_DE_REG_FILE, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, file, Ext4File, InodeTypes
 };
 use riscv::register::mstatus::set_fs;
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, Dirent, open, page_cache::PageCache, root_inode, stat::as_inode_stat, FileTrait, InodeMeta, InodeTrait, Kstat},
-    sync::{new_shared, MutexGuard, NoIrqLock, Shared, TimeStamp},
+    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, open, page_cache::PageCache, root_inode, stat::as_inode_stat, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat},
+    sync::{new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult}
 };
 
@@ -29,7 +29,7 @@ unsafe impl Sync for Ext4Inode {}
 impl Ext4Inode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
     pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<dyn InodeTrait> {
-        // info!("[Ext4Inode::new] path = {} ssssss", path);
+        warn!("[Ext4Inode::new] path = {} ssssss", path);
         // if INODE_CACHE.has_inode(path) {
         //     return INODE_CACHE.get(path).clone().unwrap();
         // }
@@ -39,12 +39,9 @@ impl Ext4Inode {
         if types == InodeTypes::EXT4_DE_DIR || types == InodeTypes::EXT4_INODE_MODE_DIRECTORY {
             // file_size = ext4file.lock().file_size();
             file_size = 0;
-            // info!("[Ext4Inode::new] path = {}, size = {} bbbbbbbbbbb",path, file_size);
         } else {
-            // info!("[Ext4Inode::new] path = {}, types = {:?}", path, types);
             ext4file.lock().file_open(path, O_RDONLY);
             file_size = ext4file.lock().file_size();
-            // info!("[Ext4Inode::new] path = {}, size = {} aaaaaaaaaaa",path, file_size);
             ext4file.lock().file_close();
         }
 
@@ -79,13 +76,13 @@ impl InodeTrait for Ext4Inode {
     /// 获取文件大小
     fn get_size(&self) -> usize {
         let size = self.metadata.size.load(Ordering::Relaxed);
-        info!("[get_size] {}", size);
+        debug!("[get_size] {}", size);
         size
     }
 
     fn set_size(&self, new_size: usize) -> SysResult {
         self.metadata.size.store(new_size, Ordering::Relaxed);
-        info!("[set_size] {}", new_size);
+        debug!("[set_size] {}", new_size);
         Ok(())
     }
 
@@ -100,22 +97,22 @@ impl InodeTrait for Ext4Inode {
         // 这里文件创建的标识 O_RDWR | O_CREAT | O_TRUNC 和原来的fs/mod.rs::open函数中保持一致
         match types.clone() {
             InodeTypes::EXT4_DE_DIR => {
-                info!("[do_create] type is dir {}", path);
+                debug!("[do_create] type is dir {}", path);
                 let mut file = Ext4File::new(path, types.clone());
                 if let Ok(_) = file.dir_mk(path) {
-                    info!("[do_create] succeed {}", path);
+                    debug!("[do_create] succeed {}", path);
                 } else {
-                    info!("[do_create] failed {}", path);
+                    debug!("[do_create] failed {}", path);
                 }
                 file.file_close();
             }
             InodeTypes::EXT4_DE_REG_FILE => {
-                info!("[do_create] type is reg file {}", path);
+                debug!("[do_create] type is reg file {}", path);
                 let mut file = Ext4File::new(path, types.clone());
                 if let Ok(_) = file.file_open(path, O_CREAT | O_TRUNC | O_RDWR) {
-                    info!("[do_create] succeed {}", path);
+                    debug!("[do_create] succeed {}", path);
                 } else {
-                    info!("[do_create] failed {}", path);
+                    debug!("[do_create] failed {}", path);
                 }
                 file.file_close();
             }
@@ -138,7 +135,6 @@ impl InodeTrait for Ext4Inode {
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
         let file_size = self.get_size();
         if file_size == 0 || offset >= file_size{
-            info!("aaabusfdlkj");
             return 0;
         }
 
@@ -176,11 +172,11 @@ impl InodeTrait for Ext4Inode {
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         let write_size = match &self.page_cache {
             None => {
-                info!("[write_at] no cache");
+                debug!("[write_at] no cache");
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
-                info!("[write_at] has cache");
+                debug!("[write_at] has cache");
                 cache.write(buf, offset).await
             }
         };
@@ -219,14 +215,14 @@ impl InodeTrait for Ext4Inode {
     }
     /// 同步文件
     async fn sync(&self) {
-        info!("[ext4Inode sync] do sync with pagecache");
+        debug!("[ext4Inode sync] do sync with pagecache");
         if let Some(cache) = &self.page_cache {
             cache.flush().await;
         }
     }
     /// 读取文件所有内容
     async fn read_all(&self) -> SysResult<Vec<u8>> {
-        info!("[read_all] read all file, size = {}", self.get_size());
+        debug!("[read_all] read all file, size = {}", self.get_size());
         let mut buf = vec![0; self.get_size()];
         // info!("got enough buf");
         self.read_at(0, &mut buf).await;
@@ -242,18 +238,13 @@ impl InodeTrait for Ext4Inode {
     /// 应当剥夺walk创造inode的权力todo
     fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
-        // info!("{} walk path is {}", file.file_path.to_str().unwrap(), path);
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
-            // info!("is a dir");
             let page_cache = None;
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
-            // info!("is a file");
             let page_cache = Some(PageCache::new_bare());
-            // info!("finish create pagecache");
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_REG_FILE, page_cache.clone()))
         } else {
-            // info!("is nothing");
             None
         }
     }
@@ -263,7 +254,7 @@ impl InodeTrait for Ext4Inode {
             0 => self.get_size(),
             size => size
         };
-        info!("[Ext4Inode] fstat size = {}", size);
+        debug!("[Ext4Inode] fstat size = {}", size);
         let mut file = self.file.lock();
         // let size = self.size();
         match file.fstat() {
@@ -298,8 +289,8 @@ impl InodeTrait for Ext4Inode {
         Ok(0)
     }
 
-    fn get_timestamp(&self) -> MutexGuard<'_, TimeStamp, NoIrqLock, > {
-        self.metadata.timestamp.lock()
+    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
+        &self.metadata.timestamp
     }
     // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
     //     self.file.lock()

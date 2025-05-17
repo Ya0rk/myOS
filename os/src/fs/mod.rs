@@ -31,16 +31,17 @@ pub use stat::Kstat;
 pub use vfs::*;
 pub use stdio::{Stdin, Stdout};
 pub use crate::mm::page::Page;
+use crate::net::dev;
 pub use pre_data::*;
 use crate::mm::page::PageType;
-use devfs::{find_device, open_device_file, register_device, DevZero};
+use devfs::{find_device, open_device_file, register_device, DevNull, DevZero};
 use ffi::{MOUNTS, MEMINFO, LOCALTIME, ADJTIME};
 use ext4::file::NormalFile;
 use crate::mm::UserBuffer;
 use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
 use alloc::{sync::Arc, vec::Vec};
-use log::{debug, info};
+use log::{debug, error, info};
 
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
@@ -189,10 +190,10 @@ fn create_open_file(
     parent_path: &str,
     flags: OpenFlags,
 ) -> Option<FileClass> {
-    // info!(
-    //     "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
-    //     flags, target_abs_path, parent_path
-    // );
+    debug!(
+        "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
+        flags, target_abs_path, parent_path
+    );
 
     // 逻辑为获得一个Option<Arc InodeTrait>如果返回None直接返回None,因为代表父母节点都没有
     // 如果父母节点存在, 那么当父母节点是Dir的时候获得inode,如果父母节点不是Dir页直接返回None
@@ -201,11 +202,11 @@ fn create_open_file(
             if inode.node_type() == InodeType::Dir {
                 inode
             } else {
-                info!("[create_open_file] failed inode type is {:?}", inode.node_type());
-                // inode
+                debug!("[create_open_file] failed inode type is {:?}", inode.node_type());
                 return None;
             }
         } else {
+            error!("[create_open_file] failed to get parent inode {}", parent_path);
             return None;
         }
     };
@@ -225,7 +226,7 @@ fn create_open_file(
                 parent_dentry.add_child(&path.get_filename(), flags).unwrap()
             } else {
                 // no need to create
-                info!("[create_open_file] path = {} no need to creat", target_abs_path);
+                debug!("[create_open_file] path = {} no need to creat", target_abs_path);
                 return None;
             }
             
@@ -277,7 +278,7 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
 /// - path: 文件夹目录（绝对路径）
 /// - mode: 创建模式
 pub fn mkdir(target_abs_path: &str, mode: usize) -> SysResult<()> {
-    info!("[mkdir] new dir abs_path is {}", target_abs_path);
+    debug!("[mkdir] new dir abs_path is {}", target_abs_path);
 
     let abs_path = Path::string2path(target_abs_path.into());
 
@@ -287,7 +288,7 @@ pub fn mkdir(target_abs_path: &str, mode: usize) -> SysResult<()> {
     }
 
     
-    info!(
+    debug!(
         "[mkdir] path {}, mode {}",
         target_abs_path, mode
     );

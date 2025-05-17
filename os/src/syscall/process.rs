@@ -189,22 +189,24 @@ pub fn sys_clone(
 }
 
 pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize> {
-    info!("[sys_execve] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut path = user_cstr(path.into())?.unwrap();
-    info!("sys_exec: path = {:?}, taskid = {}", path, task.get_pid());
     let mut argv = user_cstr_array(argv.into())?.unwrap_or_else(|| Vec::new());
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
-    info!("cwd = {}", cwd);
+
+    info!("[sys_execve]: path: {:?}, cwd: {:?}", path, cwd);
+
 
     // if path.ends_with("busybox") {
     //     path = [cwd.clone(), "busybox".to_string()].concat();
     // }
-
+    // 此处应当使用/proc/self/exe去调用,在shell应用在直接执行这个文件失败后一般而言会转而使用/proc/self/exe去执行,例如
+    // execve("./a.sh", ["./a.sh"], 0x39be2b28 /* 43 vars */) = -1 ENOEXEC (Exec format error)
+    // execve("/proc/self/exe", ["ash", "./a.sh"], 0x39be2b28 /* 43 vars */) = 0
     if path.ends_with(".sh") || path.ends_with("iperf3"){
-        path = [cwd.clone(), "busybox".to_string()].concat();
+        path = [cwd.clone(),"/".to_string(), "busybox".to_string()].concat();
         argv.insert(0, path.clone());
         argv.insert(1, "sh".to_string());
     }
@@ -569,6 +571,7 @@ pub fn sys_sigaction(
                     sa_restorer: new_act.sa_restorer,
                     sa_mask: new_act.sa_mask
                 };
+                // info!("[sys_sigaction] new act = {:?}", new_act);
                 let new_kaction = KSigAction {
                     sa: new_act,
                     sa_type: SigHandlerType::Customized { handler }

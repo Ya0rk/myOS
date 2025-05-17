@@ -7,7 +7,7 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::vec;
-use log::info;
+use log::{debug, info};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
@@ -15,7 +15,7 @@ use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dentry, Di
 use crate::mm::user_ptr::{user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
-use crate::sync::{TimeSpec, TimeStamp};
+use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
 use crate::syscall::ffi::{IoVec, StatFs};
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{backtrace, Errno, SysResult};
@@ -161,7 +161,7 @@ pub fn sys_fstatat(
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
-    info!("pathname = {},", path);
+    debug!("[sys_fsstatat] pathname {},", path);
     let cwd = task.get_current_path();
     info!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}, dirfd = {}", cwd, path, flags, dirfd);
 
@@ -240,7 +240,7 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
         Some(file) => {
             file.fstat(&mut stat)?;
             buffer.write(stat.as_bytes());
-            info!("fstat finished");
+            info!("fstat finished fd: {}, stat: {:?}", fd, stat);
             return Ok(0);
         }
         _ => {
@@ -510,6 +510,11 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
 
     // drop(inner);
 
+    // TODO
+    // 返回错误码有问题,应当返回EEXIST:目录存在;EACCES:权限不足;EROFS:文件系统只读;
+    // ENOSPC:没有足够的空间;ENAMETOOLONG:路径过长;ENOTDIR:不是目录;
+    // ELOOP:符号链接过多;ENOSPC:没有足够的空间;EFAULT:路径错误;等
+
     // 检查路径是否有效并创建目录
     match mkdir(target_path.as_str(), mode) {
         Ok(_) => Ok(0), // 成功
@@ -603,14 +608,14 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
 
 
 pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> {
-    info!("[sys_unlinkat] start");
+    // info!("[sys_unlinkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, path);
-    info!("[sys_unlink] start path = {}", path);
+    // info!("[sys_unlink] start path = {}", path);
     let is_relative = !path.starts_with("/");
     let base = task.get_current_path();
-
+    info!("[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}", fd, base, path, flags);
     if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
         let file = file_class.file()?;
         // info!("[unlink] file path = {}", file.path);
@@ -976,9 +981,8 @@ pub async fn sys_pwrite64(
 ///  With utimensat() the file is specified via the pathname given in pathname
 /// times[0] specifies the new "last access time" (atime); times[1] specifies the new "last modification time" (mtime)
 pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2], flags: i32) -> SysResult<usize> {
-    info!("[sys_utimensat] start");
+    info!("[sys_utimensat] start fd: {}, path: {:#X}", dirfd, pathname);
     let task = current_task().unwrap();
-    let mut new_time = TimeStamp::new();
 
     // 如果pathname不是空，target就是pathname对应文件
     // 如果是空，那么就是dirfd对应文件
@@ -987,11 +991,26 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
         let mut path = translated_str(task.get_user_token(), pathname as *const u8);
         
         let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
-        let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).unwrap().file()?;
+        let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).ok_or("error path");
+        let file = if let Ok(file) = file {
+            file.file()?
+        } else {
+            return Err(Errno::ENOENT);
+        };
         file.get_inode()
     } else {
         let res = match dirfd {
-            AT_FDCWD => { unimplemented!() }
+            AT_FDCWD => { 
+                let cwd = task.get_current_path();
+                let mut path = translated_str(task.get_user_token(), pathname as *const u8);
+                let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).ok_or("error path");
+                let file = if let Ok(file) = file {
+                    file.file()?
+                } else {
+                    return Err(Errno::ENOENT);
+                };
+                file.get_inode()
+            }
             _ => {
                 let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
                 file.get_inode()
@@ -999,26 +1018,42 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
         };
         res
     };
-
+    let mut new_time;
+    {new_time = inode.get_timestamp().lock().clone();}
+    info!("[sys_utimensat] new_time: \n{:?} \n{:?}",new_time.atime, new_time.mtime);
     if !times.is_null() {
         let user_time = unsafe { &*times };
+        // 访问时间
         match user_time[0].tv_nsec {
-            UTIME_NOW => {} // sec设置为当前时间
-            UTIME_OMIT => { // 保持不变
-                // 保持不变
-                let old_timestamp = inode.get_timestamp();
-                new_time.atime = old_timestamp.atime;
+            UTIME_NOW => {
+                // sec设置为当前时间
+                new_time.atime = TimeSpec::from(*CLOCK_MANAGER.lock().get(0).unwrap() + time_duration());
+                info!("[sys_utimensat] set atime to now {:?}", new_time.atime);
             }
-            _ => { new_time.atime = user_time[0]; }
+            UTIME_OMIT => {
+                // 保持不变
+                info!("[sys_utimensat] omit atime {:?}", new_time.atime);
+            }
+            _ => { 
+                new_time.atime = user_time[0]; 
+                info!("[sys_utimensat] set atime to {:?}", new_time.atime);
+            }
         }
+        // 修改时间
         match user_time[1].tv_nsec {
-            UTIME_NOW => {} // sec设置为当前时间
+            UTIME_NOW => {
+                // sec设置为当前时间
+                new_time.mtime = TimeSpec::from(*CLOCK_MANAGER.lock().get(0).unwrap() + time_duration());
+                info!("[sys_utimensat] set mtime to now {:?}", new_time.mtime);
+            } 
             UTIME_OMIT => { // 保持不变
                 // 保持不变
-                let old_timestamp = inode.get_timestamp();
-                new_time.mtime = old_timestamp.mtime;
+                info!("[sys_utimensat] omit mtime {:?}", new_time.mtime);
             }
-            _ => { new_time.mtime = user_time[1]; }
+            _ => { 
+                new_time.mtime = user_time[1]; 
+                info!("[sys_utimensat] set mtime to {:?}", new_time.mtime);
+            }
         }
     }
 

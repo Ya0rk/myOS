@@ -91,7 +91,7 @@ impl Dentry {
         };
         let res = Arc::new(res);
         self.children.write().insert(name.clone(), res.clone());
-        info!("[Dentry::new] {} insert child {} ", self.name.read(), name);
+        debug!("[Dentry::new] {} insert child {} ", self.name.read(), name);
         res.inode.write().push(inode);
         res
     }
@@ -333,7 +333,7 @@ impl Dentry {
                     dentry_now.get_inode();
                 }
                 None => {
-                    info!("[get_inode_from_path] no such file or directory: {}", path_now);
+                    debug!("[get_inode_from_path] no such file or directory: {}", path_now);
                     return None;
                 }
             }

@@ -3,6 +3,7 @@ pub mod sstatus;
 pub mod interrupt;
 
 use core::arch::asm;
+use log::info;
 use riscv::register::satp;
 pub use riscv::register::scause;
 // pub use core::arch::riscv64::*;
@@ -79,6 +80,7 @@ pub fn shutdown(failuer: bool) -> ! {
 
 /// use sbi call to start the specific core
 pub fn hart_start_success(hartid: usize, start_addr: usize) -> bool {
+    info!("[hart_start_success] hart_start_success: hartid = {}, start_addr = {:#x}", hartid, start_addr);
     sbi::hart_start(hartid, start_addr)
 }
 

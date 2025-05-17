@@ -23,7 +23,7 @@ pub fn kernel_trap_handler() {
     let cause = scause.cause();
     match cause {
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
-            info!("[kernel_trap_handler] kernel timer interrupt");
+            // info!("[kernel_trap_handler] kernel timer interrupt");
             TIMER_QUEUE.handle_expired();
             get_current_cpu().timer_irq_inc();
             set_next_trigger();
