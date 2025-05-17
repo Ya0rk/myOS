@@ -29,7 +29,7 @@ unsafe impl Sync for Ext4Inode {}
 impl Ext4Inode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
     pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<dyn InodeTrait> {
-        warn!("[Ext4Inode::new] path = {} ssssss", path);
+        // warn!("[Ext4Inode::new] path = {} ssssss", path);
         // if INODE_CACHE.has_inode(path) {
         //     return INODE_CACHE.get(path).clone().unwrap();
         // }

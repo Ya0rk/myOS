@@ -584,6 +584,7 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     let token = current_user_token();
     let task = current_task().unwrap();
     let path = translated_str(token, path);
+    info!("[sys_chidr] path = {}", path);
 
     // let mut inner = task.inner_lock();
     let current_path = task.get_current_path();

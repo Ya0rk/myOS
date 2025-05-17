@@ -212,7 +212,6 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     }
 
     info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
-    // println!("[sys_exec] path = {}, argv = {:?}, env = {:?}", path, argv, env);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;

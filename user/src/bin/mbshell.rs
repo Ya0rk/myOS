@@ -31,10 +31,16 @@ fn run_cmd(cmd: &str) {
                 cmd,
             ],
             &[
+                "LOGNAME=root\0",
+                "SHELL=/bash\0",
                 "PATH=/bin:/\0",
                 "HOME=/\0",
+                ["PWD=", cd.strip_suffix("/").unwrap()].concat().as_str(),
+                "USER=root\0",
+                "LANG=C.UTF-8\0",
                 "LD_LIBRARY_PATH=/\0",
-                "TERM=screen\0",
+                "PS1=\x1b[1m\x1b[32mDel0n1x\x1b[0m:\x1b[1m\x1b[34m\\w\x1b[0m\\$ \0",
+                "TERM=vt220\0",
             ],
         );
     } else {
