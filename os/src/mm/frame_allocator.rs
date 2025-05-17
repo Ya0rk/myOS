@@ -1,5 +1,6 @@
 use super::{PhysAddr, PhysPageNum};
 use crate::{hal::{config::MEMORY_END, KERNEL_ADDR_OFFSET}, mm::address::KernelAddr};
+use crate::{sync::SpinNoIrqLock};
 use alloc::vec::Vec;
 use spin::Mutex;
 use core::fmt::{self, Debug, Formatter};
@@ -86,7 +87,7 @@ type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
     /// frame allocator instance through lazy_static!
-    pub static ref FRAME_ALLOCATOR: Mutex<FrameAllocatorImpl> = Mutex::new(FrameAllocatorImpl::new());
+    pub static ref FRAME_ALLOCATOR: SpinNoIrqLock<FrameAllocatorImpl> = SpinNoIrqLock::new(FrameAllocatorImpl::new());
 }
 /// initiate the frame allocator using `ekernel` and `MEMORY_END`
 pub fn init_frame_allocator() {

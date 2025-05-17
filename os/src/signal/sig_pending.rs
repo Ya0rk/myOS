@@ -1,6 +1,5 @@
 use alloc::collections::VecDeque;
 use crate::task::TaskStatus;
-
 use super::ffi::{SigCode, SigErr, SigMask, SigNom};
 
 /// 使用优先队列和普通队列
@@ -44,6 +43,12 @@ pub enum SigDetails {
     None
 }
 
+pub enum WhichQueue {
+    Fifo,
+    Prio,
+    None
+}
+
 lazy_static! {
     /// 优先级较高的信号
     static ref PRIO_SIG: SigMask = SigMask::SIGSEGV | SigMask::SIGBUS
@@ -61,34 +66,75 @@ impl SigPending {
     }
 
     /// 取出一个信号，优先从prio队列获取
-    pub fn take_one(&mut self) -> Option<SigInfo> {
-        let sig_info = 
-                self.prio
-                .pop_front()
-                .or_else(|| self.fifo.pop_front());
-        match sig_info {
-            Some(one) => {
-                self.mask.unset_sig(one.signo as usize);
-                return Some(one);
-            }
-            None => return sig_info,
+    /// 参数mask：当前进程的信号掩码，不能取出掩码中的信号
+    pub fn take_one(&mut self, mask: SigMask) -> Option<SigInfo> {
+        if let Some(index) = self.prio.iter().position(|x| !mask.have(x.signo as usize)) {
+            let siginfo = self.prio.remove(index).unwrap();
+            self.mask.unset_sig(siginfo.signo as usize); // 这里的mask代表该信号是否在队列中，然后将其删去
+            return Some(siginfo);
         }
+
+        if let Some(index) = self.fifo.iter().position(|x| !mask.have(x.signo as usize)) {
+            let siginfo = self.fifo.remove(index).unwrap();
+            self.mask.unset_sig(siginfo.signo as usize);
+            return Some(siginfo);
+        }
+
+        return None;
     }
 
     /// 用于wait4中取出SIGCHLD信号，所以只需要遍历fifo队列
     pub fn take_expected_one(&mut self, expect: SigMask) -> Option<SigInfo> {
+        match self.has_expected(expect) {
+            (true, i, q) => {
+                let siginfo = match q {
+                    WhichQueue::Fifo => self.fifo.remove(i as usize),
+                    WhichQueue::Prio => self.prio.remove(i as usize),
+                    WhichQueue::None => unimplemented!()
+                };
+                self.mask.unset_sig(siginfo.unwrap().signo as usize);
+                return siginfo;
+            },
+            (false, _, _) => return None
+        }
+    }
+
+    /// 获取信号，不会将其从队列删除
+    pub fn get_expected_one(&self, expect: SigMask) -> Option<SigInfo> {
+        match self.has_expected(expect) {
+            (true, i, q) => {
+                let siginfo = match q {
+                    WhichQueue::Fifo => self.fifo.get(i as usize),
+                    WhichQueue::Prio => self.prio.get(i as usize),
+                    WhichQueue::None => unimplemented!()
+                };
+                return siginfo.cloned();
+            },
+            (false, _, _) => return None
+        }
+    }
+
+    pub fn has_expected(&self, expect: SigMask) -> (bool, isize, WhichQueue) {
         let intersection = self.mask & expect;
         if intersection.is_empty() {
-            return None;
+            return (false, -1, WhichQueue::None);
         }
+
         for i in 0..self.fifo.len() {
             let signo = self.fifo[i].signo as usize;
             if intersection.have(signo) {
-                self.mask.unset_sig(signo);
-                return self.fifo.remove(i);
+                return (true, i as isize, WhichQueue::Fifo);
             }
         }
-        None
+
+        for i in 0..self.prio.len() {
+            let signo = self.prio[i].signo as usize;
+            if intersection.have(signo) {
+                return (true, i as isize, WhichQueue::Prio);
+            }
+        }
+
+        return (false, -1, WhichQueue::None);
     }
 
     pub fn add(&mut self, siginfo: SigInfo) {

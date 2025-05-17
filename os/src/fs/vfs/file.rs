@@ -1,8 +1,9 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
-use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{UserBuffer, page::Page}, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, net::Socket, utils::SysResult};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
+use log::info;
 use spin::RwLock;
 
 use super::InodeTrait;
@@ -40,29 +41,9 @@ impl FileMeta {
 /// 它提供了读取、写入、查询状态等基本文件操作。
 #[async_trait]
 pub trait FileTrait: Send + Sync {
-    /// 设置文件的flags
-    fn set_flags(&self, flags: OpenFlags);
-
-    /// 获取文件的flags
-    fn get_flags(&self) -> OpenFlags {
-        todo!()
-    }
-
     fn get_inode(&self) -> Arc<dyn InodeTrait>;
-    /// 检查文件是否可读
-    ///
-    /// # 返回
-    ///
-    /// 如果文件可读返回 `true`，否则返回 `false`
     fn readable(&self) -> bool;
-
-    /// 检查文件是否可写
-    ///
-    /// # 返回
-    ///
-    /// 如果文件可写返回 `true`，否则返回 `false`
     fn writable(&self) -> bool;
-
     fn executable(&self) -> bool;
 
     /// 从文件中读取数据到用户缓冲区
@@ -76,20 +57,15 @@ pub trait FileTrait: Send + Sync {
     /// # 返回
     ///
     /// 实际读取的字节数
-    async fn read(&self, buf: UserBuffer) -> SysResult<usize>;
+    async fn read(&self, buf: &mut [u8]) -> SysResult<usize>;
 
-    /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_sendfile)
-    // async fn read_at(&self, offset: usize, buf: &mut [u8]) -> SysResult<usize> {
-    //     let inode = self.get_inode();
-    //     if offset > inode.size() {
-    //         return Ok(0);
-    //     }
-    //     Ok(inode.read_at(offset, buf).await)
-    // }
-
-    /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
-    async fn pread(&self, mut buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize>{
-        todo!()
+    /// 从指定偏移量读取数据到用户缓冲区
+    async fn read_at(&self, offset: usize, buf: &mut [u8]) -> SysResult<usize> {
+        let inode = self.get_inode();
+        if offset > inode.get_size() {
+            return Ok(0);
+        }
+        Ok(inode.read_at(offset, buf).await)
     }
 
     /// 将用户缓冲区中的数据写入文件
@@ -103,23 +79,16 @@ pub trait FileTrait: Send + Sync {
     /// # 返回
     ///
     /// 实际写入的字节数
-    async fn write(&self, buf: UserBuffer) -> SysResult<usize>;
+    async fn write(&self, buf: &[u8]) -> SysResult<usize>;
 
-    /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_sendfile)
-    // async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
-    //     let inode = self.get_inode();
-    //     // TODO(YJJ): maybe bug,这里size可能是0？
-    //     if offset > inode.size() {
-    //         let newsize = offset + buf.len();
-    //         inode.set_size(newsize);
-    //         // inode.truncate(newsize);
-    //     }
-    //     Ok(inode.write_at(offset, buf).await)
-    // }
-
-    /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
-    async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
-        todo!()
+    /// 将数据从指定偏移量写入文件，返回实际写入的字节数
+    async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
+        let inode = self.get_inode();
+        if offset > inode.get_size() {
+            let newsize = offset + buf.len();
+            inode.truncate(newsize);
+        }
+        Ok(inode.write_at(offset, buf).await)
     }
 
     /// ppoll处理
@@ -138,42 +107,53 @@ pub trait FileTrait: Send + Sync {
     /// # 返回
     ///
     /// 设置后的新偏移量位置
-    fn lseek(&self, _offset: isize, _whence: usize) -> SysResult<usize> {
-        unimplemented!("not support!");
-    }
-
-    /// 获取文件名
-    ///
-    /// # 返回
-    ///
-    /// 文件的名称
     fn get_name(&self) -> SysResult<String>;
-
-    /// 重命名
-    /// 
-    /// 成功返回0，否则返回errno
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize>;
-
-    /// 获取文件的状态信息
-    ///
-    /// 填充提供的 Kstat 结构体，包含文件的元数据信息。
-    ///
-    /// # 参数
-    ///
-    /// * `stat` - 用于存储文件状态信息的结构体
     fn fstat(&self, stat: &mut Kstat) -> SysResult;
-
     fn is_dir(&self) -> bool;
 
-    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
-        todo!()
+    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
+        unimplemented!("File Trait read_dents");
     }
 
     // TODO: 缓存未命中处理
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>>;
+
+    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
+        unimplemented!("not support!");
+    }
+    fn set_flags(&self, flags: OpenFlags){
+        // unimplemented!("not support!");
+    }
+    fn get_flags(&self) -> OpenFlags {
+        // unimplemented!("not support!");
+        OpenFlags::O_RDWR
+    }
+    /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
+    async fn pread(&self, mut buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize>{
+        unimplemented!("not support!");
+    }
+    /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
+    async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+        unimplemented!("not support!");
+    }
+    fn lseek(&self, _offset: isize, _whence: usize) -> SysResult<usize> {
+        info!("{}", self.get_name().unwrap());
+        // unimplemented!("not support!");
+        Ok(0)
+    }
+
+    // ppoll处理,代表数据到达，可以读取数据
+    async fn pollin(&self) -> bool {
+        // info!("[Filetrait::pollin] file: {}", self.get_name().unwrap());
+        // info!("[pollin] use defaule implement");
+        true
+    }
+    // ppoll处理，代表可以写入数据，如 socket 发送缓冲区有空闲
+    async fn pollout(&self) -> bool {
+        info!("[pollout] use defaule implement");
+        true
+    }
 }
 
-// pub trait Ioctl: File {
-//     /// ioctl处理
-//     fn ioctl(&self, cmd: usize, arg: usize) -> isize;
-// }
+

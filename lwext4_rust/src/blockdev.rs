@@ -307,7 +307,23 @@ impl<K: KernelDevOp> Ext4BlockWrapper<K> {
         Ok(0)
     }
 
+    fn to_u8_array_32(input: &str) -> [u8; 32] {
+        // 将字符串转换为字节数组
+        let bytes = input.as_bytes();
+    
+        // 创建一个长度为 32 的数组，并用 0 填充
+        let mut array = [0u8; 32];
+    
+        // 将字节数组复制到前面部分
+        let len = bytes.len().min(32); // 确保不会超出数组长度
+        array[..len].copy_from_slice(&bytes[..len]);
+    
+        // 返回数组的引用
+        array
+    }
+
     pub fn lwext4_dir_ls(&self) -> Vec<String> {
+        // let path = &Self::to_u8_array_32("/musl"); // 列出musl目录下的内容
         let path = &self.mount_point;
         let mut sss: [u8; 255] = [0; 255];
         let mut d: ext4_dir = unsafe { core::mem::zeroed() };
@@ -335,11 +351,6 @@ impl<K: KernelDevOp> Ext4BlockWrapper<K> {
                 sss.copy_from_slice(&dentry.name);
                 sss[dentry.name_length as usize] = 0;
 
-                // info!(
-                //     "  {}{}",
-                //     entry_to_str(dentry.inode_type as u32),
-                //     str::from_utf8(&sss).unwrap()
-                // );
                 res.push(format!(
                     "{} {}",
                     entry_to_str(dentry.inode_type as u32),

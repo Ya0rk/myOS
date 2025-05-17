@@ -17,7 +17,7 @@ pub struct Manager {
 }
 
 /// 存放所有任务的管理器，可以通过pid快速找到对应的Task
-pub struct TaskManager(HashMap<Pid, Weak<TaskControlBlock>>);
+pub struct TaskManager(pub HashMap<Pid, Weak<TaskControlBlock>>);
 /// 存放进程组的管理器，通过进程组的leader 的pid可以定位到进程组
 pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
 
@@ -82,7 +82,7 @@ impl ProcessGroupManager {
 
     fn remove(&mut self, pgid: PGid, pid: Pid) {
         let target_group = self.0.get_mut(&pgid).unwrap();
-        target_group.remove(pid);
+        target_group.retain(|p| *p != pid);
     }
 
     /// 获取所有进程数量
@@ -113,9 +113,15 @@ pub fn get_proc_num() -> u16 {
 
 /// 将原进程从进程组中删除，加入一个全新的进程组，该进程组以自己为leader
 pub fn extract_proc_to_new_group(old_pgid: PGid, new_pgid: PGid, pid: Pid) {
-    MANAGER.process_group.lock().remove(old_pgid, pid);
-    match MANAGER.process_group.lock().0.get_mut(&new_pgid) {
+    let mut grand = MANAGER.process_group.lock();
+    grand.remove(old_pgid, pid);
+    match grand.0.get_mut(&new_pgid) {
         Some(vec) => vec.push(pid),
-        None => MANAGER.process_group.lock().add_new_group(new_pgid),
+        None => grand.add_new_group(new_pgid),
     }
+}
+
+/// 获取一个进程组
+pub fn get_target_proc_group(pgid: PGid) -> Vec<Pid> {
+    MANAGER.process_group.lock().0.get(&pgid).cloned().unwrap()
 }

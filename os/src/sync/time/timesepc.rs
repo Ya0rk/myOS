@@ -1,8 +1,8 @@
 use core::{fmt::Display, time::Duration};
 use zerocopy::IntoBytes;
-use crate::{sync::timer::{get_time_ns, get_time_s, NSEC_PER_SEC}, task::current_task};
+use crate::{sync::timer::{get_time_ns, get_time_s, time_duration, NSEC_PER_SEC}, task::current_task};
 
-#[derive(Copy, Clone, IntoBytes)]
+#[derive(Copy, Clone, IntoBytes, Debug)]
 #[repr(C)]
 pub struct TimeSpec {
     /// 秒
@@ -12,6 +12,7 @@ pub struct TimeSpec {
 }
 
 impl TimeSpec {
+    /// 返回当前时间
     pub fn new() -> Self {
         let tv_sec = get_time_s();
         let tv_nsec = get_time_ns();
@@ -53,11 +54,29 @@ impl TimeSpec {
             tv_nsec: time.subsec_nanos() as usize,
         }
     }
+    
+    /// 获取较为粗糙的时间，这里使用秒
+    pub fn get_coarse_time() -> Self {
+        let ts = get_time_s();
+        TimeSpec {
+            tv_sec: ts, 
+            tv_nsec: 0 
+        }
+    }
 }
 
 impl From<TimeSpec> for Duration {
     fn from(ts: TimeSpec) -> Self {
         Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32)
+    }
+}
+
+impl From<Duration> for TimeSpec {
+    fn from(value: Duration) -> Self {
+        Self {
+            tv_sec: value.as_secs() as usize,
+            tv_nsec: value.subsec_nanos() as usize
+        }
     }
 }
 

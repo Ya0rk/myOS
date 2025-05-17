@@ -1,6 +1,6 @@
-use alloc::{string::String, sync::Arc, vec::Vec};
+use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
 use log::info;
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, utils::SysResult};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 
@@ -15,9 +15,6 @@ impl DevZero {
 
 #[async_trait]
 impl FileTrait for DevZero {
-    fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
-    }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
@@ -30,8 +27,10 @@ impl FileTrait for DevZero {
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, mut user_buf: UserBuffer) -> SysResult<usize> {
-        Ok(user_buf.clear())
+    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
+        let len = user_buf.len();
+        user_buf.fill(0);
+        Ok(len)
     }
     /// 填满0
     async fn pread(&self, mut user_buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
@@ -40,32 +39,27 @@ impl FileTrait for DevZero {
         user_buf.write(&zero);
         Ok(len)
     }
-    async fn write(&self, user_buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, user_buf: & [u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }
     
     fn get_name(&self) -> SysResult<String> {
-        todo!()
+        Ok("/dev/zero".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    // fn poll(&self, events: PollEvents) -> PollEvents {
-    //     let mut revents = PollEvents::empty();
-    //     if events.contains(PollEvents::IN) {
-    //         revents |= PollEvents::IN;
-    //     }
-    //     if events.contains(PollEvents::OUT) {
-    //         revents |= PollEvents::OUT;
-    //     }
-    //     revents
-    // }
-    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        todo!()
+    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
+        0
+    }
+    fn fstat(&self, stat: &mut Kstat) -> SysResult {
+        *stat = Kstat::new();
+        stat.st_mode = S_IFCHR;
+        Ok(())
     }
     fn is_dir(&self) -> bool {
-        todo!()
+        false
     }
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()

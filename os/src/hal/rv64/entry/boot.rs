@@ -1,5 +1,8 @@
 #![allow(unused)]
 use core::arch::asm;
+use log::info;
+use lwext4_rust::bindings::int_fast16_t;
+
 use crate::{hal::arch::hart_start_success, mm::VirtAddr};
 use crate::hal::config::{HART_NUM, HART_START_ADDR, KERNEL_ADDR_OFFSET};
 
@@ -48,6 +51,7 @@ pub fn clear_bss() {
     unsafe {
         let start: VirtAddr = VirtAddr(sbss as usize);
         let end: VirtAddr = VirtAddr(ebss as usize);
+        info!("end = {}, start = {}",end.0, start.0);
         let len: usize = end.0 - start.0;
         core::slice::from_raw_parts_mut(start.as_ptr(), len)
             .fill(0);

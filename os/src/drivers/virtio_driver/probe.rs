@@ -7,6 +7,7 @@ use log::info;
 
 use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
 use alloc::sync::Arc;
+use crate::sync::SpinNoIrqLock;
 
 use super::VirtIoHalImpl;
 use lazy_static::*;
@@ -40,11 +41,11 @@ use spin::mutex::Mutex;
 use alloc::boxed::Box;
 
 lazy_static! {
-    pub static ref BLOCKDEVICE_ADDR_REG: Mutex<Option<usize>> = Mutex::new(None);
+    pub static ref BLOCKDEVICE_ADDR_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
 }
 
 lazy_static! {
-    pub static ref BLOCKDEVICE_SIZE_REG: Mutex<Option<usize>> = Mutex::new(None);
+    pub static ref BLOCKDEVICE_SIZE_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
 }
 
 

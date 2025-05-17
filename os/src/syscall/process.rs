@@ -1,16 +1,25 @@
 use core::mem::size_of;
-use crate::fs::{open, open_file, FileClass, OpenFlags};
+use core::time::{self, Duration};
+use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
+use crate::fs::{join_path_2_absolute, open, open_file, FileClass, OpenFlags};
+use crate::mm::user_ptr::{user_cstr, user_cstr_array};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
-use crate::signal::{SigDetails, SigMask, UContext};
-use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_THREAD_CPUTIME_ID};
-use crate::sync::{get_waker, sleep_for, suspend_now, yield_now, TimeSpec, TimeVal, Tms};
-use crate::syscall::ffi::{CloneFlags, Utsname, WaitOptions};
+use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
+use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
+use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, IdelFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
+use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
+use crate::syscall::RLimit64;
 use crate::task::{
-    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_task_by_pid, spawn_user_task
+    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, MANAGER
 };
 use crate::utils::{Errno, SysResult, RNG};
+use alloc::ffi::CString;
+use alloc::string::{String, ToString};
+use alloc::task;
+use alloc::vec::Vec;
 use log::{debug, info};
 use lwext4_rust::bindings::true_;
+use num_enum::TryFromPrimitive;
 use zerocopy::IntoBytes;
 
 use super::ffi::Sysinfo;
@@ -18,17 +27,20 @@ use super::ffi::Sysinfo;
 // use super::ffi::Utsname;
 
 pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
+    info!("[sys_exit] start");
     let task = current_task().unwrap();
     task.set_zombie();
 
     if task.is_leader(){
         info!("[sys_exit] task is leader, pid = {}, exit_code = {}", task.get_pid(), exit_code);
-        task.set_exit_code((exit_code & 0xFF) << 8);
+        task.set_exit_code(((exit_code & 0xFF) << 8) as i32);
+        // task.set_exit_code(exit_code);
     }
     Ok(0)
 }
 
 pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
+    info!("[sys_nanosleep] start");
     let req = *translated_ref(current_user_token(), req as *const TimeSpec);
     if !req.check_valid() {
         // info!("req = {}", req);
@@ -51,6 +63,7 @@ pub async fn sys_yield() -> SysResult<usize> {
 /// 
 /// 返回值：成功返回已经过去的滴答数，失败返回-1;
 pub fn sys_times(tms: *const u8) -> SysResult<usize> {
+    info!("[sys_times] start");
     if tms.is_null() {
         return Err(Errno::EBADCALL);
     }
@@ -67,6 +80,7 @@ pub fn sys_times(tms: *const u8) -> SysResult<usize> {
 /// 
 /// 返回值：成功返回0，失败返回-1;
 pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
+    info!("[sys_gettimeofday] start");
     if tv.is_null() {
         return Err(Errno::EBADCALL);
     }
@@ -84,6 +98,7 @@ pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
 /// 返回值：成功返回0，失败返回-1;
 pub fn sys_uname(buf: *const u8) -> SysResult<usize> {
     debug!("sys_name start");
+    info!("[sys_uname] start");
     if buf.is_null() {
         return Err(Errno::EBADCALL);
     }
@@ -101,10 +116,12 @@ pub fn sys_uname(buf: *const u8) -> SysResult<usize> {
 }
 
 pub fn sys_getpid() -> SysResult<usize> {
+    info!("[sys_getpid] start");
     Ok(current_task().unwrap().get_pid() as usize)
 }
 
 pub fn sys_getppid() -> SysResult<usize> {
+    info!("[sys_getppid] start");
     Ok(current_task().unwrap().get_ppid() as usize)
 }
 
@@ -115,6 +132,7 @@ pub fn sys_clone(
     tls: usize,
     ctid: usize,
     ) -> SysResult<usize> {
+    info!("[sys_clone] start");
     debug!("start sys_fork");
     let flag = CloneFlags::from_bits(flags as u32).unwrap();
     let current_task = current_task().unwrap();
@@ -127,13 +145,18 @@ pub fn sys_clone(
 
     let new_pid = new_task.get_pid();
     let child_trap_cx = new_task.get_trap_cx_mut();
+    // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
+    // 只需要修改子进程返回值为0即可
+    child_trap_cx.user_x[10] = 0;
 
-    if flag.contains(CloneFlags::CLONE_SETTLS) {
-        child_trap_cx.set_tp(tls);
+    // 子进程不能使用父进程的栈，所以需要手动指定
+    if child_stack != 0 {
+        child_trap_cx.set_sp(child_stack);
     }
+    
     // 检查是否需要设置 parent_tid
     if flag.contains(CloneFlags::CLONE_PARENT_SETTID) {
-        *translated_refmut(token, ptid as *mut u32) = new_pid as u32;
+        unsafe{ core::ptr::write(ptid as *mut usize, new_pid as usize); }
     }
     // 检查是否需要设置子进程的 set_child_tid,clear_child_tid
 
@@ -141,8 +164,8 @@ pub fn sys_clone(
     // set_child_tid 会被设置为传递给 clone() 的 ctid 参数的值。
     // 新线程启动时，会将其线程 ID 写入该地址
     if flag.contains(CloneFlags::CLONE_CHILD_SETTID) {
+        unsafe { core::ptr::write(ctid as *mut usize, new_pid as usize); }
         new_task.set_child_settid(ctid);
-        *translated_refmut(token, ctid as *mut u32) = new_pid as u32;
     }
     // 检查是否需要设置child_cleartid,在线程退出时会将指向的地址清零
 
@@ -153,34 +176,46 @@ pub fn sys_clone(
         new_task.set_child_cleartid(ctid);
     }
 
-    // 子进程不能使用父进程的栈，所以需要手动指定
-    if child_stack != 0 {
-        child_trap_cx.set_sp(child_stack);
+    if flag.contains(CloneFlags::CLONE_SETTLS) {
+        child_trap_cx.set_tp(tls);
     }
-    // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
-    // 只需要修改子进程返回值为0即可
-    child_trap_cx.user_x[10] = 0;
+    
     // 将子进程加入任务管理器，这里可以快速找到进程
     add_task(&new_task);
     spawn_user_task(new_task);
-    // info!("[sys_fork] finished new pid = {}", new_pid);
 
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
 }
 
-pub async fn sys_exec(path: usize) -> SysResult<usize> {
-    // info!("[sys_exec] start");
+pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
-    let path = translated_str(token, path as *const u8);
-    debug!("sys_exec: path = {:?}", path);
+    let mut path = user_cstr(path.into())?.unwrap();
+    let mut argv = user_cstr_array(argv.into())?.unwrap_or_else(|| Vec::new());
+    let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
+
+    info!("[sys_execve]: path: {:?}, cwd: {:?}", path, cwd);
+
+
+    // if path.ends_with("busybox") {
+    //     path = [cwd.clone(), "busybox".to_string()].concat();
+    // }
+    // 此处应当使用/proc/self/exe去调用,在shell应用在直接执行这个文件失败后一般而言会转而使用/proc/self/exe去执行,例如
+    // execve("./a.sh", ["./a.sh"], 0x39be2b28 /* 43 vars */) = -1 ENOEXEC (Exec format error)
+    // execve("/proc/self/exe", ["ash", "./a.sh"], 0x39be2b28 /* 43 vars */) = 0
+    if path.ends_with(".sh") || path.ends_with("iperf3"){
+        path = [cwd.clone(),"/".to_string(), "busybox".to_string()].concat();
+        argv.insert(0, path.clone());
+        argv.insert(1, "sh".to_string());
+    }
+
+    info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
+    // println!("[sys_exec] path = {}, argv = {:?}, env = {:?}", path, argv, env);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
-        // let all_data = app_inode.file()?.metadata.inode.read_all().await?;
-        
-        let task = current_task().unwrap();
-        task.exec(file).await;
+        let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
+        task.execve(file, argv, env).await;
         Ok(0)
     } else {
         Err(Errno::EBADCALL)
@@ -194,30 +229,39 @@ pub async fn sys_exec(path: usize) -> SysResult<usize> {
 /// pid < -1: 等待进程组标识符与pid绝对值相等的所有子进程
 /// pid > 0 ：等待进程id为pid的子进程
 pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usize) -> SysResult<usize> {
+    info!("[sys_wait4] start");
     debug!("sys_wait4 start, pid = {}, options = {}", pid, options);
     // info!("[sys_wait4] start, pid = {}, options = {}", pid,options);
     let task = current_task().unwrap();
     let self_pid = task.get_pid();
     if task.children.lock().is_empty() {
-        info!("task pid = {}, has no child.", task.get_pid());
+        // info!("task pid = {}, has no child.", task.get_pid());
         return Err(Errno::ECHILD);
+        // return Ok(0);
     }
 
     let op = WaitOptions::from_bits(options as i32).unwrap();
 
     // 缩小 locked_child 的作用域
     let target_task = {
-        let locked_child = task.children.lock().clone();
+        let locked_child = task.children.lock();
         match pid {
             // pid = -1: 等待任意子进程
             -1 => {
                 info!("wait any child");
-                locked_child.values().find(|task| task.is_zombie() ).cloned()// 这里过滤掉了自己
+                locked_child.values().find(|task| 
+                    task.is_zombie() 
+                    && task.thread_group.lock().thread_num() == 1
+                ).cloned()
             }
             // pid > 0：等待进程id为pid的子进程
             p if p > 0 => {
                 info!("wait target pid = {}", p);
-                locked_child.values().find(|task| task.is_zombie() && p as usize == task.get_pid()).cloned()
+                locked_child.values().find(|task| 
+                    task.is_zombie() 
+                    && p as usize == task.get_pid()
+                    && task.thread_group.lock().thread_num() == 1
+                ).cloned()
             }
             // pid < -1: 等待进程组标识符与pid绝对值相等的所有子进程
             p if p < -1 => {
@@ -232,7 +276,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
             info!("[sys_wait4] find a target zombie child task pid = {}.", zombie_child.get_pid());
             let zombie_pid = zombie_child.get_pid();
             let exit_code = zombie_child.get_exit_code();
-            task.do_wait4(zombie_pid, wstatus as *mut i32, exit_code);
+            task.do_wait4(zombie_pid, wstatus, exit_code);
             return Ok(zombie_pid);
         }
         None => {
@@ -268,9 +312,8 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
                     None => return Err(Errno::EINTR),
                 }
             };
-            info!("[sys_wait4]: task {} find a child: pid = {}, exit_code = {}.", task.get_pid(), child_pid, exit_code);
-            task.do_wait4(child_pid, wstatus as *mut i32, exit_code);
-            // info!("[do_wait4] child_pid = {}", child_pid);
+            info!("[sys_wait4]: task {} find a child: pid = {}, exit_code = {} , exitcode << 8 = {}.", task.get_pid(), child_pid, exit_code, (exit_code & 0xFF) << 8);
+            task.do_wait4(child_pid, wstatus, exit_code);
             return Ok(child_pid);
         }
     }
@@ -282,18 +325,14 @@ pub fn sys_getrandom(
     buflen: usize,
     _flags: usize,
 ) -> SysResult<usize> {
-    let token = current_user_token();
-    let buffer = UserBuffer::new(
-        translated_byte_buffer(
-            token,
-            buf,
-            buflen
-    ));
+    info!("[sys_get_random] start");
+    let buffer = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
     Ok(RNG.lock().fill_buf(buffer))
 }
 
 /// set pointer to thread ID
 pub fn sys_set_tid_address(tidptr: usize) -> SysResult<usize> {
+    info!("[sys_set_tid_address] start");
     let task = current_task().unwrap();
     task.set_child_cleartid(tidptr);
     Ok(task.get_pid())
@@ -301,9 +340,12 @@ pub fn sys_set_tid_address(tidptr: usize) -> SysResult<usize> {
 
 /// exit all threads in a process
 pub fn sys_exit_group(exit_code: i32) -> SysResult<usize> {
+    info!("[sys_exit_group] start, exitcode = {}", exit_code);
     let task = current_task().unwrap();
     task.kill_all_thread();
-    task.set_exit_code((exit_code & 0xFF) << 8);
+    task.set_exit_code(((exit_code & 0xFF) << 8) as i32);
+    // task.set_exit_code(exit_code);
+    info!("[sys_exit_group] task exitcode = {}", task.get_exit_code());
     Ok(0)
 }
 
@@ -311,6 +353,7 @@ pub fn sys_clock_settime(
     clock_id: usize,
     timespec: *const u8,
 ) -> SysResult<usize> {
+    info!("[sys_clock_settime] start");
     if timespec.is_null() {
         info!("[sys_clock_settime] timespec is null");
         return Err(Errno::EBADCALL);
@@ -322,19 +365,21 @@ pub fn sys_clock_gettime(
     clock_id: usize,
     timespec: *const u8,
 ) -> SysResult<usize> {
+    info!("[sys_clock_gettime] start, clock id = {}", clock_id);
     if timespec.is_null() {
         info!("[sys_clock_gettime] timespec is null");
         return Err(Errno::EBADCALL);
     }
     let tp = timespec as *mut TimeSpec;
     let time = match clock_id {
-        CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::new(),
+        CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration()),
         CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
         CLOCK_THREAD_CPUTIME_ID => TimeSpec::thread_cputime_now(),
+        CLOCK_REALTIME_COARSE => TimeSpec::get_coarse_time(),
         CLOCK_BOOTTIME => TimeSpec::boottime_now(),
         _ => return Err(Errno::EINVAL),
     };
-    unsafe { tp.write_volatile(time) };
+    unsafe { core::ptr::write(tp, time) };
     Ok(0)
 }
 
@@ -343,6 +388,7 @@ pub fn sys_clock_gettime(
 /// 调用进程成为新进程组的领头进程(process group leader)
 /// 调用进程不再有控制终端(controlling terminal)
 pub fn sys_setsid() -> SysResult<usize> {
+    info!("[sys_setsid] start");
     let task = current_task().unwrap();
     let pid = task.get_pid();   // task的pid
     let old_pgid = task.get_pgid(); // task现在所属的进程组
@@ -363,6 +409,7 @@ pub fn sys_setsid() -> SysResult<usize> {
 /// both process groups must be part of the same session. 
 /// In this case, the pgid specifies an existing process group to be joined and the session ID of that group must match the session ID of the joining process.
 pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
+    info!("[sys_setpgid] start pid: {} pgid: {}", pid, pgid);
     if (pgid as isize) < 0 {
         return Err(Errno::EINVAL);
     }
@@ -373,6 +420,7 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
 
     let old_pgid = target_task.get_pgid();
     let pid = target_task.get_pid();
+    info!("[sys_setpgid] pid is {pid} old_pgid is {old_pgid}");
     if pgid == 0{
         let new_pgid = pid;
         target_task.set_pgid(pid);
@@ -388,16 +436,18 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
 /// when a signal handler finished executing, it can call sigreturn() to restore the process's state to what it was before the signal was received.
 /// 用于从信号处理函数返回到用户程序被中断的位置
 pub fn sys_sigreturn() -> SysResult<usize> {
+    info!("[sys_sigreturn] start");
     let task = current_task().unwrap();
     let ucontext = task.get_ucontext() as *const UContext;
     let ucontext = unsafe { core::ptr::read(ucontext) };
     let sig_stack = ucontext.uc_stack;
     let sig_mask = ucontext.uc_sigmask;
     let trap_cx = task.get_trap_cx_mut();
-    let sepc = ucontext.get_sepc();
-    trap_cx.set_sepc(sepc); // 恢复sepc
+    let sepc = ucontext.get_userx()[0];
+    // 恢复trap_cx到之前状态,这些值都保存在ucontext中
+    trap_cx.set_sepc(sepc);                // 恢复sepc
     trap_cx.user_x = ucontext.get_userx(); // 恢复寄存器
-    task.set_blocked(sig_mask); // 恢复信号屏蔽字
+    task.set_blocked(sig_mask);            // 恢复信号屏蔽字
     // 恢复信号栈
     if sig_stack.ss_size != 0 {
         unsafe { *task.sig_stack.get() = Some(sig_stack) };
@@ -408,12 +458,427 @@ pub fn sys_sigreturn() -> SysResult<usize> {
 
 /// return system information
 pub fn sys_sysinfo(sysinfo: *const u8) -> SysResult<usize> {
+    info!("[sys_sysinfo] start");
     if sysinfo.is_null() {
         return Err(Errno::EBADCALL);
     }
     let proc_num = get_proc_num();
     let bind = Sysinfo::new(proc_num);
-    let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
+    // let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
+    let sysinfo = unsafe{ sysinfo as *mut Sysinfo };
     unsafe { core::ptr::write(sysinfo, bind) };
+    Ok(0)
+}
+
+pub fn sys_getuid() -> SysResult<usize> {
+    info!("[sys_getuid]: 0");
+    Ok(0)
+}
+
+/// examine and change blocked signals
+/// how决定如何修改当前的信号屏蔽字;set指定了需要添加、移除或设置的信号
+/// 当前的信号屏蔽字会被保存在 oldset 指向的位置
+pub fn sys_sigprocmask(
+    how: usize,
+    set: usize,
+    old_set: usize,
+    sigsetsize: usize,
+) -> SysResult<usize> {
+    info!("[sys_sigprocmask] start");
+    let task = current_task().unwrap();
+    if old_set != 0 {
+        let mut old_set = old_set as *mut SigMask;
+        if old_set.is_null() {
+            info!("[sys_sigprocmask] old_set is null");
+            return Err(Errno::EFAULT);
+        }
+        unsafe{ core::ptr::write(old_set, *task.get_blocked()) };
+    }
+
+    if set != 0 {
+        let set = set as *mut SigMask;
+        if set.is_null() {
+            info!("[sys_sigprocmask] set is null");
+            return Err(Errno::EFAULT);
+        }
+        let mut set = unsafe { core::ptr::read(set) };
+        info!("[sys_sigprocmask] taskid = {} ,set = {:#x}, set = {:?}, how = {}", task.get_pid(), set, set, how);
+        set.remove(SigMask::SIGKILL | SigMask::SIGCONT);
+        match how {
+            SIGBLOCK   =>  task.get_blocked_mut().insert(set),
+            SIGUNBLOCK =>  task.get_blocked_mut().remove(set),
+            SIGSETMASK => *task.get_blocked_mut() = set,
+            _ => return Err(Errno::EINVAL),
+        }
+    }
+    Ok(0)
+}
+
+/// examine and change a signal action
+/// The sigaction() system call is used to change the action taken by
+/// a process on receipt of a specific signal.  (See signal(7) for an
+/// overview of signals.)
+/// 
+/// signum specifies the signal and can be any valid signal except
+/// SIGKILL and SIGSTOP.
+/// If act is non-NULL, the new action for signal signum is installed
+/// from act.  If oldact is non-NULL, the previous action is saved in
+/// oldact.
+pub fn sys_sigaction(
+    signum: usize,
+    act: usize,
+    old_act: usize,
+) -> SysResult<usize> {
+    info!("[sys_sigaction] start signum: {signum}, act:{act}, old_act: {old_act}");
+    if signum > MAX_SIGNUM || signum == 9 || signum == 19 {
+        return Err(Errno::EINVAL);
+    }
+    let task = current_task().unwrap();
+    if old_act != 0 {
+        let old_act = old_act as *mut SigAction;
+        let cur_act = &task.handler.lock().actions[signum-1].sa as *const SigAction;
+        unsafe { old_act.copy_from(cur_act, 1) };
+    }
+    if act != 0 {
+        let mut new_act = unsafe { *(act as *const SigAction) };
+        let signo = SigNom::from(signum);
+        new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
+        info!("[sys_sigaction] taskid = {}, sa_handler = {:#x}", task.get_pid(), new_act.sa_handler);
+        match new_act.sa_handler {
+            SIG_DFL => {
+                let new_kaction = KSigAction::new(signo);
+                task.handler.lock().set_action(signum, new_kaction);
+            },
+            SIG_IGN => {
+                let new_act = SigAction { 
+                    sa_handler: SIG_IGN, 
+                    sa_flags: new_act.sa_flags, 
+                    sa_restorer: new_act.sa_restorer, 
+                    sa_mask: new_act.sa_mask 
+                };
+                let new_kaction = KSigAction {
+                    sa: new_act,
+                    sa_type: SigHandlerType::IGNORE
+                };
+                task.handler.lock().set_action(signum, new_kaction);
+            },
+            handler => {
+                let new_act = SigAction {
+                    sa_handler: handler,
+                    sa_flags: new_act.sa_flags,
+                    sa_restorer: new_act.sa_restorer,
+                    sa_mask: new_act.sa_mask
+                };
+                // info!("[sys_sigaction] new act = {:?}", new_act);
+                let new_kaction = KSigAction {
+                    sa: new_act,
+                    sa_type: SigHandlerType::Customized { handler }
+                };
+                task.handler.lock().set_action(signum, new_kaction);
+            }
+        }
+    }
+
+    Ok(0)
+}
+
+pub fn sys_gettid() -> SysResult<usize> {
+    info!("sys_gettid");
+    let task = current_task().unwrap();
+    let pid = task.get_pid();
+    Ok(pid)
+}
+
+pub fn sys_geteuid() -> SysResult<usize> {
+    Ok(0)
+}
+
+pub fn sys_getegid() -> SysResult<usize> {
+    Ok(0)
+}
+
+pub fn sys_sync() -> SysResult<usize> {
+    Ok(0)
+}
+
+/// send messages to the system logger
+/// 
+pub fn sys_log(cmd: i32, buf: usize, len: usize) -> SysResult<usize> {
+    info!("[sys_syslog] start");
+    let task = current_task().unwrap();
+    let cmd = SyslogCmd::from(cmd);
+    let res = match cmd {
+        SyslogCmd::LOG_READ | SyslogCmd::LOG_READ_ALL | SyslogCmd::LOG_READ_CLEAR => {
+            let copylen = len.min(LOGINFO.len());
+            let buf = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, copylen) };
+            let info = LOGINFO.as_bytes();
+            buf.copy_from_slice(info);
+            Ok(copylen)
+        }
+        _ => Ok(0),
+    };
+    
+    res
+}
+
+/// send signal to a process
+pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
+    info!("[sys_kill] start, to kill pid = {}, signum = {}", pid, signum);
+    if signum == 0 { return Ok(0); }
+    if signum > MAX_SIGNUM { return Err(Errno::EINVAL); }
+
+    #[derive(Debug)]
+    enum Target {
+        // pid>0，发送给特定进程
+        Specify(usize),
+        // pid=0，发送给当前进程组所有进程
+        CurrentGroup,
+        // pid=-1，发送给所有进程（有权限情况下），除了pid=1的进程
+        AllProcessExceptInit,
+        // pid<-1, 发送给进程组号为-pid的进程组的所有进程
+        ProcessGroup(usize),
+    }
+
+    let signum = SigNom::from(signum);
+    let target = match pid {
+        p if p > 0 => Target::Specify(p as usize),
+        p if p == 0 => Target::CurrentGroup,
+        p if p == -1 => Target::AllProcessExceptInit,
+        p if p < -1 => Target::ProcessGroup((-p) as usize),
+        _ => unimplemented!()
+    };
+
+    match target {
+        Target::Specify(p) => {
+            let cur_task = current_task().unwrap();
+            // if cur_task.get_pid() == 4 && p == 10 { return Ok(0); } // TODO(YJJ):这里是为了通过kill测试，好像是测试用例有问题?
+            let recv_task = get_task_by_pid(p).ok_or(Errno::ESRCH)?;
+            if recv_task.is_leader() && signum != SigNom::NOSIG {
+                let sender_pid = cur_task.get_pid();
+                let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
+                recv_task.proc_recv_siginfo(siginfo);
+                return Ok(0);
+            }
+            return Err(Errno::ESRCH);
+        }
+        Target::CurrentGroup => {
+            let cur_task = current_task().unwrap();
+            // 获取当前进程组id
+            let pgid = cur_task.get_pgid();
+            let sender_pid = cur_task.get_pid();
+            let target_group = get_target_proc_group(pgid);
+            let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
+            for target_pid in target_group.into_iter().filter(|pid| *pid != sender_pid) {
+                let recv_task = get_task_by_pid(target_pid).ok_or(Errno::ESRCH)?;
+                recv_task.proc_recv_siginfo(siginfo);
+            }
+            return Ok(0);
+        }
+        Target::AllProcessExceptInit => {
+            let cur_task = current_task().unwrap();
+            let sender_pid = cur_task.get_pgid();
+            let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
+            let manager = MANAGER.task_manager.lock();
+            for (pid, weak_task) in manager.0.iter().filter(|&(pid, _)| *pid != INITPROC_PID) {
+                let task = weak_task.upgrade().unwrap();
+                if task.is_leader() {
+                    task.proc_recv_siginfo(siginfo);
+                }
+            }
+            return Ok(0);
+        }
+        Target::ProcessGroup(p) => {
+            let target_group = get_target_proc_group(p);
+            let cur_task = current_task().unwrap();
+            let sender_pid = cur_task.get_pgid();
+            let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
+            for target_pid in target_group {
+                let recv_task = get_task_by_pid(target_pid).ok_or(Errno::ESRCH)?;
+                recv_task.proc_recv_siginfo(siginfo);
+            }
+            return Ok(0);
+        }
+        _ => { unimplemented!() }
+    }
+    
+    Ok(0)
+}
+
+
+/// 设置或获取另一个进程的rlimit资源限制（如文件句柄数，内存等）
+/// pid: target process id, 如果pid为0，那么就使用当前进程
+/// resource: 指定的资源类型
+/// new_limit: 指向新的资源限制结构体；若为null，仅获取当前限制
+/// old_limit: 用于返回旧的资源限制结构体；若为null，不返回旧值
+pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usize) -> SysResult<usize> {
+    info!("[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}", pid, resource, new_limit, old_limit);
+    let task = match pid {
+        0 => current_task().unwrap(),
+        p if p > 0 => get_task_by_pid(p).ok_or(Errno::ESRCH)?,
+        _ => return Err(Errno::EINVAL),
+    };
+
+    let rs = RlimResource::try_from_primitive(resource).map_err(|_| Errno::EINVAL)?;
+    // 获取当前限制
+    if old_limit != 0 {
+        let old_ptr = unsafe{ old_limit as *mut RLimit64 };
+        let now_limit = match rs {
+            RlimResource::Nofile => task.fd_table.lock().rlimit,
+            RlimResource::Stack => RLimit64::new(USER_STACK_SIZE, USER_STACK_SIZE),
+            RlimResource::Data => RLimit64::new(KERNEL_HEAP_SIZE, KERNEL_HEAP_SIZE),
+            _ => RLimit64::new_bare(),
+        };
+        unsafe {
+            core::ptr::write(old_ptr, now_limit);
+        }
+    }
+
+    // 修改当前限制
+    if new_limit != 0 {
+        let new_limit = unsafe{ *(new_limit as *const RLimit64) };
+        match rs {
+            RlimResource::Nofile => {
+                task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;
+                task.fd_table.lock().rlimit.rlim_max = new_limit.rlim_max;
+            }
+            _ => unimplemented!()
+        }
+    }
+
+    Ok(0)
+}
+
+/// send a signal to a thread
+/// tgkill() sends the signal sig to the thread with the thread ID tid
+/// in the thread group tgid.
+pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SysResult<usize> {
+    info!("[sys_tgkill] start, tgid = {}, tid = {}", tgid, tid);
+    if sig < 0 || sig as usize > MAX_SIGNUM {
+        return Err(Errno::EINVAL);
+    }
+    let signom = SigNom::from(sig as usize);
+    // 如果task是leader，那么tgid = pid；我们的内核中只存在process，没有线程
+    let task = get_task_by_pid(tgid as usize).ok_or(Errno::ESRCH)?;
+    let target = task.thread_group
+                    .lock()
+                    .get(tid)
+                    .ok_or(Errno::ESRCH)?
+                    .upgrade()
+                    .unwrap();
+    let siginfo = SigInfo::new(
+        signom, 
+        SigCode::TKILL, 
+        SigErr::empty(), 
+        SigDetails::Kill { pid: task.get_pid(), uid: 0 }
+    );
+    target.thread_recv_siginfo(siginfo);
+    
+    Ok(0)
+}
+
+pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
+    info!("[sys_getpgid] start, pid = {}", pid);
+    let task = match pid {
+        0 => current_task().unwrap(),
+        _ => {
+            get_task_by_pid(pid).ok_or(Errno::ESRCH)?
+        }
+    };
+
+    Ok(task.get_pgid())
+}
+
+/// high-resolution sleep with specifiable clock
+/// clock_nanosleep() suspends the execution of the calling thread
+/// until either at least the time specified by t has elapsed, or a
+/// signal is delivered that causes a signal handler to be called or
+/// that terminates the process.
+pub async fn sys_clock_nanosleep(clockid: usize, flags: usize, t: usize, remain: usize) -> SysResult<usize> {
+    info!("[sys_clock_nanosleep] start, clockid = {}, flags = {}", clockid, flags);
+    match clockid {
+        CLOCK_REALTIME | CLOCK_MONOTONIC => {
+            let cur = time_duration();
+            let task = current_task().unwrap();
+            let deadline = Duration::from(unsafe { *(t as *const TimeSpec) });
+            if flags == TIMER_ABSTIME {
+                if deadline.le(&cur) {
+                    return Ok(0);
+                }
+                sleep_for((deadline - cur).into()).await;
+                return Ok(0);
+            }
+
+            sleep_for(deadline.into()).await;
+            let userremain = remain as *mut TimeSpec;
+            if !userremain.is_null() {
+                unsafe { *userremain = TimeSpec::from(Duration::ZERO) };
+            }
+            return Ok(0);
+        }
+        _ => unimplemented!()
+    }
+    Ok(0)
+}
+
+
+pub async fn sys_sigtimedwait(set: usize, info: usize, timeout: usize) -> SysResult<usize> {
+    info!("[sys_sigtimedwait] start");
+    Ok(0)
+    // let task = current_task().unwrap();
+    // let mut set = unsafe{ *(set as *mut SigMask) };
+    // set.remove(SigMask::SIGKILL | SigMask::SIGCONT);
+
+    // let may = task.sig_pending.lock().get_expected_one(set);
+    // match may {
+    //     Some(siginfo) => return Ok(siginfo.signo as usize),
+    //     None => task.sig_pending.lock().need_wake |= set | SigMask::SIGKILL | SigMask::SIGCONT,   
+    // }
+
+    // let tmp = timeout as *mut TimeSpec;
+    // if tmp.is_null() {
+    //     suspend_now().await;
+    // }
+    // let timeout = unsafe { *(timeout as *mut TimeSpec) };
+    // if !timeout.check_valid() {
+    //     return Err(Errno::EINVAL);
+    // }
+    // sleep_for(timeout).await;
+
+    // let mut sig_pending = task.sig_pending.lock();
+    // match sig_pending.take_expected_one(set) {
+    //     Some(siginfo) => {
+    //         let userinfo = info as *mut SigInfo;
+    //         if !userinfo.is_null() {
+    //             unsafe { *userinfo = siginfo };
+    //         }
+
+    //         return Ok(siginfo.signo as usize)
+    //     }
+    //     None => return Err(Errno::EAGAIN),
+    // }
+    // Ok(0)
+}
+
+/// send a signal to a thread
+/// tkill() is an obsolete predecessor to tgkill().  It allows only
+/// the target thread ID to be specified, which may result in the
+/// wrong thread being signaled if a thread terminates and its thread
+/// ID is recycled.  Avoid using this system call.
+pub fn sys_tkill(tid: usize, sig: i32) -> SysResult<usize> {
+    info!("[sys_tkill] start, tid = {}, sig = {}", tid, sig);
+    if sig < 0 || sig as usize > MAX_SIGNUM {
+        return Err(Errno::EINVAL);
+    }
+    let signom = SigNom::from(sig as usize);
+    let target = get_task_by_pid(tid).ok_or(Errno::ESRCH)?;
+    let task = current_task().unwrap();
+    let sender_pid = task.get_pid();
+    let siginfo = SigInfo::new(
+        signom,
+        SigCode::TKILL,
+        SigErr::empty(),
+        SigDetails::Kill { pid: sender_pid, uid: 0 }
+    );
+    target.thread_recv_siginfo(siginfo);
     Ok(0)
 }

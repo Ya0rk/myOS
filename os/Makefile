@@ -8,6 +8,7 @@ ifeq ($(ARCH), loongarch64)
 	TARGET := loongarch64-unknown-none
 endif
 MODE := release
+# IMG := sdcard
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
@@ -15,9 +16,10 @@ APPS := ../user/src/bin/*
 
 # fs image
 FS = lwext4_rust
-# FS_IMG := ../$(FS)/ext4.img
-FS_IMG := ../sdcard-la.img
 
+
+
+# FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 1
 
@@ -60,9 +62,13 @@ ifeq ($(ARCH), riscv64)
 	QEMU_ARGS += -nographic 
 	QEMU_ARGS += -bios $(BOOTLOADER) 
 	QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
-	QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+	QEMU_ARGS += -drive file=$(FS_IMG_BAK),if=none,format=raw,id=x0
 	QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 	QEMU_ARGS += -smp $(CPUS)
+
+
+	FS_IMG := ../sdcard-rv-test.img
+	FS_IMG_BAK = ../sdcard-rv-test-copy.img
 endif
 ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS =  -machine virt 
@@ -70,9 +76,13 @@ ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS += -D ../qemu.log -d mmu,page,in_asm,int,pcall,cpu_reset,guest_errors,exec,cpu
 	QEMU_ARGS += -nographic 
 	QEMU_ARGS += -kernel $(KERNEL_ELF)
-	QEMU_ARGS += -drive file=$(FS_IMG),if=none,format=raw,id=x0
+	QEMU_ARGS += -drive file=$(FS_IMG_BAK),if=none,format=raw,id=x0
 	QEMU_ARGS += -device virtio-blk-pci,drive=x0,id=virtio-disk0 
 	QEMU_ARGS += -smp $(CPUS)
+
+	
+	FS_IMG := ../sdcard-la.img
+	FS_IMG_BAK = ../sdcard-la-copy.img
 endif
 
 # 加入另一个块设备
@@ -94,17 +104,13 @@ PHONY += initproc
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
-	cargo install cargo-binutils
-	rustup component add rust-src
-	rustup component add llvm-tools-preview
+	# cargo install cargo-binutils
+	# rustup component add rust-src
+	# rustup component add llvm-tools-preview
 PHONY += env
 
 $(KERNEL_BIN): kernel
 	$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $@
-
-copy_to_fs: 
-	cd ../$(FS) && sh create_img.sh 
-PHONY += copy_to_fs
 
 $(APPS):
 
@@ -112,13 +118,12 @@ kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
 	cp ./linker/linker-$(BOARD)-$(ARCH).ld ./src/linker.ld
-	cargo build $(MODE_ARG)
+	cargo build $(MODE_ARG) -j 
 	rm src/linker.ld
 PHONY += kernel
 
 clean:
 	cargo clean
-	rm -f $(FS_IMG)
 	cd ../user && make clean
 PHONY += clean
 
@@ -136,12 +141,19 @@ run: run-inner
 PHONY += run
 
 qemu-version-check:
-	sh scripts/qemu-ver-check.sh $(QEMU_NAME)
+	# sh scripts/qemu-ver-check.sh $(QEMU_NAME)
 PHONY += qemu-version-check
 
-run-inner: qemu-version-check build
+# 复制镜像，然后操作复制后的copy镜像，防止镜像被破坏
+copy_img:
+	@echo "Copying image $(FS_IMG_BAK)"
+	cp $(FS_IMG) $(FS_IMG_BAK)
+PHONY += copy_img
+
+run-inner: qemu-version-check copy_img build
 	echo "Running QEMU with arguments: $(QEMU_ARGS)"
 	$(QEMU_NAME) $(QEMU_ARGS)
+	rm $(FS_IMG_BAK)
 PHONY += run-inner
 
 # debug: qemu-version-check build
@@ -215,12 +227,10 @@ LAgdb:
 PHONY += LAgdb
 
 # TEMP - 从官方sdcard镜像启动
-rv-tb-build:
-	env $(KERNEL_BIN) initproc
+rv-tb-build: env $(KERNEL_BIN) initproc 
 PHONY += rv-tb-build
 
-rv-tb-run:
-	qemu-version-check build
+rv-tb-run: rv-tb-build
 	$(QEMU_NAME) $(QEMU_ARGS)
 PHONY += rv-tb-run
 

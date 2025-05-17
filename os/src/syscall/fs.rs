@@ -1,19 +1,25 @@
 use core::cell::SyncUnsafeCell;
+use core::cmp::max;
+use core::error;
 use core::ops::Add;
 use alloc::boxed::Box;
-use alloc::string::String;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::vec;
-use log::info;
+use log::{debug, info};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
-use crate::fs::{ join_path_2_absolute, mkdir, open, open_file, Dirent, FileClass, FileTrait, Kstat, MountFlags, OpenFlags, Path, Pipe, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
+use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::mm::user_ptr::{user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
-use crate::syscall::ffi::{FcntlArgFlags, IoVec};
+use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
+use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
+use crate::syscall::ffi::{IoVec, StatFs};
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
-use crate::utils::{Errno, SysResult};
-use super::ffi::{FaccessatMode, FcntlFlags, AT_REMOVEDIR};
+use crate::utils::{backtrace, Errno, SysResult};
+use super::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, AT_REMOVEDIR};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
@@ -28,7 +34,8 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
-            Ok(file.write(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
+            let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, len) };
+            Ok(file.write(buf).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
     }
@@ -48,7 +55,8 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
-            Ok(file.read(UserBuffer::new(translated_byte_buffer(token, buf as *const u8, len))).await? as usize)
+            let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
+            Ok(file.read(buf).await? as usize)
         }
         _ => Err(Errno::EBADCALL),
     }
@@ -65,6 +73,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 ///```
 /// len: 数组的长度
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    // info!("[sys_readv] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -84,8 +93,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
                     continue;
                 }
                 let base = (unsafe { *iov_st }).iov_base;
-                let one = translated_byte_buffer(token, base as *const u8, len);
-                let buffer = UserBuffer::new(one);
+                let buffer = unsafe {core::slice::from_raw_parts_mut(base as *mut u8, len)};
                 let read_len = file.read(buffer).await?;
                 res += read_len;
             }
@@ -99,6 +107,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
 /// system call writes iovcnt buffers from the file associated
 /// with the file descriptor fd into the buffers described by iov
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
+    // info!("[sys_writev] fd = {}", fd);
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -108,21 +117,23 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
     match task.get_file_by_fd(fd) {
         Some(file) => {
             if !file.writable() {
+                info!("no writeable");
                 return Err(Errno::EPERM);
             }
             // 将iov中的结构体一个个取出，转化为UserBuffer
             for i in 0..iovcnt {
-                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
-                let len = (unsafe { *iov_st }).iov_len;
+                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *const IoVec;
+                let len = (unsafe { &*iov_st }).iov_len;
                 if len == 0 {
                     continue;
                 }
-                let base = (unsafe { *iov_st }).iov_base;
-                let one = translated_byte_buffer(token, base as *const u8, len);
-                let buffer = UserBuffer::new(one);
+                let base = (unsafe { &*iov_st }).iov_base;
+                let buffer = unsafe{core::slice::from_raw_parts(base as *const u8, len)};
+                // info!("aaaaaaaaaaaa");
                 let write_len = file.write(buffer).await?;
                 res += write_len;
             }
+            // info!("nnnnnnnnnnnn");
             Ok(res)
         }
         _ => Err(Errno::EBADCALL),
@@ -150,7 +161,9 @@ pub fn sys_fstatat(
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, pathname);
+    debug!("[sys_fsstatat] pathname {},", path);
     let cwd = task.get_current_path();
+    debug!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
 
     // 计算目标路径
     let target_path = if path.starts_with("/") {
@@ -180,10 +193,17 @@ pub fn sys_fstatat(
     match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
         Some(FileClass::File(file)) => {
             file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             buffer.write(tempstat.as_bytes());
             return Ok(0);
         }
-        _ => return Err(Errno::EBADCALL),
+        Some(FileClass::Abs(file)) => {
+            file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
+            buffer.write(tempstat.as_bytes());
+            return Ok(0);
+        }
+        _ => return Err(Errno::ENOENT)
     }
 }
 
@@ -196,6 +216,7 @@ pub fn sys_fstatat(
 /// 
 /// 返回值：成功返回0，失败返回-1；
 pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
+    info!("[sys_fstat] start");
     let task = current_task().unwrap();
     // let inner = task.inner_lock();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
@@ -219,7 +240,7 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
         Some(file) => {
             file.fstat(&mut stat)?;
             buffer.write(stat.as_bytes());
-            info!("fstat finished");
+            info!("fstat finished fd: {}, stat: {:?}", fd, stat);
             return Ok(0);
         }
         _ => {
@@ -233,13 +254,13 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
 /// 
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysResult<usize> {
-    info!("sys_openat start");
+    info!("[sys_openat] start");
 
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = translated_str(token, path);
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
-    info!("[sys_openat] path = {}", path);
+    info!("[sys_openat] path = {}, flags = {:?}", path, flags);
 
     // 计算目标路径
     let target_path = if path.starts_with("/") {
@@ -259,17 +280,22 @@ pub fn sys_openat(fd: isize, path: *const u8, flags: u32, _mode: usize) -> SysRe
         info!("[sys_openat] other cwd = {}", other_cwd);
         join_path_2_absolute(other_cwd, path)
     };
-
-    // 检查路径是否有效并打开文件
     let cwd = task.get_current_path();
-    if let Some(inode) = open(cwd.as_str(), target_path.as_str(), flags) {
-        let fd = task.alloc_fd(FdInfo::new(inode.file()?, flags));
-        info!("[sys_openat] alloc fd finished, new fd = {}", fd);
+    // 检查路径是否有效并打开文件
+    if let Some(fileclass) = open(cwd.as_str() , target_path.as_str(), flags) {
+        let fd = match fileclass {
+            FileClass::File(file) => {
+                task.alloc_fd(FdInfo::new(file, flags))
+            },
+            FileClass::Abs(file) => {
+                task.alloc_fd(FdInfo::new(file, flags))
+            },
+            _ => { unreachable!() }
+        };
+        info!("[sys_openat] taskid = {}, alloc fd finished, new fd = {}",task.get_pid(), fd);
         if fd > RLIMIT_NOFILE {
             return Err(Errno::EMFILE);
         } else {
-            // info!("[sys_openat] task pid = {}", task.get_pid());
-            // info!("[sys_openat] new fd = {}", fd);
             return Ok(fd);
         }
     } else {
@@ -302,11 +328,11 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
     let (read_fd, write_fd) = {
         let (read, write) = Pipe::new();
         (
-            task.alloc_fd(FdInfo::new(read, flags)),
-            task.alloc_fd(FdInfo::new(write, flags)),
+            task.alloc_fd(FdInfo::new(read.clone(),  OpenFlags::O_RDONLY)),
+            task.alloc_fd(FdInfo::new(write.clone(), OpenFlags::O_WRONLY)),
         )
     };
-    info!("alloc read_fd = {}, write_fd = {}", read_fd, write_fd);
+    info!("taskid = {}, alloc read_fd = {}, write_fd = {}", task.get_pid(), read_fd, write_fd);
 
     let token = task.get_user_token();
     *translated_refmut(token, pipefd) = read_fd as u32;
@@ -335,35 +361,27 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 /// len：buf的大小。
 /// 
 /// 返回值：成功执行，返回读取的字节数。当到目录结尾，则返回0。失败，则返回-1。
-pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize> {
+pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
+    info!("[sys_getdents64] start fd: {}, len: {}", fd, len);
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+        log::error!("[sys_getdents64] fd {} invalid", fd);
         return Err(Errno::EBADF);
     }
 
+    let buf = buf as *mut u8;
     if buf.is_null() {
+        log::error!("[sys_getdents64] buf is null");
         return Err(Errno::EFAULT);
     }
     // TODO: 有待修改
 
     let token = task.get_user_token();
-    let mut buffer = UserBuffer::new(translated_byte_buffer(token, buf, len));
+    // let mut buffer = UserBuffer::new(translated_byte_buffer(token, buf, len));
     let file = task.get_file_by_fd(fd).unwrap();
-    // let dentrys = match file.read_dentry() {
-    //     Some(dir_entrys) => dir_entrys,
-    //     _ => return Err(Errno::EINVAL),
-    // };
-
-    // let mut res = 0;
-    // let one_den_len = size_of::<Dirent>();
-    // for den in dentrys {
-    //     if res + one_den_len > len {
-    //         break;
-    //     }
-    //     buffer.write_at(res, den.as_bytes());
-    //     res += one_den_len;
-    // }
-    let res = file.read_dents(buffer, len);
+    // let buffer = user_slice_mut((buf as usize).into(), len)?.unwrap();
+    let res = file.read_dents(buf as usize, len);
+    info!("[sys_getdents64] return = {}", res);
     Ok(res)
 }
 
@@ -371,6 +389,7 @@ pub fn sys_getdents64(fd: usize, buf: *const u8, len: usize) -> SysResult<usize>
 ///
 /// Success: 返回当前工作目录的长度;  Fail: 返回-1
 pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
+    info!("[sys_getcwd] start");
     if buf.is_null() || size == 0 {
         return Err(Errno::EINVAL);
     }
@@ -380,6 +399,7 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
     let token = task.get_user_token();
     let cwd: String = task.get_current_path();
     let length: usize = cwd.len();
+    info!("[sys_getcwd] cwd is {}", cwd);
 
     if length > PATH_MAX {
         return Err(Errno::ENAMETOOLONG);
@@ -403,15 +423,13 @@ pub fn sys_getcwd(buf: *mut u8, size: usize) -> SysResult<usize> {
 /// Success: 返回新的文件描述符; Fail: 返回-1
 pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
+    info!("[sys_dup] pid = {}, oldfd = {}", task.get_pid(), oldfd);
     // let mut inner = task.inner_lock();
-    if oldfd >= task.fd_table_len() {
-        return Err(Errno::EBADF);
-    }
 
     let old_temp_fd = task.get_fd(oldfd);
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.set_close_on_exec(true);
-    let new_fd = task.alloc_fd(new_temp_fd);
+    let new_temp_fd = old_temp_fd.off_Ocloexec(true);
+    let new_fd = task.dup(new_temp_fd)?;
     // drop(inner);
     if new_fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -425,6 +443,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
 /// 
 /// Success: 返回新的文件描述符; Fail: 返回-1
 pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
+    info!("[sys_dup3] start");
     if oldfd == newfd {
         return Err(Errno::EINVAL);
     }
@@ -433,25 +452,24 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     let flag = OpenFlags::from_bits(flags as i32).unwrap();
     let cloexec = {
         match flag {
-            flags if flags.is_empty() => Some(false),
             OpenFlags::O_CLOEXEC => Some(true),
-            _ => None,
+            _ => Some(false),
         }
     }.ok_or(Errno::EINVAL)?;
 
     let task = current_task().unwrap();
-    // let mut inner = task.inner_lock();
+    // info!("[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = {}", task.get_pid());
     
-    if newfd > RLIMIT_NOFILE ||
-        oldfd >= task.fd_table_len() ||
-        task.fd_is_none(oldfd) 
+    if newfd > RLIMIT_NOFILE
     {
         return Err(Errno::EBADF);
     }
 
     let old_temp_fd = task.get_fd(oldfd);
+    if old_temp_fd.is_none() { return Err(Errno::EBADF); }
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.set_close_on_exec(cloexec);
+    let new_temp_fd = old_temp_fd.clone().off_Ocloexec(!cloexec);
+    // info!("[sys_dup3] old file name = {}, oldfd = {}", old_temp_fd.clone().file.unwrap().get_name()?, oldfd);
     // 将newfd 放到指定位置
     task.put_fd_in(new_temp_fd, newfd);
 
@@ -462,9 +480,8 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usize> {
-
     // Err(Errno::EBADCALL)
-    info!("sys_mkdirat start");
+    info!("[sys_mkdirat] start");
 
     let task = current_task().unwrap();
     let token = current_user_token();
@@ -491,20 +508,23 @@ pub fn sys_mkdirat(dirfd: isize, path: *const u8, mode: usize) -> SysResult<usiz
 
     // drop(inner);
 
-    // 检查路径是否有效并创建目录
-    let result = if let Some(_) = mkdir(target_path.as_str(), mode) {
-        Ok(0) // 成功
-    } else {
-        Err(Errno::EBADCALL) // 失败
-    };
+    // TODO
+    // 返回错误码有问题,应当返回EEXIST:目录存在;EACCES:权限不足;EROFS:文件系统只读;
+    // ENOSPC:没有足够的空间;ENAMETOOLONG:路径过长;ENOTDIR:不是目录;
+    // ELOOP:符号链接过多;ENOSPC:没有足够的空间;EFAULT:路径错误;等
 
-    result
+    // 检查路径是否有效并创建目录
+    match mkdir(target_path.as_str(), mode) {
+        Ok(_) => Ok(0), // 成功
+        _ => Err(Errno::EBADCALL)
+    }
 }
 
 /// 卸载文件系统：https://man7.org/linux/man-pages/man2/umount.2.html
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_umount2(target: *const u8, flags: u32) -> SysResult<usize> {
+    info!("[sys_umount2] start");
     let ufg = UmountFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
     if ufg.contains(UmountFlags::MNT_EXPIRE)
         && (ufg.contains(UmountFlags::MNT_DETACH) || ufg.contains(UmountFlags::MNT_FORCE))
@@ -524,6 +544,7 @@ pub fn sys_umount2(target: *const u8, flags: u32) -> SysResult<usize> {
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags: u32, data: *const u8) -> SysResult<usize> {
+    info!("[sys_mount] start");
     let token = current_user_token();
     let source = translated_str(token, source);
     let target = translated_str(token, target);
@@ -556,7 +577,7 @@ pub fn sys_mount(source: *const u8, target: *const u8, fstype: *const u8, flags:
 /// 
 /// Success: 返回0； 失败： 返回-1；
 pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
-    // info!("sys_chdir start");
+    info!("[sys_chdir] start");
 
     let token = current_user_token();
     let task = current_task().unwrap();
@@ -566,16 +587,15 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
     let current_path = task.get_current_path();
 
     // 计算新路径
-    let new_path = if path.starts_with("/") {
+    let target_path = if path.starts_with("/") {
         path
     } else {
         join_path_2_absolute(current_path, path)
     };
 
     // 检查路径是否有效
-    let cwd = task.get_current_path();
-    let result = if let Some(_) = open(&cwd, new_path.as_str(), OpenFlags::O_RDONLY) {
-        task.set_current_path(new_path); // 更新当前路径
+    let result = if chdir(&target_path) {
+        task.set_current_path(target_path); // 更新当前路径
         Ok(0) // 成功
     } else {
         Err(Errno::EBADCALL) // 失败
@@ -586,14 +606,17 @@ pub fn sys_chdir(path: *const u8) -> SysResult<usize> {
 
 
 pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> {
+    // info!("[sys_unlinkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = translated_str(token, path);
+    // info!("[sys_unlink] start path = {}", path);
     let is_relative = !path.starts_with("/");
     let base = task.get_current_path();
-
+    info!("[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}", fd, base, path, flags);
     if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
         let file = file_class.file()?;
+        // info!("[unlink] file path = {}", file.path);
         let is_dir = file.is_dir();
         if is_dir && flags != AT_REMOVEDIR {
             return Err(Errno::EISDIR);
@@ -604,17 +627,104 @@ pub fn sys_unlinkat(fd: isize, path: *const u8, flags: u32) -> SysResult<usize> 
         let child_abs = join_path_2_absolute(base, path);
         file.get_inode().unlink(&child_abs);
     }
+    info!("[sys_unlink] finished");
     
     Ok(0)
 }
 
-/// make a new name for a file: a hard link
-pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
+pub fn sys_renameat2(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let old_path = translated_str(token, oldpath);
     let new_path = translated_str(token, newpath);
     let cwd = task.get_current_path();
+    info!("[sys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: {} ", &olddirfd, &old_path, &newdirfd, &new_path);
+
+    let old_path = if old_path.starts_with("/") {
+        old_path
+    } else {
+        if olddirfd == AT_FDCWD {
+            join_path_2_absolute(cwd.clone(), old_path)
+        } else {
+            match task.get_file_by_fd(olddirfd as usize) {
+                Some(file) => {
+                    join_path_2_absolute(file.get_name()?, old_path)
+                }
+                None => {
+                    return Err(Errno::EBADF);
+                }
+            }
+        }
+    };
+
+    let new_path = if new_path.starts_with("/") {
+        new_path
+    } else {
+        if newdirfd == AT_FDCWD {
+            join_path_2_absolute(cwd.clone(), new_path)
+        } else {
+            match task.get_file_by_fd(newdirfd as usize) {
+                Some(file) => {
+                    join_path_2_absolute(file.get_name()?, new_path)
+                }
+                None => {
+                    return Err(Errno::EBADF);
+                }
+            }
+        }
+    };
+    Ok(0)
+}
+
+/// make a new name for a file: a hard link
+pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath: *const u8, flags: u32) -> SysResult<usize> {
+    // info!("[sys_linkat] start");
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let old_path = translated_str(token, oldpath);
+    let new_path = translated_str(token, newpath);
+    let cwd = task.get_current_path();
+    // info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: {}", &olddirfd, &old_path, &newdirfd, &new_path);
+
+    let old_path = if old_path.starts_with("/") {
+        old_path
+    } else {
+        if olddirfd == AT_FDCWD {
+            join_path_2_absolute(cwd.clone(), old_path)
+        } else {
+            match task.get_file_by_fd(olddirfd as usize) {
+                Some(file) => {
+                    join_path_2_absolute(file.get_name()?, old_path)
+                }
+                None => {
+                    return Err(Errno::EBADF);
+                }
+            }
+        }
+    };
+
+    if let Some(inode) = Dentry::get_inode_from_path(&old_path) {
+        if inode.node_type() == InodeType::Dir {
+            return Err(Errno::EISDIR);
+        }
+    }
+
+    let new_path = if old_path.starts_with("/") {
+        new_path
+    } else {
+        if newdirfd == AT_FDCWD {
+            join_path_2_absolute(cwd.clone(), old_path.clone())
+        } else {
+            match task.get_file_by_fd(newdirfd as usize) {
+                Some(file) => {
+                    join_path_2_absolute(file.get_name()?, new_path)
+                }
+                None => {
+                    return Err(Errno::EACCES);
+                }
+            }
+        }
+    };
 
     if olddirfd == AT_FDCWD {
         if let Some(file_class) = open(&cwd, &old_path, OpenFlags::O_RDWR) {
@@ -624,12 +734,6 @@ pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath:
                 return Err(Errno::EEXIST);
             }
             file.get_inode().link(&new_path);
-            let new_file = NormalFile::new(
-                file.metadata.flags.read().clone(),
-                file.parent.clone(),
-                file.metadata.inode.clone(),
-                new_path
-            );
         }
     }
     Ok(0)
@@ -637,6 +741,7 @@ pub fn sys_linkat(olddirfd: isize, oldpath: *const u8, newdirfd: isize, newpath:
 
 /// copies data between one file descriptor and another
 pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usize) -> SysResult<usize> {
+    info!("[sys_sendfile] start");
     let task = current_task().unwrap();
     let src = task.get_file_by_fd(in_fd).ok_or(Errno::EBADF)?;
     let dest = task.get_file_by_fd(out_fd).ok_or(Errno::EBADF)?;
@@ -647,13 +752,14 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
     let mut len: usize = 0;
     let mut buf = vec![0u8; count];
     let mut new_offset = offset;
+    if new_offset != 0 { panic!("not implement") };
 
     loop {
-        let read_size = src.get_inode().read_at(new_offset, &mut buf).await;
+        let read_size = src.read(&mut buf).await?;
         if read_size == 0 {
             break;
         }
-        let write_size = dest.get_inode().write_at(new_offset, &buf).await;
+        let write_size = dest.write(&buf[0..read_size]).await?;
         if read_size != write_size {
             return Err(Errno::EIO);
         }
@@ -663,13 +769,13 @@ pub async fn sys_sendfile(out_fd: usize, in_fd: usize, offset: usize, count: usi
 
     // If offset is not NULL, then sendfile() does not modify the file offset of in_fd; 
     // otherwise the file offset is adjusted to reflect the number of bytes read from in_fd.
-    if offset == 0 {
+    if offset != 0 {
         // 重新设置offset：
         let token = task.get_user_token();
         src.lseek(len as isize, SEEK_CUR).unwrap();
         *translated_refmut(token, offset as *mut usize) = new_offset;
     }
-
+    info!("[sys_sendfile] finished");
     Ok(len)
 }
 
@@ -683,14 +789,13 @@ pub fn sys_faccessat(
 ) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
-    let path = translated_str(token, pathname);
+    let mut path = translated_str(token, pathname);
+    info!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
-    let abs = if path.starts_with("/") {
-        // 绝对路径，忽略 dirfd
-        path
-    } else if dirfd == AT_FDCWD {
+    let abs = if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
         let current_path = current_task().unwrap().get_current_path();
+        // path.insert(0, '.');
         join_path_2_absolute(current_path, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
@@ -728,6 +833,7 @@ pub fn sys_faccessat(
 /// associated with the file descriptor fd to the argument offset
 /// according to the directive whence as follows
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
+    info!("[sys_lseek] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -740,6 +846,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
 /// 用于修改某个文件描述符的属性
 /// 第1个参数fd为待修改属性的文件描述符，第2个参数cmd为对应的操作命令，第3个参数为cmd的参数
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
+    info!("[sys_fcntl] start");
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
@@ -806,6 +913,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
 /// 改变文件大小
 /// 返回值：0、-1
 pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
+    info!("[sys_ftruncate64] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -817,6 +925,7 @@ pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
 
 /// 可更改现有文件的访问权限
 pub fn sys_fchmodat() -> SysResult<usize> {
+    info!("[sys_fchmodat] start");
     return Ok(0);
 }
 
@@ -828,6 +937,7 @@ pub async fn sys_pread64(
     count: usize,
     offset: usize,
 ) -> SysResult<usize> {
+    info!("[sys_pread64] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -850,6 +960,7 @@ pub async fn sys_pwrite64(
     count: usize,
     offset: usize,
 ) -> SysResult<usize> {
+    info!("[sys_pwrite64] start");
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
@@ -862,4 +973,149 @@ pub async fn sys_pwrite64(
     let buffer = translated_byte_buffer(token, buf as *const u8, count);
     let user_buffer = UserBuffer::new(buffer);
     file.pwrite(user_buffer, offset, count).await
+}
+
+/// change file timestamps with nanosecond precision
+///  With utimensat() the file is specified via the pathname given in pathname
+/// times[0] specifies the new "last access time" (atime); times[1] specifies the new "last modification time" (mtime)
+pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2], flags: i32) -> SysResult<usize> {
+    info!("[sys_utimensat] start fd: {}, path: {:#X}", dirfd, pathname);
+    let task = current_task().unwrap();
+
+    // 如果pathname不是空，target就是pathname对应文件
+    // 如果是空，那么就是dirfd对应文件
+    let inode = if pathname != 0 {
+        let cwd = task.get_current_path();
+        let mut path = translated_str(task.get_user_token(), pathname as *const u8);
+        
+        let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
+        let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).ok_or("error path");
+        let file = if let Ok(file) = file {
+            file.file()?
+        } else {
+            return Err(Errno::ENOENT);
+        };
+        file.get_inode()
+    } else {
+        let res = match dirfd {
+            AT_FDCWD => { 
+                let cwd = task.get_current_path();
+                let mut path = translated_str(task.get_user_token(), pathname as *const u8);
+                let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).ok_or("error path");
+                let file = if let Ok(file) = file {
+                    file.file()?
+                } else {
+                    return Err(Errno::ENOENT);
+                };
+                file.get_inode()
+            }
+            _ => {
+                let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
+                file.get_inode()
+            }
+        };
+        res
+    };
+    let mut new_time;
+    {new_time = inode.get_timestamp().lock().clone();}
+    info!("[sys_utimensat] new_time: \n{:?} \n{:?}",new_time.atime, new_time.mtime);
+    if !times.is_null() {
+        let user_time = unsafe { &*times };
+        // 访问时间
+        match user_time[0].tv_nsec {
+            UTIME_NOW => {
+                // sec设置为当前时间
+                new_time.atime = TimeSpec::from(*CLOCK_MANAGER.lock().get(0).unwrap() + time_duration());
+                info!("[sys_utimensat] set atime to now {:?}", new_time.atime);
+            }
+            UTIME_OMIT => {
+                // 保持不变
+                info!("[sys_utimensat] omit atime {:?}", new_time.atime);
+            }
+            _ => { 
+                new_time.atime = user_time[0]; 
+                info!("[sys_utimensat] set atime to {:?}", new_time.atime);
+            }
+        }
+        // 修改时间
+        match user_time[1].tv_nsec {
+            UTIME_NOW => {
+                // sec设置为当前时间
+                new_time.mtime = TimeSpec::from(*CLOCK_MANAGER.lock().get(0).unwrap() + time_duration());
+                info!("[sys_utimensat] set mtime to now {:?}", new_time.mtime);
+            } 
+            UTIME_OMIT => { // 保持不变
+                // 保持不变
+                info!("[sys_utimensat] omit mtime {:?}", new_time.mtime);
+            }
+            _ => { 
+                new_time.mtime = user_time[1]; 
+                info!("[sys_utimensat] set mtime to {:?}", new_time.mtime);
+            }
+        }
+    }
+
+    inode.set_timestamps(new_time);
+
+    Ok(0)
+}
+
+/// read value of a symbolic link
+/// 一个符号链接当中获得真实的路径地址
+/// 注意到当前没有真正地实现,返回值全为0,代表不支持该功能
+pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let pathname = translated_str(token, pathname as *const u8);
+    info!("[sys_readlinkat] start, dirfd: {}, pathname: {}.", dirfd, pathname);
+
+    let pathname = Path::string2path(pathname);
+    if !pathname.is_absolute() {
+        if dirfd == AT_FDCWD {
+            let cwd = task.get_current_path();
+            todo!();
+            log::error!("case which is no abs path hasn't implement");
+            return Ok(0); 
+        }
+    } else {
+        // 由于暂时没有实现软链接,所以先这么做吧,把这个文件重定向到/musl/busybox
+        if pathname.get() == "/proc/self/exe" {
+            let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
+                buf
+            } else {
+                return Err(Errno::EFAULT);
+            };
+            let path_bytes = "/musl/busybox\0".as_bytes();
+            if path_bytes.len() > bufsiz {
+                ub[0..bufsiz].copy_from_slice(&path_bytes[0..bufsiz]);
+                return Ok(bufsiz);
+            } else {
+                ub[0..path_bytes.len()].copy_from_slice(&path_bytes[0..path_bytes.len()]);
+                return Ok(path_bytes.len());
+            }
+        }
+
+        if let Some(FileClass::File(file)) = open_file(&pathname.get(), OpenFlags::O_RDONLY) {
+            let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
+                buf
+            } else {
+                return Err(Errno::EFAULT);
+            };
+            let c_path = alloc::format!("{}\0", file.path);
+            let path_bytes = c_path.as_bytes();
+            let len = max(path_bytes.len(), bufsiz);
+            ub[0..len].copy_from_slice(&path_bytes[0..len]);
+            return Ok(len);
+        }
+    }
+    Ok(0)
+}
+
+pub fn sys_statfs(path: usize, buf: usize) -> SysResult<usize> {
+    info!("[sys_statfs] start");
+    let stat = StatFs::new().to_u8();
+    let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, core::mem::size_of::<StatFs>()) };
+    buf.copy_from_slice(&stat);
+
+    Ok(0)
 }

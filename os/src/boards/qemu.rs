@@ -4,7 +4,7 @@ use crate::hal::config::KERNEL_ADDR_OFFSET;
 pub const CLOCK_FREQ: usize = 12500000;
 
 #[cfg(target_arch = "riscv64")]
-pub const MEMORY_END: usize = 0x8800_0000 + KERNEL_ADDR_OFFSET; // 将用户和内核空间放在一起，高地址为内核空间
+pub const MEMORY_END: usize = 0xc000_0000 + KERNEL_ADDR_OFFSET; // 将用户和内核空间放在一起，高地址为内核空间
 
 #[cfg(target_arch = "loongarch64")]
 pub const MEMORY_END: usize = 0xa800_0000 + KERNEL_ADDR_OFFSET; // 将用户和内核空间放在一起，高地址为内核空间

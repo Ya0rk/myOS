@@ -66,71 +66,71 @@ bitflags! {
 
     #[derive(Clone, Copy, Debug)]
     pub struct SigMask: usize {
-        const NOSIG     = 1 << 0;
-        const SIGHUP    = 1 << 1;
-        const SIGINT    = 1 << 2;
-        const SIGQUIT   = 1 << 3;
-        const SIGILL    = 1 << 4;
-        const SIGTRAP   = 1 << 5;
-        const SIGABRT   = 1 << 6;
-        const SIGBUS    = 1 << 7;
-        const SIGFPE    = 1 << 8;
-        const SIGKILL   = 1 << 9;
-        const SIGUSR1   = 1 << 10;
-        const SIGSEGV   = 1 << 11;
-        const SIGUSR2   = 1 << 12;
-        const SIGPIPE   = 1 << 13;
-        const SIGALRM   = 1 << 14;
-        const SIGTERM   = 1 << 15;
-        const SIGSTKFLT = 1 << 16;
-        const SIGCHLD   = 1 << 17;
-        const SIGCONT   = 1 << 18;
-        const SIGSTOP   = 1 << 19;
-        const SIGTSTP   = 1 << 20;
-        const SIGTTIN   = 1 << 21;
-        const SIGTTOU   = 1 << 22;
-        const SIGURG    = 1 << 23;
-        const SIGXCPU   = 1 << 24;
-        const SIGXFSZ   = 1 << 25;
-        const SIGVTALRM = 1 << 26;
-        const SIGPROF   = 1 << 27;
-        const SIGWINCH  = 1 << 28;
-        const SIGIO     = 1 << 29;
-        const SIGPWR    = 1 << 30;
-        const SIGSYS    = 1 << 31;
+        const SIGHUP    = 1 << (1 - 1);
+        const SIGINT    = 1 << (2 - 1);
+        const SIGQUIT   = 1 << (3 - 1);
+        const SIGILL    = 1 << (4 - 1);
+        const SIGTRAP   = 1 << (5 - 1);
+        const SIGABRT   = 1 << (6 - 1);
+        const SIGBUS    = 1 << (7 - 1);
+        const SIGFPE    = 1 << (8 - 1);
+        const SIGKILL   = 1 << (9 - 1);
+        const SIGUSR1   = 1 << (10 - 1);
+        const SIGSEGV   = 1 << (11 - 1);
+        const SIGUSR2   = 1 << (12 - 1);
+        const SIGPIPE   = 1 << (13 - 1);
+        const SIGALRM   = 1 << (14 - 1);
+        const SIGTERM   = 1 << (15 - 1);
+        const SIGSTKFLT = 1 << (16 - 1);
+        const SIGCHLD   = 1 << (17 - 1);
+        const SIGCONT   = 1 << (18 - 1);
+        const SIGSTOP   = 1 << (19 - 1);
+        const SIGTSTP   = 1 << (20 - 1);
+        const SIGTTIN   = 1 << (21 - 1);
+        const SIGTTOU   = 1 << (22 - 1);
+        const SIGURG    = 1 << (23 - 1);
+        const SIGXCPU   = 1 << (24 - 1);
+        const SIGXFSZ   = 1 << (25 - 1);
+        const SIGVTALRM = 1 << (26 - 1);
+        const SIGPROF   = 1 << (27 - 1);
+        const SIGWINCH  = 1 << (28 - 1);
+        const SIGIO     = 1 << (29 - 1);
+        const SIGPWR    = 1 << (30 - 1);
+        const SIGSYS    = 1 << (31 - 1);
         /* --- other realtime signals --- */
-        const   SIGTIMER    = 1 << 32;
-        const   SIGCANCEL   = 1 << 33;
-        const   SIGSYNCCALL = 1 << 34;
-        const   SIGRT_3     = 1 << 35;
-        const   SIGRT_4     = 1 << 36;
-        const   SIGRT_5     = 1 << 37;
-        const   SIGRT_6     = 1 << 38;
-        const   SIGRT_7     = 1 << 39;
-        const   SIGRT_8     = 1 << 40;
-        const   SIGRT_9     = 1 << 41;
-        const   SIGRT_10    = 1 << 42;
-        const   SIGRT_11    = 1 << 43;
-        const   SIGRT_12    = 1 << 44;
-        const   SIGRT_13    = 1 << 45;
-        const   SIGRT_14    = 1 << 46;
-        const   SIGRT_15    = 1 << 47;
-        const   SIGRT_16    = 1 << 48;
-        const   SIGRT_17    = 1 << 49;
-        const   SIGRT_18    = 1 << 50;
-        const   SIGRT_19    = 1 << 51;
-        const   SIGRT_20    = 1 << 52;
-        const   SIGRT_21    = 1 << 53;
-        const   SIGRT_22    = 1 << 54;
-        const   SIGRT_23    = 1 << 55;
-        const   SIGRT_24    = 1 << 56;
-        const   SIGRT_25    = 1 << 57;
-        const   SIGRT_26    = 1 << 58;
-        const   SIGRT_27    = 1 << 59;
-        const   SIGRT_28    = 1 << 60;
-        const   SIGRT_29    = 1 << 61;
-        const   SIGRT_30    = 1 << 62;
-        const   SIGRT_31    = 1 << 63;
+        const   SIGTIMER    = 1 << (32 - 1);
+        const   SIGCANCEL   = 1 << (33 - 1);
+        const   SIGSYNCCALL = 1 << (34 - 1);
+        const   SIGRT_3     = 1 << (35 - 1);
+        const   SIGRT_4     = 1 << (36 - 1);
+        const   SIGRT_5     = 1 << (37 - 1);
+        const   SIGRT_6     = 1 << (38 - 1);
+        const   SIGRT_7     = 1 << (39 - 1);
+        const   SIGRT_8     = 1 << (40 - 1);
+        const   SIGRT_9     = 1 << (41 - 1);
+        const   SIGRT_10    = 1 << (42 - 1);
+        const   SIGRT_11    = 1 << (43 - 1);
+        const   SIGRT_12    = 1 << (44 - 1);
+        const   SIGRT_13    = 1 << (45 - 1);
+        const   SIGRT_14    = 1 << (46 - 1);
+        const   SIGRT_15    = 1 << (47 - 1);
+        const   SIGRT_16    = 1 << (48 - 1);
+        const   SIGRT_17    = 1 << (49 - 1);
+        const   SIGRT_18    = 1 << (50 - 1);
+        const   SIGRT_19    = 1 << (51 - 1);
+        const   SIGRT_20    = 1 << (52 - 1);
+        const   SIGRT_21    = 1 << (53 - 1);
+        const   SIGRT_22    = 1 << (54 - 1);
+        const   SIGRT_23    = 1 << (55 - 1);
+        const   SIGRT_24    = 1 << (56 - 1);
+        const   SIGRT_25    = 1 << (57 - 1);
+        const   SIGRT_26    = 1 << (58 - 1);
+        const   SIGRT_27    = 1 << (59 - 1);
+        const   SIGRT_28    = 1 << (60 - 1);
+        const   SIGRT_29    = 1 << (61 - 1);
+        const   SIGRT_30    = 1 << (62 - 1);
+        const   SIGRT_31    = 1 << (63 - 1);
+        const   SIGMAX      = 1 << (64 - 1);
     }
 
     #[derive(Default, Copy, Clone, Debug)]
@@ -169,8 +169,8 @@ bitflags! {
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
-#[repr(usize)]
+#[derive(PartialEq, Clone, Copy, Debug)]
+#[repr(i32)]
 pub enum SigNom {
     // 标准信号常量定义（基于 Linux/x86 架构）
     // 注：信号编号可能因操作系统或架构略有不同，此处以 Linux 常规值为准
@@ -207,41 +207,45 @@ pub enum SigNom {
     SIGPWR = 30,      // 电源故障（UPS 电池低电量）
     SIGSYS = 31,      // 无效系统调用
     SIGTIMER = 32,    // 定时器信号（某些系统如 Solaris 使用）
+    SIGCANCEL = 33,  // 取消信号（某些系统如 Solaris 使用）
     SIGRTMAX = 64,    // 最大实时信号编号（实际可用信号可能更少）
 }
 
 
 impl SigMask {
     pub fn set_sig(&mut self, sig_num: usize) {
-        *self |= (SigMask::from_bits(1 << sig_num)).unwrap();
+        self.insert((SigMask::from_bits(1 << (sig_num - 1))).unwrap());
     }
 
     pub fn unset_sig(&mut self, sig_num: usize) {
-        *self -= (SigMask::from_bits(1 << sig_num)).unwrap();
+        self.remove((SigMask::from_bits(1 << (sig_num - 1))).unwrap());
     }
 
     pub fn have(&self, sig_num: usize) -> bool {
-        self.contains(SigMask::from_bits(1 << sig_num).unwrap())
+        self.contains(SigMask::from_bits(1 << (sig_num - 1)).unwrap())
     }
 }
+
+pub const SIG_DFL:usize = 0;
+pub const SIG_IGN:usize = 1;
 
 #[allow(non_camel_case_types)]
 #[repr(usize)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum SigHandler {
+pub enum SigHandlerType {
     /// 恢复信号的默认行为
-    SIG_DFL,
+    DEFAULT = 0,
     /// 忽略该信号（如防止 SIGCHLD 产生僵尸进程）
-    SIG_IGN,
+    IGNORE = 1,
     /// 用户自定义的信号处理函数
     Customized { handler: usize },
 }
 
-impl SigHandler {
+impl SigHandlerType {
     pub fn default(sig: SigNom) -> Self {
         match sig {
-            SigNom::SIGCHLD | SigNom::SIGURG | SigNom::SIGWINCH => Self::SIG_IGN,
-            _ => Self::SIG_DFL,
+            SigNom::SIGCHLD | SigNom::SIGURG | SigNom::SIGWINCH => Self::IGNORE,
+            _ => Self::DEFAULT,
         }
     }
 }
@@ -249,10 +253,36 @@ impl SigHandler {
 impl From<usize> for SigNom {
     fn from(value: usize) -> Self {
         if value <= MAX_SIGNUM {
-            let ret: SigNom = unsafe { core::mem::transmute(value) };
+            let ret: SigNom = unsafe { core::mem::transmute(value as i32) };
             return ret;
         } else {
             panic!("signal nomber out of bounds!");
+        }
+    }
+}
+
+pub const SIGBLOCK: usize = 0;
+pub const SIGUNBLOCK: usize = 1;
+pub const SIGSETMASK: usize = 2;
+
+#[derive(Default, Copy, Clone)]
+#[repr(C)]
+pub struct LinuxSigInfo {
+    pub si_signo: i32,
+    pub si_errno: i32,
+    pub si_code: i32,
+    pub _pad: [i32; 29],
+    _align: [u64; 0],
+}
+
+impl LinuxSigInfo {
+    pub fn new(signo: i32, code: i32) -> Self {
+        Self {
+            si_signo: signo,
+            si_errno: 0,
+            si_code: code,
+            _pad: [0; 29],
+            _align: [0; 0],
         }
     }
 }

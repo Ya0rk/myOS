@@ -3,9 +3,9 @@
 //! 
 pub use crate::board::{CLOCK_FREQ, MEMORY_END, MMIO};
 
-const KB: usize = 1024;
+pub const KB: usize = 1024;
 #[allow(unused)]
-const MB: usize = 1024 * KB;
+pub const MB: usize = 1024 * KB;
 
 // mm
 // TODO:目前是有栈协程，如果将userstack修改为8MB，kernelstack修改为64kB，会导致Kerenlstack爆栈

@@ -1,21 +1,18 @@
-// mod context;
+#[allow(clippy::module_inception)]
+mod task;
 mod manager;
 mod pid;
 mod processor;
-// mod switch;
 mod fd;
-pub mod executor;
 mod sched;
 mod thread_group;
-#[allow(clippy::module_inception)]
-mod task;
 pub mod aux;
+pub mod futex;
+pub mod executor;
 
-use async_task::Task;
-pub use fd::{FdTable, FdInfo};
-use log::info;
-// pub use context::TaskContext;
-pub use pid::{KernelStack, Pid, PidAllocator};
+pub use futex::*;
+pub use fd::{FdTable, FdInfo, sock_map_fd};
+pub use pid::{Pid, PidAllocator};
 pub use task::{TaskControlBlock, TaskStatus};
 pub use processor::CPU;
 pub use sched::TaskFuture;
@@ -24,7 +21,7 @@ pub use manager::{
     add_task, remove_task_by_pid, get_task_by_pid, 
     remove_proc_group_member, add_proc_group_member, 
     new_process_group, get_init_proc, extract_proc_to_new_group,
-    get_proc_num
+    get_proc_num, get_target_proc_group, MANAGER
 };
 pub use sched::{spawn_user_task, spawn_kernel_task};
 pub use processor::{
@@ -33,34 +30,28 @@ pub use processor::{
     get_current_hart_id, get_current_cpu
 };
 
-use crate::fs::flush_preload;
+use async_task::Task;
+use log::info;
+use crate::fs::{autorun, gbshell, initproc, mbshell};
 use crate::{fs::FileClass, sync::block_on};
 use thread_group::ThreadGroup;
 use crate::fs::OpenFlags;
 use crate::fs::open_file;
+use cfg_if::cfg_if;
 
-// lazy_static! {
-//     ///Globle process that init user shell
-//     pub static ref INITPROC: Arc<TaskControlBlock> = {
-//         // TODO: 重构为异步
-//         if let Some(FileClass::File(file)) = open_file("initproc", OpenFlags::O_RDONLY) {
-//             let elf_data = file.metadata.inode.read_all().await.unwrap();
-//             let res=TaskControlBlock::new(&elf_data);
-//             res
-//         } else {
-//             panic!("error: initproc from Abs File!");
-//         }
-//     };
-// }
 ///Add init process to the manager
 pub async fn add_initproc() {
-    println!("[add_initproc] enter add_initproc");
-    let initproc = flush_preload().await;
-    TaskControlBlock::new(initproc).await;
-    // if let Some(file) = open_file("initproc", OpenFlags::O_RDONLY) {
-    //     // let elf_data = block_on(async { file.metadata.inode.read_all().await }).unwrap();
-    //     TaskControlBlock::new(file).await;
-    // } else {
-    //     panic!("error: initproc from Abs File!");
-    // }
+     let file = if cfg!(feature = "autorun") {
+        autorun().await
+     } else if cfg!(feature = "gbshell") {
+        gbshell().await
+     } else if cfg!(feature = "mbshell") {
+        mbshell().await
+     } else if cfg!(feature = "initproc") {
+        initproc().await
+     } else {
+        mbshell().await
+     };
+
+    TaskControlBlock::new(file).await;
 }

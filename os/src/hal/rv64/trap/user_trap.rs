@@ -1,8 +1,7 @@
 #![allow(unused_import_braces)]
 #![allow(unused)]
 use log::info;
-// use riscv::register::{sepc, stval};
-// use riscv::register::scause::{self, Exception, Interrupt, Trap};
+use crate::hal::arch::sstatus::FS;
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, yield_now};
 use crate::syscall::syscall;
@@ -19,15 +18,17 @@ use riscv::register::scause::{self, Exception, Interrupt, Trap};
 /// handle user interrupt, exception, or system call from user space
 pub async fn user_trap_handler() {
     // 设置kernel的trap handler entry
+
+    use crate::{sync::TIMER_QUEUE};
     set_trap_handler(IndertifyMode::Kernel);
     let scause = scause::read();
     let stval = stval::read();
     let sepc = sepc::read();
     let cause = scause.cause();
     let task = current_task().unwrap();
+    // println!("stval = {:#x}", stval);
 
     if task.get_time_data().usedout_timeslice() && executor::has_task() {
-        // log::info!("time slice used up, yield now");
         yield_now().await;
     }
 
@@ -50,30 +51,25 @@ pub async fn user_trap_handler() {
 
             // cx is changed during sys_exec, so we have to call it again
             cx = current_trap_cx();
-            
+
             match result {
                 Ok(ret) => {
                     cx.user_x[10] = ret as usize;
                 }
                 Err(err) => {
                     // TODO：这里单独处理的waitpid返回值情况，后序要修改
-                    if err as isize == -1 || err as isize == -2 {
+                    if (err as isize) < 0 {
                         cx.user_x[10] = err as usize;
                     } else {
-                        cx.user_x[10] = -(err as isize) as usize;
+                        cx.user_x[10] = (-(err as isize)) as usize;
                         info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
                     }
                 }
             }
-            
-            
         }
         Trap::Exception(Exception::StorePageFault)
         | Trap::Exception(Exception::LoadPageFault)
         | Trap::Exception(Exception::InstructionPageFault) => {
-            // log::info!(
-            //     "[user_trap_handler] encounter page fault, addr {stval:#x}, instruction {sepc:#x} scause {cause:?}",
-            // );
             let access_type = match cause {
                 Trap::Exception(Exception::InstructionPageFault) => PageFaultAccessType::RX,
                 Trap::Exception(Exception::LoadPageFault) => PageFaultAccessType::RO,
@@ -91,26 +87,23 @@ pub async fn user_trap_handler() {
         | Trap::Exception(Exception::InstructionFault) // 1
         | Trap::Exception(Exception::LoadFault) => { // 10
             println!(
-                "[kernel] hart_id = {:?}, {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
+                "[user_trap] hart_id = {:?}, {:?} = {:?} in application, bad addr = {:#x}, bad instruction = {:#x}, kernel killed it.",
                 get_current_hart_id(),
                 scause.bits(),
                 scause.cause(),
                 stval,
                 current_trap_cx().get_sepc(),
             );
-            // page fault exit code
-            // exit_current_and_run_next(-2);
             task.set_zombie();
         }
         Trap::Exception(Exception::IllegalInstruction) => { // 2
-            println!("[kernel] hart_id = {:?}, IllegalInstruction in application, kernel killed it.",
-                get_current_hart_id()
+            println!("[user_trap] hart_id = {:?}, IllegalInstruction in application, stval = {:#x}, sepc = {:#x}, kernel killed it.",
+                get_current_hart_id(), stval, sepc
             );
-            // illegal instruction exit code
-            // exit_current_and_run_next(-3);
             task.set_zombie();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
+            TIMER_QUEUE.handle_expired();
             set_next_trigger();
             yield_now().await;
         }
@@ -136,14 +129,13 @@ pub fn user_trap_return() {
 
     let trap_cx= current_trap_cx();
     trap_cx.float_regs.trap_out_do_with_freg();
+    trap_cx.sstatus.set_fs(FS::Clean);
     
     get_current_cpu().timer_irq_reset();
     let task = current_task().unwrap();
-    // task.get_time_data_mut().set_sched_out_time();
     task.get_time_data_mut().set_trap_out_time();
     unsafe { __return_to_user(trap_cx); }
     task.get_time_data_mut().set_trap_in_time();
-    // task.get_time_data_mut().set_sched_in_time();
 
     trap_cx.float_regs.trap_in_do_with_freg(trap_cx.sstatus);
 }

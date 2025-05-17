@@ -4,6 +4,7 @@ use core::arch::asm;
 use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
 use crate::hal::arch::kernel_token_write;
+use crate::sync::SpinNoIrqLock;
 use super::address::{kaddr_p2v, kpn_v2p, KernelAddr};
 use super::memory_space::vm_area::MapPerm;
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
@@ -16,8 +17,6 @@ use alloc::vec::Vec;
 use bitflags::*;
 use log::info;
 use spin::Mutex;
-// use riscv::register::satp;
-// use crate::utils::flags::{AccessFlags, AccessFlagsMut, UserAccessFlags};
 
 // TODO(COW标志位可以设置在这里)
 // bitflags! {
@@ -133,22 +132,13 @@ pub unsafe fn switch_user_page_table(user_token: usize) {
     // asm!("sfence.vma");
     crate::hal::arch::user_token_write(user_token);
     crate::hal::arch::sfence();
-    // hal::arch::switch_pagetable(page_table_token);
-
 }
 
 
 // TODO: 优化结构
-
-// pub static mut KERNEL_PAGE_TABLE: Option<Arc<Mutex<PageTable>>> = None;
 lazy_static! {
-    // pub static ref KERNEL_PAGE_TABLE: Arc<Mutex<PageTable>> = Arc::new(Mutex::new(PageTable::init_kernel_page_table()));
-    pub static ref KERNEL_PAGE_TABLE: Arc<Mutex<PageTable>> = Arc::new(Mutex::new(PageTable::new()));
+    pub static ref KERNEL_PAGE_TABLE: Arc<SpinNoIrqLock<PageTable>> = Arc::new(SpinNoIrqLock::new(PageTable::init_kernel_page_table()));
 }
-
-// pub fn get_kernel_page_table() -> &'static Arc<Mutex<PageTable>> {
-//     unsafe {KERNEL_PAGE_TABLE.as_ref()}
-// }
 
 
 pub struct PageTable {

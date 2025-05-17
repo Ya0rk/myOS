@@ -1,12 +1,9 @@
 #![allow(unused)]
-
-
 use alloc::{collections::VecDeque, task};
 use log::info;
 use core::{future::Future, sync::atomic::{AtomicU32, AtomicUsize}};
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
-use crate::{hal::config::HART_NUM, sync::SpinNoIrqLock, utils::{LcgRng, RNG}};
-
+use crate::{hal::config::HART_NUM, sync::{SpinNoIrqLock, TIMER_QUEUE}, utils::{LcgRng, RNG}};
 use super::get_current_hart_id;
 
 const QUEUE_NUM: usize = HART_NUM;
@@ -51,7 +48,7 @@ impl TaskQueue {
 
     /// 从任务队列窃取一半的normal task，可以减少窃取次数
     fn steal(&self) -> Option<VecDeque<Runnable>> {
-        info!("steal task---");
+        // info!("steal task---");
         let len = self.normal_len();
         if len == 0 {
             return None;
@@ -115,99 +112,52 @@ pub fn has_task() -> bool {
 /// Run all tasks in the task queue
 pub fn run() {
     let mut steal_counter = 0;
+    let mut trycnt = 0;
     loop {
-        // 首先尝试从自己的队列中获取任务
-        let worker_id = get_current_hart_id();
-        if let Some(task) = TASK_QUEUES[worker_id].fetch() {
-            // info!("nihao");
-            task.run();
-            // info!("sssss");
-            steal_counter = 0; // 重置窃取计数器
-        } else {
-            // 如果自己的队列为空，尝试从其他队列中窃取任务
-            // info!("bhao");
+        let tasks = run_once();
+        if tasks == 0 {
+            trycnt += 1;
             steal_counter += 1;
-            if steal_counter > QUEUE_NUM * 2 {
-                // 如果多次窃取失败，可能没有任务了，退出循环
-                break;
-            }
-            for i in 0..QUEUE_NUM {
-                if i == worker_id {
-                    continue; // 跳过自己的队列
-                }
-                if let Some(tasks) = TASK_QUEUES[i].steal() {
-                    TASK_QUEUES[worker_id].push_n_normal(tasks); // 将偷取的任务加入自己队列
-                    steal_counter = 0; // 重置窃取计数器
-                    break;
-                }
-            }
+            // if steal_counter > QUEUE_NUM * 2 {
+            //     // 如果多次窃取失败，可能没有任务了，退出循环
+            //     break;
+            // }
+            // for i in 0..QUEUE_NUM {
+            //     if i == worker_id {
+            //         continue; // 跳过自己的队列
+            //     }
+            //     if let Some(tasks) = TASK_QUEUES[i].steal() {
+            //         TASK_QUEUES[worker_id].push_n_normal(tasks); // 将偷取的任务加入自己队列
+            //         steal_counter = 0; // 重置窃取计数器
+            //         break;
+            //     }
+            // }
+
+        } else {
+            trycnt = 0;
+            steal_counter = 0; // 重置窃取计数器
+        }
+        if trycnt > 0x10000000 {
+            println!("no task");
+            return;
         }
     }
 }
 
-// use core::future::Future;
-
-// use alloc::collections::vec_deque::VecDeque;
-// use async_task::{Runnable, ScheduleInfo, WithInfo};
-
-// use crate::sync::SpinNoIrqLock;
-
-// lazy_static! {
-//     static ref EXECUTOR: Executor = Executor::new();
-// }
-// struct Executor {
-//     task_queue: SpinNoIrqLock<VecDeque<Runnable>>,
-// }
-
-// impl Executor {
-//     pub fn new() -> Self {
-//         Self {
-//             task_queue: SpinNoIrqLock::new(VecDeque::new()),
-//         }
-//     }
-//     pub fn push_back(&self, runnable: Runnable) {
-//         self.task_queue.lock().push_back(runnable);
-//     }
-
-//     pub fn push_front(&self, runnable: Runnable) {
-//         self.task_queue.lock().push_front(runnable);
-//     }
-
-//     pub fn fetch(&self) -> Option<Runnable> {
-//         self.task_queue.lock().pop_front()
-//     }
-// }
-
-// /// Add a task into task queue
-// pub fn spawn<F, R>(future: F)
-// where
-//     F: Future<Output = R> + Send + 'static,
-//     R: Send + 'static,
-// {
-//     let schedule = move |task: Runnable, info: ScheduleInfo| {
-//         if info.woken_while_running {
-//             EXECUTOR.push_back(task);
-//         } else {
-//             EXECUTOR.push_front(task);
-//         }
-//     };
-//     // let schedule = |task| EXECUTOR.push_back(task);
-//     let (task, handle) = async_task::spawn(future, WithInfo(schedule));
-//     task.schedule();
-//     handle.detach();
-// }
-
-// pub fn run() {
-//     loop {
-//         if let Some(task) = EXECUTOR.fetch() {
-//             task.run();
-//             // handle_timeout_events();
-//         } else {
-//             break;
-//         }
-//     }
-// }
-
-// pub fn has_task() -> bool {
-//     EXECUTOR.task_queue.lock().len() >= 1
-// }
+pub fn run_once() -> usize {
+    let mut tasks = 0;
+    let mut steal_cnt = 0;
+    let worker_id = get_current_hart_id();
+    if let Some(task) = TASK_QUEUES[worker_id].fetch() {
+        task.run();
+        tasks += 1;
+    } else {
+        steal_cnt += 1;
+        if steal_cnt > QUEUE_NUM * 10 {
+            // 如果多次窃取失败，可能没有任务了，退出循环
+            println!("no task");
+            return 0;
+        }
+    }
+    tasks
+}

@@ -17,7 +17,6 @@ impl Future for GetWakerFuture {
 /// 获取当前任务的waker
 #[inline(always)]
 pub async fn get_waker() -> Waker {
-    // info!("get_waker");
     GetWakerFuture.await
 }
 
@@ -68,7 +67,6 @@ impl Future for ControlFuture {
 /// 放弃当前任务的执行，将其重新加入task_queue中轮循，使得其他任务有机会执行
 #[inline(always)]
 pub async fn yield_now() {
-    // info!("yield_now");
     ControlFuture::new(ControlBehavior::YieldFuture).await
 }
 
@@ -76,6 +74,5 @@ pub async fn yield_now() {
 /// 挂起当前任务，使得其他任务有机会执行,等待被其他任务唤醒
 #[inline(always)]
 pub async fn suspend_now() {
-    // info!("suspend_now");
     ControlFuture::new(ControlBehavior::SuspendFuture).await
 }

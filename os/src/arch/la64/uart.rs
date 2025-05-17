@@ -56,5 +56,5 @@ const UART_ADDR: usize = 0x0_1FE0_01E0 | 0x9000_0000_0000_0000;
 
 /// LA的UART设备，地址写死为uart_addr
 lazy_static! {
-    pub static ref UART: Mutex<Uart> = Mutex::new(Uart::new(UART_ADDR));
+    pub static ref UART: SpinNoIrqLock<Uart> = SpinNoIrqLock::new(Uart::new(UART_ADDR));
 }

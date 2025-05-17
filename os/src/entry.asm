@@ -4,6 +4,11 @@ _start:
     # 启动时rust sbi将hart_id放在a0中
     mv tp,a0
 
+    # 设置 sstatus.FS 为 "Initial" 状态 (0b01), 
+    # 启用浮点寄存器，不然后面汇编不能识别双精度相关指令，会触发
+    # li t0, (1 << 13)  # FS 字段位于 bit 13-14
+    # csrs sstatus, t0
+
     # 根据hart_id不同设置kernel stack的sp
     slli t0, a0, 16  # t0 = hart_id << 16(4096 * 16)
     la sp, boot_stack_top

@@ -55,3 +55,6 @@ lwext4_rust/c_old/lwext4/include/generated/ext4_config.h
 # Added by cargo
 
 /target
+/mount_point
+*.ans
+*.gz

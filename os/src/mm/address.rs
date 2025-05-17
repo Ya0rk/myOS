@@ -74,11 +74,11 @@ macro_rules! impl_arithmetic_with_usize {
 pub struct KernelAddr(pub usize);
 /// physical address
 #[repr(C)]
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Hash, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct PhysAddr(pub usize);
 /// virtual address
 #[repr(C)]
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Hash, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub struct VirtAddr(pub usize);
 /// physical page number
 #[repr(C)]
@@ -461,7 +461,6 @@ where
 }
 /// a simple range structure for virtual page number
 pub type VPNRange = SimpleRange<VirtPageNum>;
-
 
 /// translate kernel virtual addr into physical addr
 pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {

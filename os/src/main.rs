@@ -1,9 +1,9 @@
-
 #![allow(warnings)]
 // #![deny(warnings)]
-
 #![no_std]
 #![no_main]
+#![feature(cfg_match)]
+#![feature(stmt_expr_attributes)]
 #![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
 // #![feature(riscv_ext_intrinsics)]
@@ -17,6 +17,7 @@
 #![allow(unused_variables)]
 #![feature(map_try_insert)]
 #![feature(naked_functions)]
+#![feature(let_chains)]
 
 #![allow(unused)]
 extern crate alloc;
@@ -35,28 +36,24 @@ mod lang_items;
 pub mod mm;
 pub mod fs;
 pub mod task;
-// pub mod trap;
 pub mod sync;
 pub mod utils;
 pub mod syscall;
 pub mod drivers;
+pub mod net;
 // pub mod arch;
 pub mod signal;
 pub mod hal;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
+use alloc::vec::{self, Vec};
 use hal::mem::{mmu_init, tlb::{self, tlb_fill}, tlb_init};
 use log::info;
 use mm::memory_space::test_la_memory_space;
-use sync::{block_on, timer};
+use sync::{block_on, time_init, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
-// #[cfg(target_arch = "riscv64")]
-// global_asm!(include_str!("entry.asm"));
-
-// #[cfg(target_arch = "loongarch64")]
-// global_asm!(include_str!("entry_la.asm"));
 
 #[macro_use]
 extern crate lazy_static;
@@ -96,18 +93,21 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         println!("start init mm");
         mm::init(true);
         println!("finished mm::init");
+        // utils::logger_init();
+        sync::time_init();
 
-        // loop {};
+        // info!("[rust_main] alloc a vec size is 1387650");
+        // let mut buffer: Vec<u8> = alloc::vec![1; 1387650];
+        // println!("{:?}", buffer[256]);
+        // info!("[rust_main] alloc mem is enough");
 
-
-        
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
             hart_id
         );
+        START_HART_ID.store(hart_id, Ordering::SeqCst);
         hal::trap::init();
-        task::init_processors();
         
         crate::drivers::init();
 
@@ -117,7 +117,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         
 
         // 测试代码应当放在这里
-        #[cfg(feature = "test")]
+        // #[cfg(feature = "test")]
         {
             // mm::remap_test();
             // info!("start path test");
@@ -127,17 +127,15 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // test_la_memory_space();
         }
 
-        info!("[a] src/main.rs:126");
 
+        task::init_processors();
         spawn_kernel_task(async move {
             task::add_initproc().await
         });
-        info!("[a] src/main.rs:131");
-        // INIT_FINISHED.store(true, Ordering::SeqCst);
-        // START_HART_ID.store(hart_id, Ordering::SeqCst);
-        // #[cfg(feature = "mul_hart")]
-        // hal::entry::boot::boot_all_harts(hart_id);
         
+        INIT_FINISHED.store(true, Ordering::SeqCst);
+        #[cfg(feature = "mul_hart")]
+        hal::entry::boot::boot_all_harts(hart_id);
     } else {
 
         hal::trap::init();
@@ -148,6 +146,11 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     timer::set_next_trigger();
     info!("[a] src/main.rs:145");
     // 列出目前的应用
+    // let finish = AtomicBool::new(false);
+    // if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
+    //     finish.store(fs::list_apps(), Ordering::SeqCst);
+    // }
+    // while !finish.load(Ordering::SeqCst) {}
     // let finish = AtomicBool::new(false);
     // if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
     //     finish.store(fs::list_apps(), Ordering::SeqCst);

@@ -3,20 +3,20 @@ use log::info;
 use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
 
 use crate::{
-    drivers::{BlockDriver, Disk},
-    fs::{page_cache::PageCache, InodeTrait, Kstat, SuperBlockTrait},
+    drivers::Disk,
+    fs::{page_cache::PageCache, Ext4Inode, Kstat, SuperBlockTrait},
 };
 
 use alloc::sync::Arc;
 
-use super::Ext4Inode;
+use super::InodeTrait;
 
 unsafe impl Send for Ext4SuperBlock {}
 unsafe impl Sync for Ext4SuperBlock {}
 
 pub struct Ext4SuperBlock{
     inner: Ext4BlockWrapper<Disk>,
-    root: Arc<Ext4Inode>,
+    root: Arc<dyn InodeTrait>,
 }
 
 impl Ext4SuperBlock {
@@ -36,14 +36,6 @@ impl SuperBlockTrait for Ext4SuperBlock {
     }
     fn fs_stat(&self) -> Kstat {
         Kstat::new()
-        // let mut file = self.root.file.lock();
-        // match file.fstat() {
-        //     Ok(stat) => {
-        //         let (atime, mtime, ctime) = self.root.metadata.timestamp.lock().get();
-        //         as_inode_stat(stat, atime, mtime, ctime)
-        //     }
-        //     Err(_) => Kstat::new()
-        // }
     }
     fn sync(&self) {
         todo!()

@@ -1,19 +1,23 @@
 // mod interrupt;
 mod up;
-pub mod mutex;
 mod misc;
+pub mod mutex;
 pub mod time;
 pub mod timer;
 pub mod once;
+pub mod time_async;
 
-use core::{future::Future, task::{Context, Poll}};
-use alloc::{boxed::Box, sync::Arc, task::Wake};
+use core::{future::Future, task::{Context, Poll}, time::Duration};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, task::Wake, vec::Vec, vec};
+use spin::Lazy;
+use time::{CLOCK_MONOTONIC, CLOCK_REALTIME};
 
 pub use crate::hal::arch::interrupt::{enable_interrupt, disable_interrupt, interrupt_is_enabled, enable_timer_interrupt};
 pub use mutex::{new_shared, new_sleep_shared};
-pub use timer::{sleep_for, set_next_trigger};
+pub use timer::{sleep_for, set_next_trigger, time_duration};
 pub use misc::{get_waker, yield_now, suspend_now};
 pub use up::SyncUnsafeCell;
+pub use time_async::*;
 pub use time::{TimeVal, TimeSpec, Tms, TimeData, TimeStamp};
 pub use mutex::{SpinLock, SpinNoIrqLock, SleepLock, MutexGuard, MutexOperations, NoIrqLock, NoopLock, Shared, SleepShared};
 
@@ -38,4 +42,17 @@ pub fn block_on<T>(fut: impl Future<Output=T>) -> T {
             Poll::Pending => continue,
         }
     }
+}
+
+/// Clock manager that used for looking for a given process
+pub static CLOCK_MANAGER: Lazy<SpinNoIrqLock<Vec<Duration>>> = Lazy::new(|| SpinNoIrqLock::new(Vec::new()));
+
+pub fn time_init() {
+    CLOCK_MANAGER
+        .lock()
+        .insert(CLOCK_REALTIME, Duration::ZERO);
+    
+    CLOCK_MANAGER
+        .lock()
+        .insert(CLOCK_MONOTONIC, Duration::ZERO);
 }

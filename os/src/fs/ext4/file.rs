@@ -3,11 +3,11 @@ use async_trait::async_trait;
 use log::info;
 use sbi_spec::pmu::cache_event::NODE;
 use crate::{
-    hal::config::PATH_MAX, 
-    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, 
-    mm::{UserBuffer, page::Page}, utils::{Errno, SysResult}
+    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
+
+use super::Ext4Inode;
 
 pub struct NormalFile {
     pub path: String, // 文件的路径
@@ -31,13 +31,24 @@ impl NormalFile {
 
     // 判断是否存在同名文件
     pub fn is_child(&self, path: &str) -> bool {
-        self.parent
-        .as_ref()
-        .expect("no parent, plz check!")
-        .upgrade()
-        .unwrap()
-        .walk(&path)
-        .is_none()
+        // info!("[is_child] ? {}", path);
+        if let 
+            Some(_) = 
+            self.parent
+                .as_ref()
+                .expect("no parent, plz check!")
+                .upgrade()
+                .unwrap()
+                .walk(&path) 
+        {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn unlink(&self) {
+        
     }
 }
 
@@ -68,25 +79,22 @@ impl FileTrait for NormalFile {
         stat.st_mode & 0o111 != 0
     }
 
-    async fn read(&self, mut buf: UserBuffer) -> SysResult<usize> {
+    async fn read(&self, mut buf: &mut [u8]) -> SysResult<usize> {
         let mut total_read_size = 0usize;
         info!("read file: {}, offset: {}", self.path, self.metadata.offset());
 
-        if self.metadata.inode.size() <= self.metadata.offset() {
-            //读取位置超过文件大小，返回结果为EOF
-            return Ok(0);
-        }
+        // if self.metadata.inode.size() <= self.metadata.offset() || self.metadata.inode.size() == 0 {
+        //     //读取位置超过文件大小，返回结果为EOF
+        //     return Ok(0);
+        // }
 
         let mut new_offset = self.metadata.offset();
-        for slice in buf.buffers.iter_mut() {
-            let read_size = self.metadata.inode.read_at(new_offset, *slice).await;
-            if read_size == 0 {
-                break;
-            }
-            new_offset += read_size;
-            total_read_size += read_size;
-        }
+        // 这边要使用 iter_mut()，因为要将数据写入
+        let read_size = self.metadata.inode.read_at(new_offset, buf).await;
+        new_offset += read_size;
+        total_read_size += read_size;
         self.metadata.set_offset(new_offset);
+
         Ok(total_read_size)
     }
 
@@ -95,7 +103,7 @@ impl FileTrait for NormalFile {
         let mut total_read_size = 0usize;
         info!("pread file: {}, offset: {}", self.path, offset);
 
-        if self.metadata.inode.size() <= offset {
+        if self.metadata.inode.get_size() <= offset {
             //读取位置超过文件大小，返回结果为EOF
             return Ok(0);
         }
@@ -112,31 +120,29 @@ impl FileTrait for NormalFile {
         Ok(total_read_size)
     }
 
-    async fn write(&self, buf: UserBuffer) -> SysResult<usize> {
+    async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         let mut total_write_size = 0usize;
-        let file_size = self.metadata.inode.size();
+        // 将改变inode大小的逻辑移入inode的write_at方法中
+        // 增加代码内聚
+        // let file_size = self.metadata.inode.get_size();
         let offset = self.metadata.offset();
-        // TODO(YJJ): 如果不检测 maybe bug???
-        if buf.len() > file_size - offset {
-            // info!("[write] file size = {}", file_size);
-            // info!("[write] buf size = {}, offset = {}", buf.len(), offset);
-            // self.metadata.inode.truncate(offset + buf.len());
-            self.metadata.inode.set_size(buf.len() + offset).expect("[write_at]: set size fail!");
-            // info!("[write] set size = {}", self.metadata.inode.size());
-        }
-        for slice in buf.buffers.iter() {
-            let old_offset = self.metadata.offset();
-            let write_size = self.metadata.inode.write_at(old_offset, *slice).await;
-            self.metadata.set_offset(old_offset+write_size);
-            total_write_size += write_size;
-        }
+        // if buf.len() > file_size - offset {
+        //     self.metadata.inode.set_size(buf.len() + offset).expect("[write_at]: set size fail!");
+        // }
+
+        let old_offset = self.metadata.offset();
+        let write_size = self.metadata.inode.write_at(old_offset, buf).await;
+        self.metadata.set_offset(old_offset+write_size);
+        total_write_size += write_size;
+        // info!("size = {} ============", self.metadata.inode.get_size());
+
         Ok(total_write_size)
     }
 
     async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
         let mut total_write_size = 0usize;
         let mut offset = offset;
-        let file_size = self.metadata.inode.size();
+        let file_size = self.metadata.inode.get_size();
         if offset > file_size - buf.len() {
             self.metadata.inode.set_size(buf.len() + offset).expect("[pwrite]: set size fail!");
         }
@@ -148,7 +154,6 @@ impl FileTrait for NormalFile {
         Ok(total_write_size)
     }
 
-
     fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {
         if offset < 0 || whence > 2 {
             return Err(Errno::EINVAL);
@@ -158,7 +163,7 @@ impl FileTrait for NormalFile {
         let res = match whence {
             SEEK_SET => offset,
             SEEK_CUR => old_offset + offset,
-            SEEK_END => offset + self.metadata.inode.size(),
+            SEEK_END => offset + self.metadata.inode.get_size(),
             _ => return Err(Errno::EINVAL)
         };
         self.metadata.set_offset(res);
@@ -208,43 +213,55 @@ impl FileTrait for NormalFile {
         self.metadata.inode.is_dir()
     }
 
-    fn read_dents(&self, mut ub: UserBuffer, len: usize) -> usize {
+    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
+        info!("[read_dents] {}, len: {}, now file offset: {}", self.path, len, self.metadata.offset());
         if !self.is_dir() {
+            // info!("[read_dents] {} is not a dir", self.path);
             return 0;
         }
 
-        // let ext4_file = self.metadata.inode.get_ext4file();
-        // let dirs = ext4_file.read_dir_from(0).unwrap();
-        // let mut dir_entrys = Vec::new();
 
-        // for dir in dirs {
-        //     let (d_ino, d_off, d_reclen, d_type, d_name) = (
-        //         dir.d_ino,
-        //         dir.d_off,
-        //         dir.d_reclen,
-        //         dir.d_type,
-        //         dir.d_name
-        //     );
+        let ub = if let Ok(Some(buf)) = user_slice_mut::<u8>(ub.into(), len) {
+            buf
+        } else {
+            return 0;
+        };
 
-        //     let entry = Dirent::new(d_name, d_off, d_ino, d_type, d_reclen);
-        //     self.metadata.set_offset(d_off as usize);
-        //     dir_entrys.push(entry);
-        // }
+        if self.path == "/musl/ltp" || self.path == "/musl/basic"
+            || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
+
+                info!("alsdkjlaskdfj");
+                return 0;
+        }
+        
         // Some(dir_entrys)
-        let dentrys = self.metadata.inode.read_dents();
-        let dentrys = match dentrys {
+        let dirs = self.metadata.inode.read_dents();
+        let dirs = match dirs {
             Some(x) => x,
             _ => return 0,
         };
+        // let mut res = 0;
+        // let one_den_len = size_of::<Dirent>();
         let mut res = 0;
-        let one_den_len = size_of::<Dirent>();
-        for den in dentrys {
-            if res + one_den_len > len {
-                break;
-            }
-            ub.write_at(res, den.as_bytes());
-            res += one_den_len;
+        let file_now_offset = self.metadata.offset();
+        for den in dirs {
+            let den_len = den.len();
+            // info!(
+            //     "[read_dents] \n\tname: {}\n\td_off: {:#X}\n\td_reclen: {:#X}", 
+            //     String::from_utf8(den.d_name.to_vec()).unwrap(),
+            //     den.off(),
+            //     den_len);
+            if res + den_len > len {
+                break
+            };
+            if den.off() - den.len() >= file_now_offset {
+                // ub.write_at(res, den.as_bytes());
+                ub[res..res + den.len()].copy_from_slice(den.as_bytes());
+                res += den.len();
+            };
         };
+        self.metadata.set_offset(file_now_offset + res);
+        // info!("[read_dents] path {} return {}", self.path, res);
         res
     }
     

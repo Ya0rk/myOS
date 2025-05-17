@@ -120,6 +120,11 @@ impl Sstatus {
     pub fn set_spp(&mut self, val: SPP) {
         self.bits.set_bit(8, val == SPP::Supervisor);
     }
+
+    pub fn set_fs(&mut self, fs: FS) {
+        let v: u8 = unsafe { core::mem::transmute(fs) };
+        self.bits.set_bits(13..15, v as usize);
+    }
 }
 
 pub fn read() -> Sstatus {

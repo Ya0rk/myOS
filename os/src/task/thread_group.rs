@@ -23,6 +23,10 @@ impl ThreadGroup {
         self.tasks.remove(&taskid);
     }
 
+    pub fn get(&self, taskid: usize) -> Option<&Weak<TaskControlBlock>> {
+        self.tasks.get(&taskid)
+    }
+
     #[allow(unused)]
     pub fn thread_num(&self) -> usize {
         self.tasks.len()
