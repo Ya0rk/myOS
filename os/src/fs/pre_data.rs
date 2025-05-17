@@ -1,6 +1,6 @@
 use alloc::{sync::Arc, vec::Vec};
 use log::info;
-use virtio_drivers::transport::pci::bus;
+// use virtio_drivers::transport::pci::bus;
 use crate::{fs::{open_file, FileClass, FileTrait, OpenFlags}, mm::UserBuffer};
 
 use super::ext4::NormalFile;

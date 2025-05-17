@@ -8,7 +8,7 @@ pub use super_block::*;
 
 use alloc::sync::Arc;
 use lazy_static::*;
-use crate::drivers::{BlockDeviceImpl, Disk};
+use crate::drivers::{Disk};
 use super::{InodeTrait, Kstat, SuperBlockTrait};
 
 lazy_static! {

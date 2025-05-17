@@ -20,7 +20,7 @@ pub use userbuffer::UserBuffer;
 // pub use map_area::MapArea;
 pub use page_table::{PageTable};
 pub use frame_allocator::{frame_alloc, frame_dealloc};
-// pub use page_table::{translated_byte_buffer, translated_refmut, translated_ref, translated_str};
+pub use page_table::{translated_byte_buffer, translated_refmut, translated_ref, translated_str};
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init(first: bool) {

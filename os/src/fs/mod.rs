@@ -25,7 +25,7 @@ pub use dirent::Dirent;
 // pub use inode_cache::*;
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
-use sbi_rt::NonRetentive;
+// use sbi_rt::NonRetentive;
 use sbi_spec::pmu::cache_event::NODE;
 pub use stat::Kstat;
 pub use vfs::*;

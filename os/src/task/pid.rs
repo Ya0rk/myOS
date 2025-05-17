@@ -11,7 +11,7 @@ use lazy_static::*;
 use log::{debug, info};
 // use riscv::paging::PTE;
 use spin::Mutex;
-use riscv::paging::PTE;
+// use riscv::paging::PTE;
 
 lazy_static! {
     pub static ref PID_ALLOCATOR: SpinNoIrqLock<PidAllocator> = SpinNoIrqLock::new(PidAllocator::new());

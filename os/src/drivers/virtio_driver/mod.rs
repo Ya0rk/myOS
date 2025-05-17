@@ -10,7 +10,7 @@ use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 use core::ptr::NonNull;
 
 use crate::{
-    drivers::DevError, mm::{
+    drivers::DevError, hal::KERNEL_ADDR_OFFSET, mm::{
         frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PageTable, PhysPageNum,
         StepByOne, VirtAddr,
     }, sync::SpinNoIrqLock, task::current_user_token
@@ -37,6 +37,7 @@ unsafe impl Hal for VirtIoHalImpl {
             QUEUE_FRAMES.lock().push(Arc::new(frame));
         }
         let pa: crate::mm::address::PhysAddr = ppn_base.into();
+        // TODO: remove KernelAddr
         let va = KernelAddr::from(pa).0;
         let vaddr = if let Some(vaddr) = NonNull::new(va as _) {
             vaddr

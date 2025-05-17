@@ -12,7 +12,7 @@ bitflags = "2.8.0"
 xmas-elf = "0.10.0"
 # virtio-drivers = { path = "../vendor/virtio-drivers" }
 # virtio-drivers = { path = "../vendor/virtio-drivers-new" }
-# virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers.git"}
+virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers.git"}
 flat_device_tree = { version = "3.1.1" }
 log = "0.4"
 spin = "0.10.0"
