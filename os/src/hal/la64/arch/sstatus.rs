@@ -3,6 +3,8 @@
 // use core::arch::asm;
 // use riscv::{addr::BitField, register::sstatus::FS};
 
+use loongarch64::register::prmd;
+
 /// Floating-point extension state
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum FS {
@@ -24,6 +26,7 @@ pub enum SPP {
     User = 0,
 }
 
+/// Prmd in LA
 impl Sstatus {
     /// Returns the contents of the register as raw bits
     #[inline]
@@ -63,6 +66,7 @@ impl Sstatus {
     }
 
     /// The status of the floating-point unit
+    /// TODO: implement
     #[inline]
     pub fn fs(&self) -> FS {
         unimplemented!()
@@ -100,16 +104,34 @@ impl Sstatus {
     }
 
     #[inline]
-    pub fn set_sie(&mut self, val: bool) {
-        unimplemented!()
+    pub fn set_pie(&mut self, val: bool) {
+        // unimplemented!()
+        if val {
+            self.bits |= 1 << 2;
+        }
+        else {
+            self.bits &= !(1 << 2);
+        }
     }
 
     #[inline]
     pub fn set_spp(&mut self, val: SPP) {
-        unimplemented!()
+        // unimplemented!()
+        if val == SPP::Supervisor {
+            self.bits &= !0b11;
+        }
+        else {
+            self.bits |= 0b11;
+        }
     }
 }
 
 pub fn read() -> Sstatus {
-    unimplemented!()
+    // unimplemented!()
+    Sstatus { bits: unsafe {
+        let bits: usize;
+        core::arch::asm!("csrrd {},0x1", out(reg) bits);
+        bits
+    } }
+    // Sstatus {bits:prmd::read()}
 }
