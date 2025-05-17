@@ -4,7 +4,7 @@ pub mod tlb;
 
 use loongarch64::register::estat::{self, Exception, Trap};
 use loongarch64::register::{
-    badv, ecfg, eentry, prmd, pwch, pwcl, stlbps, ticlr, tlbidx, tlbrehi, tlbrentry,
+    badv, ecfg, eentry, euen, prmd, pwch, pwcl, stlbps, ticlr, tlbidx, tlbrehi, tlbrentry
 };
 
 pub const PS_4K: usize = 0x0c;
@@ -27,6 +27,8 @@ pub fn mmu_init() {
     pwch::set_dir3_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3 + PAGE_SIZE_SHIFT - 3);
     pwch::set_dir3_width(PAGE_SIZE_SHIFT - 3);
 
+    // tmp
+    euen::set_fpe(true);
 
 
 }
@@ -47,7 +49,7 @@ pub fn tlb_init(tlbrentry: usize) {
     stlbps::set_ps(PS_4K);
     tlbrehi::set_ps(PS_4K);
 
-    tlbrentry::set_tlbrentry(tlbrentry & 0xFFFF_FFFF_FFFF);
+    tlbrentry::set_tlbrentry(tlbrentry);
     // pgdl::set_base(kernel_pgd_base);
     // pgdh::set_base(kernel_pgd_base);
 }
