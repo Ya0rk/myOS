@@ -40,9 +40,9 @@ pub async fn sys_futex(
 
     match use_op {
         FutexOp::FUTEX_WAIT => {
-            info!("[sys_futex] wait, uaddr = {:#x}, taskid = {}", uaddr, current_task().unwrap().get_pid());
             // // 如果futex word中仍然保存着参数val给定的值，那么当前线程则进入睡眠，等待FUTEX_WAKE的操作唤醒它。
             let now_val = unsafe{ atomic_load_acquire(uaddr as *const u32) };
+            info!("[sys_futex] wait, uaddr = {:#x}, taskid = {}, now_val = {}, val = {}", uaddr, current_task().unwrap().get_pid(), now_val, val);
             // // 如果uaddr指向地址的值 != val，那么就返回错误
             if now_val != val { return Err(Errno::EAGAIN); }
 
@@ -116,8 +116,8 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
         return Err(Errno::EINVAL);
     }
     let task = current_task().unwrap();
-    let wake_up_sig = *task.get_blocked();
-    task.set_wake_up_signal(wake_up_sig);
+    // let wake_up_sig = *task.get_blocked();
+    // task.set_wake_up_signal(wake_up_sig);
 
     let futex_future = FutexFuture::new(uaddr, key, bitset, val);
     info!("[do_futex_wait] uaddr = {:#x}", uaddr);
@@ -130,23 +130,23 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
             let timeout = Duration::from(tp);
             info!("[do_futex_wait] timeout = {:?}", timeout);
             if let Err(Errno::ETIMEDOUT) = TimeoutFuture::new(futex_future, timeout).await {
-                info!("[do_futex_wait] time out.");
-                let pid = task.get_pid();
-                let mut binding = task.futex_list.lock();
-                if binding.check_is_inqueue(key, pid) {
-                    binding.remove(key, pid);
-                    return Err(Errno::EINVAL);
-                }
+                // info!("[do_futex_wait] time out.");
+                // let pid = task.get_pid();
+                // let mut binding = task.futex_list.lock();
+                // if binding.check_is_inqueue(key, pid) {
+                //     binding.remove(key, pid);
+                //     return Err(Errno::EINVAL);
+                // }
             };
         }
     }
 
-    if task.sig_pending.lock().has_expected(wake_up_sig).0 {
-        // 这里需要判断是否是被信号唤醒的
-        info!("[do_futex_wait] wake up by signal");
-        task.futex_list.lock().remove(key, task.get_pid());
-        return Err(Errno::EINTR);
-    }
+    // if task.sig_pending.lock().has_expected(wake_up_sig).0 {
+    //     // 这里需要判断是否是被信号唤醒的
+    //     info!("[do_futex_wait] wake up by signal");
+    //     task.futex_list.lock().remove(key, task.get_pid());
+    //     return Err(Errno::EINTR);
+    // }
 
     return Ok(0);
 }

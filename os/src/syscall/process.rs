@@ -742,7 +742,7 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
                 task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;
                 task.fd_table.lock().rlimit.rlim_max = new_limit.rlim_max;
             }
-            _ => unimplemented!()
+            _ => (),
         }
     }
 

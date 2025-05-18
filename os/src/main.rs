@@ -88,11 +88,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         utils::logger_init();
         sync::time_init();
 
-        // info!("[rust_main] alloc a vec size is 1387650");
-        // let mut buffer: Vec<u8> = alloc::vec![1; 1387650];
-        // println!("{:?}", buffer[256]);
-        // info!("[rust_main] alloc mem is enough");
-
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
@@ -110,7 +105,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         // 此时完成初始化工作，准备载入进程开始执行
 
         // 测试代码应当放在这里
-        // #[cfg(feature = "test")]
         {
             // mm::remap_test();
             info!("start path test");
@@ -119,9 +113,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // fs::vfs::dentry_test();
         }
 
-        // spawn_kernel_task(async move {
-        //     fs::vfs::dentry_test().await
-        // });
         task::init_processors();
         spawn_kernel_task(async move {
             task::add_initproc().await

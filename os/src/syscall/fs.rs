@@ -178,7 +178,8 @@ pub fn sys_fstatat(
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_fstatat] not found fd");
-        let other_cwd = inode.get_name()?;
+        let other_cwd = cwd.clone();
+        // let other_cwd = inode.get_name()?;
         join_path_2_absolute(other_cwd, path)
     };
 

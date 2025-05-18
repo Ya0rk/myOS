@@ -203,7 +203,7 @@ fn create_open_file(
                 return None;
             }
         } else {
-            error!("[create_open_file] failed to get parent inode {}", parent_path);
+            error!("[create_open_file] failed to get parent inode {}, target path = {}", parent_path, target_abs_path);
             return None;
         }
     };

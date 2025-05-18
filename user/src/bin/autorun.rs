@@ -17,10 +17,10 @@ const TESTCASES: &[&str] = &[
     // "./libcbench_testcode.sh\0",
     // "./libctest_testcode.sh\0",
     // "./iozone_testcode.sh\0",
-    "./unixbench_testcode.sh\0",
+    // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
     // "./iperf_testcode.sh\0",
-    // "./lmbench_testcode.sh\0",
+    "./lmbench_testcode.sh\0",
 ];
 
 /// 传入str引用转换为C风格字符串，使其可以被用作系统调用
@@ -37,7 +37,7 @@ fn run_cmd(cmd: &str, pwd: &str) {
             &path,
             &[ &path, "sh\0", "-c\0", cmd],
             &[
-                "PATH=/bin:/\0",
+                ["PATH=", pwd.strip_suffix("/").unwrap(), ":/bin\0"].concat().as_str(),
                 "HOME=/\0",
                 "LD_LIBRARY_PATH=/\0",
                 "TERM=screen\0",

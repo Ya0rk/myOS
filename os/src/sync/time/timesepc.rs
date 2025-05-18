@@ -28,6 +28,7 @@ impl TimeSpec {
     pub fn process_cputime_now() -> Self {
         let task = current_task().unwrap();
         let time = task.process_cputime();
+        println!("[process_cputime_now] sec = {}, nsec = {}", time.as_secs() as usize, time.subsec_nanos() as usize);
         TimeSpec {
             tv_sec: time.as_secs() as usize,
             tv_nsec: time.subsec_nanos() as usize,
