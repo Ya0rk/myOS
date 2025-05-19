@@ -132,9 +132,9 @@ pub fn sys_clone(
     tls: usize,
     ctid: usize,
     ) -> SysResult<usize> {
-    info!("[sys_clone] start");
     debug!("start sys_fork");
     let flag = CloneFlags::from_bits(flags as u32).unwrap();
+    info!("[sys_clone] start child_stack {}, flag: {:?}", child_stack, flag);
     let current_task = current_task().unwrap();
     let token = current_task.get_user_token();
     let new_task = match flag.contains(CloneFlags::CLONE_THREAD) {
