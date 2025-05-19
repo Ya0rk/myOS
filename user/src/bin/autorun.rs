@@ -14,13 +14,13 @@ const TESTCASES: &[&str] = &[
     // "./busybox_testcode.sh\0",
     // "./lua_testcode.sh\0",
     // "./netperf_testcode.sh\0",
-    // "./libcbench_testcode.sh\0",
+    "./libcbench_testcode.sh\0",
     // "./libctest_testcode.sh\0",
     // "./iozone_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
     // "./iperf_testcode.sh\0",
-    "./lmbench_testcode.sh\0",
+    // "./lmbench_testcode.sh\0",
 ];
 
 /// 传入str引用转换为C风格字符串，使其可以被用作系统调用

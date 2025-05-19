@@ -22,6 +22,8 @@ pub struct TimeData {
 
     child_user_time: Duration,
     child_system_time: Duration,
+
+    systime_helper: Duration,
 }
 
 impl TimeData {
@@ -37,6 +39,7 @@ impl TimeData {
             trap_out_time: Duration::ZERO,
             child_user_time: Duration::ZERO,
             child_system_time: Duration::ZERO,
+            systime_helper: Duration::ZERO,
         }
     }
 
@@ -44,19 +47,21 @@ impl TimeData {
     pub fn set_sched_in_time(&mut self) {
         let now = time_duration();
         self.sched_in_time = now;
+        self.systime_helper = now;
     }
 
     /// 在task调度出processor时更新时间，增加内核态时间
     pub fn set_sched_out_time(&mut self) {
         let now = time_duration();
         self.sched_out_time = now;
-        self.system_time += now - self.sched_in_time; // 相当于加上 调度的一个时间片
+        self.system_time += now - self.systime_helper;
     }
 
     /// 在trap in时更新task的时间，增加用户态时间
     pub fn set_trap_in_time(&mut self) {
         let now = time_duration();
         self.trap_in_time = now;
+        self.systime_helper = now;
         self.user_time += now - self.trap_out_time;
     }
 

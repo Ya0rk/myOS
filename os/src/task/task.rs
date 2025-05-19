@@ -166,6 +166,7 @@ impl TaskControlBlock {
     }
 
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
+        info!("[process_fork] start, flags = {:?}", flag);
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(pid.0);
@@ -209,6 +210,7 @@ impl TaskControlBlock {
         let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
             true  => self.memory_space.clone(),
             false => {
+                info!("[process_fork] self memoty space.");
                 let child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
                 unsafe { sfence(); }
                 new_shared(child_memory_space)
@@ -257,6 +259,7 @@ impl TaskControlBlock {
     }
 
     pub fn thread_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
+        info!("[thread_fork] start, flags = {:?}", flag);
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(self.get_tgid());
@@ -808,6 +811,19 @@ impl TaskControlBlock {
             }
         }
         utime+stime
+    }
+
+    pub fn process_ustime(&self) -> (Duration, Duration) {
+        let mut utime = Duration::ZERO;
+        let mut stime = Duration::ZERO;
+        for (_, thread) in self.thread_group.lock().tasks.iter() {
+            if let Some(thread) = thread.upgrade() {
+                let (ut, st) = thread.get_time_data().get_ustime();
+                utime += ut;
+                stime += st;
+            }
+        }
+        (utime, stime)
     }
 
     pub fn with_mut_memory_space<T>(&self, f: impl FnOnce(&mut MemorySpace) -> T) -> T {

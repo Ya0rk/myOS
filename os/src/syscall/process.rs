@@ -7,7 +7,7 @@ use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, trans
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
 use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
-use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
+use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
 use crate::syscall::RLimit64;
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, MANAGER
@@ -133,7 +133,6 @@ pub fn sys_clone(
     ctid: usize,
     ) -> SysResult<usize> {
     info!("[sys_clone] start");
-    debug!("start sys_fork");
     let flag = CloneFlags::from_bits(flags as u32).unwrap();
     let current_task = current_task().unwrap();
     let token = current_task.get_user_token();
@@ -886,5 +885,23 @@ pub fn sys_tkill(tid: usize, sig: i32) -> SysResult<usize> {
 
 pub fn sys_madvise() -> SysResult<usize> {
     info!("[sys_madvise] start");
+    Ok(0)
+}
+
+
+/// get resource usage
+pub fn sys_getrusage(who: isize, usage: usize) -> SysResult<usize> {
+    info!("[sys_getrusage] start, who = {}", who);
+    let task = current_task().unwrap();
+    let mut res;
+    match who {
+        RUSAGE_SELF => {
+            let (user_time, sys_time) = task.process_ustime();
+            res = Rusage::new(user_time.into(), sys_time.into());
+        }
+        _ => unimplemented!()
+    }
+    let ptr = unsafe{ usage as *mut Rusage };
+    unsafe{ core::ptr::write(ptr, res); }
     Ok(0)
 }
