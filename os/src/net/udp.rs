@@ -311,6 +311,9 @@ impl FileTrait for UdpSocket {
     fn is_dir(&self) -> bool {
         false
     }
+    fn get_flags(&self) -> OpenFlags {
+        self.flags
+    }
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<crate::mm::page::Page>> {
         unimplemented!()
     }

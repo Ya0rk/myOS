@@ -850,9 +850,9 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
 /// 用于修改某个文件描述符的属性
 /// 第1个参数fd为待修改属性的文件描述符，第2个参数cmd为对应的操作命令，第3个参数为cmd的参数
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
-    info!("[sys_fcntl] start, fd = {}", fd);
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
+    info!("[sys_fcntl] start, fd = {}, cmd = {:?}", fd, cmd);
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
     }
@@ -873,7 +873,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
             // Return (as the function result) the file descriptor flags; arg is ignored.
             if let Some(file) = task.get_file_by_fd(fd) {
                 let flags = file.get_flags();
-                if flags.contains(OpenFlags::O_CLOEXEC) && cmd == FcntlFlags::F_GETFD {
+                if flags.contains(OpenFlags::O_CLOEXEC) && cmd.contains(FcntlFlags::F_GETFD) {
                     return Ok(FcntlArgFlags::bits(&FcntlArgFlags::FD_CLOEXEC) as usize);
                 } else {
                     return Ok(OpenFlags::bits(&flags) as usize);
@@ -905,7 +905,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
         FcntlFlags::F_DUPFD_CLOEXEC => {
             if let Some(file) = task.get_file_by_fd(fd) {
                 let flags = file.get_flags();
-                let newfd = task.alloc_fd_than(FdInfo::new(file, flags), arg as usize);
+                let newfd = task.alloc_fd_than(FdInfo::new(file, flags | OpenFlags::O_CLOEXEC), arg as usize);
                 return Ok(newfd);
             }
             return Err(Errno::EBADF);

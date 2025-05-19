@@ -87,11 +87,14 @@ impl dyn Socket {
     fn new_socket(ip_type: IpType, socket_type: SocketType) -> SysResult<SockClass> {
         match socket_type {
             ty if ty.contains(SocketType::SOCK_STREAM) => {
-                let mut non_block_flags = None;
+                let mut flags = OpenFlags::empty();
                 if socket_type.contains(SocketType::SOCK_NONBLOCK) {
-                    non_block_flags = Some(OpenFlags::O_NONBLOCK);
+                    flags.insert(OpenFlags::O_NONBLOCK);
                 }
-                Ok(SockClass::Tcp(Arc::new(TcpSocket::new(ip_type, non_block_flags))))
+                if socket_type.contains(SocketType::SOCK_CLOEXEC) {
+                    flags.insert(OpenFlags::O_CLOEXEC);
+                }
+                Ok(SockClass::Tcp(Arc::new(TcpSocket::new(ip_type, flags))))
             }
             ty if ty.contains(SocketType::SOCK_DGRAM) => {
                 Ok(SockClass::Udp(Arc::new(UdpSocket::new(ip_type))))

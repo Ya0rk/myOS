@@ -127,6 +127,7 @@ pub trait FileTrait: Send + Sync {
     }
     fn get_flags(&self) -> OpenFlags {
         // unimplemented!("not support!");
+        info!("[filetrait::get_flags] default");
         OpenFlags::O_RDWR
     }
     /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
