@@ -313,7 +313,7 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
     }
     
     // 删除对应的fd
-    task.remove_fd(fd);
+    task.remove_fd(fd)?;
     Ok(0)
 }
 
@@ -886,7 +886,6 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
             // Set the file descriptor flags to the value specified by arg.
             if let Some(file) = task.get_file_by_fd(fd) {
                 let new_flags = FcntlArgFlags::from_bits(arg as u32).ok_or(Errno::EINVAL)?;
-                // }
             }
             return Ok(0);
         }

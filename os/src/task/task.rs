@@ -750,8 +750,8 @@ impl TaskControlBlock {
         self.fd_table.lock().alloc_fd_than(fd, than).expect("task alloc fd fail")
     }
     /// 删除fd
-    pub fn remove_fd(&self, fd: usize) {
-        self.fd_table.lock().remove(fd).expect("task remove fd fail")
+    pub fn remove_fd(&self, fd: usize) -> SysResult {
+        self.fd_table.lock().remove(fd)
     }
     /// 在指定位置设置fd
     pub fn put_fd_in(&self, fd: FdInfo, idx: usize) {

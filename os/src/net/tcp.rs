@@ -1,4 +1,5 @@
 use core::cell::UnsafeCell;
+use core::time;
 use core::time::Duration;
 
 use alloc::string::String;
@@ -6,6 +7,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use async_trait::async_trait;
 use log::info;
+use lwext4_rust::bindings::int_least16_t;
 use lwext4_rust::bindings::BUFSIZ;
 use smoltcp::iface::SocketHandle;
 use smoltcp::socket;
@@ -88,29 +90,34 @@ impl TcpSocket {
         tcp::Socket::new(recv_buf, send_buf)
     }
 
+    ///根据参数 local_point 绑定 self->sockmeta->local_end
     pub fn do_bind(&self, mut local_point: IpEndpoint) -> SysResult<()> {
+        info!("[do_bind]");
         let mut sockmeta = self.sockmeta.lock();
         let mut p: u16;
 
         // addr = 0.0.0.0代表本地
         do_addr127(&mut local_point);
         // 分配port
+        // 存在问题? 有的情况下不需要做这个动作?或者说do_port不够满足要求?
+        // 因为同一时间可能会有多个socket在使用某个local end?只是remote end不一样而已
+        // 特别是在accept中会产生多个同一local end的socket
         p = do_port(&mut local_point, Sock::Tcp)?;
         
         sockmeta.local_end = Some(local_point);
         sockmeta.port = Some(p);
         drop(sockmeta);
 
-        info!("[TCP::bind] bind to port: {}", local_point.port);
+        info!("[TCP::do_bind] bind to port: {}", local_point.port);
         Ok(())
     }
 
     fn do_connect(&self, remote_point: IpEndpoint) -> SysResult<TcpState> {
+        info!("[do_connect] start");
         let local_end = self.whit_sockmeta(|sockmeta| {
             sockmeta.remote_end = Some(remote_point);
             sockmeta.local_end.unwrap()
         });
-
         let res = self.with_socket(|socket| {
             let mut binding = NET_DEV.lock();
             let context = binding.iface.context();
@@ -135,6 +142,16 @@ impl TcpSocket {
         let stat = self.with_socket(|socket| socket.state());
 
         Ok(stat)
+    }
+
+    /// 查看socket的状态
+    /// 注意到当前实现没有错误处理(不会)
+    /// 注意到这里复用了 do_connect 的代码,其实应当将 do_connect 的查看状态功能全放在这里
+    /// 形成 connect 函数的工作流
+    /// 1. 发出建立连接申请
+    /// 2. 不断查看连接状态
+    fn check_connect_stat(&self) -> SysResult<TcpState> {
+        Ok(self.with_socket(|socket| socket.state()))
     }
 
     /// 和udp的check addr相同
@@ -162,6 +179,7 @@ impl TcpSocket {
                         zero: [0u8; 8],
                     });
                     drop(sockmeta);
+                    info!("[check_addr] call bind");
                     self.bind(&addr);
                 }
                 IpType::Ipv6 => todo!(),
@@ -229,6 +247,7 @@ impl TcpSocket {
 #[async_trait]
 impl Socket for TcpSocket {
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
+        info!("[TcpSocket::bind]");
         let mut local_point = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
         let mut sockmeta = self.sockmeta.lock();
         if sockmeta.local_end.is_some() {
@@ -243,8 +262,9 @@ impl Socket for TcpSocket {
         info!("[tcp listen] backlog: {}", backlog);
         let sockmeta = self.sockmeta.lock();
         let p = sockmeta.port.clone().ok_or(Errno::EINVAL)?;
+        info!("[tcp listen] stage 1");
         let local_end = sockmeta.local_end.ok_or(Errno::EINVAL)?;
-
+        info!("[tcp listen] stage 2");
         let res = self.with_socket(|socket| {
             match socket.listen(local_end) {
                 Ok(_) => {
@@ -262,6 +282,7 @@ impl Socket for TcpSocket {
         res
     }
     async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
+        info!("[TcpSocket::accept] flags: {:?}", flags);
         if *self.state.lock() != TcpState::Listen {
             return Err(Errno::EINVAL);
         }
@@ -270,9 +291,10 @@ impl Socket for TcpSocket {
         let remote_end = TcpAcceptFuture::new(self).await?;
         let ip_type = self.sockmeta.lock().iptype;
         let local_end = self.sockmeta.lock().local_end.expect("[tcp accept] no local end");
-
         let newsock = TcpSocket::new(ip_type, flags);
-        newsock.do_bind(local_end)?;
+        {newsock.sockmeta.lock().port = Some(local_end.port);}
+        {newsock.sockmeta.lock().local_end = Some(local_end);}
+        // newsock.do_bind(local_end)?;
         newsock.listen(10)?;
         let newsock = Arc::new(newsock);
         let newfd = sock_map_fd(newsock, cloexec_enable)
@@ -286,9 +308,10 @@ impl Socket for TcpSocket {
         self.check_addr(remote_endpoint)?;
         yield_now().await;
 
-        let state = self.do_connect(remote_endpoint)?;
+        let mut state = self.do_connect(remote_endpoint)?;
         loop {
             NET_DEV.lock().poll();
+            state = self.check_connect_stat()?;
             match state {
                 TcpState::Established => {
                     info!("[tcp connect] Connected to: {}", remote_endpoint);
