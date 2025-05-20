@@ -41,6 +41,7 @@ fn run_cmd(cmd: &str) {
         println!("task run cmd parent: {}", cmd);
         let mut exit_code: i32 = 0;
         let tid = wait(&mut exit_code);
+        println!("return tid:{}", tid);
         if tid == -1 {
             yield_();
         }

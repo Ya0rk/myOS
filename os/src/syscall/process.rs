@@ -147,7 +147,7 @@ pub fn sys_clone(
     let child_trap_cx = new_task.get_trap_cx_mut();
     // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
     // 只需要修改子进程返回值为0即可
-    child_trap_cx.user_x[10] = 0;
+    child_trap_cx.user_gp.a0 = 0;
 
     // 子进程不能使用父进程的栈，所以需要手动指定
     if child_stack != 0 {
@@ -443,16 +443,16 @@ pub fn sys_sigreturn() -> SysResult<usize> {
     let sig_stack = ucontext.uc_stack;
     let sig_mask = ucontext.uc_sigmask;
     let trap_cx = task.get_trap_cx_mut();
-    let sepc = ucontext.get_userx()[0];
+    let sepc = ucontext.get_user_gp().zero;
     // 恢复trap_cx到之前状态,这些值都保存在ucontext中
     trap_cx.set_sepc(sepc);                // 恢复sepc
-    trap_cx.user_x = ucontext.get_userx(); // 恢复寄存器
+    trap_cx.user_gp = ucontext.get_user_gp(); // 恢复寄存器
     task.set_blocked(sig_mask);            // 恢复信号屏蔽字
     // 恢复信号栈
     if sig_stack.ss_size != 0 {
         unsafe { *task.sig_stack.get() = Some(sig_stack) };
     }
-    let a0 = trap_cx.user_x[10];
+    let a0 = trap_cx.user_gp.a0;
     Ok(a0)
 }
 

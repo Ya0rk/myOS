@@ -1,18 +1,18 @@
 # # 将initproc和onlinetests提前放到内存里
-#     .section .data
-#     .globl initproc_start
-#     .globl initproc_end
-#     .align 3
-# initproc_start:
-#     .incbin "../user/target/loongarch64-unknown-none/release/initproc"
-# initproc_end:
+    .section .data
+    .globl initproc_start
+    .globl initproc_end
+    .align 3
+initproc_start:
+    .incbin "../user/target/loongarch64-unknown-none/release/initproc"
+initproc_end:
 
     .section .data
     .globl user_shell_start
     .globl user_shell_end
     .align 3
 user_shell_start:
-    .incbin "../user/target/riscv64gc-unknown-none-elf/release/user_shell"
+    .incbin "../user/target/loongarch64-unknown-none/release/user_shell"
 user_shell_end:
 
 
@@ -21,7 +21,7 @@ user_shell_end:
     .globl mbshell_end
     .align 3
 mbshell_start:
-	.incbin "../user/target/riscv64gc-unknown-none-elf/release/mbshell"
+	.incbin "../user/target/loongarch64-unknown-none/release/mbshell"
 mbshell_end:
 
     .section .data
@@ -29,7 +29,7 @@ mbshell_end:
     .globl gbshell_end
     .align 3
 gbshell_start:
-	.incbin "../user/target/riscv64gc-unknown-none-elf/release/gbshell"
+	.incbin "../user/target/loongarch64-unknown-none/release/gbshell"
 gbshell_end:
 
     .section .data
@@ -37,5 +37,5 @@ gbshell_end:
     .globl autorun_end
     .align 3
 autorun_start:
-	.incbin "../user/target/riscv64gc-unknown-none-elf/release/autorun"
+	.incbin "../user/target/loongarch64-unknown-none/release/autorun"
 autorun_end:

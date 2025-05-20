@@ -73,14 +73,15 @@ endif
 ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS =  -machine virt 
 	QEMU_ARGS += -m 1G
-	QEMU_ARGS += -D ../qemu.log -d mmu,page,in_asm,int,pcall,cpu_reset,guest_errors,exec,cpu
+	# QEMU_ARGS += -D ../qemu.log -d mmu,page,in_asm,int,pcall,cpu_reset,guest_errors,exec,cpu
+	QEMU_ARGS += -D ../qemu.log -d int,in_asm
 	QEMU_ARGS += -nographic 
 	QEMU_ARGS += -kernel $(KERNEL_ELF)
 	QEMU_ARGS += -drive file=$(FS_IMG_BAK),if=none,format=raw,id=x0
 	QEMU_ARGS += -device virtio-blk-pci,drive=x0,id=virtio-disk0 
 	QEMU_ARGS += -smp $(CPUS)
 
-	
+
 	FS_IMG := ../sdcard-la.img
 	FS_IMG_BAK = ../sdcard-la-copy.img
 endif
@@ -118,7 +119,7 @@ kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
 	cp ./linker/linker-$(BOARD)-$(ARCH).ld ./src/linker.ld
-	cargo build $(MODE_ARG) -j 
+	cargo build $(MODE_ARG) -j 20
 	rm src/linker.ld
 PHONY += kernel
 
@@ -220,7 +221,7 @@ LAgdb:
 		-kernel ./target/loongarch64-unknown-none/release/os \
 		-vga none \
 		-nographic \
-		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
+		-D qemu.log -d in_asm,int \
 		-drive file=$(FS_IMG),if=none,format=raw,id=mydev \
 		-device virtio-blk-pci,drive=mydev,id=virtio-disk0 \
 		-s -S

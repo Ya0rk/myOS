@@ -85,6 +85,8 @@ pub fn kernel_trap_handler() {
                     
                     current_task().unwrap().with_mut_memory_space(|m| {
                         m.handle_page_fault(va.into(), access_type)
+                    }).unwrap_or_else(|e| {
+                        panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
                     });
                 }
         

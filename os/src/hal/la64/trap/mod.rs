@@ -60,7 +60,9 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
             _ => {},
         }
 
+        set_trap_handler(IndertifyMode::User);
         user_trap_return();
+        set_trap_handler(IndertifyMode::Kernel);
 
         match task.get_status() {
             TaskStatus::Zombie => break,

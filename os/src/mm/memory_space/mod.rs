@@ -376,7 +376,7 @@ impl MemorySpace {
                                 new_flags.remove(PTEFlags::W);
                                 (new_flags, page.ppn())
                             };
-                            info!("[map_elf] lazy alloc: vpn: {:#x} offset: {:#x} ppn: {:#x}", vpn.0, offset_aligned, ppn.0 );
+                            // info!("[map_elf] lazy alloc: vpn: {:#x} offset: {:#x} ppn: {:#x}", vpn.0, offset_aligned, ppn.0 );
                             self.page_table_mut().map_leaf(vpn, ppn, pte_flags);
                             vm_area.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };

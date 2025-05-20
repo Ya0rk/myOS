@@ -49,7 +49,7 @@ pub mod hal;
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use alloc::vec::{self, Vec};
 use hal::mem::{mmu_init, tlb::{self, tlb_fill}, tlb_init};
-use log::info;
+use log::{error, info};
 use mm::memory_space::test_la_memory_space;
 use sync::{block_on, time_init, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
@@ -108,6 +108,8 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         );
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         hal::trap::init();
+
+
         
         crate::drivers::init();
 
@@ -117,7 +119,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         
 
         // 测试代码应当放在这里
-        // #[cfg(feature = "test")]
+        #[cfg(feature = "test")]
         {
             // mm::remap_test();
             // info!("start path test");
@@ -125,6 +127,12 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // info!(" start dentry test");
             // fs::vfs::dentry_test();
             // test_la_memory_space();
+
+            // unsafe  {
+            //     let p = 0x9000_0000_0020_1000 as (*const usize);
+            //     let ins = *p;
+            //     error!("[TEST_ADDR] {:#x}", ins);
+            // }
         }
 
 

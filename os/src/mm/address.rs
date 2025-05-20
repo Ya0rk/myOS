@@ -192,8 +192,8 @@ impl From<usize> for VirtAddr {
 impl From<usize> for VirtPageNum {
     fn from(v: usize) -> Self {
         let tmp = v >> (VPN_WIDTH_SV39 - 1);
-        let is_valid = tmp == 0 || tmp == (1 << (52 - VPN_WIDTH_SV39 + 1)) - 1;
-        assert!(is_valid, "invalid v to VirtPageNum: {:#x}", v);
+        // let is_valid = tmp == 0 || tmp == (1 << (52 - VPN_WIDTH_SV39 + 1)) - 1;
+        // assert!(is_valid, "invalid v to VirtPageNum: {:#x}", v);
         Self(v)
     }
 }
@@ -259,7 +259,7 @@ impl VirtAddr {
 }
 impl From<VirtAddr> for VirtPageNum {
     fn from(v: VirtAddr) -> Self {
-        assert_eq!(v.page_offset(), 0);
+        // assert_eq!(v.page_offset(), 0);
         v.floor()
     }
 }
@@ -293,7 +293,7 @@ impl PhysAddr {
 }
 impl From<PhysAddr> for PhysPageNum {
     fn from(v: PhysAddr) -> Self {
-        assert_eq!(v.page_offset(), 0);
+        // assert_eq!(v.page_offset(), 0);
         v.floor()
     }
 }

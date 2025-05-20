@@ -16,7 +16,7 @@ pub struct UserFloatRegs {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct TrapContext {
-    /* 0-31 */ pub user_x: [usize; 32], 
+    /* 0-31 */ pub user_gp: UserGPRegs, 
     /*  32  */ pub sstatus: Sstatus,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
@@ -25,6 +25,66 @@ pub struct TrapContext {
     /*  48  */ pub kernel_fp: usize,
     /*  49  */ pub kernel_tp: usize,
     /*  50  */ pub float_regs: UserFloatRegs,
+}
+/// 通用寄存器
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct GPRegister {
+    pub zero:   usize,
+    pub ra:     usize,
+    pub sp:     usize,
+    pub gp:     usize,
+    pub tp:     usize,
+    pub t0:     usize,
+    pub t1:     usize,
+    pub t2:     usize,
+    pub s0:     usize,
+    pub s1:     usize,
+    pub a0:     usize,
+    pub a1:     usize,
+    pub a2:     usize,
+    pub a3:     usize,
+    pub a4:     usize,
+    pub a5:     usize,
+    pub a6:     usize,
+    pub a7:     usize,
+    pub s2:     usize,
+    pub s3:     usize,
+    pub s4:     usize,
+    pub s5:     usize,
+    pub s6:     usize,
+    pub s7:     usize,
+    pub s8:     usize,
+    pub s9:     usize,
+    pub s10:    usize,
+    pub s11:    usize,
+    pub t3:     usize,
+    pub t4:     usize,
+    pub t5:     usize,
+    pub t6:     usize,
+}
+
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+union UserGPRegs {
+    ord: [usize; 32],
+    alias: GPRegister,
+}
+impl UserGPRegs {
+    pub fn new_bare() -> Self {
+        Self {
+            ord: [0; 32]
+        }
+    }
+}
+
+impl Debug for UserGPRegs {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        unsafe {
+            write!(f, "{:?}", self.alias)
+        }
+    }
 }
 
 impl TrapContext {
@@ -37,7 +97,7 @@ impl TrapContext {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
         let mut cx = Self {
-            user_x: [0; 32],
+            user_x: UserGPRegs::new_bare(),
             sstatus,
             sepc: entry,
             kernel_sp: 0,

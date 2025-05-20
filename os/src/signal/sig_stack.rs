@@ -1,4 +1,4 @@
-use crate::hal::trap::TrapContext;
+use crate::hal::trap::{context::GPRegs, TrapContext};
 use super::SigMask;
 
 /// 信号栈是为信号处理程序执行提供的专用栈空间.它通常包含以下内容:
@@ -47,7 +47,7 @@ pub struct UContext {
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 struct MContext {
-    pub user_x: [usize; 32],
+    pub user_gp: GPRegs,
     pub fpstate: [usize; 66],
 }
 
@@ -63,29 +63,29 @@ impl Default for SignalStack {
 
 impl UContext {
     pub fn new(old_sigmask: SigMask, sig_stack: Option<SignalStack>, trap_cx: &TrapContext) -> Self {
-        let mut user_x: [usize; 32] = trap_cx.user_x;
+        let mut user_gp: GPRegs = trap_cx.user_gp;
         // 将old sepc暂时存储在user_x[0]中,这个sepc用于sigreturn时恢复
         // 这里的sepc是信号处理函数的返回地址
-        user_x[0] = trap_cx.sepc;
+        user_gp.zero = trap_cx.sepc;
         Self {
             uc_flags: 0,
             uc_link: 0,
             uc_stack: sig_stack.unwrap_or_default(),
             uc_sigmask: old_sigmask,
             uc_sig: [0; 16],
-            uc_mcontext: MContext::new(user_x)
+            uc_mcontext: MContext::new(user_gp)
         }
     }
 
-    pub fn get_userx(&self) -> [usize; 32] {
-        self.uc_mcontext.user_x
+    pub fn get_user_gp(&self) -> GPRegs {
+        self.uc_mcontext.user_gp
     }
 }
 
 impl MContext {
-    fn new(user_reg: [usize; 32]) -> Self {
+    fn new(user_reg: GPRegs) -> Self {
         Self {
-            user_x: user_reg,
+            user_gp: user_reg,
             fpstate: [0; 66]
         }
     }

@@ -140,13 +140,13 @@ pub async fn user_trap_handler() {
 
                     let mut cx = current_trap_cx();
                     cx.sepc += 4;
-                    let syscall_id = cx.user_x[11];
-                    let args  = [cx.user_x[4],
-                        cx.user_x[5],
-                        cx.user_x[6],
-                        cx.user_x[7],
-                        cx.user_x[8],
-                        cx.user_x[9]];
+                    let syscall_id = cx.user_gp.a7;
+                    let args  = [cx.user_gp.a0,
+                        cx.user_gp.a1,
+                        cx.user_gp.a2,
+                        cx.user_gp.a3,
+                        cx.user_gp.a4,
+                        cx.user_gp.a5];
                     // info!("[user_trap_handler] syscall id:{}, args:{:?}", syscall_id, args);
                     let result = syscall(
                         syscall_id,
@@ -158,15 +158,15 @@ pub async fn user_trap_handler() {
         
                     match result {
                         Ok(ret) => {
-                            cx.user_x[4] = ret as usize;
+                            cx.user_gp.a0 = ret as usize;
                             // info!("[syscall ret] OK:{}", ret);
                         }
                         Err(err) => {
                             if err as isize == -1 {
-                                cx.user_x[4] = err as usize;
+                                cx.user_gp.a0 = err as usize;
                                 info!("[syscall ret] Err:{:?}", err);
                             } else {
-                                cx.user_x[4] = -(err as isize) as usize;
+                                cx.user_gp.a0 = -(err as isize) as usize;
                                 info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
                             }
                         }
@@ -179,6 +179,7 @@ pub async fn user_trap_handler() {
                 Exception::PageModifyFault |
                 Exception::PageNonReadableFault |
                 Exception::PageNonExecutableFault => {
+
                     let access_type = match e {
                         Exception::LoadPageFault | Exception::PageNonReadableFault => {
                             PageFaultAccessType::RO
@@ -195,9 +196,12 @@ pub async fn user_trap_handler() {
                     };
                     
                     let va = badv::read().vaddr();  
+                    // if (va == 0) {
+                    //     panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                    // }
                     current_task().unwrap().with_mut_memory_space(|m| {
                         m.handle_page_fault(va.into(), access_type)
-                    });
+                    }).unwrap_or_else(|e| {panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());});
                 }
         
                 _ => {
@@ -218,7 +222,7 @@ pub async fn user_trap_handler() {
 #[no_mangle]
 pub fn user_trap_return() {
     // 重新修改stvec设置 user 的trap handler entry
-    set_trap_handler(IndertifyMode::User);
+    // set_trap_handler(IndertifyMode::User);
 
     let trap_cx = current_trap_cx();
     // trap_cx.float_regs.trap_out_do_with_freg();
@@ -231,6 +235,7 @@ pub fn user_trap_return() {
 
     task.get_time_data_mut().set_trap_out_time();
     // info!("[user_trap_return] entering __return_to_user, cx:{:?}", *trap_cx);
+
     unsafe { __return_to_user(trap_cx); }
     // info!("[user_trap_return] entering trap");
     task.get_time_data_mut().set_trap_in_time();

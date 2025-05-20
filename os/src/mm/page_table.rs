@@ -210,12 +210,12 @@ impl PageTable {
     // #[allow(unused)]
     /// 建立虚拟地址和物理地址的映射
     pub fn map_leaf(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
-        info!("[map_leaf] {:#x} to {:#x}", vpn.0, ppn.0);
+        // info!("[map_leaf] {:#x} to {:#x}", vpn.0, ppn.0);
         let pte = self.find_pte_create(vpn).unwrap();
         debug_assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
         // TODO: to avoid exposed flag bits
         *pte = PageTableEntry::new(ppn, flags);
-        info!("[map_leaf] pte is {:#x}", pte.bits);
+        // info!("[map_leaf] pte is {:#x}", pte.bits);
     }
     pub fn map_leaf_force(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();

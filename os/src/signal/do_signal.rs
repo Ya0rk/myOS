@@ -83,21 +83,31 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                     // a0(x10): 信号编号,在后面的trap_cx.flash中设置
                     // a1(x11): 信号信息结构体指针
                     // a2(x12): ucontext 结构体指针
-                    trap_cx.user_x[12] = new_sp; // a2
+                    trap_cx.user_gp.a2 = new_sp; // a2
                     let mut siginfo_v = LinuxSigInfo::new(signo as i32, siginfo.sigcode as i32);
                     new_sp -= size_of::<LinuxSigInfo>();
                     // 将siginfo_v拷贝到用户栈中
                     unsafe { core::ptr::write(new_sp as *mut LinuxSigInfo, siginfo_v) };
-                    trap_cx.user_x[11] = new_sp; // a1
+                    trap_cx.user_gp.a1 = new_sp; // a1
                 }
 
-                let x3 = ucontext.get_userx()[3]; // gp
-                let x4 = ucontext.get_userx()[4]; // tp
+                let mut gp: usize;
+
+                // loongarch has no global pointer reg
+                #[cfg(target_arch="riscv64")]
+                {
+                    gp = ucontext.get_user_gp().gp; // gp
+                }
+                #[cfg(target_arch="loongarch64")]
+                {
+                    gp = 0;
+                }
+                let tp = ucontext.get_user_gp().tp; // tp
                 
                 // 修改trap_cx，函数trap return后返回到用户自定义的函数，
                 // 自定义函数执行完后返回到sigreturn,这里的__sigret_helper是一个汇编，触发sigreturn
                 // 这里的sigreturn是一个系统调用，返回到内核态
-                trap_cx.flash(handler, new_sp, __sigret_helper as usize, signo, x3, x4);
+                trap_cx.flash(handler, new_sp, __sigret_helper as usize, signo, gp, tp);
                 break;
             }
         }
