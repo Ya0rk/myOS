@@ -1,5 +1,5 @@
 use super::{PhysAddr, PhysPageNum};
-use crate::{hal::{config::MEMORY_END, KERNEL_ADDR_OFFSET}, mm::address::KernelAddr};
+use crate::{hal::{config::{MEMORY_END, KERNEL_ADDR_OFFSET}}, mm::address::KernelAddr};
 use crate::{sync::SpinNoIrqLock};
 use alloc::vec::Vec;
 use spin::Mutex;

@@ -10,7 +10,7 @@ use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 use core::ptr::NonNull;
 
 use crate::{
-    drivers::DevError, hal::KERNEL_ADDR_OFFSET, mm::{
+    drivers::DevError, hal::config::KERNEL_ADDR_OFFSET, mm::{
         frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PageTable, PhysPageNum,
         StepByOne, VirtAddr,
     }, sync::SpinNoIrqLock, task::current_user_token

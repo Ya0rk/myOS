@@ -17,8 +17,6 @@ APPS := ../user/src/bin/*
 # fs image
 FS = lwext4_rust
 
-
-
 # FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
 CPUS ?= 1
@@ -58,7 +56,7 @@ QEMU_NAME := qemu-system-$(ARCH)
 
 ifeq ($(ARCH), riscv64)
 	QEMU_ARGS =  -machine virt 
-	QEMU_ARGS += -m 128M
+	QEMU_ARGS += -m 1G
 	QEMU_ARGS += -nographic 
 	QEMU_ARGS += -bios $(BOOTLOADER) 
 	QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
@@ -80,6 +78,7 @@ ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS += -drive file=$(FS_IMG_BAK),if=none,format=raw,id=x0
 	QEMU_ARGS += -device virtio-blk-pci,drive=x0,id=virtio-disk0 
 	QEMU_ARGS += -smp $(CPUS)
+	QEMU_ARGS += -L /opt/qemu-9.2.1/pc-bios  # 这里是YJJ需要指定
 
 
 	FS_IMG := ../sdcard-la.img
@@ -105,9 +104,9 @@ PHONY += initproc
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
-	# cargo install cargo-binutils
-	# rustup component add rust-src
-	# rustup component add llvm-tools-preview
+	cargo install cargo-binutils
+	rustup component add rust-src
+	rustup component add llvm-tools-preview
 PHONY += env
 
 $(KERNEL_BIN): kernel
@@ -169,7 +168,7 @@ debug: qemu-version-check build
 		tmux -2 attach-session -d
 PHONY += debug
 
-gdbserver: qemu-version-check build
+gdbserver: qemu-version-check build copy_img
 	$(QEMU_NAME) $(QEMU_ARGS) -s -S
 PHONY += gdbserver
 

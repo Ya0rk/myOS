@@ -371,7 +371,7 @@ impl VmArea {
         vpn: VirtPageNum,
         access_type: PageFaultAccessType,
     ) -> SysResult<()> {
-        log::debug!(
+        info!(
             "[VmArea::handle_page_fault] {self:?}, {vpn:?} at page table {:?}",
             page_table.root_ppn
         );
@@ -400,6 +400,7 @@ impl VmArea {
             // PERF: copying data vs. lock the area vs. atomic ref cnt
             let old_page = self.get_page(vpn);
             let cnt = Arc::strong_count(old_page);
+            info!("[handle_page_fault] page cnt:{}", cnt);
             if cnt > 1 {
                 // copy the data
                 page = Page::new();
@@ -408,6 +409,7 @@ impl VmArea {
                 // unmap old page and map new page
                 pte_flags.remove(PTEFlags::COW);
                 pte_flags.insert(PTEFlags::W);
+                pte_flags.insert(PTEFlags::D);
                 page_table.map_leaf_force(vpn, page.ppn(), pte_flags);
                 // NOTE: track `Page` with great care
                 self.pages.insert(vpn, page);
@@ -416,6 +418,7 @@ impl VmArea {
                 // set the pte to writable
                 pte_flags.remove(PTEFlags::COW);
                 pte_flags.insert(PTEFlags::W);
+                pte_flags.insert(PTEFlags::D);
                 pte.set_flags(pte_flags);
                 unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
             }

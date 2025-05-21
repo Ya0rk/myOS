@@ -1,5 +1,5 @@
 use core::cell::SyncUnsafeCell;
-use core::fmt::Display;
+use core::fmt::{Debug, Display};
 use core::future::Ready;
 use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
@@ -31,7 +31,7 @@ use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 
 pub struct TaskControlBlock {
     // 不可变
-    pid:            Pid,
+    pub pid:            Pid,
 
     // 可变
     tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
@@ -166,6 +166,7 @@ impl TaskControlBlock {
     }
 
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
+        info!("[process_fork] flags: {:?}", flag);
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(pid.0);
@@ -827,6 +828,17 @@ pub enum TaskStatus {
 }
 
 impl Display for TaskStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let status = match self {
+            Self::Ready => "Ready",
+            Self::Running => "Running",
+            Self::Stopped => "Stopped",
+            Self::Zombie => "Zombie",
+        };
+        write!(f, "{}", status)
+    }
+}
+impl Debug for TaskStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let status = match self {
             Self::Ready => "Ready",

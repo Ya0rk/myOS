@@ -623,6 +623,7 @@ impl MemorySpace {
 
     /// Clone a same `MemorySpace` lazily.
     pub fn from_user_lazily(user_space: &mut Self) -> Self {
+        info!("[from_user_lazily] enter during process fork");
         let mut memory_space = Self::new_user();
         for (range, area) in user_space.areas().iter() {
             // log::info!("[MemorySpace::from_user_lazily] cloning {area:?}");
@@ -643,8 +644,10 @@ impl MemorySpace {
                         _ => {
                             // copy on write
                             // TODO: MmapFlags::MAP_SHARED
+                            // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
                             let mut new_flags = pte.flags() | PTEFlags::COW;
                             new_flags.remove(PTEFlags::W);
+                            new_flags.remove(PTEFlags::D);
                             pte.set_flags(new_flags);
                             (new_flags, page.ppn())
                         }
@@ -877,7 +880,7 @@ impl MemorySpace {
     ) -> SysResult<()> {
         log::trace!("[MemorySpace::handle_page_fault] {va:?}");
         let vm_area = self.areas_mut().get_mut(va.align_down()).ok_or_else(|| {
-            // log::warn!("[handle_page_fault] no area containing {va:?}");
+            log::warn!("[handle_page_fault] no area containing {va:?}");
             Errno::EFAULT
         })?;
         vm_area.handle_page_fault(self.page_table_mut(), va.floor(), access_type)?;

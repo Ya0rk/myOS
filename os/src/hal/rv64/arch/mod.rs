@@ -49,12 +49,23 @@ pub fn user_token_write(token: usize) {
     }
 }
 
+pub fn user_token_read() -> usize {
+    unsafe {
+        satp_read()
+    }
+}
+
 pub fn kernel_token_write(token: usize) {
     unsafe {
         satp::write(token);
     }
 }
 
+pub fn kernel_token_read() -> usize {
+    unsafe {
+        satp_read()
+    }
+}
 
 
 pub fn sfence() {

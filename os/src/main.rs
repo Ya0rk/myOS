@@ -48,7 +48,10 @@ pub mod hal;
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use alloc::vec::{self, Vec};
+#[cfg(target_arch = "loongarch64")]
 use hal::mem::{mmu_init, tlb::{self, tlb_fill}, tlb_init};
+#[cfg(target_arch = "riscv64")]
+use hal::mem::{mmu_init, tlb_init};
 use log::{error, info};
 use mm::memory_space::test_la_memory_space;
 use sync::{block_on, time_init, timer};
@@ -77,9 +80,11 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // 载入用户进程
     // 设置时钟中断
     // 开始调度执行
-
-    mmu_init();
-    tlb_init(tlb_fill as usize);
+    #[cfg(target_arch = "loongarch64")]
+    {
+        mmu_init();
+        tlb_init(tlb_fill as usize);
+    }
     println!("hello world!");
     println!("hart id is {:#X}, dt_root is {:#x}", hart_id, dt_root);
 
