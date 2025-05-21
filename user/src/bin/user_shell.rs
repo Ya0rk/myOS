@@ -53,6 +53,9 @@ pub fn main() -> i32 {
                         _ => {
                             line.push('\0');
                             let pid = fork();
+                            let p_pid = &pid as *const isize;
+                            println!("address of pid is {:#x}", p_pid as usize);
+                            println!("pid after fork is {}", pid);
                             if pid == 0 {
                                 // child process
                                 println!("[basic] child get pid = {}", pid);
@@ -61,7 +64,9 @@ pub fn main() -> i32 {
                             } else {
                                 println!("[basic] parent get pid = {}", pid);
                                 let mut exit_code: i32 = 0;
+                                println!("pid before wait4 is {}", pid);
                                 let exit_pid = waitpid(pid as usize, &mut exit_code, 0);
+                                println!("pid after wait4 is {}", pid);
                                 assert_eq!(pid, exit_pid);
                                 println!("Shell: Process {} exited with code {}", pid, exit_code);
                             }
