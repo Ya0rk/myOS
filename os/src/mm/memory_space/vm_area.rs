@@ -371,7 +371,7 @@ impl VmArea {
         vpn: VirtPageNum,
         access_type: PageFaultAccessType,
     ) -> SysResult<()> {
-        log::debug!(
+        info!(
             "[VmArea::handle_page_fault] {self:?}, {vpn:?} at page table {:?}",
             page_table.root_ppn
         );

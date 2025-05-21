@@ -56,7 +56,7 @@ QEMU_NAME := qemu-system-$(ARCH)
 
 ifeq ($(ARCH), riscv64)
 	QEMU_ARGS =  -machine virt 
-	QEMU_ARGS += -m 128M
+	QEMU_ARGS += -m 1G
 	QEMU_ARGS += -nographic 
 	QEMU_ARGS += -bios $(BOOTLOADER) 
 	QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)

@@ -16,7 +16,17 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
     let mut cur = 0;
     let old_sigmask = *task.get_blocked();
 
-    while let Some(siginfo) = task.sig_pending.lock().take_one(old_sigmask) {    
+    loop {    
+        let siginfo = {
+            match task.sig_pending.lock().take_one(old_sigmask) {
+                Some(siginfo) => {
+                    siginfo
+                }
+                None => {
+                    break;
+                }
+            }
+        };
         cur += 1;
         // 避免队列中全是被阻塞的信号，造成死循环
         if cur > all_len {

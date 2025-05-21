@@ -644,7 +644,7 @@ impl MemorySpace {
                         _ => {
                             // copy on write
                             // TODO: MmapFlags::MAP_SHARED
-                            info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
+                            // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
                             let mut new_flags = pte.flags() | PTEFlags::COW;
                             new_flags.remove(PTEFlags::W);
                             new_flags.remove(PTEFlags::D);

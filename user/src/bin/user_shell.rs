@@ -70,7 +70,7 @@ pub fn main() -> i32 {
                                 assert_eq!(pid, exit_pid);
                                 println!("Shell: Process {} exited with code {}", pid, exit_code);
                             }
-                            // line.clear();
+                            line.clear();
                         }
                     }
                 }

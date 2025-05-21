@@ -51,7 +51,7 @@ pub fn satp_write(satp: usize) {
 }
 
 pub fn user_token_write(token: usize) {
-    info!("[user_token_write] token: {:#x}", token);
+    // info!("[user_token_write] token: {:#x}", token);
     loongarch64::register::pgdl::set_base(token << PAGE_SIZE_BITS);
 }
 pub fn user_token_read() -> usize {

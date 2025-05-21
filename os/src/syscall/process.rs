@@ -10,7 +10,7 @@ use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, I
 use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
 use crate::syscall::RLimit64;
 use crate::task::{
-    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, MANAGER
+    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, TaskStatus, MANAGER
 };
 use crate::utils::{Errno, SysResult, RNG};
 use alloc::ffi::CString;
@@ -132,7 +132,6 @@ pub fn sys_clone(
     tls: usize,
     ctid: usize,
     ) -> SysResult<usize> {
-    info!("[sys_clone] start");
     debug!("start sys_fork");
     let flag = CloneFlags::from_bits(flags as u32).unwrap();
     let current_task = current_task().unwrap();
@@ -142,7 +141,7 @@ pub fn sys_clone(
         false => current_task.process_fork(flag),
     };
     drop(current_task);
-
+    info!("[sys_clone] start, flags: {:?}, ptid: {}, tls: {}, ctid: {:#x}", flag, ptid, tls, ctid);
     let new_pid = new_task.get_pid();
     let child_trap_cx = new_task.get_trap_cx_mut();
     // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
@@ -625,6 +624,10 @@ pub fn sys_log(cmd: i32, buf: usize, len: usize) -> SysResult<usize> {
 pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
     info!("[sys_kill] start, to kill pid = {}, signum = {}", pid, signum);
     if signum == 0 { return Ok(0); }
+    // 临时设置
+    if signum == 21  {
+        return Err(Errno::EIO);
+    }
     if signum > MAX_SIGNUM { return Err(Errno::EINVAL); }
 
     #[derive(Debug)]
@@ -667,11 +670,28 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
             let pgid = cur_task.get_pgid();
             let sender_pid = cur_task.get_pid();
             let target_group = get_target_proc_group(pgid);
+            info!("[sys_kill] proc_group:{:?}", target_group);
             let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
             for target_pid in target_group.into_iter().filter(|pid| *pid != sender_pid) {
+                if target_pid == 0 { continue; }
                 let recv_task = get_task_by_pid(target_pid).ok_or(Errno::ESRCH)?;
                 recv_task.proc_recv_siginfo(siginfo);
             }
+            {
+                let cur_tasks:Vec<(usize, TaskStatus)> = MANAGER.task_manager.lock().0.values().map(|p_tcb: &alloc::sync::Weak<crate::task::TaskControlBlock>| {
+                    // 获取TaskControlBlock.pid
+                    if let Some(arc_tcb) = p_tcb.upgrade() {
+                        // 2. 成功升级后访问pid字段
+                        (arc_tcb.get_pid(), arc_tcb.get_status())
+                    }
+                    else {
+                        (10000000, TaskStatus::Zombie)
+                    }
+                }).collect();
+                info!("[sys_kill] remaining processes:{:?}", cur_tasks);
+            }
+            yield_now();
+            info!("[sys_kill] return Ok(0)");
             return Ok(0);
         }
         Target::AllProcessExceptInit => {
@@ -784,7 +804,7 @@ pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
             get_task_by_pid(pid).ok_or(Errno::ESRCH)?
         }
     };
-
+    info!("[sys_getpgid] ret pgid = {}", task.get_pgid());
     Ok(task.get_pgid())
 }
 
