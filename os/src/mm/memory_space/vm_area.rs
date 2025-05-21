@@ -384,7 +384,7 @@ impl VmArea {
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
-            panic!("aaaa");
+            panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
             return Err(Errno::EFAULT);
         }
 

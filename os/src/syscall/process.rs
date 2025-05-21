@@ -183,7 +183,7 @@ pub fn sys_clone(
     // 将子进程加入任务管理器，这里可以快速找到进程
     add_task(&new_task);
     spawn_user_task(new_task);
-
+    info!("[sys_clone] father proc return: {}", new_pid);
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
 }

@@ -14,7 +14,7 @@ const BS: u8 = 0x08u8;
 
 use alloc::{string::String, vec::Vec};
 use user_lib::console::getchar;
-use user_lib::{chdir, exec, exit, fork, getcwd, mkdir, waitpid};
+use user_lib::{chdir, exec, exit, fork, getcwd, getpid, mkdir, waitpid};
 
 #[no_mangle]
 pub fn main() -> i32 {
@@ -55,11 +55,14 @@ pub fn main() -> i32 {
                             let pid = fork();
                             if pid == 0 {
                                 // child process
+                                println!("[pid: {}] is child now execv {}", getpid(), &line);
                                 exec(line.as_str());
                                 exit(0);
                             } else {
+                                println!("[pid: {}] is pather now wait child", getpid());
                                 let mut exit_code: i32 = 0;
                                 let exit_pid = waitpid(pid as usize, &mut exit_code, 0);
+                                println!("[pid: {}] child pid = {}", getpid(), exit_pid);
                                 assert_eq!(pid, exit_pid);
                                 println!("Shell: Process {} exited with code {}", pid, exit_code);
                             }

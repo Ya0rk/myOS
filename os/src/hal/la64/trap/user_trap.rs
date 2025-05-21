@@ -109,6 +109,7 @@ pub async fn user_trap_handler() {
 pub async fn user_trap_handler() {
 
 
+    use log::error;
     use loongarch64::register::{badv, crmd, era, estat::{self, Exception, Interrupt, Trap}, ticlr, CpuMode};
 
     use crate::mm::memory_space::PageFaultAccessType;
@@ -203,7 +204,14 @@ pub async fn user_trap_handler() {
                         m.handle_page_fault(va.into(), access_type)
                     }).unwrap_or_else(|e| {panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());});
                 }
-        
+                Exception::InstructionNotExist => {
+                    error!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                    unsafe {
+                        let pc = era.pc() as *const usize;
+                        info!("[user_trap_handler] inst: {:b}", *pc);
+                        panic!("InstructionNotExist");
+                    }
+                }
                 _ => {
                     panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
                 }
