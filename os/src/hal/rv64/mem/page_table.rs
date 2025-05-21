@@ -176,6 +176,8 @@ impl PageTable {
     pub fn init_kernel_page_table() -> Self {
         extern "C" {
             fn stext();
+            fn sigret();
+            fn esigret();
             fn etext();
             fn srodata();
             fn erodata();
@@ -210,9 +212,22 @@ impl PageTable {
         // println!("aaa");
         // TODO: to avoid exposed flag bits
         kernel_page_table.map_kernel_range(
-            (stext as usize).into()..(etext as usize).into(),
+            (stext as usize).into()..(sigret as usize).into(),
             MapPerm::RX,
         );
+
+        println!("mapping .text section");
+        kernel_page_table.map_kernel_range(
+            (sigret as usize).into()..(esigret as usize).into(),
+            MapPerm::RX | MapPerm::U,
+        );
+        
+        println!("mapping .text section left");
+        kernel_page_table.map_kernel_range(
+            (esigret as usize).into()..(etext as usize).into(),
+            MapPerm::RX,
+        );
+        
         println!("mapping .rodata section");
         // memory_set.push(
         //     MapArea::new(
