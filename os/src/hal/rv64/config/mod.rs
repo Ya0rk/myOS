@@ -11,8 +11,8 @@ pub const MB: usize = 1024 * KB;
 // TODO:目前是有栈协程，如果将userstack修改为8MB，kernelstack修改为64kB，会导致Kerenlstack爆栈
 // 如果是无栈协程就不会
 pub const USER_STACK_SIZE: usize = 8 * MB;
-pub const KERNEL_STACK_SIZE: usize = 64 * KB;
-pub const KERNEL_HEAP_SIZE: usize = 0x20_00000;
+pub const KERNEL_STACK_SIZE: usize = 128 * KB;
+pub const KERNEL_HEAP_SIZE: usize = 0x200_0000;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 12;
 
@@ -64,12 +64,6 @@ pub const USER_ELF_PRE_ALLOC_PAGE_CNT: usize = 0;
 
 /// Dynamic linked interpreter address range in user space
 pub const DL_INTERP_OFFSET: usize = 0x20_0000_0000;
-
-pub const MAX_BUFFER_HEADS: usize = 0x18000;
-pub const MAX_BUFFER_CACHE: usize = 0x1000;
-pub const MAX_BUFFER_PAGES: usize = MAX_BUFFER_CACHE / MAX_BUFFERS_PER_PAGE;
-pub const MAX_BUFFERS_PER_PAGE: usize = PAGE_SIZE / BLOCK_SIZE;
-pub const BUFFER_NEED_CACHE_CNT: usize = 8;
 
 /// User stack segment
 pub const U_SEG_STACK_BEG: usize = 0x0000_0001_0000_0000;

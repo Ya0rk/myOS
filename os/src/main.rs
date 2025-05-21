@@ -122,7 +122,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         #[cfg(feature = "mul_hart")]
         hal::entry::boot::boot_all_harts(hart_id);
     } else {
-
         hal::trap::init();
         mm::init(false);        
     }

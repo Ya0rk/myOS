@@ -45,7 +45,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 if !sig_action
                     .sa_flags
                     .contains(SigActionFlag::SA_NODEFER) {
-                        task.get_blocked_mut().set_sig(signo);
+                        task.get_blocked_mut().insert_sig(signo);
                 }
 
                 // 可能有其他信号也需要阻塞
@@ -58,12 +58,14 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 let mut new_sp = match sig_stack {
                     Some(sig_stack) => {
                         // 用户自定义的栈
+                        info!("[do_signal] user define stack");
                         let mut new_sp = sig_stack.ss_sp + sig_stack.ss_size;
                         new_sp -= size_of::<UContext>();
                         new_sp
                     }
                     None => {
                         // 普通栈
+                        info!("[do_signal] default stack");
                         old_sp - size_of::<UContext>()
                     }
                 };
@@ -73,7 +75,8 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 let token = task.get_user_token();
                 // 保存当前的user 状态,在sigreturn中恢复
                 // 包括本来的sepc，后序在sigreturn中恢复
-                let ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx);
+                let mut ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx);
+                ucontext.uc_mcontext.user_x[0] = trap_cx.sepc;
                 // 将ucontext拷贝到用户栈中
                 unsafe { core::ptr::write(new_sp as *mut UContext, ucontext) };
 

@@ -76,9 +76,9 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
             _ => {},
         }
 
-        if task.pending() {
+        // if task.pending() {
             do_signal(&task);
-        }
+        // }
     }
     info!("[trap loop] task pid = {} exit", task.get_pid());
     task.do_exit();

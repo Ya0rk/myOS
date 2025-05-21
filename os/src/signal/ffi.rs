@@ -213,7 +213,7 @@ pub enum SigNom {
 
 
 impl SigMask {
-    pub fn set_sig(&mut self, sig_num: usize) {
+    pub fn insert_sig(&mut self, sig_num: usize) {
         self.insert((SigMask::from_bits(1 << (sig_num - 1))).unwrap());
     }
 

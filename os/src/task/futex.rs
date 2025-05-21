@@ -39,175 +39,316 @@ impl FutexHashKey {
     }
 }
 
-/// 全局futex hash桶，管理着所有的futex
-// pub static FUTEXBUCKET: Lazy<SpinNoIrqLock<FutexBucket>> = Lazy::new(|| SpinNoIrqLock::new(FutexBucket::new()));
+// /// 全局futex hash桶，管理着所有的futex
+// // pub static FUTEXBUCKET: Lazy<SpinNoIrqLock<FutexBucket>> = Lazy::new(|| SpinNoIrqLock::new(FutexBucket::new()));
 
-/// 每个hash key对应一个vec，其中是(线程id，进程waker, bitset位掩码）三元组，waker用来唤醒进程
-pub struct FutexBucket(pub HashMap<FutexHashKey, UnsafeCell<Vec<(usize, Waker, u32)>>>);
+// /// 每个hash key对应一个vec，其中是(线程id，进程waker, bitset位掩码）三元组，waker用来唤醒进程
+// pub struct FutexBucket(pub HashMap<FutexHashKey, UnsafeCell<Vec<(usize, Waker, u32)>>>);
 
-impl FutexBucket {
+// impl FutexBucket {
+//     pub fn new() -> Self {
+//         Self(HashMap::new())
+//     }
+
+//     /// 获取不可变的futex hash桶
+//     pub fn get_values(&self, key: FutexHashKey) -> Option<&Vec<(usize, Waker, u32)>> {
+//         self.0.get(&key).map(|v| unsafe { & *v.get() })
+//     }
+
+//     /// 获取可变的futex hash桶
+//     pub fn get_mut_values(&mut self, key: FutexHashKey) -> Option<&mut Vec<(usize, Waker, u32)>> {
+//         self.0.get_mut(&key).map(|v| unsafe { &mut *v.get() })
+//     }
+
+//     pub fn check_is_inqueue(&self, key: FutexHashKey, pid: usize) -> bool {
+//         match self.get_values(key) {
+//             Some(queue) => queue.iter().any(|(p, _, _)| *p == pid),
+//             None => false
+//         }
+//     }
+
+//     pub fn add(&mut self, key: FutexHashKey, pid: usize, waker: Waker, bitset: u32) {
+//         match self.get_mut_values(key) {
+//             Some(queue) => {
+//                 queue.push((pid, waker, bitset));
+//             }
+//             None => {
+//                 let mut new_queue = Vec::new();
+//                 new_queue.push((pid, waker, bitset));
+//                 self.0.insert(key, UnsafeCell::new(new_queue));
+//             }
+//         }
+//     }
+
+//     /// 用于删除特定的futex，主要场景分为两种：超时或者被信号打断
+//     pub fn remove(&mut self, key: FutexHashKey, pid: usize) {
+//         info!("[futex queue] remove pid = {}", pid);
+//         let queue = match self.get_mut_values(key) {
+//             Some(queue) => queue,
+//             None => return
+//         };
+//         queue.retain(|(p, _, _)| *p != pid); // 删除队列中pid的任务
+//         if queue.is_empty() {  // 队列为空，就删除整个队列，避免内存泄露
+//             self.0.remove(&key);
+//         }
+//     }
+
+//     // 唤醒在队列中的任务, 同时将这些任务从队列中清除
+//     pub fn to_wake(&mut self, key: FutexHashKey, bitset: u32, num: u32) -> usize {
+//         if num == 0 {
+//             return 0;
+//         }
+//         let mut res = 0;
+//         if let Some(queue) = self.get_mut_values(key) {
+//             while let Some((pid, waker, tb)) = queue.pop() {
+//                 if bitset & tb == 0 {
+//                     queue.push((pid, waker, tb)); // 如果不满足条件，就放回去
+//                     continue;
+//                 }
+//                 waker.wake();
+//                 res += 1;
+//                 if res >= num as usize { break; }
+//             }
+//             if queue.is_empty() {
+//                 self.0.remove(&key);
+//             }
+//         }
+//         return res;
+//     }
+
+//     /// 将key中剩下的futex移动到newkey队列中
+//     pub fn requeue(&mut self, key: FutexHashKey, new_key: FutexHashKey, max_num: usize) -> SysResult<()> {
+//         let mut should_remove = false;
+//         let mut migrated = None;
+
+//         // 处理旧队列
+//         if let Some(uc) = self.0.get_mut(&key) {
+//             let old_queue = unsafe { &mut *uc.get() };
+//             let have = old_queue.len();
+//             let do_len = min(have, max_num);
+
+//             if do_len == 0 {
+//                 // 无元素可迁移，检查是否需删除空队列
+//                 should_remove = old_queue.is_empty();
+//             } else {
+//                 // 迁移元素并检查是否需删除旧键
+//                 migrated = Some(old_queue.split_off(have - do_len));
+//                 should_remove = old_queue.is_empty();
+//             }
+//         } else {
+//             // 旧队列不存在，直接返回成功
+//             return Ok(());
+//         }
+
+//         // 清理空队列
+//         if should_remove {
+//             self.0.remove(&key);
+//         }
+
+//         // 迁移到新队列
+//         if let Some(mut migrated) = migrated {
+//             let new_entry = self.0.entry(new_key).or_insert_with(|| UnsafeCell::new(Vec::new()));
+//             let new_queue = unsafe { &mut *new_entry.get() };
+//             new_queue.append(&mut migrated);
+//         }
+
+//         Ok(())
+//     }
+// }
+
+
+// pub struct FutexFuture {
+//     pub uaddr: usize,
+//     pub key: FutexHashKey,
+//     pub bitset: u32, // 位掩码，用于唤醒判断
+//     pub val: u32, // 期望的值，在入队列前需要判断是否相等
+//     pub is_register: bool,
+//     // pub task: Arc<TaskControlBlock>,
+// }
+
+// impl FutexFuture {
+//     pub fn new(uaddr: usize, key: FutexHashKey, bitset:u32, val: u32) -> Self {
+//         FutexFuture {
+//             uaddr,
+//             key,
+//             bitset,
+//             val,
+//             is_register: false,
+//             // task: current_task().unwrap(),
+//         }
+//     }
+// }
+
+// impl Future for FutexFuture {
+//     type Output = ();
+
+//     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
+//         let this = self.get_mut();
+//         // let task = this.task.as_ref();
+//         let task = current_task().unwrap();
+//         let pid = task.get_pid();
+//         let uaddr = this.uaddr;
+//         info!("[futex_future] poll pid = {}, uaddr = {:#x}, is_register = {}", pid, uaddr, this.is_register);
+//         if !this.is_register {
+//             // 说明还没有加入全局hash 桶
+//             // 在入队前要判断是否是期望值
+//             if unsafe{ atomic_load_acquire(uaddr as *const u32) } != this.val {
+//                 // 如果不相等，说明有其他任务释放了锁，此时就不需要将其加入队列，否则可能造成无法唤醒
+//                 info!("[futex_future] now != val");
+//                 return Poll::Ready(());
+//             }
+
+//             // 加入hash 桶
+//             task.futex_list.lock().add(this.key, pid, cx.waker().clone(), this.bitset);
+//             this.is_register = true;
+//             return Poll::Pending
+//         }
+
+//         task.futex_list.lock().remove(this.key, pid);
+//         return Poll::Ready(())
+//     }
+// }
+
+type TID = usize;
+
+pub struct FutexQueue(pub BTreeMap<usize, UnsafeCell<BTreeMap<TID, Waker>>>);
+
+impl FutexQueue {
     pub fn new() -> Self {
-        Self(HashMap::new())
+        Self(BTreeMap::new())
     }
-
-    /// 获取不可变的futex hash桶
-    pub fn get_values(&self, key: FutexHashKey) -> Option<&Vec<(usize, Waker, u32)>> {
-        self.0.get(&key).map(|v| unsafe { & *v.get() })
-    }
-
-    /// 获取可变的futex hash桶
-    pub fn get_mut_values(&mut self, key: FutexHashKey) -> Option<&mut Vec<(usize, Waker, u32)>> {
-        self.0.get_mut(&key).map(|v| unsafe { &mut *v.get() })
-    }
-
-    pub fn check_is_inqueue(&self, key: FutexHashKey, pid: usize) -> bool {
-        match self.get_values(key) {
-            Some(queue) => queue.iter().any(|(p, _, _)| *p == pid),
-            None => false
+    pub fn add_waiter(&mut self, uaddr: usize, tid: TID, waker: Waker) {
+        if let Some(waiters) = self.0.get_mut(&uaddr) {
+            unsafe { &mut *waiters.get() }.insert(tid, waker);
+        } else {
+            let mut waiters = BTreeMap::new();
+            waiters.insert(tid, waker);
+            self.0.insert(uaddr, UnsafeCell::new(waiters));
         }
     }
 
-    pub fn add(&mut self, key: FutexHashKey, pid: usize, waker: Waker, bitset: u32) {
-        match self.get_mut_values(key) {
-            Some(queue) => {
-                queue.push((pid, waker, bitset));
+    pub fn get_waiters(&self, uaddr: usize) -> Option<&mut BTreeMap<TID, Waker>> {
+        if let Some(waiters) = self.0.get(&uaddr) {
+            Some(unsafe { &mut *waiters.get() })
+        } else {
+            None
+        }
+    }
+
+    pub fn remove_waiter(&mut self, uaddr: usize, tid: TID) {
+        if let Some(queue) = self.get_waiters(uaddr) {
+            queue.remove(&tid);
+        }
+    }
+
+    pub fn wake(&mut self, uaddr: usize, n: u32) -> usize {
+        let mut count = 0;
+        if let Some(waiters) = self.get_waiters(uaddr) {
+            while let Some((_, waiter)) = pop_waiter(waiters) {
+                waiter.wake();
+                count += 1;
+                if count == n {
+                    break;
+                }
             }
-            None => {
-                let mut new_queue = Vec::new();
-                new_queue.push((pid, waker, bitset));
-                self.0.insert(key, UnsafeCell::new(new_queue));
-            }
         }
+        count as usize
     }
 
-    /// 用于删除特定的futex，主要场景分为两种：超时或者被信号打断
-    pub fn remove(&mut self, key: FutexHashKey, pid: usize) {
-        info!("[futex queue] remove pid = {}", pid);
-        let queue = match self.get_mut_values(key) {
-            Some(queue) => queue,
-            None => return
-        };
-        queue.retain(|(p, _, _)| *p != pid); // 删除队列中pid的任务
-        if queue.is_empty() {  // 队列为空，就删除整个队列，避免内存泄露
-            self.0.remove(&key);
-        }
-    }
-
-    // 唤醒在队列中的任务, 同时将这些任务从队列中清除
-    pub fn to_wake(&mut self, key: FutexHashKey, bitset: u32, num: u32) -> usize {
-        if num == 0 {
+    /// Wakes up a maximum of `n_wake` waiters that are waiting on the futex at
+    /// `old_uaddr`.
+    /// The remaining waiters with maxnum `n_rq`  are removed from the wait
+    /// queue of `old_uaddr` and added to the wait queue of `new_uaddr`
+    pub fn requeue_waiters(
+        &mut self,
+        old_uaddr: usize,
+        new_uaddr: usize,
+        n_wake: u32,
+        n_rq: u32,
+    ) -> usize {
+        if old_uaddr == new_uaddr {
             return 0;
         }
-        let mut res = 0;
-        if let Some(queue) = self.get_mut_values(key) {
-            while let Some((pid, waker, tb)) = queue.pop() {
-                if bitset & tb == 0 {
-                    queue.push((pid, waker, tb)); // 如果不满足条件，就放回去
-                    continue;
-                }
-                waker.wake();
-                res += 1;
-                if res >= num as usize { break; }
+        let new_waiters = match self.0.get(&new_uaddr) {
+            None => {
+                self.0.insert(new_uaddr, UnsafeCell::new(BTreeMap::new()));
+                unsafe { &mut *self.0.get(&new_uaddr).unwrap().get() }
             }
-            if queue.is_empty() {
-                self.0.remove(&key);
+            Some(new_waiters) => unsafe { &mut *new_waiters.get() },
+        };
+        let wake_count = self.wake(old_uaddr, n_wake);
+        let Some(old_waiters) = self.get_waiters(old_uaddr) else {
+            return wake_count;
+        };
+        let mut rq_count = 0;
+        while let Some((tid, waker)) = pop_waiter(old_waiters) {
+            new_waiters.insert(tid, waker);
+            rq_count += 1;
+            if rq_count == n_rq {
+                break;
             }
         }
-        return res;
+        rq_count as usize + wake_count
     }
+}
 
-    /// 将key中剩下的futex移动到newkey队列中
-    pub fn requeue(&mut self, key: FutexHashKey, new_key: FutexHashKey, max_num: usize) -> SysResult<()> {
-        let mut should_remove = false;
-        let mut migrated = None;
-
-        // 处理旧队列
-        if let Some(uc) = self.0.get_mut(&key) {
-            let old_queue = unsafe { &mut *uc.get() };
-            let have = old_queue.len();
-            let do_len = min(have, max_num);
-
-            if do_len == 0 {
-                // 无元素可迁移，检查是否需删除空队列
-                should_remove = old_queue.is_empty();
-            } else {
-                // 迁移元素并检查是否需删除旧键
-                migrated = Some(old_queue.split_off(have - do_len));
-                should_remove = old_queue.is_empty();
-            }
-        } else {
-            // 旧队列不存在，直接返回成功
-            return Ok(());
-        }
-
-        // 清理空队列
-        if should_remove {
-            self.0.remove(&key);
-        }
-
-        // 迁移到新队列
-        if let Some(mut migrated) = migrated {
-            let new_entry = self.0.entry(new_key).or_insert_with(|| UnsafeCell::new(Vec::new()));
-            let new_queue = unsafe { &mut *new_entry.get() };
-            new_queue.append(&mut migrated);
-        }
-
-        Ok(())
+fn pop_waiter(waiters: &mut BTreeMap<TID, Waker>) -> Option<(TID, Waker)> {
+    let mut key = None;
+    if let Some((tid, _)) = waiters.iter().next() {
+        key = Some(*tid);
+    }
+    if let Some(tid) = key {
+        let waker = waiters.remove(&tid).unwrap();
+        Some((tid, waker))
+    } else {
+        None
     }
 }
 
 
 pub struct FutexFuture {
     pub uaddr: usize,
-    pub key: FutexHashKey,
-    pub bitset: u32, // 位掩码，用于唤醒判断
-    pub val: u32, // 期望的值，在入队列前需要判断是否相等
-    pub is_register: bool,
-    pub task: Arc<TaskControlBlock>,
+    pub val: u32,
+    pub in_futexes: bool,
 }
 
 impl FutexFuture {
-    pub fn new(uaddr: usize, key: FutexHashKey, bitset:u32, val: u32) -> Self {
-        FutexFuture {
+    pub fn new(uaddr: usize, val: u32) -> Self {
+        Self {
             uaddr,
-            key,
-            bitset,
             val,
-            is_register: false,
-            task: current_task().unwrap(),
+            in_futexes: false,
         }
     }
 }
 
 impl Future for FutexFuture {
     type Output = ();
-
-    fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
-        let this = self.get_mut();
-        let task = this.task.as_ref();
-        let pid = task.get_pid();
-        let uaddr = this.uaddr;
-        info!("[futex_future] poll pid = {}, uaddr = {:#x}, is_register = {}", pid, uaddr, this.is_register);
-        if !this.is_register {
-            // 加入hash 桶
-            task.futex_list.lock().add(this.key, pid, cx.waker().clone(), this.bitset);
-            this.is_register = true ;
-            // 说明还没有加入全局hash 桶
-            // 在入队前要判断是否是期望值
-            let now = unsafe{ atomic_load_acquire(uaddr as *const u32) };
-            
-            info!("[futex_future] now = {}, val = {}", now, this.val);
-            if  now != this.val {
-                // 如果不相等，说明有其他任务释放了锁，此时就不需要将其加入队列，否则可能造成无法唤醒
+    fn poll(mut self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
+        // println!("[futexfuture] apoll, uaddr = {:#x}, val = {:#x}, infutex = {}", self.uaddr, self.val, self.in_futexes);
+        let task = current_task().unwrap();
+        let uaddr = self.uaddr;
+        // println!("[futexfuture] bpoll, uaddr = {:#x}, val = {:#x}, infutex = {}", uaddr, self.val, self.in_futexes);
+        if !self.in_futexes {
+            if unsafe { atomic_load_acquire(uaddr as *const u32) } == self.val {
+                // println!("jljljlljll");
+                task.futex_list.lock().add_waiter(self.uaddr, task.get_pid(), cx.waker().clone());
+                self.in_futexes = true;
+                return Poll::Pending;
+            } else {
+                // println!("asdfasdfasdf");
                 return Poll::Ready(());
-            }
-            return Poll::Pending
+            };
         }
 
-        task.futex_list.lock().remove(this.key, pid);
-        return Poll::Ready(())
+        task.futex_list.lock().remove_waiter(uaddr, task.get_pid());
+        Poll::Ready(())
     }
 }
+
+
+
+
 
 pub const ROBUST_LIST_HEAD_SIZE: usize = 24;
 

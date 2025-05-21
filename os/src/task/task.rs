@@ -5,7 +5,7 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, FutexBucket, RobustList, ThreadGroup};
+use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, RobustList, ThreadGroup};
 use super::{pid_alloc, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
@@ -17,7 +17,7 @@ use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, 
 use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
-use crate::task::{add_task, current_task, current_user_token, get_task_by_pid, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY};
+use crate::task::{add_task, current_task, current_user_token, get_task_by_pid, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FutexQueue, FUTEX_BITSET_MATCH_ANY};
 use crate::hal::trap::TrapContext;
 use crate::utils::SysResult;
 use alloc::collections::btree_map::BTreeMap;
@@ -40,12 +40,12 @@ pub struct TaskControlBlock {
 
     pub thread_group:   Shared<ThreadGroup>,
     pub memory_space:   Shared<MemorySpace>,
-    parent:         Shared<Option<Weak<TaskControlBlock>>>,
+    pub parent:         Shared<Option<Weak<TaskControlBlock>>>,
     pub children:   Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
     pub fd_table:   Shared<FdTable>,
     current_path:   Shared<String>,
     pub robust_list: Shared<RobustList>,
-    pub futex_list: Shared<FutexBucket>,
+    pub futex_list: Shared<FutexQueue>,
 
     // signal
     pub pending:        AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
@@ -99,7 +99,7 @@ impl TaskControlBlock {
             fd_table: new_shared(FdTable::new()),
             current_path: new_shared(String::from("/")), // root directory
             robust_list: new_shared(RobustList::new()),
-            futex_list: new_shared(FutexBucket::new()),
+            futex_list: new_shared(FutexQueue::new()),
 
             pending: AtomicBool::new(false),
             ucontext: AtomicUsize::new(0),
@@ -186,7 +186,7 @@ impl TaskControlBlock {
         let robust_list = new_shared(RobustList::new());
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
-        let futex_list = new_shared(FutexBucket::new());
+        let futex_list = new_shared(FutexQueue::new());
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().clone())
@@ -359,11 +359,12 @@ impl TaskControlBlock {
         if let Some(tidaddress) = self.get_child_cleartid() {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
             unsafe{ core::ptr::write(tidaddress as *mut usize, 0); }
-            let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
-            let mut binding = self.futex_list.lock();
-            binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
-            let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::FUTEX_PRIVATE);
-            binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
+            self.futex_list.lock().wake(tidaddress, 1);
+            // let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
+            // let mut binding = self.futex_list.lock();
+            // binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
+            // let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::FUTEX_PRIVATE);
+            // binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
         }
 
         if !self.is_leader() {
@@ -426,7 +427,7 @@ impl TaskControlBlock {
         }
         
         self.clear_fd_table();
-        self.recycle_data_pages();        
+        // self.recycle_data_pages();
     }
 
     pub fn do_wait4(&self, pid: usize, wstatus: usize, exit_code: i32) {
@@ -527,11 +528,11 @@ impl TaskControlBlock {
 impl TaskControlBlock {
     /// 检测pending字段，判断是否有信号需要处理
     pub fn pending(&self) -> bool {
-        self.pending.load(core::sync::atomic::Ordering::Relaxed)
+        self.pending.load(core::sync::atomic::Ordering::SeqCst)
     }
     /// 设置pending，代表 是否 有信号等待被处理
     pub fn set_pending(&self, value: bool) {
-        self.pending.store(value, core::sync::atomic::Ordering::Relaxed);
+        self.pending.store(value, core::sync::atomic::Ordering::SeqCst);
     }
 
     /// 取出task中的sig stack 留下None
@@ -554,11 +555,11 @@ impl TaskControlBlock {
 
     /// 设置ucontext
     pub fn set_ucontext(&self, addr: usize) {
-        self.ucontext.store(addr, core::sync::atomic::Ordering::Relaxed);
+        self.ucontext.store(addr, core::sync::atomic::Ordering::SeqCst);
     }
     /// 获取ucontext
     pub fn get_ucontext(&self) -> usize {
-        self.ucontext.load(core::sync::atomic::Ordering::Relaxed)
+        self.ucontext.load(core::sync::atomic::Ordering::SeqCst)
     }
 
     /// 获取parent的pid
@@ -635,15 +636,15 @@ impl TaskControlBlock {
 
     /// 获取当前进程的pgid：组id
     pub fn get_pgid(&self) -> usize {
-        self.pgid.load(core::sync::atomic::Ordering::Relaxed)
+        self.pgid.load(core::sync::atomic::Ordering::SeqCst)
     }
     /// 设置当前进程的pgid
     pub fn set_pgid(&self, pgid: usize) {
-        self.pgid.store(pgid, core::sync::atomic::Ordering::Relaxed);
+        self.pgid.store(pgid, core::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn get_tgid(&self) ->usize {
-        self.tgid.load(core::sync::atomic::Ordering::Relaxed)
+        self.tgid.load(core::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn is_leader(&self) -> bool {
@@ -692,11 +693,11 @@ impl TaskControlBlock {
     // exit code
     /// 获取进程的exit code
     pub fn get_exit_code(&self) -> i32 {
-        self.exit_code.load(core::sync::atomic::Ordering::Relaxed)
+        self.exit_code.load(core::sync::atomic::Ordering::SeqCst)
     }
     /// 修改进程exit code
     pub fn set_exit_code(&self, exit_code: i32) {
-        self.exit_code.store(exit_code, core::sync::atomic::Ordering::Relaxed);
+        self.exit_code.store(exit_code, core::sync::atomic::Ordering::SeqCst);
     }
 
     // children
