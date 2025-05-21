@@ -6,6 +6,7 @@ use loongarch64::register::ecfg::LineBasedInterrupt;
 use loongarch64::register::estat::{Exception, Interrupt, Trap};
 
 use crate::mm::memory_space::PageFaultAccessType;
+use crate::sync::{set_next_trigger, TIMER_QUEUE};
 use crate::task::current_task;
 
 #[no_mangle]
@@ -22,7 +23,9 @@ pub fn kernel_trap_handler() {
         Trap::Interrupt(Interrupt::Timer) => {
             // 清除时钟专断
             // info!("timer interrupt from kernel");
-            ticlr::clear_timer_interrupt();
+            // ticlr::clear_timer_interrupt();
+            TIMER_QUEUE.handle_expired();
+            set_next_trigger();
         }
         Trap::Interrupt(Interrupt::HWI0) => {
             // 中断0 --- 外部中断处理
@@ -30,36 +33,6 @@ pub fn kernel_trap_handler() {
         }
         Trap::Exception(e) => {
             match e {
-                // Exception::Syscall => {
-                //     let mut cx = current_trap_cx();
-                //     let syscall_id = cx.user_x[11];
-                //     let result = syscall(
-                //         syscall_id,
-                //         [cx.user_x[4],
-                //         cx.user_x[5],
-                //         cx.user_x[6],
-                //         cx.user_x[7],
-                //         cx.user_x[8],
-                //         cx.user_x[9]]
-                //     ).await;
-        
-                //     cx = current_trap_cx();
-        
-                //     match result {
-                //         Ok(ret) => {
-                //             cx.user_x[4] = ret as usize;
-                //         }
-                //         Err(err) => {
-                //             if err as isize == -1 {
-                //                 cx.user_x[4] = err as usize;
-                //             } else {
-                //                 cx.user_x[4] = -(err as isize) as usize;
-                //                 info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
-                //             }
-                //         }
-                //     }
-                // }
-        
                 Exception::LoadPageFault |
                 Exception::StorePageFault |
                 Exception::FetchPageFault |

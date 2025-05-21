@@ -55,15 +55,17 @@ pub fn main() -> i32 {
                             let pid = fork();
                             if pid == 0 {
                                 // child process
+                                println!("[basic] child get pid = {}", pid);
                                 exec(line.as_str());
                                 exit(0);
                             } else {
+                                println!("[basic] parent get pid = {}", pid);
                                 let mut exit_code: i32 = 0;
                                 let exit_pid = waitpid(pid as usize, &mut exit_code, 0);
                                 assert_eq!(pid, exit_pid);
                                 println!("Shell: Process {} exited with code {}", pid, exit_code);
                             }
-                            line.clear();
+                            // line.clear();
                         }
                     }
                 }

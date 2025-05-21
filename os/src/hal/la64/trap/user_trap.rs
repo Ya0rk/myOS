@@ -111,11 +111,11 @@ pub async fn user_trap_handler() {
 
     use loongarch64::register::{badv, crmd, era, estat::{self, Exception, Interrupt, Trap}, ticlr, CpuMode};
 
-    use crate::mm::memory_space::PageFaultAccessType;
+    use crate::{mm::memory_space::PageFaultAccessType, sync::TIMER_QUEUE};
     let estat = estat::read();
     let crmd = crmd::read();
     let era = era::read();
-    // info!("[user_trap_handler] cause:{:?}, crmd:{:?}, era:{:#x}", estat.cause(), crmd, era.pc());
+    // println!("[user_trap_handler] cause:{:?}, crmd:{:?}, era:{:#x}", estat.cause(), crmd, era.pc());
     let task= current_task().unwrap();
     if crmd.plv() != CpuMode::Ring0 {
         // 只有在内核态才会触发中断
@@ -125,6 +125,7 @@ pub async fn user_trap_handler() {
         Trap::Interrupt(Interrupt::Timer) => {
             // 清除时钟专断
             // info!("timer interrupt from kernel");
+            TIMER_QUEUE.handle_expired();
             set_next_trigger();
             yield_now().await;
         }
