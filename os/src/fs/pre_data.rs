@@ -5,8 +5,12 @@ use crate::{fs::{open_file, FileClass, FileTrait, OpenFlags}, mm::UserBuffer};
 
 use super::ext4::NormalFile;
 
-core::arch::global_asm!(include_str!("preload.S"));
+#[cfg(target_arch = "riscv64")]
+core::arch::global_asm!(include_str!("preload_rv.S"));
 
+
+#[cfg(target_arch = "loongarch64")]
+core::arch::global_asm!(include_str!("preload_la.S"));
 
 //将预加载到内存中的程序写入文件根目录
 /// 自动测试
