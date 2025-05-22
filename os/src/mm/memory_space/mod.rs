@@ -13,7 +13,7 @@ use core::{
 };
 
 // use core::arch::riscv64::sfence_vma_vaddr; 关于core::arch::riscv64::中的内容会在crate::hal::arch中统一引入
-use crate::hal::arch::sfence_vma_vaddr;
+use crate::{fs::{open, open_file, OpenFlags}, hal::arch::sfence_vma_vaddr, task::{aux, current_task}};
 // use riscv::register::scause; 将从riscv库引入scause替换为从hal::arch引入。在hal::arch中会间接引入riscv::register::scause
 // use crate::hal::arch::scause;
 // use async_utils::block_on;
@@ -408,13 +408,23 @@ impl MemorySpace {
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
         assert_eq!(elf_header.pt1.magic, ELF_MAGIC, "invalid elf!");
-        let entry = elf_header.pt2.entry_point() as usize;
+        let mut entry = elf_header.pt2.entry_point() as usize;
         let ph_entry_size = elf_header.pt2.ph_entry_size() as usize;
         let ph_count = elf_header.pt2.ph_count() as usize;
 
         let mut auxv = generate_early_auxv(ph_entry_size, ph_count, entry);
 
-        auxv.push(AuxHeader::new(AT_BASE, 0));
+        // maybe needed?
+        // auxv.push(AuxHeader::new(AT_BASE, 0));
+
+        if let Some(interp_entry) = self.load_dl_interp_if_needed(&elf).unwrap_or(None) {
+            auxv.push(AuxHeader::new(AT_BASE, DL_INTERP_OFFSET));
+            entry = interp_entry;
+        }
+        else {
+            auxv.push(AuxHeader::new(AT_BASE, 0));
+        }
+
 
         let (_max_end_vpn, header_va) = self.map_elf(elf_file, &elf, 0.into());
 
@@ -425,6 +435,63 @@ impl MemorySpace {
 
         (self, entry, auxv)
     }
+
+
+    pub fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> SysResult<Option<usize>> {
+        let elf_header = elf.header;
+        let ph_count = elf_header.pt2.ph_count();
+
+        let mut is_dl = false;
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Interp {
+                is_dl = true;
+                break;
+            }
+        }
+
+        if is_dl {
+            // adapted from phoenix
+            log::info!("[load_dl] encounter a dl elf");
+            let section = elf.find_section_by_name(".interp").unwrap();
+            let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
+            interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
+            log::info!("[load_dl] interp {}", interp);
+
+            // let mut interps: Vec<String> = vec![interp.clone()];
+
+            // log::info!("interp {}", interp);
+
+            // let mut interp_dentry: SysResult<Arc<dyn Dentry>> = Err(Errno::ENOENT);
+            // for interp in interps.into_iter() {
+            //     if let Ok(dentry) = current_task_ref().resolve_path(&interp) {
+            //         interp_dentry = Ok(dentry);
+            //         break;
+            //     }
+            // }
+            // let interp_dentry: Arc<dyn Dentry> = interp_dentry.unwrap();
+            // let interp_file = interp_dentry.open().ok().unwrap();
+            let cwd = current_task().unwrap().get_current_path();
+            if let Some(FileClass::File(interp_file)) = open(&cwd, &interp, OpenFlags::O_RDONLY) {
+                let interp_elf_data = block_on(async { interp_file.get_inode().read_all().await })?;
+                let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
+                self.map_elf(interp_file, &interp_elf, DL_INTERP_OFFSET.into());
+                Ok(Some(interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET))
+            }
+            else {
+                Err(Errno::ENOENT)
+            }
+
+            
+
+            
+        } else {
+            // no dynamic link
+            log::debug!("[load_dl] encounter a static elf");
+            Ok(None)
+        }
+    }
+
 
     /// Attach given `pages` to the MemorySpace. If pages is not given, it will
     /// create pages according to the `size` and map them to the MemorySpace.
