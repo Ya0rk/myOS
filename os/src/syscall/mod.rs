@@ -19,6 +19,7 @@ use ffi::SysCode;
 pub use ffi::CloneFlags;
 pub use ffi::ShutHow;
 pub use ffi::RLimit64;
+pub use ffi::StatFs;
 use crate::sync::TimeSpec;
 use crate::utils::SysResult;
 

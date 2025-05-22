@@ -38,3 +38,10 @@ macro_rules! println {
     }
 }
 
+#[macro_export]
+macro_rules! debug_point {
+    () => {
+        info!("[debug_point] {}:{}", file!(), line!());
+    };
+}
+

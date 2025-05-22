@@ -4,7 +4,7 @@ use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
 
 use crate::{
     drivers::Disk,
-    fs::{page_cache::PageCache, Ext4Inode, Kstat, SuperBlockTrait},
+    fs::{page_cache::PageCache, Ext4Inode, Kstat, SuperBlockTrait}, syscall::StatFs,
 };
 
 use alloc::sync::Arc;
@@ -34,8 +34,8 @@ impl SuperBlockTrait for Ext4SuperBlock {
     fn root_inode(&self) -> Arc<dyn InodeTrait> {
         self.root.clone()
     }
-    fn fs_stat(&self) -> Kstat {
-        Kstat::new()
+    fn fs_stat(&self) -> StatFs {
+        StatFs::new()
     }
     fn sync(&self) {
         todo!()
