@@ -177,7 +177,7 @@ impl Dentry {
                     return child_dentry.get_inode();
                 } else {
                     //如果不存在就创建,使用Inode的do_create方法
-                    if let Some(inode) = parent_inode.do_create(&target_name, flag.node_type()) {
+                    if let Some(inode) = parent_inode.do_create(&target_name, flag.node_type().into()) {
                         // self.children.write().insert(target_name.clone(), self.new(&target_name, inode.clone()));
                         // return Some(inode);
                         self.new(&target_name, inode.clone());

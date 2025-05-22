@@ -87,18 +87,18 @@ impl InodeTrait for Ext4Inode {
     }
 
     /// 创建文件或者目录,self是父目录,path是子文件的绝对路径,这里是要创建一个Inode
-    fn do_create(&self, path: &str, types: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
+    fn do_create(&self, path: &str, types: InodeType) -> Option<Arc<dyn InodeTrait>> {
         info!("[do_create] start {}", path);
-        let page_cache = match types {
+        let page_cache = match types.into() {
             InodeTypes::EXT4_DE_REG_FILE => Some(PageCache::new_bare()),
             _ => None
         };
         // 注意到原来这里是一个虚假的闯将,应当修改为在ext4文件系统中,真实的创建.
         // 这里文件创建的标识 O_RDWR | O_CREAT | O_TRUNC 和原来的fs/mod.rs::open函数中保持一致
-        match types.clone() {
+        match types.clone().into() {
             InodeTypes::EXT4_DE_DIR => {
                 debug!("[do_create] type is dir {}", path);
-                let mut file = Ext4File::new(path, types.clone());
+                let mut file = Ext4File::new(path, types.clone().into());
                 if let Ok(_) = file.dir_mk(path) {
                     debug!("[do_create] succeed {}", path);
                 } else {
@@ -108,7 +108,7 @@ impl InodeTrait for Ext4Inode {
             }
             InodeTypes::EXT4_DE_REG_FILE => {
                 debug!("[do_create] type is reg file {}", path);
-                let mut file = Ext4File::new(path, types.clone());
+                let mut file = Ext4File::new(path, types.clone().into());
                 if let Ok(_) = file.file_open(path, O_CREAT | O_TRUNC | O_RDWR) {
                     debug!("[do_create] succeed {}", path);
                 } else {
@@ -121,7 +121,7 @@ impl InodeTrait for Ext4Inode {
             }
         }
         
-        let nf = Ext4Inode::new(path, types.clone(), page_cache.clone());
+        let nf = Ext4Inode::new(path, types.clone().into(), page_cache.clone());
         // nf.file.lock().file_open(path, O_RDWR).expect("[do_create] create file failed!");
         info!("[do_create] succe {}", path);
         
