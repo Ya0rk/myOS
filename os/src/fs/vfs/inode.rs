@@ -88,7 +88,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Some(Arc<dyn Inode>) if creation succeeds, None otherwise.
     /// 这里只是创建一个inode，打开文件还需要使用file结构体包裹inode，然后返回file
-    fn do_create(&self, _path: &str, _ty: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
+    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
         todo!()
     }
     /// 确实应当剥夺walk去创造Inode的权利
