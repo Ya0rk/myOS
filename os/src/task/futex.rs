@@ -8,7 +8,7 @@ use alloc::{sync::Arc, vec::Vec};
 use hashbrown::HashMap;
 use log::info;
 use spin::Lazy;
-use crate::mm::{address::kaddr_v2p, PhysAddr, VirtAddr};
+use crate::mm::{Direct, PhysAddr, VirtAddr};
 use crate::sync::{SpinNoIrqLock, SyncUnsafeCell};
 use crate::utils::{Errno, SysResult};
 use super::{current_task, Pid, TaskControlBlock};
@@ -32,7 +32,8 @@ impl FutexHashKey {
             return FutexHashKey::Privite { addr: va };
         }
 
-        let pa = kaddr_v2p(va);
+        // TODO: 正确吗？ by lsz
+        let pa = va.direct_pa();
         return FutexHashKey::Shared { addr: pa };
     }
 }

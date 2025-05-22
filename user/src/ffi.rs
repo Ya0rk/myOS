@@ -30,3 +30,4 @@ pub const SYSCALL_MMAP: usize       = 222;
 pub const SYSCALL_WAIT4: usize      = 260;
 pub const GETRANDOM: usize          = 278;
 pub const SYSCALL_LS: usize         = 300;
+pub const SYSCALL_KILL: usize       = 129;

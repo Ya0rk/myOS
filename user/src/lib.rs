@@ -199,3 +199,7 @@ pub fn munmap(addr: *const u8, length: usize) -> isize {
 pub fn brk(end_data_segment: *const u8) -> isize {
     sys_brk(end_data_segment)
 }
+
+pub fn kill(pid: usize, signal: usize) -> isize {
+    sys_kill(pid, signal)
+}

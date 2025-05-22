@@ -1,9 +1,12 @@
 //! Implementation of physical and virtual address and page number.
 use core::ops::Range;
 
+use sbi_spec::pmu::hardware_event::STALLED_CYCLES_FRONTEND;
+
 // use super::PageTableEntry;
 use crate::hal::mem::page_table::{PageTableEntry};
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PAGE_MASK, PAGE_SIZE, PAGE_SIZE_BITS};
+use crate::hal::KERNEL_PG_ADDR_BASE;
 use core::fmt::{self, Debug, Formatter};
 // use core::iter::Step;
 /// physical address
@@ -462,26 +465,49 @@ where
 /// a simple range structure for virtual page number
 pub type VPNRange = SimpleRange<VirtPageNum>;
 
-/// translate kernel virtual addr into physical addr
-pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {
-    (va.0 - KERNEL_ADDR_OFFSET).into()
+// /// translate kernel virtual addr into physical addr
+// pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {
+//     (va.0 - KERNEL_ADDR_OFFSET).into()
+// }
+
+
+// // TODO: should not use on la
+// /// translate kernel virtual page number into physical page number
+// pub fn kpn_v2p(vpn: VirtPageNum) -> PhysPageNum {
+//     (vpn.0 - KERNEL_PGNUM_OFFSET).into()
+// }
+
+// /// translate physical addr into kernel virtual addr
+// pub fn kaddr_p2v(pa: PhysAddr) -> VirtAddr {
+//     (pa.0 + KERNEL_ADDR_OFFSET).into()
+// }
+
+
+// // TODO: should not use on la
+// /// translate physical page number into kernel virtual page number
+// pub fn kpn_p2v(ppn: PhysPageNum) -> VirtPageNum {
+//     (ppn.0 + KERNEL_PGNUM_OFFSET).into()
+// }
+
+// pub fn kva_pg2d(va: VirtAddr) -> VirtAddr {
+//     (va.0 - KERNEL_PG_ADDR_BASE + KERNEL_ADDR_OFFSET).into()
+// }
+
+// pub fn kva_d2pg(va: VirtAddr) -> VirtAddr {
+//     (va.0 - KERNEL_ADDR_OFFSET + KERNEL_PG_ADDR_BASE).into()
+// }
+
+pub trait Direct {
+    fn direct_pa(&self) -> PhysAddr;
+    fn paged_va(&self) -> VirtAddr;
 }
 
-
-// TODO: should not use on la
-/// translate kernel virtual page number into physical page number
-pub fn kpn_v2p(vpn: VirtPageNum) -> PhysPageNum {
-    (vpn.0 - KERNEL_PGNUM_OFFSET).into()
+pub trait Paged {
+    fn paged_pa(&self) -> PhysAddr;
+    fn direct_va(&self) -> VirtAddr;
 }
 
-/// translate physical addr into kernel virtual addr
-pub fn kaddr_p2v(pa: PhysAddr) -> VirtAddr {
-    (pa.0 + KERNEL_ADDR_OFFSET).into()
-}
-
-
-// TODO: should not use on la
-/// translate physical page number into kernel virtual page number
-pub fn kpn_p2v(ppn: PhysPageNum) -> VirtPageNum {
-    (ppn.0 + KERNEL_PGNUM_OFFSET).into()
+pub trait PageNum {
+    fn ppn(&self) -> PhysPageNum;
+    fn vpn(&self) -> VirtPageNum;
 }

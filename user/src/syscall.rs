@@ -175,3 +175,7 @@ pub fn sys_munmap(addr: *const u8, length: usize) -> isize {
 pub fn sys_brk(end_data_segment: *const u8) -> isize {
     syscall(SYSCALL_BRK, [end_data_segment as usize, 0, 0, 0, 0, 0])
 }
+
+pub fn sys_kill(pid: usize, signal: usize) -> isize {
+    syscall(SYSCALL_KILL, [pid, signal, 0, 0, 0, 0])
+}

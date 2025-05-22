@@ -1,5 +1,6 @@
 pub mod page_table;
 pub mod tlb;
+pub mod address;
 
 
 use loongarch64::register::estat::{self, Exception, Trap};
