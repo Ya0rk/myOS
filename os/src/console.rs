@@ -39,3 +39,10 @@ macro_rules! println {
     }
 }
 
+#[macro_export]
+macro_rules! debug_point {
+    ($msg:expr) => {
+        info!("\x1b[32m[debug_point]\x1b[0m \x1b[31m{}:{}\x1b[0m {}", file!(), line!(), $msg);
+    };
+}
+

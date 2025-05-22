@@ -20,7 +20,7 @@ fn run_cmd(cmd: &str) {
     println!("task run cmd: {}", cmd);
     let cd = "/musl/";
     chdir(&conert_str2byte(cd));
-    // if fork() == 0 {
+    if fork() == 0 {
         println!("task run cmd child: {}, pid: {}", cmd, getpid());
         execve(
             "/musl/busybox\0",
@@ -37,15 +37,15 @@ fn run_cmd(cmd: &str) {
                 "TERM=screen\0",
             ],
         );
-    // } else {
-    //     println!("task run cmd parent: {}", cmd);
-    //     let mut exit_code: i32 = 0;
-    //     let tid = wait(&mut exit_code);
-    //     println!("return tid:{}", tid);
-    //     if tid == -1 {
-    //         yield_();
-    //     }
-    // }
+    } else {
+        println!("task run cmd parent: {}", cmd);
+        let mut exit_code: i32 = 0;
+        let tid = wait(&mut exit_code);
+        println!("return tid:{}", tid);
+        if tid == -1 {
+            yield_();
+        }
+    }
 }
 
 #[no_mangle]
@@ -56,18 +56,18 @@ fn main() -> i32 {
     //     "busybox ln -s /lib/glibc/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1 ",
     // );
     run_cmd("/musl/busybox --install /bin\0");
-    // if fork() == 0 {
-    //     println!("main run sh");
-    //     run_cmd("/bin/sh\0");
-    // } else {
-    //     println!("main parent");
-    //     loop {
-    //         let mut exit_code: i32 = 0;
-    //         let pid = wait(&mut exit_code);
-    //         if pid < 0 {
-    //             break;
-    //         }
-    //     }
-    // }
+    if fork() == 0 {
+        println!("main run sh");
+        run_cmd("/bin/sh\0");
+    } else {
+        println!("main parent");
+        loop {
+            let mut exit_code: i32 = 0;
+            let pid = wait(&mut exit_code);
+            if pid < 0 {
+                break;
+            }
+        }
+    }
     0
 }

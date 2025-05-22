@@ -624,10 +624,6 @@ pub fn sys_log(cmd: i32, buf: usize, len: usize) -> SysResult<usize> {
 pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
     info!("[sys_kill] start, to kill pid = {}, signum = {}", pid, signum);
     if signum == 0 { return Ok(0); }
-    // 临时设置
-    if signum == 21  {
-        return Err(Errno::EIO);
-    }
     if signum > MAX_SIGNUM { return Err(Errno::EINVAL); }
 
     #[derive(Debug)]
