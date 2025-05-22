@@ -1,6 +1,7 @@
 use core::{arch::asm, fmt::Debug};
 // use riscv::register::sstatus::FS;
 use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
+use log::info;
 use loongarch64::register::*;
 
 #[repr(C)]
@@ -210,9 +211,10 @@ impl TrapContext {
     /// 
     /// sigret: 信号处理完后返回到sigreturn系统调用
     pub fn flash(&mut self, handler: usize, new_sp: usize, sigret: usize, signo: usize, gp: usize, tp: usize) {
+        info!("[flash] in with args: handler:{:#x}, new_sp:{:#x}, sigret:{:#x}, signo:{}", handler, new_sp, sigret, signo);
         self.sepc = handler;
         self.set_sp(new_sp);
-        self.user_gp.ra = sigret;
+        self.user_gp.ra = (sigret & 0xFFFF_FFFF_FFFF) | 0xFFFF_FFC0_0000_0000;
         self.user_gp.a0 = signo;
         self.user_gp.tp = tp;
     }

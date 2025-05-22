@@ -15,7 +15,7 @@ pub use frame_allocator::FrameTracker;
 // pub use memory_set::{MemorySet, KERNEL_SPACE};
 pub use ffi::{MapPermission, MapType};
 use page_table::{enable_kernel_pgtable, KERNEL_PAGE_TABLE};
-pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernelAddr, StepByOne};
+pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum, KernelAddr, StepByOne, Paged, Direct, PageNum};
 pub use userbuffer::UserBuffer;
 // pub use map_area::MapArea;
 pub use page_table::{PageTable};

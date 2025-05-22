@@ -117,6 +117,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 // 修改trap_cx，函数trap return后返回到用户自定义的函数，
                 // 自定义函数执行完后返回到sigreturn,这里的__sigret_helper是一个汇编，触发sigreturn
                 // 这里的sigreturn是一个系统调用，返回到内核态
+                info!("[do_signal] before flash");
                 trap_cx.flash(handler, new_sp, __sigret_helper as usize, signo, gp, tp);
                 break;
             }

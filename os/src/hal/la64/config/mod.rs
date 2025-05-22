@@ -42,10 +42,13 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 // #[cfg(target_arch = "loongarch64")]
 pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
-pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_ADDR_OFFSET >> PAGE_SIZE_BITS;
 
-pub const KERNEL_ADDR_START: usize = 0xffff_ffc0_0000_0000;
-pub const KERNEL_PGNUM_START: usize = KERNEL_ADDR_START >> PAGE_SIZE_BITS;
+pub const KERNEL_PG_ADDR_BASE: usize = 0xffff_ffc0_0000_0000;
+pub const KERNEL_PGNUM_BASE: usize = KERNEL_PG_ADDR_BASE >> PAGE_SIZE_BITS;
+pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_PGNUM_BASE;
+pub const KERNEL_VADDR_MASK: usize = 0x0000_ffff_ffff_ffff;
+pub const KERNEL_PG_VADDR_MASK: usize = 0x0000_003f_ffff_ffff;
+pub const KERNEL_VPN_MASK: usize = KERNEL_PG_VADDR_MASK >> PAGE_SIZE_BITS;
 
 
 // TODO: 使用正确的虚拟地址

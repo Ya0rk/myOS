@@ -27,12 +27,16 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
 
 // TODO: no longer addr offset 
-#[cfg(target_arch = "riscv64")]
 pub const KERNEL_ADDR_OFFSET: usize = 0xffff_ffc0_0000_0000;
-#[cfg(target_arch = "loongarch64")]
-pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
-pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_ADDR_OFFSET >> PAGE_SIZE_BITS;
+pub const KERNEL_PG_ADDR_BASE: usize = 0xffff_ffc0_0000_0000;
+pub const KERNEL_PGNUM_BASE: usize = KERNEL_PG_ADDR_BASE >> PAGE_SIZE_BITS;
+pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_PGNUM_BASE;
+pub const KERNEL_VADDR_MASK: usize = 0x0000_003f_ffff_ffff;
+pub const KERNEL_VPN_MASK: usize = KERNEL_VADDR_MASK >> PAGE_SIZE_BITS;
+
+
+
 pub const USER_SPACE_TOP: usize = 0x30_0000_0000;
 pub const USER_TRAP_CONTEXT: usize = USER_SPACE_TOP - PAGE_SIZE;
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;

@@ -4,8 +4,10 @@ use core::arch::asm;
 use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
 use crate::hal::arch::kernel_token_write;
+use crate::mm::{Direct, PageNum};
+// use crate::mm::address::kva_d2pg;
 use crate::sync::SpinNoIrqLock;
-use super::address::{kaddr_p2v, kpn_v2p, KernelAddr};
+use super::address::{KernelAddr};
 use super::memory_space::vm_area::MapPerm;
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 use crate::hal::mem::page_table::*;
@@ -226,10 +228,10 @@ impl PageTable {
 
     pub fn map_kernel_range(&mut self, range_va: Range<VirtAddr>, perm: MapPerm) {
         // println!("[map kernel range] range_va:{:?}", range_va);
-        let range_vpn = range_va.start.floor()..range_va.end.ceil();
-        println!("[map_kernel_range] map area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
+        let range_vpn = range_va.start.paged_va().floor()..range_va.end.paged_va().ceil();
+        println!("[map_kernel_range] map area:{:#x}..{:#x}", range_va.start.paged_va().0, range_va.end.paged_va().0);
         for vpn in range_vpn {
-            let ppn = kpn_v2p(vpn);
+            let ppn = vpn.ppn();
             // println!("[map vpn] vpn:{:#x}, ppn:{:#x}", vpn.0, ppn.0);
             self.map_leaf(vpn, ppn, perm.into());
         }
@@ -238,16 +240,16 @@ impl PageTable {
     pub fn map_kernel_huge_page(&mut self, base_pa: PhysAddr, perm: MapPerm) {
         // TODO: to avoid exposed flag bits
         assert!(perm.intersects(MapPerm::RWX));
-        let base_vpn: VirtPageNum = kaddr_p2v(base_pa).into();
+        let base_vpn: VirtPageNum = base_pa.paged_va().into();
         let pte = &mut self.root_ppn.get_pte_array()[base_vpn.indexes()[0]];
         // TODO: to avoid exposed flag bits
         *pte = PageTableEntry::new(base_pa.into(), perm.into());
     }
     pub fn unmap_kernel_range(&mut self, range_va: Range<VirtAddr>) {
-        let range_vpn: Range<VirtPageNum> = range_va.start.floor()..range_va.end.ceil();
-        info!("[unmap_kernel_range] unmap area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
+        let range_vpn: Range<VirtPageNum> = range_va.start.paged_va().floor()..range_va.end.paged_va().ceil();
+        info!("[unmap_kernel_range] unmap area:{:#x}..{:#x}", range_va.start.paged_va().0, range_va.end.paged_va().0);
         for vpn in range_vpn {
-            let ppn = kpn_v2p(vpn);
+            let ppn = vpn.ppn();
             self.unmap(vpn);
         }
     }
