@@ -138,6 +138,7 @@ pub enum SysCode {
     SYSCALL_RENAMEAT2 = 276,
     SYSCALL_PRLIMIT64 = 261,
     GETRANDOM         = 278,
+    SYS_STATX         = 291,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -244,6 +245,7 @@ impl SysCode {
             Self::SYSCALL_WAIT4 => "wait4",
             Self::SYSCALL_UNKNOWN => "unknown",
             Self::GETRANDOM => "getrandom",
+            Self::SYS_STATX => "statx",
         }
     }
 }

@@ -69,6 +69,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_READ => sys_read(args[0], args[1] as usize, args[2]).await,
         SysCode::SYSCALL_WRITE => sys_write(args[0], args[1] as usize, args[2]).await,
         SysCode::SYSCALL_FSTAT => sys_fstat(args[0] as usize, args[1] as *const u8),
+        SysCode::SYS_STATX => sys_statx(args[0] as i32, args[1] as *const u8, args[2] as u32, args[3] as u32, args[4] as *mut u8),
         SysCode::SYSCALL_EXIT => sys_exit(args[0] as i32),
         SysCode::SYSCALL_NANOSLEEP => sys_nanosleep(args[0] as usize, args[1] as usize).await,
         SysCode::SYSCALL_YIELD => sys_yield().await,

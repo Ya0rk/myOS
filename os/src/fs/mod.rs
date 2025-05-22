@@ -28,6 +28,7 @@ pub use pipe::Pipe;
 // use sbi_rt::NonRetentive;
 use sbi_spec::pmu::cache_event::NODE;
 pub use stat::Kstat;
+pub use stat::Statx;
 pub use vfs::*;
 pub use stdio::{Stdin, Stdout};
 pub use crate::mm::page::Page;

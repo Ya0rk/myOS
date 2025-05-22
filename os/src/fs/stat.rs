@@ -89,3 +89,102 @@ pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeS
         // __unused: [0; 2], // 填充字段
     }
 }
+
+
+
+/// man 2 statx 中的定义
+///
+// The file timestamps are structures of the following type:
+///
+///       struct statx_timestamp {
+///           __s64 tv_sec;    /* Seconds since the Epoch (UNIX time) */
+///           __u32 tv_nsec;   /* Nanoseconds since tv_sec */
+///       };
+#[derive(Debug)]
+#[repr(C)]
+pub struct Statx_timestamp {
+    tv_sec: i64,
+    tv_nsec: u32,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct Statx {
+    /// mask of bits indicating
+    stx_mask: u32,
+    stx_blksize: u32,
+    stx_attributes: u64,
+    stx_nlink: u32,
+    stx_uid: u32,
+    stx_gid: u32,
+    stx_mode: u16,
+    stx_ino: u64,
+    stx_size: u64,
+    stx_blocks: u64,
+    stx_attributes_mask: u64, 
+
+    /// 最后访问时间
+    stx_atime: Statx_timestamp,
+    /// 创建时间
+    stx_btime: Statx_timestamp,
+    /// 最后状态变更时间
+    stx_ctime: Statx_timestamp,
+    /// 最后修改时间
+    stx_mtime: Statx_timestamp,
+    
+    /// 主设备ID 
+    stx_dev_major: u32,
+    // 设备示例ID
+    stx_dev_minor: u32,
+}
+
+impl From<Kstat> for Statx {
+    fn from(kstat: Kstat) -> Self {
+        Self {
+            stx_mask: 0,
+            stx_blksize: kstat.st_blksize as u32,
+            stx_attributes: 0,
+            stx_nlink: kstat.st_nlink,
+            stx_uid: kstat.st_uid,
+            stx_gid: kstat.st_gid,
+            stx_mode: kstat.st_mode as u16,
+            stx_ino: kstat.st_ino,
+            stx_size: kstat.st_size as u64,
+            stx_blocks: kstat.st_blocks as u64,
+            stx_attributes_mask: 0,
+
+            // 时间戳
+            stx_atime: Statx_timestamp {
+                tv_sec: kstat.st_atime_sec as i64,
+                tv_nsec: kstat.st_atime_nsec as u32,
+            },
+            stx_btime: Statx_timestamp {
+                tv_sec: 0, // 创建时间未知
+                tv_nsec: 0,
+            },
+            stx_ctime: Statx_timestamp {
+                tv_sec: kstat.st_ctime_sec as i64,
+                tv_nsec: kstat.st_ctime_nsec as u32,
+            },
+            stx_mtime: Statx_timestamp {
+                tv_sec: kstat.st_mtime_sec as i64,
+                tv_nsec: kstat.st_mtime_nsec as u32,
+            },
+            stx_dev_major: 0,
+            stx_dev_minor: 0,
+        }
+    }
+}
+
+impl Statx {
+
+    pub fn set_mask(&mut self, mask: u32) {
+        self.stx_mask = mask;
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        let size = core::mem::size_of::<Self>();
+        unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, size) }
+    }
+
+}

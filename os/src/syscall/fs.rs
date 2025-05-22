@@ -11,7 +11,7 @@ use log::{debug, info};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Path, Pipe, Stdout, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, Statx, MountFlags, OpenFlags, Path, Pipe, Stdout, StxMask, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::user_ptr::{user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
@@ -248,6 +248,78 @@ pub fn sys_fstat(fd: usize, kst: *const u8) -> SysResult<usize> {
         }
     }
 
+}
+
+
+/// 291号系统调用
+/// 
+/// 这个函数返回一个文件的信息, 将其存储到statxbuf中, statxbuf是一个指向statx结构体的指针
+/// 
+/// mask是要求的掩盖码,在内核中的定义是StxMask
+/// 
+/// 要访问文件的元数据不需要对文件本事有任何权限, 但是如果通过pathname参数指定路径, 那么需要对路径中的每级父目录都有搜索权限
+/// 
+/// 如果pathname是绝对路径就直接访问
+/// 
+/// 如果pathname是相对路径, 且dirfd是AT_FDCWD, 那么就从当前工作目录开始访问
+/// 
+/// 如果pathname是相对路径, 且dirfd不是AT_FDCWD, 那么就从dirfd指定的目录开始访问
+/// 
+/// 暂时忽略_mask就全部塞进去算了
+pub fn sys_statx(dirfd: i32, pathname: *const u8, flags: u32, mask: u32, statxbuf: *const u8) -> SysResult<usize> {
+    info!("[sys_statx] start");
+    let dirfd = dirfd as isize;
+    let task = current_task().unwrap();
+    let token = task.get_user_token();
+    let path = translated_str(token, pathname);
+    let cwd = task.get_current_path();
+
+    // 无效的掩码
+    let _mask = StxMask::from_bits(mask).ok_or(Errno::EINVAL)?;
+    if _mask.contains(StxMask::STATX__RESERVED) {
+        return Err(Errno::EINVAL);
+    }
+
+    info!("[sys_statx] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
+
+    // 计算目标路径
+    let target_path = if path.starts_with("/") {
+        // 绝对路径，忽略 dirfd
+        path
+    } else if dirfd == AT_FDCWD {
+        // 相对路径，以当前目录为起点
+        join_path_2_absolute(cwd.clone(), path)
+    } else {
+        // 相对路径，以 dirfd 对应的目录为起点
+        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
+            return Err(Errno::EBADF);
+        }
+        let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_statx] not found fd");
+        let other_cwd = inode.get_name()?;
+        join_path_2_absolute(other_cwd, path)
+    };
+
+    let mut buffer = UserBuffer::new(
+        translated_byte_buffer(
+            token, 
+            statxbuf, 
+            core::mem::size_of::<Statx>()
+    ));
+
+    let mut stat = Kstat::new();
+    // 检查路径是否有效并打开文件
+    if let Some(FileClass::File(file)) = open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
+        file.fstat(&mut stat)?;
+        let mut statx: Statx = stat.into();
+        statx.set_mask(mask);
+        buffer.write(statx.as_bytes());
+        debug_point!("");
+        return Ok(0);
+    } else {
+        debug_point!("[sys_statx] open file failed");
+        info!("statx fail");
+        return Err(Errno::ENOENT);
+    }
 }
 
 /// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
