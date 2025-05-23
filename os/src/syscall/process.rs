@@ -668,6 +668,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
             let pgid = cur_task.get_pgid();
             let sender_pid = cur_task.get_pid();
             let target_group = get_target_proc_group(pgid);
+            info!("[sys_kill] target_group = {:?}", target_group);
             let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
             for target_pid in target_group.into_iter().filter(|pid| *pid != sender_pid) {
                 let recv_task = get_task_by_pid(target_pid).ok_or(Errno::ESRCH)?;
@@ -690,6 +691,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
         }
         Target::ProcessGroup(p) => {
             let target_group = get_target_proc_group(p);
+            println!("[sys_kill] target_group = {:?},", target_group);
             let cur_task = current_task().unwrap();
             let sender_pid = cur_task.get_pgid();
             let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
@@ -785,6 +787,9 @@ pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
             get_task_by_pid(pid).ok_or(Errno::ESRCH)?
         }
     };
+    // info!("[sys_getpgid] finish, pgid = {}, cur task pid = {}", task.get_pgid(), task.get_pid());
+    // let target_group = get_target_proc_group(task.get_pgid());
+    // info!("[sys_getpgid] target_group = {:?}.", target_group);
 
     Ok(task.get_pgid())
 }

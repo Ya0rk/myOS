@@ -380,9 +380,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // TODO: 有待修改
 
     let token = task.get_user_token();
-    // let mut buffer = UserBuffer::new(translated_byte_buffer(token, buf, len));
     let file = task.get_file_by_fd(fd).unwrap();
-    // let buffer = user_slice_mut((buf as usize).into(), len)?.unwrap();
     let res = file.read_dents(buf as usize, len);
     info!("[sys_getdents64] return = {}", res);
     Ok(res)

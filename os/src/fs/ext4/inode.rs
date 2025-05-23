@@ -292,9 +292,6 @@ impl InodeTrait for Ext4Inode {
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         &self.metadata.timestamp
     }
-    // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
-    //     self.file.lock()
-    // }
     fn is_dir(&self) -> bool {
         self.metadata.file_type.is_dir()
     }
@@ -324,11 +321,3 @@ impl InodeTrait for Ext4Inode {
         Some(dir_entrys)
     }
 }
-
-// impl Drop for Ext4Inode {
-//     fn drop(&mut self) {
-//         let mut file = self.file.lock();
-//         // debug!("Drop struct FileWrapper {:?}", file.get_path());
-//         file.file_close().expect("failed to close fd");
-//     }
-// }

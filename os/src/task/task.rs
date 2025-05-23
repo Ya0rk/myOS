@@ -122,7 +122,7 @@ impl TaskControlBlock {
         debug!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
 
         new_task.add_thread_group_member(new_task.clone());
-        new_process_group(new_task.get_pgid());
+        new_process_group(new_task.get_pgid(), new_task.get_pid());
         add_task(&new_task);
         spawn_user_task(new_task.clone());
         info!("spawn init proc");

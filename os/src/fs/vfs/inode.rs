@@ -198,23 +198,4 @@ impl dyn InodeTrait {
         Ok(0)
     }
 
-    // 打开一个inode，创建一个管理该inode的对应的file返回
-    // pub fn do_open(self: Arc<Self>, parent: Option<Weak<dyn InodeTrait>>, flags: OpenFlags, path: String) -> Option<FileClass> {
-    //     let new_file = NormalFile::new(
-    //         flags, 
-    //         parent,
-    //         self,
-    //         path
-    //     );
-    //     // 将指针移到文件末尾
-    //     if flags.contains(OpenFlags::O_APPEND) {
-    //         new_file.lseek(0, SEEK_END).unwrap();
-    //     }
-    //     // 截断文件长度为0
-    //     if flags.contains(OpenFlags::O_TRUNC) {
-    //         new_file.metadata.inode.truncate(0);
-    //     }
-        
-    //     Some(FileClass::File(Arc::new(new_file)))
-    // }
 }

@@ -273,7 +273,7 @@ pub fn run() {
 
 pub fn run_once() -> usize{
     let mut tasks = 0;
-    if let Some(task) = TASK_QUEUE.fetch() {
+    while let Some(task) = TASK_QUEUE.fetch() {
         task.run();
         tasks += 1;
     }
