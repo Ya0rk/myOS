@@ -62,15 +62,15 @@ pub async fn sys_yield() -> SysResult<usize> {
 /// 输入：tms结构体指针，用于获取保存当前进程的运行时间数据；
 /// 
 /// 返回值：成功返回已经过去的滴答数，失败返回-1;
-pub fn sys_times(tms: *const u8) -> SysResult<usize> {
+pub fn sys_times(tms: usize) -> SysResult<usize> {
     info!("[sys_times] start");
-    if tms.is_null() {
+    let ptr = tms as *mut Tms;
+    if ptr.is_null() {
+        info!("[sys_times] tms is null");
         return Err(Errno::EBADCALL);
     }
-    let bind = Tms::new();
-    let time = bind.as_bytes();
-    let mut buffer = UserBuffer::new(translated_byte_buffer(current_user_token(), tms, size_of::<Tms>()));
-    buffer.write(time);
+    let data = Tms::new();
+    unsafe{ core::ptr::write(ptr, data); }
     Ok(0)
 }
 
@@ -79,15 +79,14 @@ pub fn sys_times(tms: *const u8) -> SysResult<usize> {
 /// 输入： timespec结构体指针用于获得时间值；
 /// 
 /// 返回值：成功返回0，失败返回-1;
-pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
+pub fn sys_gettimeofday(tv: usize, _tz: *const u8) -> SysResult<usize> {
     info!("[sys_gettimeofday] start");
-    if tv.is_null() {
+    let ptr = tv as *mut TimeVal;
+    if ptr.is_null() {
         return Err(Errno::EBADCALL);
     }
-    let binding = TimeVal::new();
-    let timeval = binding.as_bytes();
-    let mut buffer = UserBuffer::new(translated_byte_buffer(current_user_token(), tv, size_of::<TimeVal>()));
-    buffer.write(timeval);
+    let data = TimeVal::new();
+    unsafe{ core::ptr::write(ptr, data); }
     Ok(0)
 }
 
@@ -96,22 +95,16 @@ pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
 /// 输入：utsname结构体指针用于获得系统信息数据；
 /// 
 /// 返回值：成功返回0，失败返回-1;
-pub fn sys_uname(buf: *const u8) -> SysResult<usize> {
+pub fn sys_uname(buf: usize) -> SysResult<usize> {
     debug!("sys_name start");
     info!("[sys_uname] start");
-    if buf.is_null() {
+    let ptr = buf as *mut Utsname;
+    if ptr.is_null() {
         return Err(Errno::EBADCALL);
     }
 
-    let bind = Utsname::new();
-    let utsname = bind.as_bytes();
-    let mut buffer = UserBuffer::new(
-        translated_byte_buffer(
-            current_user_token(), 
-            buf, 
-            size_of::<Utsname>()
-    ));
-    buffer.write(utsname);
+    let data = Utsname::new();
+    unsafe{ core::ptr::write(ptr, data); }
     Ok(0)
 }
 
@@ -363,14 +356,14 @@ pub fn sys_clock_settime(
 
 pub fn sys_clock_gettime(
     clock_id: usize,
-    timespec: *const u8,
+    timespec: usize,
 ) -> SysResult<usize> {
     info!("[sys_clock_gettime] start, clock id = {}", clock_id);
-    if timespec.is_null() {
+    let ptr = timespec as *mut TimeSpec;
+    if ptr.is_null() {
         info!("[sys_clock_gettime] timespec is null");
         return Err(Errno::EBADCALL);
     }
-    let tp = timespec as *mut TimeSpec;
     let time = match clock_id {
         CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration()),
         CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
@@ -379,7 +372,7 @@ pub fn sys_clock_gettime(
         CLOCK_BOOTTIME => TimeSpec::boottime_now(),
         _ => return Err(Errno::EINVAL),
     };
-    unsafe { core::ptr::write(tp, time) };
+    unsafe { core::ptr::write(ptr, time) };
     info!("[sys_clock_gettime] finish");
     Ok(0)
 }
@@ -458,16 +451,15 @@ pub fn sys_sigreturn() -> SysResult<usize> {
 }
 
 /// return system information
-pub fn sys_sysinfo(sysinfo: *const u8) -> SysResult<usize> {
+pub fn sys_sysinfo(sysinfo: usize) -> SysResult<usize> {
     info!("[sys_sysinfo] start");
-    if sysinfo.is_null() {
+    let ptr = sysinfo as *mut Sysinfo;
+    if ptr.is_null() {
         return Err(Errno::EBADCALL);
     }
     let proc_num = get_proc_num();
     let bind = Sysinfo::new(proc_num);
-    // let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
-    let sysinfo = unsafe{ sysinfo as *mut Sysinfo };
-    unsafe { core::ptr::write(sysinfo, bind) };
+    unsafe { core::ptr::write(ptr, bind) };
     Ok(0)
 }
 
