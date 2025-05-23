@@ -1,6 +1,7 @@
 #![allow(unused_import_braces)]
 #![allow(unused)]
 use log::info;
+use core::arch::asm;
 use crate::hal::arch::sstatus::SPP;
 use crate::sync::{disable_interrupt, set_next_trigger, yield_now};
 use crate::syscall::syscall;
@@ -110,7 +111,7 @@ pub async fn user_trap_handler() {
 
 
     use log::error;
-    use loongarch64::register::{badv, crmd, era, estat::{self, Exception, Interrupt, Trap}, ticlr, CpuMode};
+    use loongarch64::{asm, register::{badi, badv, crmd, era, estat::{self, Exception, Interrupt, Trap}, ticlr, CpuMode}};
 
     use crate::{mm::memory_space::PageFaultAccessType, sync::TIMER_QUEUE};
     let estat = estat::read();
@@ -166,10 +167,10 @@ pub async fn user_trap_handler() {
                         Err(err) => {
                             if err as isize == -1 {
                                 cx.user_gp.a0 = err as usize;
-                                info!("[syscall ret] Err:{:?}", err);
+                                // info!("[syscall ret] Err:{:?}", err);
                             } else {
                                 cx.user_gp.a0 = -(err as isize) as usize;
-                                info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
+                                // info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
                             }
                         }
                     }
@@ -214,14 +215,19 @@ pub async fn user_trap_handler() {
                     }
                 }
                 _ => {
-                    panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                    panic!("Cause:{:?} ecode:{:#x} is:{:#x} pc: {:#x} BADV: {:#x} BADI: {:#x}", estat.cause(), estat.ecode(), estat.is(), era.pc(), badv::read().vaddr(), badi::read().inst());
                 }
             }
         }
 
         
         _ => {
-            panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+            unsafe {
+                let mut fcsr0 = current_trap_cx().float_regs.fcsr;
+                // asm!("movfcsr2gr {}, $fcsr0", out(reg) fcsr0);
+                error!("[user_trap_handler] fcsr: {:#b}", fcsr0);
+            }
+            panic!("Cause:{:?} ecode:{:#x} is:{:#x} pc: {:#x} BADV: {:#x} BADI: {:#x}", estat.cause(), estat.ecode(), estat.is(), era.pc(), badv::read().vaddr(), badi::read().inst());
         }
     }
     // era::set_pc(era.pc());

@@ -7,12 +7,12 @@ use loongarch64::register::*;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct UserFloatRegs {
-    f: [f64; 32], // 57-88
-    fcsr: u32,    // 89
-    fcc: u8,      // 89+4
-    need_save: u8,
-    need_restore: u8,
-    dirty: u8,
+    pub f: [f64; 32], // 56-87
+    pub fcsr: u32,    // 88
+    pub fcc: u8,      // 88+4
+    pub need_save: u8,
+    pub need_restore: u8,
+    pub dirty: u8,
 }
 
 #[repr(C)]

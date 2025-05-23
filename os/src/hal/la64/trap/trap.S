@@ -65,26 +65,34 @@ __trap_from_user:
 
     # 保存fscr寄存器
     movfcsr2gr $t0, $fcsr0
-    st.w $t0, $sp, 89*8
+    st.w $t0, $sp, 88*8
 
     # save FCC
-    movcf2gr $t0, $fcc7
+    movcf2gr $t1, $fcc7
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc6
+    movcf2gr $t1, $fcc6
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc5
+    movcf2gr $t1, $fcc5
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc4
+    movcf2gr $t1, $fcc4
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc3
+    movcf2gr $t1, $fcc3
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc2
+    movcf2gr $t1, $fcc2
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc1
+    movcf2gr $t1, $fcc1
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc0
+    movcf2gr $t1, $fcc0
+    or $t0, $t0, $t1
     # 保存 fcc寄存器
-    st.b $t0, $sp, 89*8+4
+    st.b $t0, $sp, 88*8+4
 
     # 保存sstatus寄存器
     csrrd $t0, CSR_PRMD
@@ -181,11 +189,11 @@ __return_to_user:
     st.d $tp, $sp, 55*8
 
     # 恢复 FCSR
-    ld.w $t0, $sp, 89*8
+    ld.w $t0, $sp, 88*8
     movgr2fcsr $fcsr0, $t0
 
     # 恢复 FCC
-    ld.b $t0, $sp, 89*8+4
+    ld.b $t0, $sp, 88*8+4
     movgr2cf $fcc0, $t0
     srli.w $t0, $t0, 1
     movgr2cf $fcc1, $t0
