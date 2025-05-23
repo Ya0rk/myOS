@@ -8,7 +8,7 @@ pub use super_block::*;
 
 use alloc::sync::Arc;
 use lazy_static::*;
-use crate::drivers::{BlockDeviceImpl, Disk};
+use crate::{drivers::{BlockDeviceImpl, Disk}, syscall::StatFs};
 use super::{InodeTrait, Kstat, SuperBlockTrait};
 
 lazy_static! {
@@ -29,7 +29,7 @@ pub fn sync() {
     SUPER_BLOCK.sync()
 }
 
-pub fn fs_stat() -> Kstat {
+pub fn fs_stat() -> StatFs {
     SUPER_BLOCK.fs_stat()
 }
 
