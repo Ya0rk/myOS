@@ -78,6 +78,11 @@ impl TimeData {
         self.child_system_time += stime;
     }
 
+    /// 获取child的用户时间和内核时间
+    pub fn get_child_ustime(&self) -> (Duration, Duration) {
+        (self.child_user_time, self.child_system_time)
+    }
+
     /// 获取用户态花费时间
     #[inline(always)]
     pub fn get_user_time(&self) -> Duration {

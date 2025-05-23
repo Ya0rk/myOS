@@ -1,7 +1,7 @@
 use core::time::Duration;
 
 use zerocopy::{Immutable, IntoBytes};
-use crate::sync::timer::{get_time_s, get_time_us};
+use crate::{board::CLOCK_FREQ, hal::arch::get_time, sync::timer::{get_time_s, get_time_us, USEC_PER_SEC}};
 
 #[derive(Clone, Copy, IntoBytes, Immutable, Default)]
 #[repr(C)]
@@ -14,7 +14,8 @@ pub struct TimeVal {
 
 impl TimeVal {
     pub fn new() -> Self {
-        TimeVal { tv_sec: get_time_s(), tv_usec: get_time_us() }
+        let tick = get_time_us();
+        TimeVal { tv_sec: tick / USEC_PER_SEC, tv_usec: tick % USEC_PER_SEC }
     }
 }
 
