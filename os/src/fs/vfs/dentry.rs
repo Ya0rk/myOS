@@ -7,7 +7,7 @@ use riscv::{interrupt::Mutex, register::fcsr::read};
 use sbi_rt::{NonRetentive, SharedPtr};
 use spin::{rwlock::RwLock};
 use core::hash::{Hash, Hasher};
-use crate::{fs::{ffi::InodeType, mkdir, open_file, path, root_inode, FileClass, FileTrait, OpenFlags, Path}, utils::SysResult};
+use crate::{fs::{ffi::InodeType, mkdir, open_file, path, procfs::PROCFS_SUPER_BLOCK, root_inode, FileClass, FileTrait, OpenFlags, Path}, utils::SysResult};
 use alloc::sync::{Arc, Weak};
 use super::{inode, InodeTrait, SuperBlockTrait};
 
@@ -46,6 +46,10 @@ impl Dentry {
         Self::bind(&DENTRY_ROOT, crate::fs::ext4::SUPER_BLOCK.root_inode());
         info!("list root dir");
         {DENTRY_ROOT.children.read().iter().for_each(|x| println!("{}", x.0));};
+        info!("mount ProcFs");
+        mkdir("/proc", 0);
+        let procFs = Self::get_dentry_from_path(&String::from("/proc")).unwrap(); 
+        procFs.mount(PROCFS_SUPER_BLOCK.clone());
     }
     /// 创建一个根节点dentry
     fn new_root() -> Arc<Self>{
@@ -106,7 +110,7 @@ impl Dentry {
 
     /// pattern为绝对路径
     fn get_child(self: Arc<Self>, pattern: &String) -> Option<Arc<Self>> {
-        // info!("visit {}", pattern);
+        info!("visit {}", pattern);
         if pattern.ends_with("/") || pattern.ends_with(".") || pattern.as_str() == "" {
             // info!("return name is {}", self.name.read());
             return Some(self.clone());
@@ -250,7 +254,7 @@ impl Dentry {
     }
     
     /// 将一个dentry和一个superblock绑定
-    fn mount<T: SuperBlockTrait>(self: &Arc<Self>, sb: T) {
+    fn mount(self: &Arc<Self>, sb: Arc<dyn SuperBlockTrait>) {
         if sb.root_inode().node_type() != InodeType::Dir {
             info!("you can't mount a inode which is not TYPE DIR");
             return;
