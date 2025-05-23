@@ -141,28 +141,3 @@ fn do_signal_continue(task: &Arc<TaskControlBlock>, signo: SigNom) {
     // 唤醒子进程并通知父进程
     task.cont_all_thread(signo);
 }
-
-/// 从Pantheon借鉴, 不知道可不可以使用UserBuffer
-/// Copy data from `src` out of kernel memory set into `dst` which lives in the
-/// given memory set indicated by the given `token`.
-pub fn copy2user<T>(token: usize, dst: *mut T, src: &T) {
-    let mut dst_buffer =
-        translated_byte_buffer(token, dst as *const u8, core::mem::size_of::<T>());
-
-    let src_slice = unsafe {
-        core::slice::from_raw_parts(src as *const T as *const u8, core::mem::size_of::<T>())
-    };
-    let mut index = 0;
-
-    let mut start_byte = 0;
-    loop {
-        let dst_slice = &mut dst_buffer[index];
-        index += 1;
-        let dst_slice_len = dst_slice.len();
-        dst_slice.copy_from_slice(&src_slice[start_byte..start_byte + dst_slice_len]);
-        start_byte += dst_slice_len;
-        if dst_buffer.len() == index {
-            break;
-        }
-    }
-}

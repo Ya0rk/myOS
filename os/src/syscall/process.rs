@@ -2,7 +2,7 @@ use core::mem::size_of;
 use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{join_path_2_absolute, open, open_file, FileClass, OpenFlags};
-use crate::mm::user_ptr::{user_cstr, user_cstr_array};
+use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
@@ -41,7 +41,8 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
 
 pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
     info!("[sys_nanosleep] start");
-    let req = *translated_ref(current_user_token(), req as *const TimeSpec);
+    let req: TimeSpec = *user_ref(req.into())?.unwrap();
+    // let req = *translated_ref(current_user_token(), req as *const TimeSpec);
     if !req.check_valid() {
         // info!("req = {}", req);
         return Err(Errno::EINVAL);

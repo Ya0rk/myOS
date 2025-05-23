@@ -3,7 +3,7 @@ use alloc::task;
 use log::info;
 use num_enum::TryFromPrimitive;
 use crate::{
-    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, 
+    mm::VirtAddr, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, 
     task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE}, 
     utils::{Errno, SysResult}
 };
