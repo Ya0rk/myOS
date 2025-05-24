@@ -86,7 +86,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 // 保存当前的user 状态,在sigreturn中恢复
                 // 包括本来的sepc，后序在sigreturn中恢复
                 let mut ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx);
-                ucontext.uc_mcontext.user_x[0] = trap_cx.sepc;
+                ucontext.uc_mcontext.user_gp.zero = trap_cx.sepc;
                 // 将ucontext拷贝到用户栈中
                 unsafe { core::ptr::write(new_sp as *mut UContext, ucontext) };
 

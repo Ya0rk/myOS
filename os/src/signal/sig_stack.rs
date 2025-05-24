@@ -46,7 +46,7 @@ pub struct UContext {
 /// 整个结构体大小为784字节，为了适配musl libc
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
-struct MContext {
+pub struct MContext {
     pub user_gp: GPRegs,
     pub fpstate: [usize; 66],
 }

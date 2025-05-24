@@ -799,7 +799,8 @@ pub fn sys_getpgid(pid: usize) -> SysResult<usize> {
         }
     };
     info!("[sys_getpgid] ret pgid = {}", task.get_pgid());
-    Ok(task.get_pgid() + 1)
+    // Ok(task.get_pgid() + 1)
+    Ok(task.get_pgid())
 }
 
 /// high-resolution sleep with specifiable clock
