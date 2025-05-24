@@ -53,7 +53,7 @@ loongarch64 = { git = "https://github.com/Godones/loongArch64", package = "loong
 
 [features]
 board_qemu = []
-default = ["error", "test", "qemu_riscv", "mbshell"]
+default = ["info", "test", "qemu_riscv", "mbshell"]
 error = []
 warn = []
 autorun = []

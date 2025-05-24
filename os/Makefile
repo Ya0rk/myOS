@@ -1,6 +1,6 @@
 # Building
-ARCH := riscv64
-# ARCH := loongarch64
+# ARCH := riscv64
+ARCH := loongarch64
 ifeq ($(ARCH), riscv64)
 	TARGET := riscv64gc-unknown-none-elf
 endif
@@ -13,7 +13,7 @@ KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
-OVERWRITE := true
+OVERWRITE := false
 
 # fs image
 FS = lwext4_rust
