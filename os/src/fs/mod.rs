@@ -134,16 +134,15 @@ pub fn create_init_files() -> SysResult {
     register_device("/dev/zero");
     //注册设备/dev/null
     // register_device("/dev/null");
-    mkdir("/dev/null", 0);
+    open("/", "/dev/null", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open("/", "/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    
     //创建./dev/misc文件夹
     mkdir("/dev/misc", 0);
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
 
     mkdir("/dev/shm", 0); // libctest中的pthread_cancel_points测试用例需要
-
-    // mkdir("/tmp", 0);
-    open_file("/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
 
     //创建/etc文件夹
     mkdir("/etc", 0);
@@ -205,7 +204,7 @@ fn create_open_file(
                 return None;
             }
         } else {
-            error!("[create_open_file] failed to get parent inode {}", parent_path);
+            error!("[create_open_file] failed to get parent inode {}, target path = {}", parent_path, target_abs_path);
             return None;
         }
     };

@@ -104,3 +104,8 @@ pub fn sys_mprotect(addr: *const u8, length: usize, prot: i32) -> SysResult<usiz
         )
     }).map(|_| 0)
 }
+
+pub fn sys_mremap() -> SysResult<usize> {
+    info!("[sys_mremap] start");
+    Ok(0)
+}

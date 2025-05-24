@@ -1,6 +1,6 @@
 use core::{future::Future, task::Poll};
 use log::info;
-use smoltcp::{socket::{tcp::{self, Socket}, udp::UdpMetadata}, wire::IpEndpoint};
+use smoltcp::{socket::{tcp::{self, Socket}, udp::{self, UdpMetadata}}, wire::IpEndpoint};
 use crate::{fs::OpenFlags, net::SOCKET_SET, utils::{Errno, SysResult}};
 use super::{tcp::TcpSocket, udp::UdpSocket, TcpState, NET_DEV};
 
@@ -68,6 +68,7 @@ impl<'a> Future for TcpSendFuture<'a> {
     type Output = SysResult<usize>;
 
     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
+        info!("[TcpSendFuture] start");
         NET_DEV.lock().poll();
         let ret = self.tcpsocket.with_socket(|socket| {
             if !socket.is_open() {
@@ -114,7 +115,9 @@ impl<'a> Future for UdpSendFuture<'a> {
 
     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
         NET_DEV.lock().poll();
-        let ret = self.udpsocket.with_socket(|socket| {
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<udp::Socket>(self.udpsocket.handle);
+        let ret = {
             if !socket.can_send() {
                 if self.udpsocket.flags.contains(OpenFlags::O_NONBLOCK) {
                     return Poll::Ready(Err(Errno::EAGAIN));
@@ -124,12 +127,14 @@ impl<'a> Future for UdpSendFuture<'a> {
             }
             match socket.send_slice(self.msg_buf, *self.meta) {
                 Ok(_) => {
+                    drop(binding);
                     NET_DEV.lock().poll();
+                    info!("[UdpSendFuture] finish, msg = {:?}", self.msg_buf);
                     return Poll::Ready(Ok(self.msg_buf.len()));
                 }
                 Err(_) => return Poll::Ready(Err(Errno::ENOBUFS)),
             }
-        });
+        };
 
         ret
     }

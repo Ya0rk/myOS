@@ -2,12 +2,12 @@ use core::mem::size_of;
 use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{join_path_2_absolute, open, open_file, FileClass, OpenFlags};
-use crate::mm::user_ptr::{user_cstr, user_cstr_array};
+use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
-use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, IdelFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
-use crate::syscall::ffi::{CloneFlags, RlimResource, SyslogCmd, Utsname, WaitOptions, LOGINFO};
+use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
+use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
 use crate::syscall::RLimit64;
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, TaskStatus, MANAGER
@@ -41,7 +41,8 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
 
 pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
     info!("[sys_nanosleep] start");
-    let req = *translated_ref(current_user_token(), req as *const TimeSpec);
+    let req: TimeSpec = *user_ref(req.into())?.unwrap();
+    // let req = *translated_ref(current_user_token(), req as *const TimeSpec);
     if !req.check_valid() {
         // info!("req = {}", req);
         return Err(Errno::EINVAL);
@@ -62,15 +63,15 @@ pub async fn sys_yield() -> SysResult<usize> {
 /// 输入：tms结构体指针，用于获取保存当前进程的运行时间数据；
 /// 
 /// 返回值：成功返回已经过去的滴答数，失败返回-1;
-pub fn sys_times(tms: *const u8) -> SysResult<usize> {
+pub fn sys_times(tms: usize) -> SysResult<usize> {
     info!("[sys_times] start");
-    if tms.is_null() {
+    let ptr = tms as *mut Tms;
+    if ptr.is_null() {
+        info!("[sys_times] tms is null");
         return Err(Errno::EBADCALL);
     }
-    let bind = Tms::new();
-    let time = bind.as_bytes();
-    let mut buffer = UserBuffer::new(translated_byte_buffer(current_user_token(), tms, size_of::<Tms>()));
-    buffer.write(time);
+    let data = Tms::new();
+    unsafe{ core::ptr::write(ptr, data); }
     Ok(0)
 }
 
@@ -79,15 +80,14 @@ pub fn sys_times(tms: *const u8) -> SysResult<usize> {
 /// 输入： timespec结构体指针用于获得时间值；
 /// 
 /// 返回值：成功返回0，失败返回-1;
-pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
+pub fn sys_gettimeofday(tv: usize, _tz: *const u8) -> SysResult<usize> {
     info!("[sys_gettimeofday] start");
-    if tv.is_null() {
+    let ptr = tv as *mut TimeVal;
+    if ptr.is_null() {
         return Err(Errno::EBADCALL);
     }
-    let binding = TimeVal::new();
-    let timeval = binding.as_bytes();
-    let mut buffer = UserBuffer::new(translated_byte_buffer(current_user_token(), tv, size_of::<TimeVal>()));
-    buffer.write(timeval);
+    let data = TimeVal::new();
+    unsafe{ core::ptr::write(ptr, data); }
     Ok(0)
 }
 
@@ -96,22 +96,16 @@ pub fn sys_gettimeofday(tv: *const u8, _tz: *const u8) -> SysResult<usize> {
 /// 输入：utsname结构体指针用于获得系统信息数据；
 /// 
 /// 返回值：成功返回0，失败返回-1;
-pub fn sys_uname(buf: *const u8) -> SysResult<usize> {
+pub fn sys_uname(buf: usize) -> SysResult<usize> {
     debug!("sys_name start");
     info!("[sys_uname] start");
-    if buf.is_null() {
+    let ptr = buf as *mut Utsname;
+    if ptr.is_null() {
         return Err(Errno::EBADCALL);
     }
 
-    let bind = Utsname::new();
-    let utsname = bind.as_bytes();
-    let mut buffer = UserBuffer::new(
-        translated_byte_buffer(
-            current_user_token(), 
-            buf, 
-            size_of::<Utsname>()
-    ));
-    buffer.write(utsname);
+    let data = Utsname::new();
+    unsafe{ core::ptr::write(ptr, data); }
     Ok(0)
 }
 
@@ -132,8 +126,9 @@ pub fn sys_clone(
     tls: usize,
     ctid: usize,
     ) -> SysResult<usize> {
-    debug!("start sys_fork");
+    info!("[sys_clone] start");
     let flag = CloneFlags::from_bits(flags as u32).unwrap();
+    info!("[sys_clone] start child_stack {}, flag: {:?}", child_stack, flag);
     let current_task = current_task().unwrap();
     let token = current_task.get_user_token();
     let new_task = match flag.contains(CloneFlags::CLONE_THREAD) {
@@ -211,7 +206,6 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     }
 
     info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
-    // println!("[sys_exec] path = {}, argv = {:?}, env = {:?}", path, argv, env);
     if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;
@@ -324,7 +318,7 @@ pub fn sys_getrandom(
     buflen: usize,
     _flags: usize,
 ) -> SysResult<usize> {
-    info!("[sys_get_random] start");
+    info!("[sys_get_random] start, buflen = {}", buflen);
     let buffer = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, buflen) };
     Ok(RNG.lock().fill_buf(buffer))
 }
@@ -341,6 +335,7 @@ pub fn sys_set_tid_address(tidptr: usize) -> SysResult<usize> {
 pub fn sys_exit_group(exit_code: i32) -> SysResult<usize> {
     info!("[sys_exit_group] start, exitcode = {}", exit_code);
     let task = current_task().unwrap();
+    info!("[sys_exit_group] start, taskid = {}, exitcode = {}", task.get_pid(), exit_code);
     task.kill_all_thread();
     task.set_exit_code(((exit_code & 0xFF) << 8) as i32);
     // task.set_exit_code(exit_code);
@@ -362,14 +357,14 @@ pub fn sys_clock_settime(
 
 pub fn sys_clock_gettime(
     clock_id: usize,
-    timespec: *const u8,
+    timespec: usize,
 ) -> SysResult<usize> {
     info!("[sys_clock_gettime] start, clock id = {}", clock_id);
-    if timespec.is_null() {
+    let ptr = timespec as *mut TimeSpec;
+    if ptr.is_null() {
         info!("[sys_clock_gettime] timespec is null");
         return Err(Errno::EBADCALL);
     }
-    let tp = timespec as *mut TimeSpec;
     let time = match clock_id {
         CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration()),
         CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
@@ -378,7 +373,8 @@ pub fn sys_clock_gettime(
         CLOCK_BOOTTIME => TimeSpec::boottime_now(),
         _ => return Err(Errno::EINVAL),
     };
-    unsafe { core::ptr::write(tp, time) };
+    unsafe { core::ptr::write(ptr, time) };
+    info!("[sys_clock_gettime] finish");
     Ok(0)
 }
 
@@ -456,16 +452,15 @@ pub fn sys_sigreturn() -> SysResult<usize> {
 }
 
 /// return system information
-pub fn sys_sysinfo(sysinfo: *const u8) -> SysResult<usize> {
+pub fn sys_sysinfo(sysinfo: usize) -> SysResult<usize> {
     info!("[sys_sysinfo] start");
-    if sysinfo.is_null() {
+    let ptr = sysinfo as *mut Sysinfo;
+    if ptr.is_null() {
         return Err(Errno::EBADCALL);
     }
     let proc_num = get_proc_num();
     let bind = Sysinfo::new(proc_num);
-    // let sysinfo = translated_refmut(current_user_token(), sysinfo as *mut Sysinfo);
-    let sysinfo = unsafe{ sysinfo as *mut Sysinfo };
-    unsafe { core::ptr::write(sysinfo, bind) };
+    unsafe { core::ptr::write(ptr, bind) };
     Ok(0)
 }
 
@@ -668,7 +663,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
             let pgid = cur_task.get_pgid();
             let sender_pid = cur_task.get_pid();
             let target_group = get_target_proc_group(pgid);
-            info!("[sys_kill] proc_group:{:?}", target_group);
+            info!("[sys_kill] target_group = {:?}", target_group);
             let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
             for target_pid in target_group.into_iter().filter(|pid| *pid != sender_pid) {
                 if target_pid == 0 { continue; }
@@ -707,6 +702,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
         }
         Target::ProcessGroup(p) => {
             let target_group = get_target_proc_group(p);
+            println!("[sys_kill] target_group = {:?},", target_group);
             let cur_task = current_task().unwrap();
             let sender_pid = cur_task.get_pgid();
             let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
@@ -759,7 +755,7 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
                 task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;
                 task.fd_table.lock().rlimit.rlim_max = new_limit.rlim_max;
             }
-            _ => unimplemented!()
+            _ => (),
         }
     }
 
@@ -898,5 +894,28 @@ pub fn sys_tkill(tid: usize, sig: i32) -> SysResult<usize> {
         SigDetails::Kill { pid: sender_pid, uid: 0 }
     );
     target.thread_recv_siginfo(siginfo);
+    Ok(0)
+}
+
+pub fn sys_madvise() -> SysResult<usize> {
+    info!("[sys_madvise] start");
+    Ok(0)
+}
+
+
+/// get resource usage
+pub fn sys_getrusage(who: isize, usage: usize) -> SysResult<usize> {
+    info!("[sys_getrusage] start, who = {}", who);
+    let task = current_task().unwrap();
+    let mut res;
+    match who {
+        RUSAGE_SELF => {
+            let (user_time, sys_time) = task.process_ustime();
+            res = Rusage::new(user_time.into(), sys_time.into());
+        }
+        _ => unimplemented!()
+    }
+    let ptr = unsafe{ usage as *mut Rusage };
+    unsafe{ core::ptr::write(ptr, res); }
     Ok(0)
 }

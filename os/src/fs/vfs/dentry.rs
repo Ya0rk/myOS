@@ -139,7 +139,7 @@ impl Dentry {
                         let temp = if self.name.read().ends_with("/") {
                             alloc::format!("{}{}", self.name.read(), real_name)
                         } else {
-                        alloc::format!("{}/{}", self.name.read(), real_name)
+                            alloc::format!("{}/{}", self.name.read(), real_name)
                         }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
                         let temp = temp.replace('\0', "");//去除掉“\0”字符
                         let son = Self::new_bare(&self, &temp);

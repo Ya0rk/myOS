@@ -40,10 +40,9 @@ impl FileTrait for DevNull {
         Ok(0)
     }
     /// 填满0
-    async fn pread(&self, mut user_buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+    async fn pread(&self, mut user_buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
         info!("[pread] from nullfs, fill 0");
-        let zero: Vec<u8> = (0..user_buf.buffers.len()).map(|_| 0).collect();
-        user_buf.write(&zero);
+        user_buf.fill(0);
         Ok(len)
     }
     async fn write(&self, user_buf: & [u8]) -> SysResult<usize> {

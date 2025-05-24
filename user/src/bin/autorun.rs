@@ -14,7 +14,7 @@ const TESTCASES: &[&str] = &[
     "./busybox_testcode.sh\0",
     "./lua_testcode.sh\0",
     // "./netperf_testcode.sh\0",
-    // "./libc-bench\0",
+    // "./libcbench_testcode.sh\0",
     // "./libctest_testcode.sh\0",
     // "./iozone_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
@@ -37,7 +37,7 @@ fn run_cmd(cmd: &str, pwd: &str) {
             &path,
             &[ &path, "sh\0", "-c\0", cmd],
             &[
-                "PATH=/:/bin\0",
+                ["PATH=", "/bin:", pwd.strip_suffix("/").unwrap(), ].concat().as_str(),
                 "HOME=/\0",
                 "LD_LIBRARY_PATH=/\0",
                 "TERM=screen\0",
@@ -55,7 +55,7 @@ fn run_cmd(cmd: &str, pwd: &str) {
 #[no_mangle]
 fn main() -> i32 {
     if fork() == 0 {
-        let cd = "/musl/";
+        let cd = "/glibc/";
         chdir(&conert_str2byte(cd));
         for test in TESTCASES {
             run_cmd(test, cd);

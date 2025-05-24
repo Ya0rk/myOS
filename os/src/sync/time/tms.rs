@@ -1,5 +1,5 @@
 use zerocopy::{Immutable, IntoBytes};
-use crate::sync::timer::get_time_ms;
+use crate::{sync::timer::get_time_ms, task::current_task};
 
 #[allow(non_camel_case_types)]
 type clock_t = isize;
@@ -18,12 +18,15 @@ pub struct Tms {
 
 impl Tms {
     pub fn new() -> Self {
-        let now = get_time_ms() as clock_t;
+        let task = current_task().unwrap();
+        let timedata = task.get_time_data();
+        let (utime, stime) = timedata.get_ustime();
+        let (cutime, cstime) = timedata.get_child_ustime();
         Self {
-            tms_utime: now,
-            tms_stime: now,
-            tms_cutime: now,
-            tms_cstime: now,
+            tms_utime: utime.as_micros() as clock_t,
+            tms_stime: stime.as_micros() as clock_t,
+            tms_cutime: cutime.as_micros() as clock_t,
+            tms_cstime: cstime.as_micros() as clock_t,
         }
     }
 }

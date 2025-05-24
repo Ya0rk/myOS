@@ -1,8 +1,9 @@
+use core::{net::Ipv4Addr, time::Duration};
 use alloc::{string::String, sync::Arc, vec};
 use log::info;
 use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata, UdpMetadata}, storage::PacketBuffer, wire::{IpAddress, IpEndpoint}};
-use crate::{fs::{FileMeta, OpenFlags, RenameFlags}, net::net_async::UdpSendFuture, sync::{get_waker, SpinNoIrqLock}, syscall::ShutHow, utils::{Errno, SysResult}};
-use super::{addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, alloc_port, Port, SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
+use crate::{fs::{FileMeta, OpenFlags, RenameFlags}, net::{addr::do_addr127, do_port, net_async::UdpSendFuture, MAX_BUFFER_SIZE}, sync::{get_waker, yield_now, NullFuture, SpinNoIrqLock, TimeoutFuture}, syscall::ShutHow, task::current_task, utils::{Errno, SysResult}};
+use super::{addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
 use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
@@ -28,7 +29,7 @@ impl UdpSocket {
             )
         );
         // TODO(YJJ): maybe bug
-        // NET_DEV.lock().poll();
+        NET_DEV.lock().poll();
         Self {
             handle,
             flags: OpenFlags::O_RDWR,
@@ -75,6 +76,7 @@ impl UdpSocket {
                         addr: [127, 0, 0, 1],
                         zero: [0u8; 8],
                     });
+                    drop(sockmeta);
                     self.bind(&addr);
                 }
                 IpType::Ipv6 => todo!(),
@@ -99,25 +101,19 @@ impl UdpSocket {
 #[async_trait]
 impl Socket for UdpSocket {
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
+        info!("[Udp::bind] start, addr = {:?}", addr);
         let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
         let mut sockmeta = self.sockmeta.lock();
         if sockmeta.port.is_some() {
             return Err(Errno::EADDRINUSE);
         }
-        let mut p: Port;
-        let mut port_manager = PORT_MANAGER.lock();
+        let mut p: u16;
 
-        if endpoint.port == 0 {
-            p = alloc_port(Sock::Udp)?;
-            endpoint.port = p.port;
-        } else {
-            if port_manager.udp_used_ports.get(endpoint.port as usize).unwrap() {
-                return Err(Errno::EADDRINUSE);
-            }
-            p = Port::new(Sock::Udp, endpoint.port);
-            port_manager.udp_used_ports.set(endpoint.port as usize, true);
-        }
-        drop(port_manager);
+        // addr == 0.0.0.0代表本地广播
+        do_addr127(&mut endpoint);
+        // 分配port
+        p = do_port(&mut endpoint, Sock::Udp)?;
+        // 记录port
         sockmeta.port = Some(p);
 
         NET_DEV.lock().poll();
@@ -126,7 +122,7 @@ impl Socket for UdpSocket {
         let socket = binding.get_mut::<udp::Socket>(self.handle);
         match socket.bind(endpoint) {
             Ok(_) => {
-                info!("[bind] bind to port: {}", endpoint.port);
+                info!("[Udp::bind] bind to port: {}", endpoint.port);
                 sockmeta.local_end = Some(endpoint);
             }
             Err(_) => {
@@ -143,6 +139,7 @@ impl Socket for UdpSocket {
         unimplemented!()
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {
+        info!("[Udp::connect] start, addr = {:?}", addr);
         /// 与TCP不同，UDP的connect函数不会引发三次握手，而是将目标IP和端口记录下来
         let remote_endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
         self.check_addr(remote_endpoint);
@@ -152,7 +149,8 @@ impl Socket for UdpSocket {
     async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize> {
         // 如果没有远程地址，就先和远程地址建立连接
         // 就算有远程地址，也要覆盖，使用提供的dest_addr
-        self.connect(dest_addr).await;
+        info!("[Udp::send_msg] start, dest_addr = {:?}", dest_addr);
+        // self.connect(dest_addr).await;
         let dest = match self.sockmeta.lock().remote_end {
             Some(a) => a,
             None => return Err(Errno::EISCONN),
@@ -164,7 +162,51 @@ impl Socket for UdpSocket {
     }
     async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)> {
         // 完成timer 队列后再来实现，需要控制接收速度
-        todo!()
+        // NET_DEV.lock().poll(); 
+        // TODO: (YJJ)将这里修改为future形式
+        loop {
+            NET_DEV.lock().poll(); // 更新队列，保持队列是最新状态
+            let res = self.with_socket(|socket| {
+                if socket.can_recv() {
+                    info!("[Udp::recv_msg] can recv");
+                    if let Ok((size, metadata)) = socket.recv_slice(buf) {
+                        info!("[Udp::recv_msg] recv_slice, size:{}", size);
+                        if size > (MAX_BUFFER_SIZE / 2) as usize {
+                            // need to be slow
+                            let task = current_task().unwrap();
+                            let span = Duration::from_millis(2);
+                            let nullfuture = NullFuture::new(task, span);
+                            // TimeoutFuture::new(nullfuture, span).await;
+                        }
+
+                        let remote = metadata.endpoint;
+                        let port = remote.port;
+                        let addr = remote.addr;
+                        let res = match addr {
+                            IpAddress::Ipv4(addr) => {
+                                SockAddr::Inet4(Ipv4::new(port, addr.octets()))
+                            }
+                            IpAddress::Ipv6(addr) => {
+                                SockAddr::Inet6(Ipv6::new(port, addr.octets()))
+                            }
+                        };
+
+                        return Some((size, res));
+                    }
+                    info!("[Udp::recv_msg] do not recvslice");
+                    return None;
+                }
+                return None;
+            });
+            
+            info!("[Udp::recv_msg] do not recv");
+            match res {
+                Some(res) => return Ok(res),
+                None => {
+                    yield_now().await
+                }
+            }
+        }
     }
     fn set_recv_buf_size(&self, size: u32) -> SysResult<()> {
         self.sockmeta.lock().recv_buf_size = size as usize;
@@ -190,10 +232,10 @@ impl Socket for UdpSocket {
         Ok(())
     }
     fn get_sockname(&self) -> SysResult<SockAddr> {
-        let local_end = self.sockmeta.lock().local_end.expect("[tcp] get_sockname no local_end");
+        let local_end = self.sockmeta.lock().local_end.expect("[udp] get_sockname no local_end");
         let port = local_end.port;
         let addr = local_end.addr;
-        info!("[tcp]get_sockname local end port: {}, addr = {}", port, addr);
+        info!("[udp]get_sockname local end port: {}, addr = {}", port, addr);
         match addr {
             IpAddress::Ipv4(addr) => {
                 let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));
@@ -210,7 +252,7 @@ impl Socket for UdpSocket {
         let remote_end = self.sockmeta.lock().remote_end.ok_or(Errno::ENOTCONN)?;
         let port = remote_end.port;
         let addr = remote_end.addr;
-        info!("[tcp]get_sockname local end port: {}, addr = {}", port, addr);
+        info!("[udp]get_sockname local end port: {}, addr = {}", port, addr);
         match addr {
             IpAddress::Ipv4(addr) => {
                 let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));
@@ -229,12 +271,15 @@ impl Socket for UdpSocket {
     fn enable_nagle(&self, action: u32) -> SysResult<()> {
         todo!()
     }
+    fn get_socktype(&self) -> SysResult<Sock> {
+        Ok(Sock::Udp)
+    }
 }
 
 #[async_trait]
 impl FileTrait for UdpSocket {
-    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
-        self
+    fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
+        Ok(self)
     }
     fn get_inode(&self) -> Arc<dyn crate::fs::InodeTrait> {
         unimplemented!()
@@ -265,6 +310,9 @@ impl FileTrait for UdpSocket {
     }
     fn is_dir(&self) -> bool {
         false
+    }
+    fn get_flags(&self) -> OpenFlags {
+        self.flags
     }
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<crate::mm::page::Page>> {
         unimplemented!()

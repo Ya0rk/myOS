@@ -100,12 +100,12 @@ impl<F: Future> Future for TimeoutFuture<F> {
 }
 
 /// 用来空转,如果被信号kill、stop打断，那么返回剩余时间
-pub struct IdelFuture {
+pub struct NullFuture {
     pub task: Arc<TaskControlBlock>,
     pub deadline: Duration // 空转的时间
 }
 
-impl IdelFuture {
+impl NullFuture {
     pub fn new(task: Arc<TaskControlBlock>, deadline: Duration) -> Self {
         Self {
             task,
@@ -114,7 +114,7 @@ impl IdelFuture {
     }
 }
 
-impl Future for IdelFuture {
+impl Future for NullFuture {
     type Output = SysResult<Duration>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

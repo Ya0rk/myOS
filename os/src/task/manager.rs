@@ -67,10 +67,10 @@ pub fn get_init_proc() -> Arc<TaskControlBlock> {
 }
 
 impl ProcessGroupManager {
-    fn add_new_group(&mut self, pgid: PGid) {
+    fn add_new_group(&mut self, pgid: PGid, pid: usize) {
         let mut vec: Vec<usize> = Vec::new();
-        if pgid != INITPROC_PID {
-            vec.push(pgid); // 因为新建一个进程组是以自己为leader，所以pgid = pid，可以直接push(pgid)
+        if pid != INITPROC_PID {
+            vec.push(pid); 
         }
         self.0.insert(pgid, vec);
     }
@@ -95,8 +95,9 @@ impl ProcessGroupManager {
     }
 }
 
-pub fn new_process_group(pgid: PGid) {
-    MANAGER.process_group.lock().add_new_group(pgid);
+/// 新建一个进程组，并将自己的pid放入进程组中。
+pub fn new_process_group(pgid: PGid, pid: usize) {
+    MANAGER.process_group.lock().add_new_group(pgid, pid);
 }
 
 pub fn remove_proc_group_member(pgid: PGid, pid: Pid) {
@@ -111,13 +112,13 @@ pub fn get_proc_num() -> u16 {
     MANAGER.process_group.lock().get_all_process_num()
 }
 
-/// 将原进程从进程组中删除，加入一个全新的进程组，该进程组以自己为leader
+/// 将原进程从进程组中删除，加入一个全新的进程组
 pub fn extract_proc_to_new_group(old_pgid: PGid, new_pgid: PGid, pid: Pid) {
     let mut grand = MANAGER.process_group.lock();
     grand.remove(old_pgid, pid);
     match grand.0.get_mut(&new_pgid) {
         Some(vec) => vec.push(pid),
-        None => grand.add_new_group(new_pgid),
+        None => grand.add_new_group(new_pgid, pid),
     }
 }
 

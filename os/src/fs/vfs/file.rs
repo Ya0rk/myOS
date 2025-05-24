@@ -1,5 +1,5 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
-use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, net::Socket, utils::SysResult};
+use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, net::Socket, utils::{Errno, SysResult}};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -119,22 +119,23 @@ pub trait FileTrait: Send + Sync {
     // TODO: 缓存未命中处理
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>>;
 
-    fn get_socket(self: Arc<Self>) -> Arc<dyn Socket> {
-        unimplemented!("not support!");
+    fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
+        Err(Errno::ENOTSOCK)
     }
     fn set_flags(&self, flags: OpenFlags){
         // unimplemented!("not support!");
     }
     fn get_flags(&self) -> OpenFlags {
         // unimplemented!("not support!");
+        info!("[filetrait::get_flags] default");
         OpenFlags::O_RDWR
     }
     /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
-    async fn pread(&self, mut buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize>{
+    async fn pread(&self, mut buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize>{
         unimplemented!("not support!");
     }
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
-    async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+    async fn pwrite(&self, buf: &[u8], offset: usize, len: usize) -> SysResult<usize> {
         unimplemented!("not support!");
     }
     fn lseek(&self, _offset: isize, _whence: usize) -> SysResult<usize> {

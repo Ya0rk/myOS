@@ -76,6 +76,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // init_processors
     // probe
     // fs::init
+    // 初始化网络模块
     // 进行测试
     // 载入用户进程
     // 设置时钟中断
@@ -101,11 +102,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         // utils::logger_init();
         sync::time_init();
 
-        // info!("[rust_main] alloc a vec size is 1387650");
-        // let mut buffer: Vec<u8> = alloc::vec![1; 1387650];
-        // println!("{:?}", buffer[256]);
-        // info!("[rust_main] alloc mem is enough");
-
         // TODO:后期可以丰富打印的初始化信息
         println!(
             "[kernel] ---------- hart {} is starting... ----------",
@@ -119,6 +115,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         crate::drivers::init();
 
         fs::init();
+        net::init_net_dev();
         // 此时完成初始化工作，准备载入进程开始执行
 
         
@@ -140,7 +137,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // }
         }
 
-
         task::init_processors();
         spawn_kernel_task(async move {
             task::add_initproc().await
@@ -150,25 +146,12 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         #[cfg(feature = "mul_hart")]
         hal::entry::boot::boot_all_harts(hart_id);
     } else {
-
         hal::trap::init();
         mm::init(false);        
     }
     
     unsafe { sync::enable_timer_interrupt() };
     timer::set_next_trigger();
-    info!("[a] src/main.rs:145");
-    // 列出目前的应用
-    // let finish = AtomicBool::new(false);
-    // if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
-    //     finish.store(fs::list_apps(), Ordering::SeqCst);
-    // }
-    // while !finish.load(Ordering::SeqCst) {}
-    // let finish = AtomicBool::new(false);
-    // if get_current_hart_id() == START_HART_ID.load(Ordering::SeqCst) {
-    //     finish.store(fs::list_apps(), Ordering::SeqCst);
-    // }
-    // while !finish.load(Ordering::SeqCst) {}
     executor::run();
     panic!("Unreachable in rust_main!");
 }

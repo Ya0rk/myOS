@@ -28,7 +28,7 @@ unsafe impl Sync for Ext4Inode {}
 impl Ext4Inode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
     pub fn new(path: &str, types: InodeTypes, page_cache: Option<Arc<PageCache>>) -> Arc<dyn InodeTrait> {
-        warn!("[Ext4Inode::new] path = {} ssssss", path);
+        // warn!("[Ext4Inode::new] path = {} ssssss", path);
         // if INODE_CACHE.has_inode(path) {
         //     return INODE_CACHE.get(path).clone().unwrap();
         // }
@@ -291,9 +291,6 @@ impl InodeTrait for Ext4Inode {
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         &self.metadata.timestamp
     }
-    // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
-    //     self.file.lock()
-    // }
     fn is_dir(&self) -> bool {
         self.metadata.file_type.is_dir()
     }
@@ -323,11 +320,3 @@ impl InodeTrait for Ext4Inode {
         Some(dir_entrys)
     }
 }
-
-// impl Drop for Ext4Inode {
-//     fn drop(&mut self) {
-//         let mut file = self.file.lock();
-//         // debug!("Drop struct FileWrapper {:?}", file.get_path());
-//         file.file_close().expect("failed to close fd");
-//     }
-// }

@@ -40,7 +40,7 @@ pub struct UContext {
     // don't know why, struct need to be exact the same with musl libc
     pub uc_sig: [usize; 16],
     // 保存具体机器状态的上下文信息，这是一个机器相关的表示，包含了处理器的寄存器状态等信息
-    uc_mcontext: MContext,
+    pub uc_mcontext: MContext,
 }
 
 /// 整个结构体大小为784字节，为了适配musl libc
@@ -66,7 +66,7 @@ impl UContext {
         let mut user_gp: GPRegs = trap_cx.user_gp;
         // 将old sepc暂时存储在user_x[0]中,这个sepc用于sigreturn时恢复
         // 这里的sepc是信号处理函数的返回地址
-        user_gp.zero = trap_cx.sepc;
+        // user_x[0] = trap_cx.sepc;
         Self {
             uc_flags: 0,
             uc_link: 0,

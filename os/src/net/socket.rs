@@ -1,13 +1,12 @@
 use alloc::sync::Arc;
 use async_trait::async_trait;
 use crate::{
-    fs::{FileTrait, OpenFlags}, syscall::ShutHow, 
+    fs::{FileMeta, FileTrait, OpenFlags}, syscall::ShutHow, 
     utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 use super::{
-    addr::{IpType, Sock, SockAddr}, 
-    tcp::TcpSocket, udp::UdpSocket, Port, SockClass, SocketType, AF_INET, AF_INET6
+    addr::{IpType, Sock, SockAddr}, tcp::TcpSocket, udp::UdpSocket, unix::UnixSocket, SockClass, SocketType, AF_INET, AF_INET6
 };
 use smoltcp::{socket::tcp, wire::IpEndpoint};
 pub type TcpState = tcp::State;
@@ -17,7 +16,7 @@ pub struct SockMeta {
     pub iptype: IpType,
     pub recv_buf_size: usize,
     pub send_buf_size: usize,
-    pub port: Option<Port>,
+    pub port: Option<u16>,
     pub shuthow: Option<ShutHow>,
     pub local_end: Option<IpEndpoint>,
     pub remote_end: Option<IpEndpoint>,
@@ -71,6 +70,8 @@ pub trait Socket: FileTrait {
     fn set_keep_alive(&self, action: u32) -> SysResult<()>;
 
     fn enable_nagle(&self, action: u32) -> SysResult<()>;
+
+    fn get_socktype(&self) -> SysResult<Sock>;
 }
 
 impl dyn Socket {
@@ -86,11 +87,14 @@ impl dyn Socket {
     fn new_socket(ip_type: IpType, socket_type: SocketType) -> SysResult<SockClass> {
         match socket_type {
             ty if ty.contains(SocketType::SOCK_STREAM) => {
-                let mut non_block_flags = None;
+                let mut flags = OpenFlags::empty();
                 if socket_type.contains(SocketType::SOCK_NONBLOCK) {
-                    non_block_flags = Some(OpenFlags::O_NONBLOCK);
+                    flags.insert(OpenFlags::O_NONBLOCK);
                 }
-                Ok(SockClass::Tcp(Arc::new(TcpSocket::new(ip_type, non_block_flags))))
+                if socket_type.contains(SocketType::SOCK_CLOEXEC) {
+                    flags.insert(OpenFlags::O_CLOEXEC);
+                }
+                Ok(SockClass::Tcp(Arc::new(TcpSocket::new(ip_type, flags))))
             }
             ty if ty.contains(SocketType::SOCK_DGRAM) => {
                 Ok(SockClass::Udp(Arc::new(UdpSocket::new(ip_type))))

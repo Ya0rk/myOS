@@ -1,15 +1,9 @@
-// pub mod block;
-
-// pub use block::BLOCK_DEVICE;
-
 mod device;
 mod disk;
-// mod virtio;
 pub mod virtio_driver;
 
 pub use device::*;
 pub use disk::*;
-// pub use virtio::*;
 pub use virtio_driver::*;
 use virtio_drivers::{device::console::Size, transport::{self, mmio::{MmioTransport, VirtIOHeader}, pci::PciTransport, Transport}};
 use core::ptr::NonNull;
