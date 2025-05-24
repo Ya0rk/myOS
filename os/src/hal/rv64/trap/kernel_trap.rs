@@ -47,7 +47,9 @@ pub fn kernel_trap_handler() {
                 let result = task.with_mut_memory_space(|m| {
                     // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
                     m.handle_page_fault(stval.into(), access_type)
-                });
+                }).unwrap_or_else(|e| {
+                    panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                });;
             },
             _ => {
                 panic!("a trap {:?} from kernel!", scause::read().cause());
