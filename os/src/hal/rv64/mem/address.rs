@@ -1,6 +1,6 @@
 use crate::mm::{VirtAddr, PhysAddr, VirtPageNum, PhysPageNum, Paged, Direct, PageNum};
 
-use crate::hal::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, KERNEL_VADDR_MASK, KERNEL_VPN_MASK};
+use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, KERNEL_VADDR_MASK, KERNEL_VPN_MASK};
 
 impl Paged for VirtAddr {
     /// 内核页表的虚拟地址 转换为对应的直接映射窗口的虚拟地址

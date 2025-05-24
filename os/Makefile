@@ -1,6 +1,6 @@
 # Building
-# ARCH := riscv64
-ARCH := loongarch64
+ARCH := riscv64
+# ARCH := loongarch64
 ifeq ($(ARCH), riscv64)
 	TARGET := riscv64gc-unknown-none-elf
 endif
@@ -13,6 +13,7 @@ KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
+OVERWRITE := true
 
 # fs image
 FS = lwext4_rust
@@ -65,8 +66,8 @@ ifeq ($(ARCH), riscv64)
 	QEMU_ARGS += -smp $(CPUS)
 
 
-	FS_IMG := ../sdcard-rv-test.img
-	FS_IMG_BAK = ../sdcard-rv-test-copy.img
+	FS_IMG := ../sdcard-rv.img
+	FS_IMG_BAK = ../sdcard-rv-copy.img
 endif
 ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS =  -machine virt 
@@ -145,15 +146,20 @@ qemu-version-check:
 PHONY += qemu-version-check
 
 # 复制镜像，然后操作复制后的copy镜像，防止镜像被破坏
-copy_img:
+copy-img:
 	@echo "Copying image $(FS_IMG_BAK)"
-	cp $(FS_IMG) $(FS_IMG_BAK)
-PHONY += copy_img
+	cp $(FS_IMG) $(FS_IMG_BAK) -f
+PHONY += copy-img
 
-run-inner: qemu-version-check copy_img build
+ifeq ($(OVERWRITE),true)
+  RUN_DEPS := copy-img build
+else
+  RUN_DEPS := build
+endif
+
+run-inner: qemu-version-check $(RUN_DEPS)
 	echo "Running QEMU with arguments: $(QEMU_ARGS)"
 	$(QEMU_NAME) $(QEMU_ARGS)
-	rm $(FS_IMG_BAK)
 PHONY += run-inner
 
 # debug: qemu-version-check build
@@ -168,7 +174,7 @@ debug: qemu-version-check build
 		tmux -2 attach-session -d
 PHONY += debug
 
-gdbserver: qemu-version-check build copy_img
+gdbserver: qemu-version-check build copy-img
 	$(QEMU_NAME) $(QEMU_ARGS) -s -S
 PHONY += gdbserver
 
