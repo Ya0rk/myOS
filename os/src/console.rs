@@ -41,7 +41,7 @@ macro_rules! println {
 #[macro_export]
 macro_rules! debug_point {
     () => {
-        info!("[debug_point] {}:{}", file!(), line!());
+        info!("\x1B[32m[debug_point]\x1B[0m {}:{}", file!(), line!());
     };
 }
 
