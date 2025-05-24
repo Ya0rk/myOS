@@ -1,6 +1,6 @@
 # Building
-# ARCH := riscv64
-ARCH := loongarch64
+ARCH := riscv64
+# ARCH := loongarch64
 ifeq ($(ARCH), riscv64)
 	TARGET := riscv64gc-unknown-none-elf
 endif

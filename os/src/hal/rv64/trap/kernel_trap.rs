@@ -48,7 +48,7 @@ pub fn kernel_trap_handler() {
                     // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
                     m.handle_page_fault(stval.into(), access_type)
                 }).unwrap_or_else(|e| {
-                    panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                    panic!("{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
                 });;
             },
             _ => {

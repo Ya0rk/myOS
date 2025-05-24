@@ -80,7 +80,7 @@ pub async fn user_trap_handler() {
             let result = current_task().unwrap().with_mut_memory_space(|m| {
                 m.handle_page_fault(stval.into(), access_type)
             }).unwrap_or_else(|e| {
-                panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                panic!("{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
             });;
 
 
