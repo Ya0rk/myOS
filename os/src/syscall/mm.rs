@@ -109,3 +109,8 @@ pub fn sys_mremap() -> SysResult<usize> {
     info!("[sys_mremap] start");
     Ok(0)
 }
+
+pub fn sys_membarrier() -> SysResult<usize> {
+    info!("[sys_membarrier] start");
+    Ok(0)
+}

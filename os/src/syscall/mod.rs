@@ -9,7 +9,7 @@ mod io_async;
 
 use fs::*;
 use log::info;
-use mm::{sys_mprotect, sys_mremap};
+use mm::{sys_membarrier, sys_mprotect, sys_mremap};
 use mm::{sys_brk, sys_mmap, sys_munmap};
 use process::*;
 use io::*;
@@ -27,6 +27,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::MEMEBARRIER => sys_membarrier(),
         SysCode::SYSCALL_GETRUSAGE => sys_getrusage(args[0] as isize, args[1] as usize),
         SysCode::SYSCALL_SETSOCKOPT => sys_setsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),
         SysCode::SYSCALL_CONNECT => sys_connect(args[0] as usize, args[1] as usize, args[2] as usize).await,

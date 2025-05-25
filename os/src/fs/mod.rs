@@ -72,19 +72,10 @@ impl FileClass {
     }
 }
 
-// os\src\fs\mod.rs
-
 pub fn init() {
     // 应当初始化Dentry
     Dentry::init();
     create_init_files();
-}
-
-pub fn list_apps() -> bool{
-    println!("/**** APPS ****");
-    ls();
-    println!("**************/");
-    true
 }
 
 pub fn create_init_files() -> SysResult {
@@ -92,36 +83,9 @@ pub fn create_init_files() -> SysResult {
     mkdir("/proc", 0);
     let proc = Ext4Inode::new("/proc", InodeTypes::EXT4_DE_DIR, None);
     // 创建musl glibc文件夹
-    // mkdir("/musl", 0);
-    // let muslinode = Ext4Inode::new("/musl", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
-    // mkdir("/glibc", 0);
     open_file("/musl/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     open_file("/glibc/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
-    // open_file("/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     mkdir("/bin", 0);
-    // let glibcinode = Ext4Inode::new("/glibc", InodeTypes::EXT4_DE_DIR, Some(PageCache::new_bare()));
-    //创建/proc/mounts文件系统使用情况
-    if let Some(FileClass::File(mountsfile)) =
-        open("/proc", "mounts", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-    {
-        let mut mountsinfo = String::from(MOUNTS);
-        let mounts = unsafe { mountsinfo.as_bytes_mut() };
-        let mut mountbuf = unsafe { core::slice::from_raw_parts_mut(
-            mounts.as_mut_ptr(),
-            mounts.len(),
-        ) };
-    }
-    //创建/proc/meminfo系统内存使用情况
-    if let Some(FileClass::File(memfile)) =
-        open("/proc", "meminfo", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-    {
-        let mut meminfo = String::from(MEMINFO);
-        let mut membuf;
-        unsafe {
-            let mem = meminfo.as_bytes_mut();
-            membuf = core::slice::from_raw_parts_mut(mem.as_mut_ptr(), mem.len());
-        }
-    }
 
     //创建/dev文件夹
     mkdir("/dev", 0);
@@ -134,15 +98,13 @@ pub fn create_init_files() -> SysResult {
     register_device("/dev/zero");
     //注册设备/dev/null
     // register_device("/dev/null");
-    open("/", "/dev/null", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
-    open("/", "/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
     
     //创建./dev/misc文件夹
     mkdir("/dev/misc", 0);
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
-
-    mkdir("/dev/shm", 0); // libctest中的pthread_cancel_points测试用例需要
+    // libctest中的pthread_cancel_points测试用例需要
+    mkdir("/dev/shm", 0); 
 
     //创建/etc文件夹
     mkdir("/etc", 0);
@@ -150,32 +112,34 @@ pub fn create_init_files() -> SysResult {
         let buf = [0; 10];
         file.write(&buf);
     };
+    
+    open("/", "/dev/null", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open("/", "/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    //创建/proc/mounts文件系统使用情况
+    open("/proc", "mounts", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    //创建/proc/meminfo系统内存使用情况
+    open("/proc", "meminfo", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建/etc/adjtime记录时间偏差
-    if let Some(FileClass::File(adjtimefile)) =
-        open("/etc", "adjtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-    {
-        let mut adjtime = String::from(ADJTIME);
-        let mut adjtimebuf;
-        unsafe {
-            let adj = adjtime.as_bytes_mut();
-            adjtimebuf = core::slice::from_raw_parts_mut(adj.as_mut_ptr(), adj.len());
-        }
-    }
+    open("/etc", "adjtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建./etc/localtime记录时区
-    if let Some(FileClass::File(localtimefile)) =
-        open("/etc", "localtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-    {
-        let mut localtime = String::from(LOCALTIME);
-        let mut localtimebuf;
-        unsafe {
-            let local = localtime.as_bytes_mut();
-            localtimebuf = core::slice::from_raw_parts_mut(
-                local.as_mut_ptr(),
-                local.len(),
-            );
-        }
-    }
+    open("/etc", "localtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+
+    // 拷贝动态库
+    // 创建lib文件夹
+    mkdir("/lib", 0);
+    dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64-sf.so.1");
+    dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
+    dl_link("/musl/lib/tls_get_new-dtv_dso.so", "/lib/tls_get_new-dtv_dso.so");
+
     Ok(())
+}
+
+fn dl_link(src: &str, target: &str) {
+    if let Some(inode) = Dentry::get_inode_from_path(&src.to_string()) {
+        inode.link(&target.to_string());
+    } else {
+        panic!("no such dir: {}", src);
+    }
 }
 
 /// 创建一个打开的文件

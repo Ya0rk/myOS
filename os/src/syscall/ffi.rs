@@ -141,6 +141,7 @@ pub enum SysCode {
     SYSCALL_RENAMEAT2 = 276,
     SYSCALL_PRLIMIT64 = 261,
     GETRANDOM         = 278,
+    MEMEBARRIER       = 283,
     SYS_STATX         = 291,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
@@ -156,6 +157,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::MEMEBARRIER => "membarrier",
             Self::SYSCALL_GETRUSAGE => "getrusage",
             Self::SYSCALL_MREMAP => "mremap",
             Self::SYSCALL_MADVISE => "madvise",
