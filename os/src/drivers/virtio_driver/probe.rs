@@ -3,6 +3,10 @@
 
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
+use log::info;
+
+use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
+use alloc::sync::Arc;
 use crate::sync::SpinNoIrqLock;
 
 use super::VirtIoHalImpl;
@@ -106,7 +110,7 @@ pub fn probe(fd: u64) {
 }
 
 
-pub fn virtio_device(transport: impl Transport) {
+pub fn virtio_device(transport: impl Transport + 'static) {
     match transport.device_type() {
         DeviceType::Block => virtio_blk(transport),
         DeviceType::GPU => virtio_gpu(transport),
@@ -120,7 +124,7 @@ pub fn virtio_device(transport: impl Transport) {
     }
 }
 
-fn virtio_blk<T: Transport>(transport: T) {
+fn virtio_blk<T: Transport + 'static>(transport: T) {
     // let mut blk = VirtIOBlk::<VirtIoHalImpl, T>::new(transport).expect("failed to create blk driver");
     // println!("check blk readonly");
     // assert!(!blk.readonly());
@@ -135,63 +139,68 @@ fn virtio_blk<T: Transport>(transport: T) {
     //     blk.read_blocks(i, &mut output).expect("failed to read");
     //     assert_eq!(input, output);
     // }
-    println!("virtio-blk test finished");
+    // println!("virtio-blk test finished");
+    info!("create a virtio block device");
+    let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport));
+    info!("register");
+    register_block_device(blk);
+    info!("finished register");
 }
 
 fn virtio_gpu<T: Transport>(transport: T) {
-    let mut gpu = VirtIOGpu::<VirtIoHalImpl, T>::new(transport).expect("failed to create gpu driver");
-    let (width, height) = gpu.resolution().expect("failed to get resolution");
-    let width = width as usize;
-    let height = height as usize;
-    println!("GPU resolution is {}x{}", width, height);
-    let fb = gpu.setup_framebuffer().expect("failed to get fb");
-    for y in 0..height {
-        for x in 0..width {
-            let idx = (y * width + x) * 4;
-            fb[idx] = x as u8;
-            fb[idx + 1] = y as u8;
-            fb[idx + 2] = (x + y) as u8;
-        }
-    }
-    gpu.flush().expect("failed to flush");
-    //delay some time
-    println!("virtio-gpu show graphics....");
-    for _ in 0..1000 {
-        for _ in 0..100000 {
-            unsafe {
-                core::arch::asm!("nop");
-            }
-        }
-    }
+    // let mut gpu = VirtIOGpu::<VirtIoHalImpl, T>::new(transport).expect("failed to create gpu driver");
+    // let (width, height) = gpu.resolution().expect("failed to get resolution");
+    // let width = width as usize;
+    // let height = height as usize;
+    // println!("GPU resolution is {}x{}", width, height);
+    // let fb = gpu.setup_framebuffer().expect("failed to get fb");
+    // for y in 0..height {
+    //     for x in 0..width {
+    //         let idx = (y * width + x) * 4;
+    //         fb[idx] = x as u8;
+    //         fb[idx + 1] = y as u8;
+    //         fb[idx + 2] = (x + y) as u8;
+    //     }
+    // }
+    // gpu.flush().expect("failed to flush");
+    // //delay some time
+    // println!("virtio-gpu show graphics....");
+    // for _ in 0..1000 {
+    //     for _ in 0..100000 {
+    //         unsafe {
+    //             core::arch::asm!("nop");
+    //         }
+    //     }
+    // }
 
     println!("virtio-gpu test finished");
 }
 
 fn virtio_net<T: Transport>(transport: T) {
-    let mut net =
-        VirtIONetRaw::<VirtIoHalImpl, T, 16>::new(transport).expect("failed to create net driver");
-    let mut buf = [0u8; 2048];
-    let (hdr_len, pkt_len) = net.receive_wait(&mut buf).expect("failed to recv");
-    println!(
-        "recv {} bytes: {:02x?}",
-        pkt_len,
-        &buf[hdr_len..hdr_len + pkt_len]
-    );
-    net.send(&buf[..hdr_len + pkt_len]).expect("failed to send");
+    // let mut net =
+    //     VirtIONetRaw::<VirtIoHalImpl, T, 16>::new(transport).expect("failed to create net driver");
+    // let mut buf = [0u8; 2048];
+    // let (hdr_len, pkt_len) = net.receive_wait(&mut buf).expect("failed to recv");
+    // println!(
+    //     "recv {} bytes: {:02x?}",
+    //     pkt_len,
+    //     &buf[hdr_len..hdr_len + pkt_len]
+    // );
+    // net.send(&buf[..hdr_len + pkt_len]).expect("failed to send");
     println!("virtio-net test finished");
 }
 
 fn virtio_console<T: Transport>(transport: T) {
-    let mut console =
-        VirtIOConsole::<VirtIoHalImpl, T>::new(transport).expect("Failed to create console driver");
-    if let Some(size) = console.size().unwrap() {
-        println!("VirtIO console {}", size);
-    }
-    for &c in b"Hello world on console!\n" {
-        console.send(c).expect("Failed to send character");
-    }
-    let c = console.recv(true).expect("Failed to read from console");
-    println!("Read {:?}", c);
+    // let mut console =
+    //     VirtIOConsole::<VirtIoHalImpl, T>::new(transport).expect("Failed to create console driver");
+    // if let Some(size) = console.size().unwrap() {
+    //     println!("VirtIO console {}", size);
+    // }
+    // for &c in b"Hello world on console!\n" {
+    //     console.send(c).expect("Failed to send character");
+    // }
+    // let c = console.recv(true).expect("Failed to read from console");
+    // println!("Read {:?}", c);
     println!("virtio-console test finished");
 }
 

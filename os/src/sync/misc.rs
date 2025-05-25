@@ -67,6 +67,7 @@ impl Future for ControlFuture {
 /// 放弃当前任务的执行，将其重新加入task_queue中轮循，使得其他任务有机会执行
 #[inline(always)]
 pub async fn yield_now() {
+    // info!("yield now");
     ControlFuture::new(ControlBehavior::YieldFuture).await
 }
 

@@ -13,8 +13,9 @@ use super::{InodeTrait, Kstat, SuperBlockTrait};
 
 lazy_static! {
     pub static ref SUPER_BLOCK: Arc<dyn SuperBlockTrait> = {
+        let block_device = crate::drivers::get_block_device().unwrap(); 
         Arc::new(Ext4SuperBlock::new(
-            Disk::new(BlockDeviceImpl::new_device()),
+            Disk::new(block_device),
         ))
     };
 }

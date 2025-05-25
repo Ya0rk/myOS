@@ -4,7 +4,7 @@ use super::{time::TimeSpec, yield_now, SpinNoIrqLock};
 use alloc::collections::binary_heap::BinaryHeap;
 use spin::Lazy;
 
-const TICKS_PER_SEC: usize = 10; // 设置每秒中断次数，可以计算出每次中断的时间间隔
+const TICKS_PER_SEC: usize = 1; // 设置每秒中断次数，可以计算出每次中断的时间间隔
 pub const MSEC_PER_SEC: usize = 1000;
 pub const USEC_PER_SEC: usize = 1_000_000;
 pub const NSEC_PER_SEC: usize = 1_000_000_000;
@@ -34,7 +34,7 @@ pub fn get_time_us() -> usize {
 /// 获取时间：单位ns
 #[inline(always)]
 pub fn get_time_ns() -> usize {
-    (get_time() * NSEC_PER_SEC) / CLOCK_FREQ
+    (get_time() / (CLOCK_FREQ / USEC_PER_SEC)) * MSEC_PER_SEC
 }
 
 pub fn time_duration() -> Duration {
@@ -49,7 +49,7 @@ pub fn set_next_trigger() {
 pub async fn sleep_for(ts: TimeSpec) {
     let start = get_time_ms();
     let span = ts.tv_sec * 1_000 + ts.tv_nsec / 1_000_000;
-    while get_time_ns() - start < span {
+    while get_time_ms() - start < span { // 这之前单位有点问题
         yield_now().await;
     }
 }

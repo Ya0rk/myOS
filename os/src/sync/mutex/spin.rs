@@ -36,7 +36,7 @@ impl<T, S: MutexOperations> SpinMutex<T, S> {
         while self.lock.load(Ordering::Relaxed) {
             core::hint::spin_loop();
             try_count += 1;
-            if try_count == 0x10000000 {
+            if try_count == 0x1000000000 {
                 panic!("Mutex: deadlock detected! try_count > {:#x}\n", try_count);
             }
         }

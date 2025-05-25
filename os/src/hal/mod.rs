@@ -1,6 +1,7 @@
 //! `os/src/hal/mod.rs`
 //! 硬件抽象层Hardware Abstraction Layer
 
+pub(crate) mod utils;
 
 #[cfg(target_arch = "riscv64")]
 pub mod rv64;

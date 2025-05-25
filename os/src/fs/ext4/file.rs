@@ -98,8 +98,8 @@ impl FileTrait for NormalFile {
         Ok(total_read_size)
     }
 
-    /// 从指定偏移量读取数据到用户缓冲区
-    async fn pread(&self, mut buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+    /// 从偏移处读数据到buf，不用改变offset(这是和read的区别，可以将这两个函数综合)
+    async fn pread(&self, mut buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
         let mut total_read_size = 0usize;
         info!("pread file: {}, offset: {}", self.path, offset);
 
@@ -108,15 +108,9 @@ impl FileTrait for NormalFile {
             return Ok(0);
         }
 
-        let mut new_offset = offset;
-        for slice in buf.buffers.iter_mut() {
-            let read_size = self.metadata.inode.read_at(new_offset, *slice).await;
-            if read_size == 0 {
-                break;
-            }
-            new_offset += read_size;
-            total_read_size += read_size;
-        }
+        let read_size = self.metadata.inode.read_at(offset, buf).await;
+        total_read_size += read_size;
+
         Ok(total_read_size)
     }
 
@@ -139,18 +133,18 @@ impl FileTrait for NormalFile {
         Ok(total_write_size)
     }
 
-    async fn pwrite(&self, buf: UserBuffer, offset: usize, len: usize) -> SysResult<usize> {
+    /// 从偏移处写数据，不用改变offset(这是和write的区别，可以将这两个函数综合)
+    async fn pwrite(&self, buf: &[u8], offset: usize, len: usize) -> SysResult<usize> {
         let mut total_write_size = 0usize;
         let mut offset = offset;
         let file_size = self.metadata.inode.get_size();
         if offset > file_size - buf.len() {
             self.metadata.inode.set_size(buf.len() + offset).expect("[pwrite]: set size fail!");
         }
-        for slice in buf.buffers.iter() {
-            let write_size = self.metadata.inode.write_at(offset, *slice).await;
-            total_write_size += write_size;
-            offset += write_size;
-        }
+
+        let write_size = self.metadata.inode.write_at(offset, buf).await;
+        total_write_size += write_size;
+
         Ok(total_write_size)
     }
 
@@ -195,8 +189,6 @@ impl FileTrait for NormalFile {
             return Err(Errno::ENAMETOOLONG);
         }
 
-        // let mut ext4file = self.metadata.inode.get_ext4file();
-        // ext4file.file_rename(&old_path, &new_path).unwrap();
         self.metadata.inode.rename(&old_path, &new_path);
         self.path = new_path;
         

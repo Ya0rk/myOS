@@ -1,4 +1,4 @@
-pub const UART_ADDR: usize = 0x0_1FE0_01E0;
+pub const UART_ADDR: usize = 0x0_1FE0_01E0 + 0x9000_0000_0000_0000;
 
 
 pub const TICKS_PER_SEC: usize = 100;
@@ -26,13 +26,11 @@ pub const MB: usize = 1024 * KB;
 // mm
 // TODO:目前是有栈协程，如果将userstack修改为8MB，kernelstack修改为64kB，会导致Kerenlstack爆栈
 // 如果是无栈协程就不会
-pub const USER_STACK_SIZE: usize = 64 * KB;
-pub const KERNEL_STACK_SIZE: usize = 64 * KB;
-pub const KERNEL_HEAP_SIZE: usize = 0x20_00000;
-pub const PAGE_SIZE: usize = 0x4000;
-pub const PAGE_SIZE_BITS: usize = 14;
-
-
+pub const USER_STACK_SIZE: usize = 8 * MB;
+pub const KERNEL_STACK_SIZE: usize = 128 * KB;
+pub const KERNEL_HEAP_SIZE: usize = 0x200_0000;
+pub const PAGE_SIZE: usize = 0x1000;
+pub const PAGE_SIZE_BITS: usize = 12;
 pub const PAGE_MASK: usize = PAGE_SIZE - 1;
 
 pub const PTE_SIZE: usize = 8;
@@ -42,9 +40,20 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
 
 // #[cfg(target_arch = "loongarch64")]
-pub const KERNEL_ADDR_OFFSET: usize = 0x9000_000;
+pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
-pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_ADDR_OFFSET >> PAGE_SIZE_BITS;
+
+pub const KERNEL_PG_ADDR_BASE: usize = 0xffff_ffc0_0000_0000;
+pub const KERNEL_PGNUM_BASE: usize = KERNEL_PG_ADDR_BASE >> PAGE_SIZE_BITS;
+pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_PGNUM_BASE;
+pub const KERNEL_VADDR_MASK: usize = 0x0000_ffff_ffff_ffff;
+pub const KERNEL_PG_VADDR_MASK: usize = 0x0000_003f_ffff_ffff;
+pub const KERNEL_VPN_MASK: usize = KERNEL_PG_VADDR_MASK >> PAGE_SIZE_BITS;
+
+
+// TODO: 使用正确的虚拟地址
+
+// TODO: What's this???
 pub const USER_SPACE_TOP: usize = 0x9000_0030_0000_0000;
 pub const USER_TRAP_CONTEXT: usize = USER_SPACE_TOP - PAGE_SIZE;
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;

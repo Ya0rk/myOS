@@ -26,7 +26,7 @@ pub use manager::{
 pub use sched::{spawn_user_task, spawn_kernel_task};
 pub use processor::{
     init_processors, current_task, current_trap_cx, 
-    current_user_token, take_current_task, 
+    current_user_token, current_kernel_token, take_current_task, 
     get_current_hart_id, get_current_cpu
 };
 

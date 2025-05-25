@@ -1,6 +1,6 @@
 use core::{fmt::Display, time::Duration};
 use zerocopy::IntoBytes;
-use crate::{sync::timer::{get_time_ns, get_time_s, time_duration, NSEC_PER_SEC}, task::current_task};
+use crate::{sync::timer::{get_time_ms, get_time_ns, get_time_s, time_duration, MSEC_PER_SEC, NSEC_PER_SEC}, task::current_task};
 
 #[derive(Copy, Clone, IntoBytes, Debug)]
 #[repr(C)]
@@ -14,8 +14,9 @@ pub struct TimeSpec {
 impl TimeSpec {
     /// 返回当前时间
     pub fn new() -> Self {
-        let tv_sec = get_time_s();
-        let tv_nsec = get_time_ns();
+        let tick = get_time_ms();
+        let tv_sec = tick / MSEC_PER_SEC;
+        let tv_nsec = (tick % 1000) * 1_000_000;
 
         TimeSpec { tv_sec, tv_nsec }
     }

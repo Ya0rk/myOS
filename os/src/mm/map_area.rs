@@ -1,6 +1,6 @@
 use crate::{hal::config::{KERNEL_PGNUM_OFFSET, PAGE_SIZE}, mm::StepByOne};
 use alloc::collections::BTreeMap;
-use super::{address::VPNRange, frame_alloc, page_table::PTEFlags, FrameTracker, MapPermission, MapType, PageTable, PhysPageNum, VirtAddr, VirtPageNum};
+use super::{address::VPNRange, frame_alloc, FrameTracker, MapPermission, MapType, PageTable, PhysPageNum, VirtAddr, VirtPageNum};
 
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

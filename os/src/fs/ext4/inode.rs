@@ -4,7 +4,6 @@ use log::{debug, info, warn};
 use lwext4_rust::{
     bindings::{EXT4_DE_DIR, EXT4_DE_REG_FILE, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, file, Ext4File, InodeTypes
 };
-use riscv::register::mstatus::set_fs;
 use crate::{
     fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, open, page_cache::PageCache, root_inode, stat::as_inode_stat, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat},
     sync::{new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
@@ -292,9 +291,6 @@ impl InodeTrait for Ext4Inode {
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         &self.metadata.timestamp
     }
-    // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, > {
-    //     self.file.lock()
-    // }
     fn is_dir(&self) -> bool {
         self.metadata.file_type.is_dir()
     }
@@ -324,11 +320,3 @@ impl InodeTrait for Ext4Inode {
         Some(dir_entrys)
     }
 }
-
-// impl Drop for Ext4Inode {
-//     fn drop(&mut self) {
-//         let mut file = self.file.lock();
-//         // debug!("Drop struct FileWrapper {:?}", file.get_path());
-//         file.file_close().expect("failed to close fd");
-//     }
-// }

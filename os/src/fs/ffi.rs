@@ -64,6 +64,41 @@ bitflags! {
         const RENAME_EXCHANGE	= 	1 << 1;	// Exchange source and dest
         const RENAME_WHITEOUT	= 	1 << 2;	// Whiteout source
     }
+
+    pub struct StxMask: u32 {
+        /// Request file type (stx_mode & S_IFMT)
+        const STATX_TYPE          = 0x00000001;
+        /// Request file permissions (stx_mode & ~S_IFMT)
+        const STATX_MODE          = 0x00000002;
+        /// Request number of hard links (stx_nlink)
+        const STATX_NLINK         = 0x00000004;
+        /// Request owner UID (stx_uid)
+        const STATX_UID           = 0x00000008;
+        /// Request group GID (stx_gid)
+        const STATX_GID           = 0x00000010;
+        /// Request last access time (stx_atime)
+        const STATX_ATIME         = 0x00000020;
+        /// Request last modification time (stx_mtime)
+        const STATX_MTIME         = 0x00000040;
+        /// Request last status change time (stx_ctime)
+        const STATX_CTIME         = 0x00000080;
+        /// Request inode number (stx_ino)
+        const STATX_INO           = 0x00000100;
+        /// Request file size in bytes (stx_size)
+        const STATX_SIZE          = 0x00000200;
+        /// Request allocated blocks count (stx_blocks)
+        const STATX_BLOCKS        = 0x00000400;
+        /// Combination of all basic stat fields (equivalent to traditional `stat` struct)
+        const STATX_BASIC_STATS   = 0x000007FF;
+        /// Request file creation/birth time (stx_btime)
+        const STATX_BTIME         = 0x00000800;
+        /// Request mount ID (stx_mnt_id, since Linux 5.8)
+        const STATX_MNT_ID        = 0x00001000;
+        /// Reserved for future expansion
+        const STATX__RESERVED     = 0x80000000;
+        /// Request all fields (equivalent to `statx` with all flags set)
+        const STATX_ALL           = 0x00000fff;
+    }
 }
 
 impl OpenFlags {

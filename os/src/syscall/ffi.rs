@@ -2,7 +2,7 @@ use core::fmt::{self, Display};
 use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
-use crate::{hal::config::{BLOCK_SIZE, PATH_MAX}, sync::timer::get_time_s};
+use crate::{hal::config::{BLOCK_SIZE, PATH_MAX}, sync::{timer::get_time_s, TimeVal}};
 
 #[derive(IntoBytes, Immutable)]
 #[allow(unused)]
@@ -106,6 +106,7 @@ pub enum SysCode {
     SYSCALL_GETPGID   = 155,
     SYSCALL_SETSID    = 157,
     SYSCALL_UNAME     = 160,
+    SYSCALL_GETRUSAGE = 165,
     SYSCALL_GETTIMEOFDAY  = 169,
     SYSCALL_GETPID    = 172,
     SYSCALL_GETPPID   = 173,
@@ -140,6 +141,7 @@ pub enum SysCode {
     SYSCALL_RENAMEAT2 = 276,
     SYSCALL_PRLIMIT64 = 261,
     GETRANDOM         = 278,
+    SYS_STATX         = 291,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -154,6 +156,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_GETRUSAGE => "getrusage",
             Self::SYSCALL_MREMAP => "mremap",
             Self::SYSCALL_MADVISE => "madvise",
             Self::SYSCALL_STATFS => "statfs",
@@ -248,6 +251,7 @@ impl SysCode {
             Self::SYSCALL_WAIT4 => "wait4",
             Self::SYSCALL_UNKNOWN => "unknown",
             Self::GETRANDOM => "getrandom",
+            Self::SYS_STATX => "statx",
         }
     }
 }
@@ -688,5 +692,41 @@ impl StatFs {
             buf[i] = bytes[i];
         }
         buf
+    }
+}
+
+
+pub const RUSAGE_SELF:     isize = 0;
+pub const RUSAGE_CHILDREN: isize = -1;
+pub const RUSAGE_THREAD:   isize = 1;
+
+
+#[derive(Clone, Copy, Default)]
+#[repr(C)]
+pub struct Rusage {
+    pub utime: TimeVal,   // 用户态 CPU 时间（进程在用户模式下的总执行时间）
+    pub stime: TimeVal,   // 内核态 CPU 时间（进程在内核模式下的总执行时间）
+    pub maxrss: usize,    // 最大驻留集大小（进程使用的物理内存峰值，单位通常为 KB）
+    pub ixrss: usize,     // 共享内存大小（历史字段，现代系统通常不再使用）
+    pub idrss: usize,     // 非共享数据内存大小（历史字段，现代系统通常不再使用）
+    pub isrss: usize,     // 非共享栈内存大小（历史字段，现代系统通常不再使用）
+    pub minflt: usize,    // 软缺页次数（无需磁盘 I/O 的页故障，如写时复制）
+    pub majflt: usize,    // 硬缺页次数（需磁盘 I/O 的页故障，如页面未加载）
+    pub nswap: usize,     // 交换次数（进程被换出物理内存的次数）
+    pub inblock: usize,   // 块输入操作次数（从存储设备读取数据的次数）
+    pub oublock: usize,   // 块输出操作次数（向存储设备写入数据的次数）
+    pub msgsnd: usize,    // 发送的消息数（IPC 相关，现代系统通常不再使用）
+    pub msgrcv: usize,    // 接收的消息数（IPC 相关，现代系统通常不再使用）
+    pub nsignals: usize,  // 接收的信号数量（历史字段，现代系统通常不再使用）
+    pub nvcsw: usize,     // 自愿上下文切换次数（进程主动释放 CPU，如等待 I/O）
+    pub nivcsw: usize,    // 非自愿上下文切换次数（进程被强制切换，如时间片耗尽）
+}
+
+impl Rusage {
+    pub fn new(utime: TimeVal, stime: TimeVal) -> Self {
+        let mut ret = Rusage::default();
+        ret.utime = utime;
+        ret.stime = stime;
+        ret
     }
 }

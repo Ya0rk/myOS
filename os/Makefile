@@ -1,21 +1,26 @@
 # Building
-TARGET := riscv64gc-unknown-none-elf
+ARCH := riscv64
+# ARCH := loongarch64
+ifeq ($(ARCH), riscv64)
+	TARGET := riscv64gc-unknown-none-elf
+endif
+ifeq ($(ARCH), loongarch64)
+	TARGET := loongarch64-unknown-none
+endif
 MODE := release
 # IMG := sdcard
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
+OVERWRITE := false
 
 # fs image
 FS = lwext4_rust
 
-
-FS_IMG := ../sdcard-rv-test.img
-FS_IMG_BAK = ../sdcard-rv-test-copy.img
 # FS_IMG ?= ../$(FS)/ext4.img
 # cpu hart
-CPUS ?= 2
+CPUS ?= 1
 
 # BOARD
 BOARD := qemu
@@ -48,16 +53,38 @@ DISASM ?= -x
 TEST ?=
 
 #qemu
-QEMU_NAME := qemu-system-riscv64
+QEMU_NAME := qemu-system-$(ARCH)
 
-QEMU_ARGS =  -machine virt 
-QEMU_ARGS += -m 1G
-QEMU_ARGS += -nographic 
-QEMU_ARGS += -bios $(BOOTLOADER) 
-QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
-QEMU_ARGS += -drive file=$(FS_IMG_BAK),if=none,format=raw,id=x0
-QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
-QEMU_ARGS += -smp $(CPUS)
+ifeq ($(ARCH), riscv64)
+	QEMU_ARGS =  -machine virt 
+	QEMU_ARGS += -m 1G
+	QEMU_ARGS += -nographic 
+	QEMU_ARGS += -bios $(BOOTLOADER) 
+	QEMU_ARGS += -device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
+	QEMU_ARGS += -drive file=$(FS_IMG_BAK),if=none,format=raw,id=x0
+	QEMU_ARGS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+	QEMU_ARGS += -smp $(CPUS)
+
+
+	FS_IMG := ../sdcard-rv.img
+	FS_IMG_BAK = ../sdcard-rv-copy.img
+endif
+ifeq ($(ARCH), loongarch64)
+	QEMU_ARGS =  -machine virt 
+	QEMU_ARGS += -m 1G
+	# QEMU_ARGS += -D ../qemu.log -d mmu,page,in_asm,int,pcall,cpu_reset,guest_errors,exec,cpu
+	QEMU_ARGS += -D ../qemu.log -d int,in_asm
+	QEMU_ARGS += -nographic 
+	QEMU_ARGS += -kernel $(KERNEL_ELF)
+	QEMU_ARGS += -drive file=$(FS_IMG_BAK),if=none,format=raw,id=x0
+	QEMU_ARGS += -device virtio-blk-pci,drive=x0,id=virtio-disk0 
+	QEMU_ARGS += -smp $(CPUS)
+	QEMU_ARGS += -L /opt/qemu-9.2.1/pc-bios  # 这里是YJJ需要指定
+
+
+	FS_IMG := ../sdcard-la.img
+	FS_IMG_BAK = ../sdcard-la-copy.img
+endif
 
 # 加入另一个块设备
 # QEMU_ARGS += -drive file=../$(FS)/myimage.img,if=none,format=raw,id=x1
@@ -69,7 +96,7 @@ fdtdump:
 PHONY = fdtdump
 
 # build: env $(KERNEL_BIN) fs-img
-build: env $(KERNEL_BIN) initproc 
+build: env $(KERNEL_BIN) initproc # copy_to_fs
 PHONY += build
 
 initproc:
@@ -78,9 +105,9 @@ PHONY += initproc
 
 env:
 	(rustup target list | grep "riscv64gc-unknown-none-elf (installed)") || rustup target add $(TARGET)
-	# cargo install cargo-binutils
-	# rustup component add rust-src
-	# rustup component add llvm-tools-preview
+	cargo install cargo-binutils
+	rustup component add rust-src
+	rustup component add llvm-tools-preview
 PHONY += env
 
 $(KERNEL_BIN): kernel
@@ -91,8 +118,8 @@ $(APPS):
 kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
-	cp src/linker-$(BOARD).ld src/linker.ld
-	cargo build $(MODE_ARG) -j 16
+	cp ./linker/linker-$(BOARD)-$(ARCH).ld ./src/linker.ld
+	cargo build $(MODE_ARG) -j 20
 	rm src/linker.ld
 PHONY += kernel
 
@@ -119,15 +146,20 @@ qemu-version-check:
 PHONY += qemu-version-check
 
 # 复制镜像，然后操作复制后的copy镜像，防止镜像被破坏
-copy_img:
+copy-img:
 	@echo "Copying image $(FS_IMG_BAK)"
-	cp $(FS_IMG) $(FS_IMG_BAK)
-PHONY += copy_img
+	cp $(FS_IMG) $(FS_IMG_BAK) -f
+PHONY += copy-img
 
-run-inner: qemu-version-check copy_img build
+ifeq ($(OVERWRITE),true)
+  RUN_DEPS := copy-img build
+else
+  RUN_DEPS := build
+endif
+
+run-inner: qemu-version-check $(RUN_DEPS)
 	echo "Running QEMU with arguments: $(QEMU_ARGS)"
 	$(QEMU_NAME) $(QEMU_ARGS)
-	rm $(FS_IMG_BAK)
 PHONY += run-inner
 
 # debug: qemu-version-check build
@@ -142,7 +174,7 @@ debug: qemu-version-check build
 		tmux -2 attach-session -d
 PHONY += debug
 
-gdbserver: qemu-version-check build copy_img
+gdbserver: qemu-version-check build copy-img
 	$(QEMU_NAME) $(QEMU_ARGS) -s -S
 PHONY += gdbserver
 
@@ -154,7 +186,7 @@ LArc:
 	cargo build --target loongarch64-unknown-none
 	qemu-system-loongarch64 \
 		-M virt \
-		-m 1G \
+		-m 128M \
 		-smp 1 \
 		-kernel ./target/loongarch64-unknown-none/debug/os \
 		-vga none \
@@ -165,19 +197,21 @@ LArc:
 PHONY += LArc
 
 # 龙芯架构的启动方式
-LA:
-	cargo build --target loongarch64-unknown-none
-	qemu-system-loongarch64 \
-		-M virt \
-		-m 1G \
-		-smp 1 \
-		-kernel ./target/loongarch64-unknown-none/debug/os \
-		-vga none \
-		-nographic \
-		-drive file=$(FS_IMG),if=none,format=raw,id=mydev \
-		-device virtio-blk-pci,drive=mydev,id=virtio-disk0 
-
+LA: copy_to_fs
+	cp ./linker/linker-$(BOARD)-$(ARCH).ld ./src/linker.ld
+	cargo build --target $(TARGET) $(MODE_ARG)
+	$(QEMU_NAME) $(QEMU_ARGS)
 PHONY += LA
+# qemu-system-loongarch64 \
+# 	-kernel {os_file} 
+# 	-m {mem} 
+# 	-nographic 
+# 	-smp {smp} 
+# 	-drive file={fs},if=none,format=raw,id=x0  \
+#     -device virtio-blk-pci,drive=x0,bus=virtio-mmio-bus.0 -no-reboot  -device virtio-net-pci,netdev=net0 \
+#     -netdev user,id=net0,hostfwd=tcp::5555-:5555,hostfwd=udp::5555-:5555  \
+#     -rtc base=utc \
+#     -drive file=disk-la.img,if=none,format=raw,id=x1 -device virtio-blk-p
 
 LAgdbclient:
 	loongarch64-linux-gnu-gdb \
@@ -187,13 +221,14 @@ PHONY += LAgdbclient
 
 LAgdb:
 	qemu-system-loongarch64 \
-		-M virt \
 		-m 1G \
 		-smp 1 \
-		-kernel ./target/loongarch64-unknown-none/debug/os \
+		-kernel ./target/loongarch64-unknown-none/release/os \
 		-vga none \
 		-nographic \
-		-D qemu.log -d in_asm,int,pcall,cpu_reset,guest_errors \
+		-D qemu.log -d in_asm,int \
+		-drive file=$(FS_IMG),if=none,format=raw,id=mydev \
+		-device virtio-blk-pci,drive=mydev,id=virtio-disk0 \
 		-s -S
 PHONY += LAgdb
 

@@ -16,7 +16,7 @@ pub struct UserFloatRegs {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct TrapContext {
-    /* 0-31 */ pub user_x: [usize; 32], 
+    /* 0-31 */ pub user_gp: GPRegs, 
     /*  32  */ pub sstatus: Sstatus,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
@@ -26,6 +26,51 @@ pub struct TrapContext {
     /*  49  */ pub kernel_tp: usize,
     /*  50  */ pub float_regs: UserFloatRegs,
 }
+/// 通用寄存器
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
+pub struct GPRegs {
+    pub zero:   usize,
+    pub ra:     usize,
+    pub sp:     usize,
+    pub gp:     usize,
+    pub tp:     usize,
+    pub t0:     usize,
+    pub t1:     usize,
+    pub t2:     usize,
+    pub s0:     usize,
+    pub s1:     usize,
+    pub a0:     usize,
+    pub a1:     usize,
+    pub a2:     usize,
+    pub a3:     usize,
+    pub a4:     usize,
+    pub a5:     usize,
+    pub a6:     usize,
+    pub a7:     usize,
+    pub s2:     usize,
+    pub s3:     usize,
+    pub s4:     usize,
+    pub s5:     usize,
+    pub s6:     usize,
+    pub s7:     usize,
+    pub s8:     usize,
+    pub s9:     usize,
+    pub s10:    usize,
+    pub s11:    usize,
+    pub t3:     usize,
+    pub t4:     usize,
+    pub t5:     usize,
+    pub t6:     usize,
+}
+
+impl GPRegs {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+
 
 impl TrapContext {
     ///init app context
@@ -37,7 +82,7 @@ impl TrapContext {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
         let mut cx = Self {
-            user_x: [0; 32],
+            user_gp: GPRegs::new(),
             sstatus,
             sepc: entry,
             kernel_sp: 0,
@@ -52,20 +97,20 @@ impl TrapContext {
     }
     /// 设置context参数
     pub fn set_arg(&mut self, argc: usize, argv: usize, env: usize) {
-        self.user_x[10] = argc;
-        self.user_x[11] = argv;
-        self.user_x[12] = env;
+        self.user_gp.a0 = argc;
+        self.user_gp.a1 = argv;
+        self.user_gp.a2 = env;
         self.float_regs = UserFloatRegs::new();
     }
 
     pub fn set_sp(&mut self, sp: usize) {
-        self.user_x[2] = sp;
+        self.user_gp.sp = sp;
     }
     pub fn get_sp(&self) -> usize {
-        self.user_x[2]
+        self.user_gp.sp
     }
     pub fn set_tp(&mut self, tp: usize) {
-        self.user_x[4] = tp;
+        self.user_gp.tp = tp;
     }
     pub fn set_sepc(&mut self, sepc: usize) {
         self.sepc = sepc;
@@ -85,12 +130,12 @@ impl TrapContext {
     /// 
     /// sigret: 信号处理完后返回到sigreturn系统调用
     pub fn flash(&mut self, user_func: usize, sp: usize, sigret: usize, signo: usize, gp: usize, tp: usize) {
-        self.sepc = user_func;   // 返回到用户自定义函数
-        self.set_sp(sp);         // x2:信号处理栈的sp
-        self.user_x[1] = sigret; // ra:返回到sigreturn系统调用
-        self.user_x[3] = gp;     // gp:保存gp指针
-        self.user_x[4] = tp;     // tp:保存tp指针
-        self.user_x[10] = signo; // a0:信号编号
+        self.sepc = user_func;      // 返回到用户自定义函数
+        self.set_sp(sp);            // x2:信号处理栈的sp
+        self.user_gp.ra = sigret;   // ra:返回到sigreturn系统调用
+        self.user_gp.gp = gp;       // gp:保存gp指针
+        self.user_gp.tp = tp;       // tp:保存tp指针
+        self.user_gp.a0 = signo;    // a0:信号编号
 
     }
 }

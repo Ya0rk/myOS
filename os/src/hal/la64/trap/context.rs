@@ -1,24 +1,26 @@
-use core::arch::asm;
+use core::{arch::asm, fmt::Debug};
 // use riscv::register::sstatus::FS;
 use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
-
+use log::info;
+use loongarch64::register::*;
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct UserFloatRegs {
-    f: [f64; 32], // 57-88
-    fcsr: u32,    // 89
-    fcc: u8,      // 89+4
-    need_save: u8,
-    need_restore: u8,
-    dirty: u8,
+    pub f: [f64; 32], // 56-87
+    pub fcsr: u32,    // 88
+    pub fcc: u8,      // 88+4
+    pub need_save: u8,
+    pub need_restore: u8,
+    pub dirty: u8,
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct TrapContext {
-    /* 0-31 */ pub user_x: [usize; 32], 
-    /*  32  */ pub sstatus: PrMd,
+    /// 通用寄存器
+    /* 0-31 */ pub user_gp: GPRegs, 
+    /*  32  */ pub sstatus: Sstatus,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
     /*  35  */ pub kernal_ra: usize,
@@ -28,23 +30,146 @@ pub struct TrapContext {
     /*  56  */ pub float_regs: UserFloatRegs,
 }
 
+/// 通用寄存器
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
+pub struct GPRegs {
+    /// r0 - 硬连线为常数0的寄存器（zero）
+    pub zero:   usize, 
+    /// r1 - 返回地址寄存器（ra）
+    pub ra:     usize,
+    /// r2 - 线程局部存储指针（tp）
+    pub tp:     usize,
+    /// r3 - 栈指针寄存器（sp）
+    pub sp:     usize,
+    /// r4 - 参数/返回值寄存器0（a0/v0）
+    pub a0:     usize,
+    /// r5 - 参数/返回值寄存器1（a1/v1）
+    pub a1:     usize,
+    /// r6 - 参数寄存器2（a2）
+    pub a2:     usize,
+    /// r7 - 参数寄存器3（a3）
+    pub a3:     usize,
+    /// r8 - 参数寄存器4（a4）
+    pub a4:     usize,
+    /// r9 - 参数寄存器5（a5）
+    pub a5:     usize,
+    /// r10 - 参数寄存器6（a6）
+    pub a6:     usize,
+    /// r11 - 参数寄存器7（a7）
+    pub a7:     usize,
+    /// r12 - 临时寄存器0（t0）
+    pub t0:     usize,
+    /// r13 - 临时寄存器1（t1）
+    pub t1:     usize,
+    /// r14 - 临时寄存器2（t2）
+    pub t2:     usize,
+    /// r15 - 临时寄存器3（t3）
+    pub t3:     usize,
+    /// r16 - 临时寄存器4（t4）
+    pub t4:     usize,
+    /// r17 - 临时寄存器5（t5）
+    pub t5:     usize,
+    /// r18 - 临时寄存器6（t6）
+    pub t6:     usize,
+    /// r19 - 临时寄存器7（t7）
+    pub t7:     usize,
+    /// r20 - 临时寄存器8（t8）
+    pub t8:     usize,
+    /// r21 - 保留寄存器（未分配用途）
+    pub r21:    usize,
+    /// r22 - 帧指针寄存器（fp/s9）
+    pub fp:     usize,
+    /// r23 - 静态寄存器0（s0）
+    pub s0:     usize,
+    /// r24 - 静态寄存器1（s1）
+    pub s1:     usize,
+    /// r25 - 静态寄存器2（s2）
+    pub s2:     usize,
+    /// r26 - 静态寄存器3（s3）
+    pub s3:     usize,
+    /// r27 - 静态寄存器4（s4）
+    pub s4:     usize,
+    /// r28 - 静态寄存器5（s5）
+    pub s5:     usize,
+    /// r29 - 静态寄存器6（s6）
+    pub s6:     usize,
+    /// r30 - 静态寄存器7（s7）
+    pub s7:     usize,
+    /// r31 - 静态寄存器8（s8）
+    pub s8:     usize,
+}
+
+
+macro_rules! reg_by_num {
+    // 基础寄存器组（r0-r3）
+    ($cx:ident.0) => { $cx.user_gp.zero };
+    ($cx:ident.1) => { $cx.user_gp.ra };
+    ($cx:ident.2) => { $cx.user_gp.tp };
+    ($cx:ident.3) => { $cx.user_gp.sp };
+    
+    // 参数/返回值寄存器（r4-r11）
+    ($cx:ident.4) => { $cx.user_gp.a0 };
+    ($cx:ident.5) => { $cx.user_gp.a1 };
+    ($cx:ident.6) => { $cx.user_gp.a2 };
+    ($cx:ident.7) => { $cx.user_gp.a3 };
+    ($cx:ident.8) => { $cx.user_gp.a4 };
+    ($cx:ident.9) => { $cx.user_gp.a5 };
+    ($cx:ident.10) => { $cx.user_gp.a6 };
+    ($cx:ident.11) => { $cx.user_gp.a7 };
+    
+    // 临时寄存器（r12-r20）
+    ($cx:ident.12) => { $cx.user_gp.t0 };
+    ($cx:ident.13) => { $cx.user_gp.t1 };
+    ($cx:ident.14) => { $cx.user_gp.t2 };
+    ($cx:ident.15) => { $cx.user_gp.t3 };
+    ($cx:ident.16) => { $cx.user_gp.t4 };
+    ($cx:ident.17) => { $cx.user_gp.t5 };
+    ($cx:ident.18) => { $cx.user_gp.t6 };
+    ($cx:ident.19) => { $cx.user_gp.t7 };
+    ($cx:ident.20) => { $cx.user_gp.t8 };
+    
+    // 保留寄存器（r21）
+    ($cx:ident.21) => { $cx.user_gp.r21 };
+    
+    // 帧指针/静态寄存器（r22-r31）
+    ($cx:ident.22) => { $cx.user_gp.fp };  // fp对应r22
+    ($cx:ident.23) => { $cx.user_gp.s0 };
+    ($cx:ident.24) => { $cx.user_gp.s1 };
+    ($cx:ident.25) => { $cx.user_gp.s2 };
+    ($cx:ident.26) => { $cx.user_gp.s3 };
+    ($cx:ident.27) => { $cx.user_gp.s4 };
+    ($cx:ident.28) => { $cx.user_gp.s5 };
+    ($cx:ident.29) => { $cx.user_gp.s6 };
+    ($cx:ident.30) => { $cx.user_gp.s7 };
+    ($cx:ident.31) => { $cx.user_gp.s8 };
+}
+
+impl GPRegs {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+
+
 impl TrapContext {
     ///init app context
     pub fn app_init_context(
         entry: usize,
         sp: usize,
-        kernel_sp: usize,
-        _trap_loop: usize,
+        //kernel_sp: usize,
+        //_trap_loop: usize,
     ) -> Self {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
         let mut cx = Self {
-            user_x: [0; 32],
+            user_gp: GPRegs::new(),
             sstatus,
             sepc: entry,
-            kernel_sp,
+            kernel_sp: 0,
             kernal_ra: 0,
-            kernel_s: [0; 12],
+            kernel_s: [0; 18],
             kernel_fp: 0,
             kernel_tp: 0,
             float_regs: UserFloatRegs::new(),
@@ -52,14 +177,21 @@ impl TrapContext {
         cx.set_sp(sp);
         cx
     }
+    /// 设置context参数
+    pub fn set_arg(&mut self, argc: usize, argv: usize, env: usize) {
+        self.user_gp.a0 = argc;
+        self.user_gp.a1 = argv;
+        self.user_gp.a2 = env;
+        self.float_regs = UserFloatRegs::new();
+    }
     pub fn set_sp(&mut self, sp: usize) {
-        self.user_x[2] = sp;
+        self.user_gp.sp = sp;
     }
     pub fn get_sp(&self) -> usize {
-        self.user_x[2]
+        self.user_gp.sp
     }
     pub fn set_tp(&mut self, tp: usize) {
-        self.user_x[4] = tp;
+        self.user_gp.tp = tp;
     }
     pub fn set_sepc(&mut self, sepc: usize) {
         self.sepc = sepc;
@@ -78,12 +210,13 @@ impl TrapContext {
     /// new_sp: 信号处理栈的sp
     /// 
     /// sigret: 信号处理完后返回到sigreturn系统调用
-    pub fn flash(&mut self, handler: usize, new_sp: usize, sigret: usize, signo: usize) {
+    pub fn flash(&mut self, handler: usize, new_sp: usize, sigret: usize, signo: usize, gp: usize, tp: usize) {
+        info!("[flash] in with args: handler:{:#x}, new_sp:{:#x}, sigret:{:#x}, signo:{}", handler, new_sp, sigret, signo);
         self.sepc = handler;
         self.set_sp(new_sp);
-        self.user_x[1] = sigret;
-        self.user_x[10] = signo;
-
+        self.user_gp.ra = (sigret & 0xFFFF_FFFF_FFFF) | 0xFFFF_FFC0_0000_0000;
+        self.user_gp.a0 = signo;
+        self.user_gp.tp = tp;
     }
 }
 
@@ -92,6 +225,7 @@ impl UserFloatRegs {
         Self {
             f: [0.0; 32],
             fcsr: 0,
+            fcc: 0,
             need_save: 0,
             need_restore: 0,
             dirty: 0,

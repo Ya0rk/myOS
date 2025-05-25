@@ -2,9 +2,8 @@ use core::{intrinsics::{atomic_load_acquire, atomic_load_relaxed}, time::Duratio
 use alloc::task;
 use log::info;
 use num_enum::TryFromPrimitive;
-use riscv::addr::AddressL2;
 use crate::{
-    mm::VirtAddr, signal::copy2user, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, 
+    mm::VirtAddr, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, 
     task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE}, 
     utils::{Errno, SysResult}
 };
@@ -29,6 +28,7 @@ pub async fn sys_futex(
     info!("[sys_futex] start, futex_op = {:?}", op);
     if uaddr == 0 { return Err(Errno::EACCES); }
     let key = FutexHashKey::get_futex_key(uaddr, op);
+    // 按照linux做一些判断
     if op.contains(FutexOp::FUTEX_CLOCK_REALTIME) {
         let cmd = op & !FutexOp::FUTEX_MUSK;
         if cmd != FutexOp::FUTEX_WAIT_BITSET {
@@ -101,7 +101,6 @@ pub async fn sys_futex(
         _ => { unimplemented!() }
     }
     
-    
     Ok(0)
 }
 
@@ -116,8 +115,8 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
         return Err(Errno::EINVAL);
     }
     let task = current_task().unwrap();
-    // let wake_up_sig = *task.get_blocked();
-    // task.set_wake_up_signal(wake_up_sig);
+    let wake_up_sig = *task.get_blocked();
+    task.set_wake_up_signal(wake_up_sig);
 
     let futex_future = FutexFuture::new(uaddr, key, bitset, val);
     info!("[do_futex_wait] uaddr = {:#x}", uaddr);
@@ -141,12 +140,12 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
         }
     }
 
-    // if task.sig_pending.lock().has_expected(wake_up_sig).0 {
-    //     // 这里需要判断是否是被信号唤醒的
-    //     info!("[do_futex_wait] wake up by signal");
-    //     task.futex_list.lock().remove(key, task.get_pid());
-    //     return Err(Errno::EINTR);
-    // }
+    if task.sig_pending.lock().has_expected(wake_up_sig).0 {
+        // 这里需要判断是否是被信号唤醒的
+        info!("[do_futex_wait] wake up by signal");
+        task.futex_list.lock().remove(key, task.get_pid());
+        return Err(Errno::EINTR);
+    }
 
     return Ok(0);
 }

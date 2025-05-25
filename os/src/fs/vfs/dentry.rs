@@ -3,8 +3,8 @@ use bitflags::parser::ParseError;
 use hashbrown::{HashMap, HashSet};
 use log::{debug, error, info, warn};
 use lwext4_rust::{bindings::{false_, printf, true_}, InodeTypes};
-use riscv::{interrupt::Mutex, register::fcsr::read};
-use sbi_rt::{NonRetentive, SharedPtr};
+// use riscv::{interrupt::Mutex, register::fcsr::read};
+// use sbi_rt::{NonRetentive, SharedPtr};
 use spin::{rwlock::RwLock};
 use core::hash::{Hash, Hasher};
 use crate::{fs::{ffi::InodeType, mkdir, open_file, path, procfs::PROCFS_SUPER_BLOCK, root_inode, FileClass, FileTrait, OpenFlags, Path}, utils::{Errno, SysResult}};
@@ -143,7 +143,7 @@ impl Dentry {
                         let temp = if self.name.read().ends_with("/") {
                             alloc::format!("{}{}", self.name.read(), real_name)
                         } else {
-                        alloc::format!("{}/{}", self.name.read(), real_name)
+                            alloc::format!("{}/{}", self.name.read(), real_name)
                         }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
                         let temp = temp.replace('\0', "");//去除掉“\0”字符
                         let son = Self::new_bare(&self, &temp);

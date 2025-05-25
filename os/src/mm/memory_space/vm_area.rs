@@ -6,8 +6,10 @@ use core::ops::{Range, RangeBounds};
 use crate::hal::arch::sfence_vma_vaddr;
 // use async_utils::block_on;
 use crate::hal::config::{align_down_by_page, PAGE_SIZE};
+use crate::hal::mem::page_table::{PTEFlags, PageTableEntry};
 // use memory::{pte::PTEFlags, VirtAddr, VirtPageNum};
-use crate::mm::page_table::{PTEFlags, PageTable};
+use crate::mm::page_table::{PageTable};
+// use PTEFlags
 use crate::mm::address::{VirtAddr, VirtPageNum};
 use crate::mm::page::Page;
 use crate::sync::block_on;
@@ -62,44 +64,26 @@ bitflags! {
 impl From<PTEFlags> for MapPerm {
     fn from(flags: PTEFlags) -> Self {
         let mut ret = Self::from_bits(0).unwrap();
-        if flags.contains(PTEFlags::U) {
+        if flags.is_U() {
             ret |= MapPerm::U
         }
-        if flags.contains(PTEFlags::R) {
+        if flags.is_R() {
             ret |= MapPerm::R;
         }
-        if flags.contains(PTEFlags::W) {
+        if flags.is_W() {
             ret |= MapPerm::W;
         }
-        if flags.contains(PTEFlags::X) {
+        if flags.is_X() {
             ret |= MapPerm::X;
         }
         ret
     }
 }
 
-impl From<MapPerm> for PTEFlags {
-    fn from(perm: MapPerm) -> Self {
-        let mut ret = Self::from_bits(0).unwrap();
-        if perm.contains(MapPerm::U) {
-            ret |= PTEFlags::U;
-        } else {
-            ret |= PTEFlags::G;
-        }
-        if perm.contains(MapPerm::R) {
-            ret |= PTEFlags::R;
-        }
-        if perm.contains(MapPerm::W) {
-            ret |= PTEFlags::W;
-        }
-        if perm.contains(MapPerm::X) {
-            ret |= PTEFlags::X;
-        }
-        ret
-    }
-}
+
 
 /// A contiguous virtual memory area.
+/// ADDITION: only in user space
 #[derive(Clone)]
 pub struct VmArea {
     /// Aligned `VirtAddr` range for the `VmArea`.
@@ -233,6 +217,8 @@ impl VmArea {
         }
     }
 
+
+    // [LA_MMU] only user page table
     pub fn set_perm_and_flush(&mut self, page_table: &mut PageTable, perm: MapPerm) {
         self.set_perm(perm);
         let pte_flags = perm.into();
@@ -262,12 +248,13 @@ impl VmArea {
     /// Will alloc new pages for `VmArea` according to `VmAreaType`.
     pub fn map(&mut self, page_table: &mut PageTable) {
         // NOTE: set pte flag with global mapping for kernel memory
+        // NOTE: here is used PTEFlags::from<MapPerm>()
         let pte_flags: PTEFlags = self.map_perm.into();
 
         for vpn in self.range_vpn() {
             let page = Page::new();
             // page.clear();
-            page_table.map(vpn, page.ppn(), pte_flags);
+            page_table.map_leaf(vpn, page.ppn(), pte_flags);
             self.pages.insert(vpn, page);
         }
     }
@@ -278,7 +265,7 @@ impl VmArea {
         let pte_flags: PTEFlags = self.map_perm.into();
         for vpn in range_vpn {
             let page = Page::new();
-            page_table.map(vpn, page.ppn(), pte_flags);
+            page_table.map_leaf(vpn, page.ppn(), pte_flags);
             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
             self.pages.insert(vpn, page);
         }
@@ -376,26 +363,28 @@ impl VmArea {
 
     // FIXME: should kill user program if it deref a invalid pointer, e.g. try to
     // write at a read only area?
+    // NOTE: maybe a page fault on kernel space?
+    // DO NOT CONSIDER THIS DESIGN TEMPORARILY
     pub fn handle_page_fault(
         &mut self,
         page_table: &mut PageTable,
         vpn: VirtPageNum,
         access_type: PageFaultAccessType,
     ) -> SysResult<()> {
-        log::debug!(
+        info!(
             "[VmArea::handle_page_fault] {self:?}, {vpn:?} at page table {:?}",
             page_table.root_ppn
         );
 
         if !access_type.can_access(self.perm()) {
-            info!("type = {:?}", access_type);
-            info!("perm = {:?}", self.perm());
+            // info!("type = {:?}", access_type);
+            // info!("perm = {:?}", self.perm());
             backtrace();
             log::warn!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
-            panic!("aaaa");
+            panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
             return Err(Errno::EFAULT);
         }
 
@@ -411,6 +400,7 @@ impl VmArea {
             // PERF: copying data vs. lock the area vs. atomic ref cnt
             let old_page = self.get_page(vpn);
             let cnt = Arc::strong_count(old_page);
+            info!("[handle_page_fault] page cnt:{}", cnt);
             if cnt > 1 {
                 // copy the data
                 page = Page::new();
@@ -419,7 +409,8 @@ impl VmArea {
                 // unmap old page and map new page
                 pte_flags.remove(PTEFlags::COW);
                 pte_flags.insert(PTEFlags::W);
-                page_table.map_force(vpn, page.ppn(), pte_flags);
+                pte_flags.insert(PTEFlags::D);
+                page_table.map_leaf_force(vpn, page.ppn(), pte_flags);
                 // NOTE: track `Page` with great care
                 self.pages.insert(vpn, page);
                 unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
@@ -427,6 +418,7 @@ impl VmArea {
                 // set the pte to writable
                 pte_flags.remove(PTEFlags::COW);
                 pte_flags.insert(PTEFlags::W);
+                pte_flags.insert(PTEFlags::D);
                 pte.set_flags(pte_flags);
                 unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
             }
@@ -436,7 +428,7 @@ impl VmArea {
                     // lazy allcation for heap
                     page = Page::new();
                     page.fill_zero();
-                    page_table.map(vpn, page.ppn(), self.map_perm.into());
+                    page_table.map_leaf(vpn, page.ppn(), self.map_perm.into());
                     self.pages.insert(vpn, page);
                     unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                 }
@@ -449,7 +441,7 @@ impl VmArea {
                         if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
                             let page = block_on(async { file.get_page_at(offset_aligned).await }).unwrap()
                                 ;
-                            page_table.map(vpn, page.ppn(), self.map_perm.into());
+                            page_table.map_leaf(vpn, page.ppn(), self.map_perm.into());
                             self.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         } else {
@@ -458,7 +450,7 @@ impl VmArea {
                             if access_type.contains(PageFaultAccessType::WRITE) {
                                 let new_page = Page::new();
                                 new_page.copy_from_slice(page.get_bytes_array());
-                                page_table.map(vpn, new_page.ppn(), self.map_perm.into());
+                                page_table.map_leaf(vpn, new_page.ppn(), self.map_perm.into());
                                 self.pages.insert(vpn, new_page);
                             } else {
                                 let (pte_flags, ppn) = {
@@ -467,7 +459,7 @@ impl VmArea {
                                     new_flags.remove(PTEFlags::W);
                                     (new_flags, page.ppn())
                                 };
-                                page_table.map(vpn, ppn, pte_flags);
+                                page_table.map_leaf(vpn, ppn, pte_flags);
                                 self.pages.insert(vpn, page);
                             }
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
@@ -479,7 +471,7 @@ impl VmArea {
                             // private anonymous area
                             page = Page::new();
                             page.fill_zero();
-                            page_table.map(vpn, page.ppn(), self.map_perm.into());
+                            page_table.map_leaf(vpn, page.ppn(), self.map_perm.into());
                             self.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         }

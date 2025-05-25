@@ -10,7 +10,7 @@ use alloc::{sync::Arc, vec::Vec};
 use hashbrown::HashMap;
 use log::info;
 use spin::Lazy;
-use crate::mm::{address::kaddr_v2p, PhysAddr, VirtAddr};
+use crate::mm::{Direct, PhysAddr, VirtAddr};
 use crate::sync::{SpinNoIrqLock, SyncUnsafeCell};
 use crate::utils::{Errno, SysResult};
 use super::{current_task, Pid, TaskControlBlock};
@@ -34,7 +34,8 @@ impl FutexHashKey {
             return FutexHashKey::Privite { addr: va };
         }
 
-        let pa = kaddr_v2p(va);
+        // TODO: 正确吗？ by lsz
+        let pa = va.direct_pa();
         return FutexHashKey::Shared { addr: pa };
     }
 }
@@ -103,6 +104,7 @@ impl FutexBucket {
             while let Some((pid, waker, tb)) = queue.pop() {
                 if bitset & tb == 0 {
                     queue.push((pid, waker, tb)); // 如果不满足条件，就放回去
+                    println!("[to_wake] no reqqq");
                     continue;
                 }
                 waker.wake();
@@ -163,7 +165,7 @@ pub struct FutexFuture {
     pub bitset: u32, // 位掩码，用于唤醒判断
     pub val: u32, // 期望的值，在入队列前需要判断是否相等
     pub is_register: bool,
-    pub task: Arc<TaskControlBlock>,
+    // pub task: Arc<TaskControlBlock>,
 }
 
 impl FutexFuture {
@@ -174,7 +176,7 @@ impl FutexFuture {
             bitset,
             val,
             is_register: false,
-            task: current_task().unwrap(),
+            // task: current_task().unwrap(),
         }
     }
 }
@@ -184,23 +186,23 @@ impl Future for FutexFuture {
 
     fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
         let this = self.get_mut();
-        let task = this.task.as_ref();
+        // let task = this.task.as_ref();
+        let task = current_task().unwrap();
         let pid = task.get_pid();
         let uaddr = this.uaddr;
         info!("[futex_future] poll pid = {}, uaddr = {:#x}, is_register = {}", pid, uaddr, this.is_register);
         if !this.is_register {
-            // 加入hash 桶
-            task.futex_list.lock().add(this.key, pid, cx.waker().clone(), this.bitset);
-            this.is_register = true ;
             // 说明还没有加入全局hash 桶
             // 在入队前要判断是否是期望值
-            let now = unsafe{ atomic_load_acquire(uaddr as *const u32) };
-            
-            info!("[futex_future] now = {}, val = {}", now, this.val);
-            if  now != this.val {
+            if unsafe{ atomic_load_acquire(uaddr as *const u32) } != this.val {
                 // 如果不相等，说明有其他任务释放了锁，此时就不需要将其加入队列，否则可能造成无法唤醒
+                info!("[futex_future] now != val");
                 return Poll::Ready(());
             }
+
+            // 加入hash 桶
+            task.futex_list.lock().add(this.key, pid, cx.waker().clone(), this.bitset);
+            this.is_register = true;
             return Poll::Pending
         }
 
@@ -208,6 +210,7 @@ impl Future for FutexFuture {
         return Poll::Ready(())
     }
 }
+
 
 pub const ROBUST_LIST_HEAD_SIZE: usize = 24;
 

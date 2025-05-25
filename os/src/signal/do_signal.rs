@@ -16,7 +16,17 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
     let mut cur = 0;
     let old_sigmask = *task.get_blocked();
 
-    while let Some(siginfo) = task.sig_pending.lock().take_one(old_sigmask) {    
+    loop {    
+        let siginfo = {
+            match task.sig_pending.lock().take_one(old_sigmask) {
+                Some(siginfo) => {
+                    siginfo
+                }
+                None => {
+                    break;
+                }
+            }
+        };
         cur += 1;
         // 避免队列中全是被阻塞的信号，造成死循环
         if cur > all_len {
@@ -45,7 +55,7 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 if !sig_action
                     .sa_flags
                     .contains(SigActionFlag::SA_NODEFER) {
-                        task.get_blocked_mut().set_sig(signo);
+                        task.get_blocked_mut().insert_sig(signo);
                 }
 
                 // 可能有其他信号也需要阻塞
@@ -58,12 +68,14 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 let mut new_sp = match sig_stack {
                     Some(sig_stack) => {
                         // 用户自定义的栈
+                        info!("[do_signal] user define stack");
                         let mut new_sp = sig_stack.ss_sp + sig_stack.ss_size;
                         new_sp -= size_of::<UContext>();
                         new_sp
                     }
                     None => {
                         // 普通栈
+                        info!("[do_signal] default stack");
                         old_sp - size_of::<UContext>()
                     }
                 };
@@ -73,7 +85,8 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 let token = task.get_user_token();
                 // 保存当前的user 状态,在sigreturn中恢复
                 // 包括本来的sepc，后序在sigreturn中恢复
-                let ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx);
+                let mut ucontext = UContext::new(old_sigmask, sig_stack, &trap_cx);
+                ucontext.uc_mcontext.user_gp.zero = trap_cx.sepc;
                 // 将ucontext拷贝到用户栈中
                 unsafe { core::ptr::write(new_sp as *mut UContext, ucontext) };
 
@@ -83,21 +96,32 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                     // a0(x10): 信号编号,在后面的trap_cx.flash中设置
                     // a1(x11): 信号信息结构体指针
                     // a2(x12): ucontext 结构体指针
-                    trap_cx.user_x[12] = new_sp; // a2
+                    trap_cx.user_gp.a2 = new_sp; // a2
                     let mut siginfo_v = LinuxSigInfo::new(signo as i32, siginfo.sigcode as i32);
                     new_sp -= size_of::<LinuxSigInfo>();
                     // 将siginfo_v拷贝到用户栈中
                     unsafe { core::ptr::write(new_sp as *mut LinuxSigInfo, siginfo_v) };
-                    trap_cx.user_x[11] = new_sp; // a1
+                    trap_cx.user_gp.a1 = new_sp; // a1
                 }
 
-                let x3 = ucontext.get_userx()[3]; // gp
-                let x4 = ucontext.get_userx()[4]; // tp
+                let mut gp: usize;
+
+                // loongarch has no global pointer reg
+                #[cfg(target_arch="riscv64")]
+                {
+                    gp = ucontext.get_user_gp().gp; // gp
+                }
+                #[cfg(target_arch="loongarch64")]
+                {
+                    gp = 0;
+                }
+                let tp = ucontext.get_user_gp().tp; // tp
                 
                 // 修改trap_cx，函数trap return后返回到用户自定义的函数，
                 // 自定义函数执行完后返回到sigreturn,这里的__sigret_helper是一个汇编，触发sigreturn
                 // 这里的sigreturn是一个系统调用，返回到内核态
-                trap_cx.flash(handler, new_sp, __sigret_helper as usize, signo, x3, x4);
+                info!("[do_signal] before flash");
+                trap_cx.flash(handler, new_sp, __sigret_helper as usize, signo, gp, tp);
                 // break;
             }
         }
@@ -137,29 +161,4 @@ fn do_signal_stop(task: &Arc<TaskControlBlock>, signo: SigNom) {
 fn do_signal_continue(task: &Arc<TaskControlBlock>, signo: SigNom) {
     // 唤醒子进程并通知父进程
     task.cont_all_thread(signo);
-}
-
-/// 从Pantheon借鉴, 不知道可不可以使用UserBuffer
-/// Copy data from `src` out of kernel memory set into `dst` which lives in the
-/// given memory set indicated by the given `token`.
-pub fn copy2user<T>(token: usize, dst: *mut T, src: &T) {
-    let mut dst_buffer =
-        translated_byte_buffer(token, dst as *const u8, core::mem::size_of::<T>());
-
-    let src_slice = unsafe {
-        core::slice::from_raw_parts(src as *const T as *const u8, core::mem::size_of::<T>())
-    };
-    let mut index = 0;
-
-    let mut start_byte = 0;
-    loop {
-        let dst_slice = &mut dst_buffer[index];
-        index += 1;
-        let dst_slice_len = dst_slice.len();
-        dst_slice.copy_from_slice(&src_slice[start_byte..start_byte + dst_slice_len]);
-        start_byte += dst_slice_len;
-        if dst_buffer.len() == index {
-            break;
-        }
-    }
 }

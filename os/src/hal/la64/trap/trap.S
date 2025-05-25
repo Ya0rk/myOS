@@ -1,7 +1,3 @@
-.section .text.usertrap
-    .globl __trap_from_user
-    .globl __return_to_user
-    .align 4
 
 FP_START = 56
 .altmacro
@@ -18,11 +14,11 @@ FP_START = 56
     fld.d $f\n, $sp, \m*8
 .endm
 
-.section .text
-    .globl __trap_from_user
-    .globl __return_to_user
-    .global __trap_from_kernel
-    .align 4
+# .section .text
+#     .globl __trap_from_user
+#     .globl __return_to_user
+#     .global __trap_from_kernel
+#     .align 4
 
 .equ CSR_SAVE, 0x30
 # 保存sepc
@@ -33,6 +29,12 @@ FP_START = 56
 .equ CSR_PGD, 0x1b
 
 # user -> kernel
+.section .text.usertrap
+    .globl __trap_from_user
+    .globl __return_to_user
+    .globl ret_debug_p
+    .align 4
+
 __trap_from_user:
     #==================REMEMBER TO TURN OFF THE INTERRUPT !=======================
     # 交换sp和CSR_SAVE的值
@@ -63,26 +65,34 @@ __trap_from_user:
 
     # 保存fscr寄存器
     movfcsr2gr $t0, $fcsr0
-    st.w $t0, $sp, 89*8
+    st.w $t0, $sp, 88*8
 
     # save FCC
-    movcf2gr $t0, $fcc7
+    movcf2gr $t1, $fcc7
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc6
+    movcf2gr $t1, $fcc6
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc5
+    movcf2gr $t1, $fcc5
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc4
+    movcf2gr $t1, $fcc4
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc3
+    movcf2gr $t1, $fcc3
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc2
+    movcf2gr $t1, $fcc2
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc1
+    movcf2gr $t1, $fcc1
+    or $t0, $t0, $t1
     slli.w $t0, $t0, 1
-    movcf2gr $t0, $fcc0
+    movcf2gr $t1, $fcc0
+    or $t0, $t0, $t1
     # 保存 fcc寄存器
-    st.b $t0, $sp, 89*8+4
+    st.b $t0, $sp, 88*8+4
 
     # 保存sstatus寄存器
     csrrd $t0, CSR_PRMD
@@ -92,6 +102,8 @@ __trap_from_user:
     csrrd $t1, CSR_ERA
     st.d $t1, $sp, 33*8
 
+    csrwr $a0, CSR_SAVE
+    csrwr $a0, CSR_SAVE
     # 将user stack地址读取到t2，然后保存在r3中(栈指针保存)
     csrrd $t2, CSR_SAVE
     st.d $t2, $sp, 3*8
@@ -135,10 +147,13 @@ __trap_from_user:
 __return_to_user:
     # a0: *TrapContext in user space(Constant),
 
-    # 将a0赋值给sp，现在sp指向TrapContext
-    move $sp, $a0
-    # 将a0与CSR_SAVE交换，其实是想写入CSR_SAVE
+    # 将sp写入CSR_SAVE
+    csrwr  $sp, CSR_SAVE
+    # 将a0与CSR_SAVE交换，a0变为原sp，SAVE变为a0
     csrwr  $a0, CSR_SAVE
+    # 将a0赋值给sp，现在sp指向TrapContext
+    csrrd  $sp, CSR_SAVE
+# __trap_breakpoint:
     # now sp points to TrapContext in user space, start restoring based on it
 
     # 保存kernel寄存器(这些寄存器是callee saved)
@@ -163,18 +178,22 @@ __return_to_user:
     st.d $r20, $sp, 53*8
 
     # 保存sp
-    st.d $sp, $sp, 34*8
+    # csrrd $a0, CSR_SAVE
+    st.d $a0, $sp, 34*8
+
+    # 保存ra
+    st.d $ra, $sp, 35*8
     # 保存fp
-    st.d $fp, $a0, 54*8
+    st.d $fp, $sp, 54*8
     # 保存线程指针tp
-    st.d $tp, $a0, 55*8
+    st.d $tp, $sp, 55*8
 
     # 恢复 FCSR
-    ld.w $t0, $sp, 89*8
+    ld.w $t0, $sp, 88*8
     movgr2fcsr $fcsr0, $t0
 
     # 恢复 FCC
-    ld.b $t0, $sp, 89*8+4
+    ld.b $t0, $sp, 88*8+4
     movgr2cf $fcc0, $t0
     srli.w $t0, $t0, 1
     movgr2cf $fcc1, $t0
@@ -215,8 +234,18 @@ __return_to_user:
         .set m, m+1
     .endr
 
+    # csrwr $sp, CSR_SAVE
+    # csrrd $sp, CSR_SAVE
     # 修改栈指针，返回用户栈
     ld.d $sp, $sp, 3*8
+
+
+ret_debug_p:
+    # debug
+    csrwr $a0, CSR_SAVE 
+    csrwr $a0, CSR_SAVE
+
+
     ertn
 
     .section .text.kerneltrap
@@ -231,21 +260,21 @@ __trap_from_kernel:
     st.d    $a1, $sp, 5*8
     st.d    $a2, $sp, 6*8
     st.d    $a3, $sp, 7*8
-    st.d    $a4, $sp, 9*8
-    st.d    $a5, $sp, 10*8
-    st.d    $a6, $sp, 11*8
-    st.d    $a7, $sp, 12*8
-    st.d    $t0, $sp, 13*8
-    st.d    $t1, $sp, 14*8
-    st.d    $t2, $sp, 15*8
-    st.d    $t3, $sp, 16*8
-    st.d    $t4, $sp, 17*8
-    st.d    $t5, $sp, 18*8
-    st.d    $t6, $sp, 19*8
-    st.d    $t7, $sp, 20*8
-    st.d    $t8, $sp, 21*8
-    st.d    $r21, $sp,22*8
-    # st.d    $fp, $sp, 168
+    st.d    $a4, $sp, 8*8
+    st.d    $a5, $sp, 9*8
+    st.d    $a6, $sp, 10*8
+    st.d    $a7, $sp, 11*8
+    st.d    $t0, $sp, 12*8
+    st.d    $t1, $sp, 13*8
+    st.d    $t2, $sp, 14*8
+    st.d    $t3, $sp, 15*8
+    st.d    $t4, $sp, 16*8
+    st.d    $t5, $sp, 17*8
+    st.d    $t6, $sp, 18*8
+    st.d    $t7, $sp, 19*8
+    st.d    $t8, $sp, 20*8
+    st.d    $r21, $sp,21*8
+    st.d    $fp, $sp, 22*8 # fp = 22
     st.d    $s0, $sp, 23*8
     st.d    $s1, $sp, 24*8
     st.d    $s2, $sp, 25*8
@@ -279,20 +308,21 @@ __trap_from_kernel:
     ld.d    $a1, $sp, 5*8
     ld.d    $a2, $sp, 6*8
     ld.d    $a3, $sp, 7*8
-    ld.d    $a4, $sp, 9*8
-    ld.d    $a5, $sp, 10*8
-    ld.d    $a6, $sp, 11*8
-    ld.d    $a7, $sp, 12*8
-    ld.d    $t0, $sp, 13*8
-    ld.d    $t1, $sp, 14*8
-    ld.d    $t2, $sp, 15*8
-    ld.d    $t3, $sp, 16*8
-    ld.d    $t4, $sp, 17*8
-    ld.d    $t5, $sp, 18*8
-    ld.d    $t6, $sp, 19*8
-    ld.d    $t7, $sp, 20*8
-    ld.d    $t8, $sp, 21*8
-    ld.d    $r21, $sp,22*8
+    ld.d    $a4, $sp, 8*8
+    ld.d    $a5, $sp, 9*8
+    ld.d    $a6, $sp, 10*8
+    ld.d    $a7, $sp, 11*8
+    ld.d    $t0, $sp, 12*8
+    ld.d    $t1, $sp, 13*8
+    ld.d    $t2, $sp, 14*8
+    ld.d    $t3, $sp, 15*8
+    ld.d    $t4, $sp, 16*8
+    ld.d    $t5, $sp, 17*8
+    ld.d    $t6, $sp, 18*8
+    ld.d    $t7, $sp, 19*8
+    ld.d    $t8, $sp, 20*8
+    ld.d    $r21, $sp,21*8
+    ld.d    $fp, $sp, 22*8 # fp = 22
     ld.d    $s0, $sp, 23*8
     ld.d    $s1, $sp, 24*8
     ld.d    $s2, $sp, 25*8

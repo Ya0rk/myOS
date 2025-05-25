@@ -14,7 +14,7 @@ use super::InodeTrait;
 unsafe impl Send for Ext4SuperBlock {}
 unsafe impl Sync for Ext4SuperBlock {}
 
-pub struct Ext4SuperBlock {
+pub struct Ext4SuperBlock{
     inner: Ext4BlockWrapper<Disk>,
     root: Arc<dyn InodeTrait>,
 }

@@ -1,5 +1,6 @@
 use super::{PhysAddr, PhysPageNum};
-use crate::{hal::config::MEMORY_END, mm::address::KernelAddr, sync::SpinNoIrqLock};
+use crate::{hal::{config::{MEMORY_END, KERNEL_ADDR_OFFSET}}, mm::address::KernelAddr};
+use crate::{sync::SpinNoIrqLock};
 use alloc::vec::Vec;
 use spin::Mutex;
 use core::fmt::{self, Debug, Formatter};
@@ -94,7 +95,7 @@ pub fn init_frame_allocator() {
         fn ekernel();
     }
     FRAME_ALLOCATOR.lock().init(
-        PhysAddr::from(KernelAddr(ekernel as usize)).ceil(),
+        PhysAddr::from(KernelAddr(0x9000_0000+KERNEL_ADDR_OFFSET)).ceil(),
         PhysAddr::from(KernelAddr(MEMORY_END)).floor(),
     );
 }

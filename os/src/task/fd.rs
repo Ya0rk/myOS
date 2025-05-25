@@ -183,8 +183,9 @@ impl FdTable {
 
 /// 将一个socket加入到fd表中
 pub fn sock_map_fd(socket: Arc<dyn FileTrait>, cloexec_enable: bool) -> SysResult<usize> {
-    let fdInfo = FdInfo::new(socket, OpenFlags::O_RDWR);
-    let new_info = fdInfo.off_Ocloexec(cloexec_enable);
+    let mut flag = OpenFlags::O_RDWR;
+    let fdInfo = FdInfo::new(socket, flag);
+    let new_info = fdInfo.off_Ocloexec(!cloexec_enable);
     let task = current_task().expect("no current task");
     let fd = task.alloc_fd(new_info)?;
     Ok(fd)

@@ -3,12 +3,14 @@ pub mod probe;
 mod pci;
 
 pub use blk::*;
+use log::info;
+use lwext4_rust::bindings::printf;
 use spin::Mutex;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
 use core::ptr::NonNull;
 
 use crate::{
-    drivers::DevError, mm::{
+    drivers::DevError, hal::config::KERNEL_ADDR_OFFSET, mm::{
         frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PageTable, PhysPageNum,
         StepByOne, VirtAddr,
     }, sync::SpinNoIrqLock, task::current_user_token
@@ -35,6 +37,7 @@ unsafe impl Hal for VirtIoHalImpl {
             QUEUE_FRAMES.lock().push(Arc::new(frame));
         }
         let pa: crate::mm::address::PhysAddr = ppn_base.into();
+        // TODO: remove KernelAddr
         let va = KernelAddr::from(pa).0;
         let vaddr = if let Some(vaddr) = NonNull::new(va as _) {
             vaddr
@@ -55,17 +58,40 @@ unsafe impl Hal for VirtIoHalImpl {
     }
 
     unsafe fn mmio_phys_to_virt(pa: PhysAddr, _size: usize) -> NonNull<u8> {
-        let va = KernelAddr::from(pa).0;
+        let va = pa + KERNEL_ADDR_OFFSET;
+        // println!("[mmio_phys_to_virt] {:#x}", va);
         NonNull::new(va as _).unwrap()
     }
 
     unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
         let vaddr = buffer.as_ptr() as *mut u8 as usize;
+        // println!("[share] {:#x}", vaddr);
+        // info!("[share] buffer vaddr is {:#x}, user token is {:#x}, kernel token is {:#x}", vaddr, current_user_token(), current_kernel_token());
+        // match vaddr >> 60 {
+        //     0x9 | 0x8 => {
+        //         vaddr & 0x0fff_ffff_ffff_ffff
+        //     },
+        //     0xF => {
+        //         PageTable::from_token(current_kernel_token())
+        //         .translate_va(VirtAddr::from(vaddr))
+        //         .unwrap()
+        //         .0
+        //     },
+        //     0x0 => {
+        //         PageTable::from_token(current_user_token())
+        //         .translate_va(VirtAddr::from(vaddr))
+        //         .unwrap()
+        //         .0
+        //     },
+        //     _ => {
+        //         panic!("Invalid Virtual Address");
+        //     }
+        // }
         // Nothing to do, as the host already has access to all memory.
-        PageTable::from_token(current_user_token())
-            .translate_va(VirtAddr::from(vaddr))
-            .unwrap()
-            .0
+        
+        vaddr - KERNEL_ADDR_OFFSET
+        // 注意到现在采取直接映射模式,在entry中有设置
+        // vaddr
     }
 
     unsafe fn unshare(_paddr: PhysAddr, _buffer: NonNull<[u8]>, _direction: BufferDirection) {

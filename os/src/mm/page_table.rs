@@ -3,9 +3,14 @@
 use core::arch::asm;
 use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
+use crate::hal::arch::kernel_token_write;
+use crate::mm::{Direct, PageNum};
+// use crate::mm::address::kva_d2pg;
 use crate::sync::SpinNoIrqLock;
-use super::address::{kaddr_p2v, kpn_v2p, KernelAddr};
+use super::address::{KernelAddr};
+use super::memory_space::vm_area::MapPerm;
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
+use crate::hal::mem::page_table::*;
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -16,71 +21,118 @@ use log::info;
 use spin::Mutex;
 
 // TODO(COW标志位可以设置在这里)
-bitflags! {
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    pub struct PTEFlags: u16 {
-        const V = 1 << 0;
-        const R = 1 << 1;
-        const W = 1 << 2;
-        const X = 1 << 3;
-        const U = 1 << 4;
-        const G = 1 << 5;
-        const A = 1 << 6;
-        const D = 1 << 7;
-        const COW = 1 << 8;
-    }
-}
+// bitflags! {
+//     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+//     pub struct PTEFlags: u16 {
+//         const V = 1 << 0;
+//         const R = 1 << 1;
+//         const W = 1 << 2;
+//         const X = 1 << 3;
+//         const U = 1 << 4;
+//         const G = 1 << 5;
+//         const A = 1 << 6;
+//         const D = 1 << 7;
+//         const COW = 1 << 8;
+//     }
+// }
 
-#[derive(Copy, Clone)]
-#[repr(C)]
-/// page table entry structure
-pub struct PageTableEntry {
-    ///PTE
-    pub bits: usize,
-}
+// #[derive(Copy, Clone)]
+// #[repr(C)]
+// /// page table entry structure
+// pub struct PageTableEntry {
+//     ///PTE
+//     pub bits: usize,
+// }
 
-impl PageTableEntry {
-    ///Create a PTE from ppn
-    pub fn new(ppn: PhysPageNum, flags: PTEFlags) -> Self {
-        PageTableEntry {
-            bits: ppn.0 << 10 | flags.bits() as usize,
-        }
-    }
-    ///Return an empty PTE
-    pub fn empty() -> Self {
-        PageTableEntry { bits: 0 }
-    }
-    ///Return 44bit ppn
-    pub fn ppn(&self) -> PhysPageNum {
-        (self.bits >> 10 & ((1usize << 44) - 1)).into()
-    }
-    ///Return 10bit flag
-    pub fn flags(&self) -> PTEFlags {
-        PTEFlags::from_bits((self.bits & ((1 << 9) - 1)) as u16).unwrap()
-    }
-    ///Check PTE valid
-    pub fn is_valid(&self) -> bool {
-        self.flags().contains(PTEFlags::V)
-    }
-    ///Check PTE readable
-    pub fn readable(&self) -> bool {
-        self.flags().contains(PTEFlags::R)
-    }
-    ///Check PTE writable
-    pub fn writable(&self) -> bool {
-        self.flags().contains(PTEFlags::W)
-    }
-    ///Check PTE executable
-    pub fn executable(&self) -> bool {
-        self.flags().contains(PTEFlags::X)
-    }
-    pub fn set_flags(&mut self, flags: PTEFlags) {
-        self.bits = ((self.bits >> 10) << 10) | flags.bits() as usize;
-    }
-}
+// impl PageTableEntry {
+//     ///Create a PTE from ppn
+//     pub fn new(ppn: PhysPageNum, flags: PTEFlags) -> Self {
+//         PageTableEntry {
+//             bits: ppn.0 << 10 | flags.bits() as usize,
+//         }
+//     }
+//     ///Return an empty PTE
+//     pub fn empty() -> Self {
+//         PageTableEntry { bits: 0 }
+//     }
+//     ///Return 44bit ppn
+//     pub fn ppn(&self) -> PhysPageNum {
+//         (self.bits >> 10 & ((1usize << 44) - 1)).into()
+//     }
+//     ///Return 10bit flag
+//     pub fn flags(&self) -> PTEFlags {
+//         PTEFlags::from_bits((self.bits & ((1 << 9) - 1)) as u16).unwrap()
+//     }
+//     ///Check PTE valid
+//     pub fn is_valid(&self) -> bool {
+//         self.flags().contains(PTEFlags::V)
+//     }
+//     ///Check PTE readable
+//     pub fn readable(&self) -> bool {
+//         self.flags().contains(PTEFlags::R)
+//     }
+//     ///Check PTE writable
+//     pub fn writable(&self) -> bool {
+//         self.flags().contains(PTEFlags::W)
+//     }
+//     ///Check PTE executable
+//     pub fn executable(&self) -> bool {
+//         self.flags().contains(PTEFlags::X)
+//     }
+//     pub fn set_flags(&mut self, flags: PTEFlags) {
+//         self.bits = ((self.bits >> 10) << 10) | flags.bits() as usize;
+//     }
+// }
 
-pub unsafe fn switch_pgtable(page_table_token: usize) {
-    crate::hal::arch::satp_write(page_table_token);
+// impl AccessFlags for PTEFlags {
+//     fn readable(&self) -> bool {
+//         self.contains(PTEFlags::R)
+//     }
+//     fn writable(&self) -> bool {
+//         self.contains(PTEFlags::W)
+//     }
+//     fn executable(&self) -> bool {
+//         self.contains(PTEFlags::X)
+//     }
+//     fn into<T: AccessFlagsMut + AccessFlagsInit>(&self) -> T {
+//         let mut flags = T::new();
+//         flags.set_readable(self.readable());
+//         flags.set_writable(self.writable());
+//         flags.set_executable(self.executable());
+//         flags
+//     }
+// }
+
+// impl AccessFlagsMut for PTEFlags {
+//     fn set_readable(&mut self, readable: bool) {
+//         self.set(PTEFlags::R, readable);
+//     }
+//     fn set_writable(&mut self, writable: bool) {
+//         self.set(PTEFlags::W, writable);
+//     }
+//     fn set_executable(&mut self, executable: bool) {
+//         self.set(PTEFlags::X, executable);
+//     }
+    
+// }
+
+// impl UserAccessFlags for PTEFlags {
+//     fn user_accessible(&self) -> bool {
+//         self.contains(PTEFlags::U)
+//     }
+//     fn set_user_accessible(&mut self, user_accessible: bool) {
+//         self.set(PTEFlags::U, user_accessible);
+//     }
+// }
+
+
+
+
+pub unsafe fn switch_user_page_table(user_token: usize) {
+    // unimplemented!()
+    // satp::write(page_table_token);
+    // asm!("sfence.vma");
+    crate::hal::arch::user_token_write(user_token);
     crate::hal::arch::sfence();
 }
 
@@ -105,25 +157,18 @@ impl PageTable {
             frames: vec![frame],
         }
     }
-    pub fn new_from_kernel() -> Self {
-        let frame = frame_alloc().unwrap();
-        let kernel_page_table = KERNEL_PAGE_TABLE.lock();
-        let kernel_root_ppn = kernel_page_table.root_ppn;
-        // 第一级页表
-        let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
-        frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
-        PageTable {
-            root_ppn: frame.ppn,
-            frames: vec![frame],
-        }
-    }
+
+
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
         Self {
+            // TODO: to adapt la
             root_ppn: PhysPageNum::from(satp & ((1usize << 44) - 1)),
             frames: Vec::new(),
         }
     }
+
+    // TODO: to refactor: whether pte is created during fn call or not is undefined
     fn find_pte_create(&mut self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
@@ -136,13 +181,15 @@ impl PageTable {
             }
             if !pte.is_valid() {
                 let frame = frame_alloc().expect("no free space to allocate!");
-                *pte = PageTableEntry::new(frame.ppn, PTEFlags::V);
+                *pte = PageTableEntry::new(frame.ppn, PTEFlags::new_valid());
                 self.frames.push(frame);
             }
             ppn = pte.ppn();
         }
         result
     }
+
+    // TODO: to refactor
     pub fn find_pte(&self, vpn: VirtPageNum) -> Option<&mut PageTableEntry> {
         let idxs = vpn.indexes();
         let mut ppn = self.root_ppn;
@@ -164,39 +211,45 @@ impl PageTable {
     }
     // #[allow(unused)]
     /// 建立虚拟地址和物理地址的映射
-    pub fn map(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+    pub fn map_leaf(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+        // info!("[map_leaf] {:#x} to {:#x}", vpn.0, ppn.0);
         let pte = self.find_pte_create(vpn).unwrap();
         debug_assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
-        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        // TODO: to avoid exposed flag bits
+        *pte = PageTableEntry::new(ppn, flags);
+        // info!("[map_leaf] pte is {:#x}", pte.bits);
     }
-    pub fn map_force(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
+    pub fn map_leaf_force(&mut self, vpn: VirtPageNum, ppn: PhysPageNum, flags: PTEFlags) {
         let pte = self.find_pte_create(vpn).unwrap();
         // assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
-        *pte = PageTableEntry::new(ppn, flags | PTEFlags::V);
+        // TODO: to avoid exposed flag bits
+        *pte = PageTableEntry::new(ppn, flags);
     }
 
-    pub fn map_kernel_range(&mut self, range_va: Range<VirtAddr>, flags: PTEFlags) {
+    pub fn map_kernel_range(&mut self, range_va: Range<VirtAddr>, perm: MapPerm) {
         // println!("[map kernel range] range_va:{:?}", range_va);
-        let range_vpn = range_va.start.floor()..range_va.end.ceil();
-        println!("[map_kernel_range] map area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
+        let range_vpn = range_va.start.paged_va().floor()..range_va.end.paged_va().ceil();
+        println!("[map_kernel_range] map area:{:#x}..{:#x}", range_va.start.paged_va().0, range_va.end.paged_va().0);
         for vpn in range_vpn {
-            let ppn = kpn_v2p(vpn);
+            let ppn = vpn.ppn();
             // println!("[map vpn] vpn:{:#x}, ppn:{:#x}", vpn.0, ppn.0);
-            self.map(vpn, ppn, flags);
+            self.map_leaf(vpn, ppn, perm.into());
         }
     }    
 
-    pub fn map_kernel_huge_page(&mut self, base_pa: PhysAddr, flags: PTEFlags) {
-        assert!(flags.intersects(PTEFlags::R | PTEFlags::W | PTEFlags::X));
-        let base_vpn: VirtPageNum = kaddr_p2v(base_pa).into();
+    pub fn map_kernel_huge_page(&mut self, base_pa: PhysAddr, perm: MapPerm) {
+        // TODO: to avoid exposed flag bits
+        assert!(perm.intersects(MapPerm::RWX));
+        let base_vpn: VirtPageNum = base_pa.paged_va().into();
         let pte = &mut self.root_ppn.get_pte_array()[base_vpn.indexes()[0]];
-        *pte = PageTableEntry::new(base_pa.into(), flags | PTEFlags::V);
+        // TODO: to avoid exposed flag bits
+        *pte = PageTableEntry::new(base_pa.into(), perm.into());
     }
     pub fn unmap_kernel_range(&mut self, range_va: Range<VirtAddr>) {
-        let range_vpn = range_va.start.floor()..range_va.end.ceil();
-        info!("[unmap_kernel_range] unmap area:{:#x}..{:#x}", range_va.start.0, range_va.end.0);
+        let range_vpn: Range<VirtPageNum> = range_va.start.paged_va().floor()..range_va.end.paged_va().ceil();
+        info!("[unmap_kernel_range] unmap area:{:#x}..{:#x}", range_va.start.paged_va().0, range_va.end.paged_va().0);
         for vpn in range_vpn {
-            let ppn = kpn_v2p(vpn);
+            let ppn = vpn.ppn();
             self.unmap(vpn);
         }
     }
@@ -221,115 +274,23 @@ impl PageTable {
             (aligned_pa_usize + offset).into()
         })
     }
-    /// 获取根页表 ppn
-    pub fn token(&self) -> usize {
-        8usize << 60 | self.root_ppn.0
-    }
-    pub unsafe fn switch(&self) {
-        switch_pgtable(self.token());
+
+
+    pub unsafe fn enable(&self) {
+        switch_user_page_table(self.token());
     }
 
-    pub fn init_kernel_page_table() -> Self {
-        extern "C" {
-            fn stext();
-            fn sigret();
-            fn esigret();
-            fn etext();
-            fn srodata();
-            fn erodata();
-            fn sdata();
-            fn edata();
-            fn sbss_with_stack();
-            fn ebss();
-            fn ekernel();
-        }
-        let mut kernel_page_table = Self::new();
-        println!("kernel satp : {:#x}", kernel_page_table.token());
-        // map trampoline
-        // memory_set.map_trampoline();
-        // map kernel sections
-        println!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
-        println!(".sigret [{:#x}, {:#x})", sigret as usize, esigret as usize);
-        println!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
-        println!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
-        println!(
-            ".bss [{:#x}, {:#x})",
-            sbss_with_stack as usize, ebss as usize
-        );
-        println!("mapping .text section");
-        kernel_page_table.map_kernel_range(
-            (stext as usize).into()..(sigret as usize).into(),
-            PTEFlags::R | PTEFlags::X,
-        );
-        println!("mapping .sigret section");
-        kernel_page_table.map_kernel_range(
-            (sigret as usize).into()..(esigret as usize).into(),
-            PTEFlags::R | PTEFlags::X | PTEFlags::U,
-        );
-        println!("mapping .text section left");
-        kernel_page_table.map_kernel_range(
-            (esigret as usize).into()..(etext as usize).into(),
-            PTEFlags::R | PTEFlags::X,
-        );
-        println!("mapping .rodata section");
-        kernel_page_table.map_kernel_range(
-            (srodata as usize).into()..(erodata as usize).into(),
-            PTEFlags::R,
-        );
-        println!("mapping .data section");
-        
-        kernel_page_table.map_kernel_range(
-            (sdata as usize).into()..(edata as usize).into(),
-            PTEFlags::R | PTEFlags::W,
-        );
-        println!("mapping .bss section");
-        
-        kernel_page_table.map_kernel_range(
-            (sbss_with_stack as usize).into()..(ebss as usize).into(),
-            PTEFlags::R | PTEFlags::W,
-        );
-        println!("mapping physical memory");
-        
-        kernel_page_table.map_kernel_range(
-            (ekernel as usize).into()..(MEMORY_END).into(),
-            PTEFlags::R | PTEFlags::W,
-        );
-        println!("mapping devices");
-        // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
-        kernel_page_table.map_kernel_huge_page(
-            (0x0000_0000).into(),
-            PTEFlags::R | PTEFlags::W
-        );
-        kernel_page_table.map_kernel_huge_page(
-            (0x4000_0000).into(),
-            PTEFlags::R | PTEFlags::W
-        );
-        // for pair in MMIO {
-        //     memory_set.push(
-        //         MapArea::new(
-        //             ((*pair).0 + KERNEL_ADDR_OFFSET).into(),
-        //             ((*pair).0 + KERNEL_ADDR_OFFSET + (*pair).1).into(),
-        //             MapType::Direct,
-        //             MapPermission::R | MapPermission::W,
-        //         ),
-        //         None,
-        //     );
-        // }
-        // for pair in MMIO {
-        //     let base = (*pair).0 + KERNEL_ADDR_OFFSET;
-        //     kernel_page_table.map_kernel_range(
-        //         base.into()..(base + (*pair).1).into(),
-        //         PTEFlags::R | PTEFlags::W,
-        //     );
-        // }
-        println!("kernel memory set initialized");
-        kernel_page_table
-    }
 }
 
-pub fn switch_to_kernel_pgtable() {
-    unsafe { KERNEL_PAGE_TABLE.lock().switch(); }
+
+
+/// NOTE: should be used no more than init phase
+pub fn enable_kernel_pgtable() {
+    // unsafe { KERNEL_PAGE_TABLE.lock().enable(); }
+    kernel_token_write( KERNEL_PAGE_TABLE.lock().token() );
+
 }
+// TODO: all below is to be discarded
 /// translate a pointer to a mutable u8 Vec through page table
 pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
     let page_table = PageTable::from_token(token);

@@ -13,7 +13,7 @@ use core::{
 };
 
 // use core::arch::riscv64::sfence_vma_vaddr; 关于core::arch::riscv64::中的内容会在crate::hal::arch中统一引入
-use crate::hal::arch::sfence_vma_vaddr;
+use crate::{fs::{open, open_file, OpenFlags}, hal::arch::sfence_vma_vaddr, task::{aux, current_task}};
 // use riscv::register::scause; 将从riscv库引入scause替换为从hal::arch引入。在hal::arch中会间接引入riscv::register::scause
 // use crate::hal::arch::scause;
 // use async_utils::block_on;
@@ -26,7 +26,10 @@ use crate::{
     }, 
     fs::{FileTrait, FileClass}, sync::block_on
 };
-use super::{page_table::{PTEFlags, PageTable}};
+
+// use memory::{pte::PTEFlags, PageTable, PhysAddr, VirtAddr, VirtPageNum};
+use super::{page_table::{PageTable}};
+use crate::hal::mem::page_table::PTEFlags;
 use super::address::{VirtAddr, VirtPageNum, PhysAddr};
 use super::page::Page;
 use crate::utils::container::range_map::RangeMap;
@@ -164,7 +167,7 @@ impl MemorySpace {
     /// Create a new user memory space that inherits kernel page table.
     pub fn new_user() -> Self {
         Self {
-            page_table: SyncUnsafeCell::new(PageTable::new_from_kernel()),
+            page_table: SyncUnsafeCell::new(PageTable::new_user()),
             areas: SyncUnsafeCell::new(RangeMap::new()),
         }
     }
@@ -363,7 +366,7 @@ impl MemorySpace {
                             // WARN: area outer than region may should be set to zero
                             new_page.copy_from_slice(page.get_bytes_array());
                             self.page_table_mut()
-                                .map(vpn, new_page.ppn(), map_perm.into());
+                                .map_leaf(vpn, new_page.ppn(), map_perm.into());
                             vm_area.pages.insert(vpn, new_page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         } else {
@@ -374,7 +377,7 @@ impl MemorySpace {
                                 (new_flags, page.ppn())
                             };
                             // info!("[map_elf] lazy alloc: vpn: {:#x} offset: {:#x} ppn: {:#x}", vpn.0, offset_aligned, ppn.0 );
-                            self.page_table_mut().map(vpn, ppn, pte_flags);
+                            self.page_table_mut().map_leaf(vpn, ppn, pte_flags);
                             vm_area.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         }
@@ -408,13 +411,23 @@ impl MemorySpace {
         let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
         let elf_header = elf.header;
         assert_eq!(elf_header.pt1.magic, ELF_MAGIC, "invalid elf!");
-        let entry = elf_header.pt2.entry_point() as usize;
+        let mut entry = elf_header.pt2.entry_point() as usize;
         let ph_entry_size = elf_header.pt2.ph_entry_size() as usize;
         let ph_count = elf_header.pt2.ph_count() as usize;
 
         let mut auxv = generate_early_auxv(ph_entry_size, ph_count, entry);
 
-        auxv.push(AuxHeader::new(AT_BASE, 0));
+        // maybe needed?
+        // auxv.push(AuxHeader::new(AT_BASE, 0));
+
+        if let Some(interp_entry) = self.load_dl_interp_if_needed(&elf).unwrap_or(None) {
+            auxv.push(AuxHeader::new(AT_BASE, DL_INTERP_OFFSET));
+            entry = interp_entry;
+        }
+        else {
+            auxv.push(AuxHeader::new(AT_BASE, 0));
+        }
+
 
         let (_max_end_vpn, header_va) = self.map_elf(elf_file, &elf, 0.into());
 
@@ -425,6 +438,63 @@ impl MemorySpace {
 
         (self, entry, auxv)
     }
+
+
+    pub fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> SysResult<Option<usize>> {
+        let elf_header = elf.header;
+        let ph_count = elf_header.pt2.ph_count();
+
+        let mut is_dl = false;
+        for i in 0..ph_count {
+            let ph = elf.program_header(i).unwrap();
+            if ph.get_type().unwrap() == xmas_elf::program::Type::Interp {
+                is_dl = true;
+                break;
+            }
+        }
+
+        if is_dl {
+            // adapted from phoenix
+            log::info!("[load_dl] encounter a dl elf");
+            let section = elf.find_section_by_name(".interp").unwrap();
+            let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
+            interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
+            log::info!("[load_dl] interp {}", interp);
+
+            // let mut interps: Vec<String> = vec![interp.clone()];
+
+            // log::info!("interp {}", interp);
+
+            // let mut interp_dentry: SysResult<Arc<dyn Dentry>> = Err(Errno::ENOENT);
+            // for interp in interps.into_iter() {
+            //     if let Ok(dentry) = current_task_ref().resolve_path(&interp) {
+            //         interp_dentry = Ok(dentry);
+            //         break;
+            //     }
+            // }
+            // let interp_dentry: Arc<dyn Dentry> = interp_dentry.unwrap();
+            // let interp_file = interp_dentry.open().ok().unwrap();
+            let cwd = current_task().unwrap().get_current_path();
+            if let Some(FileClass::File(interp_file)) = open(&cwd, &interp, OpenFlags::O_RDONLY) {
+                let interp_elf_data = block_on(async { interp_file.get_inode().read_all().await })?;
+                let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
+                self.map_elf(interp_file, &interp_elf, DL_INTERP_OFFSET.into());
+                Ok(Some(interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET))
+            }
+            else {
+                Err(Errno::ENOENT)
+            }
+
+            
+
+            
+        } else {
+            // no dynamic link
+            log::debug!("[load_dl] encounter a static elf");
+            Ok(None)
+        }
+    }
+
 
     /// Attach given `pages` to the MemorySpace. If pages is not given, it will
     /// create pages according to the `size` and map them to the MemorySpace.
@@ -458,7 +528,7 @@ impl MemorySpace {
         if pages.is_empty() {
             for vpn in vm_area.range_vpn() {
                 let page = Page::new();
-                self.page_table_mut().map(vpn, page.ppn(), map_perm.into());
+                self.page_table_mut().map_leaf(vpn, page.ppn(), map_perm.into());
                 pages.push(Arc::downgrade(&page));
                 vm_area.pages.insert(vpn, page);
             }
@@ -467,7 +537,7 @@ impl MemorySpace {
             let mut pages = pages.iter();
             for vpn in vm_area.range_vpn() {
                 let page = pages.next().unwrap().upgrade().unwrap();
-                self.page_table_mut().map(vpn, page.ppn(), map_perm.into());
+                self.page_table_mut().map_leaf(vpn, page.ppn(), map_perm.into());
                 vm_area.pages.insert(vpn, page.clone());
             }
         }
@@ -620,6 +690,7 @@ impl MemorySpace {
 
     /// Clone a same `MemorySpace` lazily.
     pub fn from_user_lazily(user_space: &mut Self) -> Self {
+        info!("[from_user_lazily] enter during process fork");
         let mut memory_space = Self::new_user();
         for (range, area) in user_space.areas().iter() {
             // log::info!("[MemorySpace::from_user_lazily] cloning {area:?}");
@@ -640,13 +711,15 @@ impl MemorySpace {
                         _ => {
                             // copy on write
                             // TODO: MmapFlags::MAP_SHARED
+                            // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
                             let mut new_flags = pte.flags() | PTEFlags::COW;
                             new_flags.remove(PTEFlags::W);
+                            new_flags.remove(PTEFlags::D);
                             pte.set_flags(new_flags);
                             (new_flags, page.ppn())
                         }
                     };
-                    memory_space.page_table_mut().map(vpn, ppn, pte_flags);
+                    memory_space.page_table_mut().map_leaf(vpn, ppn, pte_flags);
                 } else {
                     // lazy allocated area
                 }
@@ -669,6 +742,7 @@ impl MemorySpace {
 
     /// Push `VmArea` into `MemorySpace` and map it in page table, also copy
     /// `data` at `offset` of `vma`.
+    /// TODO: too slow, considering to abandon it
     pub fn push_vma_with_data(&mut self, mut vma: VmArea, offset: usize, data: &[u8]) {
         vma.map(self.page_table_mut());
         vma.fill_zero();
@@ -760,11 +834,11 @@ impl MemorySpace {
                         new_flags.remove(PTEFlags::W);
                         (new_flags, page.ppn())
                     };
-                    page_table.map(vpn, ppn, pte_flags);
+                    page_table.map_leaf(vpn, ppn, pte_flags);
                     vma.pages.insert(vpn, page);
                     unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                 } else {
-                    page_table.map(vpn, page.ppn(), perm.into());
+                    page_table.map_leaf(vpn, page.ppn(), perm.into());
                     vma.pages.insert(vpn, page);
                     unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                 }
@@ -881,7 +955,7 @@ impl MemorySpace {
     }
 
     pub unsafe fn switch_page_table(&self) {
-        self.page_table().switch();
+        self.page_table().enable();
     }
 
     pub fn recycle_data_pages(&mut self) {
@@ -932,7 +1006,7 @@ pub fn init_stack(
     // --------------------------------------------------------------------------------
     // 在构建栈的时候，我们从底向上塞各个东西
 
-    // info!("[init_stack] in");
+    info!("[init_stack] in with sp:{:#x}", sp_init.0);
     let mut sp = sp_init.to_usize();
     debug_assert!(sp & 0xf == 0);
 
@@ -1010,4 +1084,16 @@ pub fn init_stack(
     // info!("[init_stack] out");
     // 返回值
     (sp, argc, arg_ptr_ptr, env_ptr_ptr)
+}
+
+
+
+pub fn test_la_memory_space() {
+    info!("[test_la_memory_space] in");
+    let mut memory_space = MemorySpace::new_user();
+    let sp = memory_space.alloc_stack(USER_STACK_SIZE);
+    unsafe {memory_space.switch_page_table();}
+    let mut x: usize;
+    unsafe {x = *((sp.0 - 0x1000) as *const usize);}
+    info!("[test_la_memory_space] read x: {x:#x}");
 }

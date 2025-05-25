@@ -4,4 +4,4 @@ target remote localhost:1234
 
 b rust_main
 
-b src/drivers/virtio/blk.rs:18
+b src/hal/la64/arch/uart.rs:4

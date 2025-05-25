@@ -1,5 +1,5 @@
 use core::cell::SyncUnsafeCell;
-use core::fmt::Display;
+use core::fmt::{Debug, Display};
 use core::future::Ready;
 use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
@@ -31,7 +31,7 @@ use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 
 pub struct TaskControlBlock {
     // 不可变
-    pid:            Pid,
+    pub pid:            Pid,
 
     // 可变
     tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
@@ -40,7 +40,7 @@ pub struct TaskControlBlock {
 
     pub thread_group:   Shared<ThreadGroup>,
     pub memory_space:   Shared<MemorySpace>,
-    parent:         Shared<Option<Weak<TaskControlBlock>>>,
+    pub parent:         Shared<Option<Weak<TaskControlBlock>>>,
     pub children:   Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
     pub fd_table:   Shared<FdTable>,
     current_path:   Shared<String>,
@@ -122,7 +122,7 @@ impl TaskControlBlock {
         debug!("initproc entry: {:#x}, sp: {:#x}", entry_point, user_sp);
 
         new_task.add_thread_group_member(new_task.clone());
-        new_process_group(new_task.get_pgid());
+        new_process_group(new_task.get_pgid(), new_task.get_pid());
         add_task(&new_task);
         spawn_user_task(new_task.clone());
         info!("spawn init proc");
@@ -166,6 +166,7 @@ impl TaskControlBlock {
     }
 
     pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
+        info!("[process_fork] start, flags = {:?}", flag);
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(pid.0);
@@ -209,6 +210,7 @@ impl TaskControlBlock {
         let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
             true  => self.memory_space.clone(),
             false => {
+                info!("[process_fork] self memoty space.");
                 let child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
                 unsafe { sfence(); }
                 new_shared(child_memory_space)
@@ -257,6 +259,7 @@ impl TaskControlBlock {
     }
 
     pub fn thread_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
+        info!("[thread_fork] start, flags = {:?}", flag);
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(self.get_tgid());
@@ -423,7 +426,7 @@ impl TaskControlBlock {
         }
         
         self.clear_fd_table();
-        self.recycle_data_pages();        
+        // self.recycle_data_pages();
     }
 
     pub fn do_wait4(&self, pid: usize, wstatus: usize, exit_code: i32) {
@@ -524,11 +527,11 @@ impl TaskControlBlock {
 impl TaskControlBlock {
     /// 检测pending字段，判断是否有信号需要处理
     pub fn pending(&self) -> bool {
-        self.pending.load(core::sync::atomic::Ordering::Relaxed)
+        self.pending.load(core::sync::atomic::Ordering::SeqCst)
     }
     /// 设置pending，代表 是否 有信号等待被处理
     pub fn set_pending(&self, value: bool) {
-        self.pending.store(value, core::sync::atomic::Ordering::Relaxed);
+        self.pending.store(value, core::sync::atomic::Ordering::SeqCst);
     }
 
     /// 取出task中的sig stack 留下None
@@ -551,11 +554,11 @@ impl TaskControlBlock {
 
     /// 设置ucontext
     pub fn set_ucontext(&self, addr: usize) {
-        self.ucontext.store(addr, core::sync::atomic::Ordering::Relaxed);
+        self.ucontext.store(addr, core::sync::atomic::Ordering::SeqCst);
     }
     /// 获取ucontext
     pub fn get_ucontext(&self) -> usize {
-        self.ucontext.load(core::sync::atomic::Ordering::Relaxed)
+        self.ucontext.load(core::sync::atomic::Ordering::SeqCst)
     }
 
     /// 获取parent的pid
@@ -632,15 +635,15 @@ impl TaskControlBlock {
 
     /// 获取当前进程的pgid：组id
     pub fn get_pgid(&self) -> usize {
-        self.pgid.load(core::sync::atomic::Ordering::Relaxed)
+        self.pgid.load(core::sync::atomic::Ordering::SeqCst)
     }
     /// 设置当前进程的pgid
     pub fn set_pgid(&self, pgid: usize) {
-        self.pgid.store(pgid, core::sync::atomic::Ordering::Relaxed);
+        self.pgid.store(pgid, core::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn get_tgid(&self) ->usize {
-        self.tgid.load(core::sync::atomic::Ordering::Relaxed)
+        self.tgid.load(core::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn is_leader(&self) -> bool {
@@ -689,11 +692,11 @@ impl TaskControlBlock {
     // exit code
     /// 获取进程的exit code
     pub fn get_exit_code(&self) -> i32 {
-        self.exit_code.load(core::sync::atomic::Ordering::Relaxed)
+        self.exit_code.load(core::sync::atomic::Ordering::SeqCst)
     }
     /// 修改进程exit code
     pub fn set_exit_code(&self, exit_code: i32) {
-        self.exit_code.store(exit_code, core::sync::atomic::Ordering::Relaxed);
+        self.exit_code.store(exit_code, core::sync::atomic::Ordering::SeqCst);
     }
 
     // children
@@ -747,8 +750,8 @@ impl TaskControlBlock {
         self.fd_table.lock().alloc_fd_than(fd, than).expect("task alloc fd fail")
     }
     /// 删除fd
-    pub fn remove_fd(&self, fd: usize) {
-        self.fd_table.lock().remove(fd).expect("task remove fd fail")
+    pub fn remove_fd(&self, fd: usize) -> SysResult {
+        self.fd_table.lock().remove(fd)
     }
     /// 在指定位置设置fd
     pub fn put_fd_in(&self, fd: FdInfo, idx: usize) {
@@ -810,6 +813,19 @@ impl TaskControlBlock {
         utime+stime
     }
 
+    pub fn process_ustime(&self) -> (Duration, Duration) {
+        let mut utime = Duration::ZERO;
+        let mut stime = Duration::ZERO;
+        for (_, thread) in self.thread_group.lock().tasks.iter() {
+            if let Some(thread) = thread.upgrade() {
+                let (ut, st) = thread.get_time_data().get_ustime();
+                utime += ut;
+                stime += st;
+            }
+        }
+        (utime, stime)
+    }
+
     pub fn with_mut_memory_space<T>(&self, f: impl FnOnce(&mut MemorySpace) -> T) -> T {
         f(&mut self.memory_space.lock())
     }
@@ -824,6 +840,17 @@ pub enum TaskStatus {
 }
 
 impl Display for TaskStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let status = match self {
+            Self::Ready => "Ready",
+            Self::Running => "Running",
+            Self::Stopped => "Stopped",
+            Self::Zombie => "Zombie",
+        };
+        write!(f, "{}", status)
+    }
+}
+impl Debug for TaskStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let status = match self {
             Self::Ready => "Ready",

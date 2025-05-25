@@ -1,7 +1,9 @@
 use core::fmt;
 
 use crate::hal::config::{KERNEL_STACK_SIZE, PAGE_SIZE, TRAMPOLINE, INITPROC_PID};
-use crate::mm::page_table::{PTEFlags, KERNEL_PAGE_TABLE};
+use crate::mm::memory_space::vm_area::MapPerm;
+use crate::mm::page_table::{ KERNEL_PAGE_TABLE};
+use crate::hal::mem::page_table::PTEFlags;
 use crate::mm::{VirtAddr};
 use crate::sync::SpinNoIrqLock;
 use alloc::collections::BTreeSet;
@@ -9,7 +11,7 @@ use lazy_static::*;
 use log::{debug, info};
 // use riscv::paging::PTE;
 use spin::Mutex;
-use riscv::paging::PTE;
+// use riscv::paging::PTE;
 
 lazy_static! {
     pub static ref PID_ALLOCATOR: SpinNoIrqLock<PidAllocator> = SpinNoIrqLock::new(PidAllocator::new());

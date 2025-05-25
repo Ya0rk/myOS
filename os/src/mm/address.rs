@@ -1,11 +1,15 @@
 //! Implementation of physical and virtual address and page number.
 use core::ops::Range;
 
-use super::PageTableEntry;
-use crate::{hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PAGE_MASK, PAGE_SIZE, PAGE_SIZE_BITS}, utils::backtrace};
+use sbi_spec::pmu::hardware_event::STALLED_CYCLES_FRONTEND;
+
+// use super::PageTableEntry;
+use crate::hal::mem::page_table::{PageTableEntry};
+use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PAGE_MASK, PAGE_SIZE, PAGE_SIZE_BITS};
 use core::fmt::{self, Debug, Formatter};
 // use core::iter::Step;
 /// physical address
+/// TODO: move to hal/config
 const PA_WIDTH_SV39: usize = 56;
 const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
@@ -159,7 +163,8 @@ impl From<VirtAddr> for KernelAddr {
         Self(v.0)
     }
 }
-
+/// todo 需要在loongarch中重建
+/// 
 fn check_addr_valid(addr: usize, offset: usize) {
     let tmp: isize = (addr as isize >> offset) as isize;
     assert!(tmp == 0 || tmp == -1, "invalid addr: {:#x}", addr);
@@ -167,14 +172,14 @@ fn check_addr_valid(addr: usize, offset: usize) {
 
 impl From<usize> for PhysAddr {
     fn from(v: usize) -> Self {
-        check_addr_valid(v, PA_WIDTH_SV39);
+        // check_addr_valid(v, PA_WIDTH_SV39);
         Self(v)
     }
 }
 
 impl From<usize> for PhysPageNum {
     fn from(v: usize) -> Self {
-        check_addr_valid(v, PPN_WIDTH_SV39);
+        // check_addr_valid(v, PPN_WIDTH_SV39);
         Self(v)
     }
 }
@@ -182,15 +187,15 @@ impl From<usize> for PhysPageNum {
 impl From<usize> for VirtAddr {
     fn from(v: usize) -> Self {
         // 拓展虚拟地址到512GB，在这之前需要做检查
-        check_addr_valid(v, VA_WIDTH_SV39);
+        // check_addr_valid(v, VA_WIDTH_SV39);
         Self(v)
     }
 }
 impl From<usize> for VirtPageNum {
     fn from(v: usize) -> Self {
         let tmp = v >> (VPN_WIDTH_SV39 - 1);
-        let is_valid = tmp == 0 || tmp == (1 << (52 - VPN_WIDTH_SV39 + 1)) - 1;
-        assert!(is_valid, "invalid v to VirtPageNum: {:#x}", v);
+        // let is_valid = tmp == 0 || tmp == (1 << (52 - VPN_WIDTH_SV39 + 1)) - 1;
+        // assert!(is_valid, "invalid v to VirtPageNum: {:#x}", v);
         Self(v)
     }
 }
@@ -256,7 +261,7 @@ impl VirtAddr {
 }
 impl From<VirtAddr> for VirtPageNum {
     fn from(v: VirtAddr) -> Self {
-        assert_eq!(v.page_offset(), 0);
+        // assert_eq!(v.page_offset(), 0);
         v.floor()
     }
 }
@@ -290,7 +295,7 @@ impl PhysAddr {
 }
 impl From<PhysAddr> for PhysPageNum {
     fn from(v: PhysAddr) -> Self {
-        assert_eq!(v.page_offset(), 0);
+        // assert_eq!(v.page_offset(), 0);
         v.floor()
     }
 }
@@ -326,6 +331,7 @@ impl PhysAddr {
         unsafe { (self.0 as *const T).as_ref().unwrap() }
     }
 }
+// TODO: replace it
 impl KernelAddr {
     pub fn get_ref<T>(&self) -> &'static T {
         unsafe { (self.0 as *const T).as_ref().unwrap() }
@@ -341,29 +347,34 @@ impl PhysPageNum {
     /// 取出当前节点的页表项数组
     pub fn get_pte_array(&self) -> &'static mut [PageTableEntry] {
         let pa: PhysAddr = (*self).into();
+        // TODO: new ptv
         let va = KernelAddr::from(pa).0;
         unsafe { core::slice::from_raw_parts_mut(va as *mut PageTableEntry, 512) }
     }
     /// 返回一个字节数组的可变引用
     pub fn get_bytes_array(&self) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
+        // TODO: new ptv
         let va = KernelAddr::from(pa).0;
         unsafe { core::slice::from_raw_parts_mut(va as *mut u8, 4096) }
     }
     ///
     pub fn get_mut<T>(&self) -> &'static mut T {
         let pa: PhysAddr = (*self).into();
+        // TODO: new ptv
         let va = KernelAddr::from(pa);
         va.get_mut()
     }
     ///Get u8 array on `PhysPageNum` with given length
     pub fn get_bytes_array_from_offset(&self, offset: usize, len: usize) -> &'static mut [u8] {
         let pa: PhysAddr = (*self).into();
+        // TODO: new ptv
         let kernel_va = KernelAddr::from(pa).0 + offset;
         unsafe { core::slice::from_raw_parts_mut(kernel_va as *mut u8, len) }
     }
     pub fn get_bytes_array_from_range(&self, range: Range<usize>) -> &'static mut [u8] {
         debug_assert!(range.end <= PAGE_SIZE, "range: {range:?}");
+        // TODO: new ptv
         let mut vaddr: VirtAddr = (self.to_paddr().0 + KERNEL_ADDR_OFFSET).into();
         vaddr += range.start;
         unsafe { core::slice::from_raw_parts_mut(vaddr.to_usize() as *mut u8, range.len()) }
@@ -453,22 +464,49 @@ where
 /// a simple range structure for virtual page number
 pub type VPNRange = SimpleRange<VirtPageNum>;
 
-/// translate kernel virtual addr into physical addr
-pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {
-    (va.0 - KERNEL_ADDR_OFFSET).into()
+// /// translate kernel virtual addr into physical addr
+// pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {
+//     (va.0 - KERNEL_ADDR_OFFSET).into()
+// }
+
+
+// // TODO: should not use on la
+// /// translate kernel virtual page number into physical page number
+// pub fn kpn_v2p(vpn: VirtPageNum) -> PhysPageNum {
+//     (vpn.0 - KERNEL_PGNUM_OFFSET).into()
+// }
+
+// /// translate physical addr into kernel virtual addr
+// pub fn kaddr_p2v(pa: PhysAddr) -> VirtAddr {
+//     (pa.0 + KERNEL_ADDR_OFFSET).into()
+// }
+
+
+// // TODO: should not use on la
+// /// translate physical page number into kernel virtual page number
+// pub fn kpn_p2v(ppn: PhysPageNum) -> VirtPageNum {
+//     (ppn.0 + KERNEL_PGNUM_OFFSET).into()
+// }
+
+// pub fn kva_pg2d(va: VirtAddr) -> VirtAddr {
+//     (va.0 - KERNEL_PG_ADDR_BASE + KERNEL_ADDR_OFFSET).into()
+// }
+
+// pub fn kva_d2pg(va: VirtAddr) -> VirtAddr {
+//     (va.0 - KERNEL_ADDR_OFFSET + KERNEL_PG_ADDR_BASE).into()
+// }
+
+pub trait Direct {
+    fn direct_pa(&self) -> PhysAddr;
+    fn paged_va(&self) -> VirtAddr;
 }
 
-/// translate kernel virtual page number into physical page number
-pub fn kpn_v2p(vpn: VirtPageNum) -> PhysPageNum {
-    (vpn.0 - KERNEL_PGNUM_OFFSET).into()
+pub trait Paged {
+    fn paged_pa(&self) -> PhysAddr;
+    fn direct_va(&self) -> VirtAddr;
 }
 
-/// translate physical addr into kernel virtual addr
-pub fn kaddr_p2v(pa: PhysAddr) -> VirtAddr {
-    (pa.0 + KERNEL_ADDR_OFFSET).into()
-}
-
-/// translate physical page number into kernel virtual page number
-pub fn kpn_p2v(ppn: PhysPageNum) -> VirtPageNum {
-    (ppn.0 + KERNEL_PGNUM_OFFSET).into()
+pub trait PageNum {
+    fn ppn(&self) -> PhysPageNum;
+    fn vpn(&self) -> VirtPageNum;
 }

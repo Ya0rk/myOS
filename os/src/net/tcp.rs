@@ -60,12 +60,7 @@ pub struct TcpSocket {
 unsafe impl Sync for TcpSocket {}
 
 impl TcpSocket {
-    pub fn new(iptype: IpType, non_block_flags: Option<OpenFlags>) -> Self {
-        info!("[TcpSocket::new] build a tcp socket");
-        let flags = match non_block_flags {
-            Some(noblock) => noblock | OpenFlags::O_RDWR,
-            None => OpenFlags::O_RDWR,
-        };
+    pub fn new(iptype: IpType, flags: OpenFlags) -> Self {
         let socket = Self::new_sock();
         let handle = SOCKET_SET.lock().add(socket);
         let sockmeta = SpinNoIrqLock::new(
@@ -296,7 +291,7 @@ impl Socket for TcpSocket {
         let remote_end = TcpAcceptFuture::new(self).await?;
         let ip_type = self.sockmeta.lock().iptype;
         let local_end = self.sockmeta.lock().local_end.expect("[tcp accept] no local end");
-        let newsock = TcpSocket::new(ip_type, Some(flags));
+        let newsock = TcpSocket::new(ip_type, flags);
         {newsock.sockmeta.lock().port = Some(local_end.port);}
         {newsock.sockmeta.lock().local_end = Some(local_end);}
         // newsock.do_bind(local_end)?;
@@ -504,6 +499,9 @@ impl FileTrait for TcpSocket {
     }
     fn is_dir(&self) -> bool {
         false
+    }
+    fn get_flags(&self) -> OpenFlags {
+        self.flags
     }
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<crate::mm::page::Page>> {
         unimplemented!()
