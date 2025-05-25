@@ -212,7 +212,11 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     }
 
     info!("[sys_exec] path = {}, argv = {argv:?}, env = {env:?}", path);
-    if let Some(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
+    // 在这里没有实现更复杂的错误处理
+    // 应当去实现复杂的错误处理
+    // 对于路径上文件的问题,返回值应当和open的返回值一样?
+    // 当返回的文件不是可执行文件的时候应当返回 Errno::ENOEXEC?
+    if let Ok(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;
         Ok(0)

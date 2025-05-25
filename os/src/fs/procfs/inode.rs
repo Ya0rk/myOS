@@ -109,7 +109,7 @@ impl InodeTrait for ProcFsInode {
         // 非常重要
         match self.inner {
             ProcFsInodeInner::exe => {
-                if let Some(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
+                if let Ok(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
                     exe.metadata.inode.read_at(offset, &mut buf).await
                 } else {
                     // error!("open /bin/sh failed");
@@ -160,7 +160,7 @@ impl InodeTrait for ProcFsInode {
         match self.inner {
             ProcFsInodeInner::exe => {
                 // 瞎**返回一个, 在tcb里面没找到当前进程的可执行文件的路径
-                if let Some(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
+                if let Ok(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
                     exe.metadata.inode.read_all().await
                 } else {
                     Err(crate::utils::Errno::EACCES)
@@ -205,7 +205,7 @@ impl InodeTrait for ProcFsInode {
         let mut res = Kstat::new();
         match self.inner {
             ProcFsInodeInner::exe => {
-                if let Some(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
+                if let Ok(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
                     exe.metadata.inode.fstat()
                 } else {
                     // error!("open /bin/sh failed");

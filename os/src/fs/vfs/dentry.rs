@@ -7,7 +7,7 @@ use riscv::{interrupt::Mutex, register::fcsr::read};
 use sbi_rt::{NonRetentive, SharedPtr};
 use spin::{rwlock::RwLock};
 use core::hash::{Hash, Hasher};
-use crate::{fs::{ffi::InodeType, mkdir, open_file, path, procfs::PROCFS_SUPER_BLOCK, root_inode, FileClass, FileTrait, OpenFlags, Path}, utils::SysResult};
+use crate::{fs::{ffi::InodeType, mkdir, open_file, path, procfs::PROCFS_SUPER_BLOCK, root_inode, FileClass, FileTrait, OpenFlags, Path}, utils::{Errno, SysResult}};
 use alloc::sync::{Arc, Weak};
 use super::{inode, InodeTrait, SuperBlockTrait};
 
@@ -110,7 +110,7 @@ impl Dentry {
 
     /// pattern为绝对路径
     fn get_child(self: Arc<Self>, pattern: &String) -> Option<Arc<Self>> {
-        info!("visit {}", pattern);
+        // info!("visit {}", pattern);
         if pattern.ends_with("/") || pattern.ends_with(".") || pattern.as_str() == "" {
             // info!("return name is {}", self.name.read());
             return Some(self.clone());
@@ -310,22 +310,23 @@ impl Dentry {
         Some(res)
     }
 
-    pub fn get_inode_from_path(path: &String) -> Option<Arc<dyn InodeTrait>> {
+    pub fn get_inode_from_path(path: &String) -> SysResult<Arc<dyn InodeTrait>> {
         // if INODE_CACHE.has_inode(path) {
         //     return INODE_CACHE.get(path)
         // }
-        // info!("[get_inode_from_path] {}", path);
+        info!("[get_inode_from_path] {}", path);
         if !path.starts_with('/') {
             panic!("path should start with /");
         }
         let mut dentry_now = DENTRY_ROOT.clone();
         if path == "/" {
-            return dentry_now.get_inode();
+            return Ok(dentry_now.get_inode().unwrap());
         }
         let mut path_now = String::from("/");
 
-        let path_split = path.split('/').collect::<Vec<_>>();
-        for name in path_split {
+        let path_split = path.split('/').enumerate();
+        let size_of_path = path_split.clone().count();
+        for (i, name) in path_split {
             if path_now.ends_with("/") {
                 path_now = alloc::format!("{}{}", path_now, name);
             } else {
@@ -334,11 +335,23 @@ impl Dentry {
             match dentry_now.get_child(&path_now) { 
                 Some(child) => {
                     dentry_now = child;
-                    dentry_now.get_inode();
+                    match dentry_now.get_inode() {
+                        Some(mid_inode) => {
+                            if !mid_inode.is_dir() && i < size_of_path - 1 {
+                                debug_point!();
+                                return Err(Errno::ENOTDIR)
+                            }
+                        },
+                        None => {
+                            debug_point!();
+                            return Err(Errno::ENOENT);
+                        }
+                    };
                 }
                 None => {
-                    debug!("[get_inode_from_path] no such file or directory: {}", path_now);
-                    return None;
+                    info!("[get_inode_from_path] no such file or directory: {}", path_now);
+                    debug_point!();
+                    return Err(Errno::ENOENT);
                 }
             }
         }
@@ -346,20 +359,21 @@ impl Dentry {
         // if let Some(inode) = dentry_now.get_inode() {
         //     INODE_CACHE.insert(path, inode);
         // };
-        dentry_now.get_inode()
+        dentry_now.get_inode().ok_or(Errno::ENOENT)
     }
-    pub fn get_dentry_from_path(path: &String) -> Option<Arc<Self>> {
+    pub fn get_dentry_from_path(path: &String) -> SysResult<Arc<Self>> {
         if !path.starts_with('/') {
             panic!("path {} should start with /", path);
         }
         let mut dentry_now = DENTRY_ROOT.clone();
         if path == "/" {
-            return Some(dentry_now);
+            return Ok(dentry_now);
         }
         let mut path_now = String::from("/");
 
-        let path_split = path.split('/').collect::<Vec<_>>();
-        for name in path_split {
+        let path_split = path.split('/').enumerate();
+        let size_of_path = path_split.clone().count();
+        for (i, name) in path_split {
             if path_now.ends_with("/") {
                 path_now = alloc::format!("{}{}", path_now, name);
             } else {
@@ -368,20 +382,29 @@ impl Dentry {
             match dentry_now.get_child(&path_now) { 
                 Some(child) => {
                     dentry_now = child;
-                    dentry_now.get_inode();
+                    match dentry_now.get_inode() {
+                        Some(mid_inode) => {
+                            if !mid_inode.is_dir() && i < size_of_path - 1 {
+                                return Err(Errno::ENOTDIR)
+                            }
+                        },
+                        None => {
+                            return Err(Errno::ENOENT);
+                        }
+                    };
                 }
                 None => {
-                    info!("no such file or directory: {}", path_now);
-                    return None;
+                    debug!("[get_inode_from_path] no such file or directory: {}", path_now);
+                    return Err(Errno::ENOENT);
                 }
             }
         }
-        Some(dentry_now)
+        Ok(dentry_now)
     }
 
     pub fn hard_link(old: String, new: String) -> bool {
         info!("[hard_link] {} TO {}", &old, &new);
-        if let (Some(dentry) ,Some(inode)) = (Self::get_dentry_from_path(&old), Self::get_inode_from_path(&old)) {
+        if let (Ok(dentry) ,Ok(inode)) = (Self::get_dentry_from_path(&old), Self::get_inode_from_path(&old)) {
             if inode.node_type() == InodeType::Dir {
                 error!("[hard link] failed target is dir! {} TO {} ", &old, &new);
                 return false;
@@ -389,7 +412,7 @@ impl Dentry {
             let path = Path::string2path(new.clone());
             let parent_path = path.get_parent_abs();
             let child_path_relative = path.get_filename();
-            if let Some(parent) = Self::get_dentry_from_path(&parent_path) {
+            if let Ok(parent) = Self::get_dentry_from_path(&parent_path) {
                 inode.link(&new);
                 info!("[hard_link] inode info: cache: {}, size: {}", inode.get_page_cache().is_none(), inode.get_size());
                 if let Some(new_dentry) = parent.clone().get_child(&new) {
@@ -419,7 +442,7 @@ lazy_static! {
 
 macro_rules! test_inode {
     ($path:expr) => {
-        if let Some(inode) = Dentry::get_inode_from_path(&String::from($path)) {
+        if let Ok(inode) = Dentry::get_inode_from_path(&String::from($path)) {
             info!("[test_inode] inode stat for {}: {:?}", $path, inode.fstat());
         } else {
             info!("[test_inode] no such file or directory: {}", $path);
@@ -442,19 +465,19 @@ pub async fn dentry_test() {
     info!("-------------start baisc get_inode test-----------------------------------------");
     {
         info!("test 0");
-        if let Some(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0")) {
+        if let Ok(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0")) {
             info!("inode stat {:?}", inode.fstat());
         } else {
             info!("no such file or directory: /test_dir0");
         }
         info!("test 1");
-        if let Some(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0/file_a")) {
+        if let Ok(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0/file_a")) {
             info!("inode stat {:?}", inode.fstat());
         } else {
             info!("no such file or directory: /test_dir0/file_a");
         }
         info!("test 2");
-        if let Some(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0/test_dir1/file_b")) {
+        if let Ok(inode) = Dentry::get_inode_from_path(&String::from("/test_dir0/test_dir1/file_b")) {
             info!("inode stat {:?}", inode.fstat());
         } else {
             info!("no such file or directory: /test_dir0/test_dir1/file_b");
@@ -479,7 +502,7 @@ pub async fn dentry_test() {
     info!("-------------finished dentry mkdir test---------------------------------------");
     
     info!("-------------start dentry write and read test---------------------------------");
-        if let Some(file) = open_file("/musl/basic/mnt/test_mkdir/file_a", OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
+        if let Ok(file) = open_file("/musl/basic/mnt/test_mkdir/file_a", OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
             let mut file = file.file().unwrap();
             let buf = alloc::vec![1, 20];
             match file.write(&buf).await {
@@ -494,7 +517,7 @@ pub async fn dentry_test() {
         } else {
             info!("[dentry] open failed");
         };
-        if let Some(file) = open_file("/musl/basic/mnt/test_mkdir/file_a", OpenFlags::O_RDWR) {
+        if let Ok(file) = open_file("/musl/basic/mnt/test_mkdir/file_a", OpenFlags::O_RDWR) {
             let mut file = file.file().unwrap();
             let mut buf = alloc::vec![0, 20];
             match file.read(&mut buf).await {
@@ -527,7 +550,7 @@ pub async fn dentry_test() {
     info!("--------------------------------------test hard link--------------------------------------");
     mkdir("/test_dir", 0);
     let flags = OpenFlags::O_RDWR | OpenFlags::O_CREAT;
-    if let Some(FileClass::File(file)) = open_file("/test_dir/filea", flags) {
+    if let Ok(FileClass::File(file)) = open_file("/test_dir/filea", flags) {
         info!("Successfully create /test_dir/filea");
         let buf = [1; 256];
         file.write(&buf).await;
@@ -543,7 +566,7 @@ pub async fn dentry_test() {
             error!("link failed");
         }
     }
-    if let Some(FileClass::File(file)) = open_file("/test_dir/fileb", OpenFlags::O_RDONLY) {
+    if let Ok(FileClass::File(file)) = open_file("/test_dir/fileb", OpenFlags::O_RDONLY) {
         info!("Successfully open /test_dir/fileb");
         let mut buf = [0; 256];
         file.read(&mut buf).await;

@@ -8,7 +8,7 @@ mod sync;
 mod io_async;
 
 use fs::*;
-use log::info;
+use log::{error, info};
 use mm::{sys_mprotect, sys_mremap};
 use mm::{sys_brk, sys_mmap, sys_munmap};
 use process::*;
@@ -27,7 +27,7 @@ use crate::utils::SysResult;
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
-    match syscode {
+    let res = match syscode {
         SysCode::SYSCALL_SETSOCKOPT => sys_setsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),
         SysCode::SYSCALL_CONNECT => sys_connect(args[0] as usize, args[1] as usize, args[2] as usize).await,
         SysCode::SYSCALL_MREMAP => sys_mremap(),
@@ -122,5 +122,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_WRITEV => sys_writev(args[0] as usize, args[1] as usize, args[2] as usize).await,
         SysCode::SYSCALL_MPROTECT => sys_mprotect(args[0] as *const u8, args[1] as usize, args[2] as i32),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
+    };
+    match res {
+        Ok(ret) => Ok(ret),
+        Err(e) => {
+            error!("syscall error: {}, syscall_id: {}", e.get_info(), syscall_id);
+            Err(e)
+        }
     }
 }
