@@ -105,7 +105,7 @@ impl InodeTrait for DevNullInode {
         stat
     }
 
-    fn do_create(&self, _path: &str, _ty: InodeTypes) -> Option<Arc<dyn InodeTrait>> {
+    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
         None // /dev/null 不支持创建子文件或目录
     }
 

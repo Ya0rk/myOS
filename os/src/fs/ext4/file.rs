@@ -222,9 +222,9 @@ impl FileTrait for NormalFile {
             return 0;
         };
 
-        // TODO:这里是为了du测试，避免列出太多东西
         // if self.path == "/musl/ltp" || self.path == "/musl/basic"
         //     || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
+
         //         info!("alsdkjlaskdfj");
         //         return 0;
         // }

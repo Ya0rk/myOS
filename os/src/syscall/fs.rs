@@ -189,13 +189,13 @@ pub fn sys_fstatat(
     let mut tempstat: Kstat = Kstat::new();
     // 检查路径是否有效并打开文件
     match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
-        Some(FileClass::File(file)) => {
+        Ok(FileClass::File(file)) => {
             file.fstat(&mut tempstat)?;
             info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             unsafe{ core::ptr::write(ptr, tempstat); }
             return Ok(0);
         }
-        Some(FileClass::Abs(file)) => {
+        Ok(FileClass::Abs(file)) => {
             file.fstat(&mut tempstat)?;
             info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             unsafe{ core::ptr::write(ptr, tempstat); }
@@ -299,17 +299,27 @@ pub fn sys_statx(dirfd: i32, pathname: *const u8, flags: u32, mask: u32, statxbu
 
     let mut stat = Kstat::new();
     // 检查路径是否有效并打开文件
-    if let Some(FileClass::File(file)) = open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
-        file.fstat(&mut stat)?;
-        let mut statx: Statx = stat.into();
-        statx.set_mask(mask);
-        buffer.write(statx.as_bytes());
-        debug_point!("");
-        return Ok(0);
-    } else {
-        debug_point!("[sys_statx] open file failed");
-        info!("statx fail");
-        return Err(Errno::ENOENT);
+    match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
+        Ok(FileClass::File(file)) => {
+            file.fstat(&mut stat)?;
+            let mut statx: Statx = stat.into();
+            statx.set_mask(mask);
+            buffer.write(statx.as_bytes());
+            debug_point!("");
+            return Ok(0);
+        }
+        Ok(FileClass::Abs(file)) => {
+            file.fstat(&mut stat)?;
+            let mut statx: Statx = stat.into();
+            statx.set_mask(mask);
+            buffer.write(statx.as_bytes());
+            debug_point!("");
+            return Ok(0);
+        }
+        Err(e) => {
+            info!("statx fail {},  {}", cwd, target_path);
+            return Err(e);
+        }
     }
 }
 
@@ -345,26 +355,29 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     };
     let cwd = task.get_current_path();
     // 检查路径是否有效并打开文件
-    if let Some(fileclass) = open(cwd.as_str() , target_path.as_str(), flags) {
-        let fd = match fileclass {
-            FileClass::File(file) => {
-                task.alloc_fd(FdInfo::new(file, flags))?
-            },
-            FileClass::Abs(file) => {
-                task.alloc_fd(FdInfo::new(file, flags))?
-            },
-            _ => { unreachable!() }
-        };
-        info!("[sys_openat] taskid = {}, alloc fd finished, new fd = {}",task.get_pid(), fd);
-        if fd > RLIMIT_NOFILE {
-            return Err(Errno::EMFILE);
-        } else {
-            return Ok(fd);
+    match open(cwd.as_str() , target_path.as_str(), flags) {
+        Ok(fileclass) => {
+            let fd = match fileclass {
+                FileClass::File(file) => {
+                    task.alloc_fd(FdInfo::new(file, flags))?
+                },
+                FileClass::Abs(file) => {
+                    task.alloc_fd(FdInfo::new(file, flags))?
+                },
+                _ => { unreachable!() }
+            };
+            info!("[sys_openat] taskid = {}, alloc fd finished, new fd = {}",task.get_pid(), fd);
+            if fd > RLIMIT_NOFILE {
+                return Err(Errno::EMFILE);
+            } else {
+                return Ok(fd);
+            }
         }
-    } else {
-        info!("openat fail");
-        return Err(Errno::EBADCALL);
-    };
+        Err(e) => {
+            info!("[sys_openat] open file failed: {:?}", e);
+            return Err(e);
+        }
+    }
 }
 
 pub fn sys_close(fd: usize) -> SysResult<usize> {
@@ -680,18 +693,37 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     let is_relative = !path.starts_with("/");
     let base = task.get_current_path();
     info!("[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}", fd, base, path, flags);
-    if let Some(file_class) = open(&base, &path, OpenFlags::O_RDWR) {
-        let file = file_class.file()?;
-        // info!("[unlink] file path = {}", file.path);
-        let is_dir = file.is_dir();
-        if is_dir && flags != AT_REMOVEDIR {
-            return Err(Errno::EISDIR);
+    match open(&base, &path, OpenFlags::O_RDWR) {
+        Ok(file_class) => {
+            let file = file_class.file()?;
+            // info!("[unlink] file path = {}", file.path);
+            let is_dir = file.is_dir();
+            if is_dir && flags != AT_REMOVEDIR {
+                return Err(Errno::EISDIR);
+            }
+            if flags == AT_REMOVEDIR && !is_dir {
+                return Err(Errno::ENOTDIR);
+            }
+            let child_abs = join_path_2_absolute(base, path);
+            file.get_inode().unlink(&child_abs);
         }
-        if flags == AT_REMOVEDIR && !is_dir {
-            return Err(Errno::ENOTDIR);
+        Err(e) => {
+            // info!("[sys_unlinkat] open file failed: {:?}", e);
+            // if e == Errno::ENOENT {
+            //     // 如果文件不存在，且flags为AT_REMOVEDIR，则返回成功
+            //     if flags == AT_REMOVEDIR {
+            //         return Ok(0);
+            //     }
+            //     return Err(Errno::ENOENT);
+            // } else if e == Errno::EISDIR && flags != AT_REMOVEDIR {
+            //     return Err(Errno::EISDIR);
+            // } else if e == Errno::ENOTDIR && flags == AT_REMOVEDIR {
+            //     return Err(Errno::ENOTDIR);
+            // } else {
+            //     return Err(e);
+            // }
+            return Err(e);
         }
-        let child_abs = join_path_2_absolute(base, path);
-        file.get_inode().unlink(&child_abs);
     }
     info!("[sys_unlink] finished");
     
@@ -769,7 +801,7 @@ pub fn sys_linkat(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: usi
         }
     };
 
-    if let Some(inode) = Dentry::get_inode_from_path(&old_path) {
+    if let Ok(inode) = Dentry::get_inode_from_path(&old_path) {
         if inode.node_type() == InodeType::Dir {
             return Err(Errno::EISDIR);
         }
@@ -793,7 +825,7 @@ pub fn sys_linkat(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: usi
     };
 
     if olddirfd == AT_FDCWD {
-        if let Some(file_class) = open(&cwd, &old_path, OpenFlags::O_RDWR) {
+        if let Ok(file_class) = open(&cwd, &old_path, OpenFlags::O_RDWR) {
             let file = file_class.file()?;
             let has_same = file.is_child(&new_path);
             if has_same {
@@ -876,7 +908,7 @@ pub fn sys_faccessat(
     };
 
     let cwd = task.get_current_path();
-    if let Some(file_class) = open(&cwd, abs.as_str(), OpenFlags::O_RDONLY) {
+    if let Ok(file_class) = open(&cwd, abs.as_str(), OpenFlags::O_RDONLY) {
         let file = file_class.file()?;
         let inode = file.get_inode();
         if mode.contains(FaccessatMode::F_OK) {
@@ -1052,25 +1084,22 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
         let mut path = user_cstr(pathname.into())?.unwrap();
         
         let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
-        let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).ok_or("error path");
-        let file = if let Ok(file) = file {
-            file.file()?
-        } else {
-            return Err(Errno::ENOENT);
-        };
-        file.get_inode()
+
+        open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT)?.file()?.get_inode()
+
+        // let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).ok_or("error path");
+        // let file = if let Ok(file) = file {
+        //     file.file()?
+        // } else {
+        //     return Err(Errno::ENOENT);
+        // };
+        // file.get_inode()
     } else {
         let res = match dirfd {
             AT_FDCWD => { 
                 let cwd = task.get_current_path();
                 let mut path = user_cstr(pathname.into())?.unwrap();
-                let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).ok_or("error path");
-                let file = if let Ok(file) = file {
-                    file.file()?
-                } else {
-                    return Err(Errno::ENOENT);
-                };
-                file.get_inode()
+                open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT)?.file()?.get_inode()
             }
             _ => {
                 let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -1158,7 +1187,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
             }
         }
 
-        if let Some(FileClass::File(file)) = open_file(&pathname.get(), OpenFlags::O_RDONLY) {
+        if let Ok(FileClass::File(file)) = open_file(&pathname.get(), OpenFlags::O_RDONLY) {
             let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
                 buf
             } else {

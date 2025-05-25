@@ -20,7 +20,7 @@ pub async fn autorun() -> Arc<NormalFile> {
         fn autorun_end();
     }
 
-    if let Some(FileClass::File(autorun)) = open_file("/autorun", OpenFlags::O_CREAT) {
+    if let Ok(FileClass::File(autorun)) = open_file("/autorun", OpenFlags::O_CREAT) {
         let len = autorun_end as usize - autorun_start as usize;
         let data = unsafe { core::slice::from_raw_parts_mut(autorun_start as *mut u8, len) as &'static [u8] };
         info!("data len ={}", data.len());
@@ -40,7 +40,7 @@ pub async fn mbshell() -> Arc<NormalFile> {
         fn mbshell_end();
     }
 
-    if let Some(FileClass::File(gbshell)) = open_file("/mbshell", OpenFlags::O_CREAT) {
+    if let Ok(FileClass::File(gbshell)) = open_file("/mbshell", OpenFlags::O_CREAT) {
         let len = mbshell_end as usize - mbshell_start as usize;
         let data = unsafe { core::slice::from_raw_parts_mut(mbshell_start as *mut u8, len) as &'static [u8] };
         info!("data len ={}", data.len());
@@ -60,7 +60,7 @@ pub async fn gbshell() -> Arc<NormalFile> {
         fn gbshell_end();
     }
 
-    if let Some(FileClass::File(gbshell)) = open_file("/gbshell", OpenFlags::O_CREAT) {
+    if let Ok(FileClass::File(gbshell)) = open_file("/gbshell", OpenFlags::O_CREAT) {
         let len = gbshell_end as usize - gbshell_start as usize;
         let data = unsafe { core::slice::from_raw_parts_mut(gbshell_start as *mut u8, len) as &'static [u8] };
         info!("data len ={}", data.len());
@@ -83,7 +83,7 @@ extern "C" {
     }
 
     // user_shell
-    if let Some(FileClass::File(user_shell)) = open_file("user_shell", OpenFlags::O_CREAT) {
+    if let Ok(FileClass::File(user_shell)) = open_file("user_shell", OpenFlags::O_CREAT) {
         let len = user_shell_end as usize - user_shell_start as usize;
         let data = unsafe { core::slice::from_raw_parts_mut(user_shell_start as *mut u8, len) as &'static [u8] };
         user_shell.metadata.inode.write_directly(0, &data).await;
@@ -93,7 +93,7 @@ extern "C" {
     }
 
     // initproc
-    if let Some(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
+    if let Ok(FileClass::File(initproc)) = open_file("initproc", OpenFlags::O_CREAT) {
         let len = initproc_end as usize - initproc_start as usize;
         let data = unsafe { core::slice::from_raw_parts_mut(initproc_start as *mut u8, len) as &'static [u8] };
         initproc.write(data).await;

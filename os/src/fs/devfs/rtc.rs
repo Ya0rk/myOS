@@ -1,5 +1,5 @@
 use core::{cmp::min, fmt::{Formatter, Debug}};
-use alloc::{format, string::{String, ToString}, sync::Arc};
+use alloc::{format, string::{String, ToString}, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use alloc::boxed::Box;
 use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, utils::SysResult};
@@ -115,5 +115,99 @@ impl Debug for RtcTime {
             "{}-{}-{} {}:{}:{}",
             self.year, self.month, self.day, self.hour, self.minute, self.second
         )
+    }
+}
+
+#[async_trait]
+impl InodeTrait for DevRtc {
+    fn get_page_cache(&self) -> Option<Arc<crate::fs::page_cache::PageCache>> {
+        None
+    }
+
+    fn get_size(&self) -> usize {
+        0
+    }
+
+    fn set_size(&self, _new_size: usize) -> SysResult {
+        Ok(())
+    }
+
+    fn do_create(&self, _path: &str, _ty: crate::fs::InodeType) -> Option<Arc<dyn InodeTrait>> {
+        None
+    }
+
+    fn node_type(&self) -> crate::fs::InodeType {
+        crate::fs::InodeType::CharDevice
+    }
+
+    async fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
+        let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
+        let str = format!("{:?}", time);
+        let bytes = str.as_bytes();
+        if offset >= bytes.len() {
+            return 0;
+        }
+        let len = core::cmp::min(buf.len(), bytes.len() - offset);
+        buf[..len].copy_from_slice(&bytes[offset..offset + len]);
+        len
+    }
+
+    async fn read_dirctly(&self, _offset: usize, _buf: &mut [u8]) -> usize {
+        0
+    }
+
+    async fn write_at(&self, _offset: usize, buf: &[u8]) -> usize {
+        buf.len()
+    }
+
+    async fn write_directly(&self, _offset: usize, buf: &[u8]) -> usize {
+        buf.len()
+    }
+
+    fn truncate(&self, _size: usize) -> usize {
+        0
+    }
+
+    async fn sync(&self) {}
+
+    async fn read_all(&self) -> SysResult<Vec<u8>> {
+        let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
+        let str = format!("{:?}", time);
+        Ok(str.as_bytes().to_vec())
+    }
+
+    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+        None
+    }
+
+    fn fstat(&self) -> Kstat {
+        let mut stat = Kstat::new();
+        stat.st_mode = crate::fs::InodeType::CharDevice as u32;
+        stat.st_nlink = 1;
+        stat.st_size = 0;
+        stat
+    }
+
+    fn unlink(&self, _child_abs_path: &str) -> SysResult<usize> {
+        Ok(0)
+    }
+
+    fn link(&self, _new_path: &str) -> SysResult<usize> {
+        Err(crate::utils::Errno::EACCES)
+    }
+
+    fn get_timestamp(&self) -> &crate::sync::SpinNoIrqLock<crate::sync::TimeStamp> {
+        // 如果需要返回一个实际值，需要给 DevRtc 加 timestamp 字段
+        unimplemented!("DevRtc does not have a timestamp")
+    }
+
+    fn is_dir(&self) -> bool {
+        false
+    }
+
+    fn rename(&self, _old_path: &String, _new_path: &String) {}
+
+    fn read_dents(&self) -> Option<Vec<crate::fs::Dirent>> {
+        None
     }
 }

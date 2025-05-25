@@ -10,6 +10,7 @@ mod path;
 pub mod vfs;
 pub mod pre_data;
 pub mod ext4;
+pub mod procfs;
 // pub mod tmp;
 pub mod ffi;
 
@@ -80,8 +81,8 @@ pub fn init() {
 
 pub fn create_init_files() -> SysResult {
     //创建/proc文件夹
-    mkdir("/proc", 0);
-    let proc = Ext4Inode::new("/proc", InodeTypes::EXT4_DE_DIR, None);
+    // mkdir("/proc", 0);
+    // let proc = Ext4Inode::new("/proc", InodeTypes::EXT4_DE_DIR, None);
     // 创建musl glibc文件夹
     open_file("/musl/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     open_file("/glibc/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
@@ -108,7 +109,7 @@ pub fn create_init_files() -> SysResult {
 
     //创建/etc文件夹
     mkdir("/etc", 0);
-    if let Some(FileClass::File(file)) = open_file("/etc/passwd", OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
+    if let Ok(FileClass::File(file)) = open_file("/etc/passwd", OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
         let buf = [0; 10];
         file.write(&buf);
     };
@@ -151,8 +152,8 @@ fn create_open_file(
     target_abs_path: &str,
     parent_path: &str,
     flags: OpenFlags,
-) -> Option<FileClass> {
-    debug!(
+) -> SysResult<FileClass> {
+    info!(
         "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
         flags, target_abs_path, parent_path
     );
@@ -160,18 +161,12 @@ fn create_open_file(
     // 逻辑为获得一个Option<Arc InodeTrait>如果返回None直接返回None,因为代表父母节点都没有
     // 如果父母节点存在, 那么当父母节点是Dir的时候获得inode,如果父母节点不是Dir页直接返回None
     let parent_dir = {
-        if let Some(inode) = Dentry::get_inode_from_path(&(parent_path.into())) {
-            if inode.node_type() == InodeType::Dir {
-                inode
-            } else {
-                debug!("[create_open_file] failed inode type is {:?}", inode.node_type());
-                return None;
-            }
-        } else {
-            error!("[create_open_file] failed to get parent inode {}, target path = {}", parent_path, target_abs_path);
-            return None;
-        }
+        Dentry::get_inode_from_path(&(parent_path.into()))?
     };
+    if parent_dir.node_type() != InodeType::Dir {
+        info!("[create_open_file] parent_path {} is not a directory", parent_path);
+        return Err(Errno::ENOTDIR);
+    }
     let parent_dentry = Dentry::get_dentry_from_path(&(parent_path.into())).unwrap();
     // info!("[create_file] got parent inode");
     // 通过Dentry直接返回target_inode,如果节点存在就直接返回
@@ -179,7 +174,7 @@ fn create_open_file(
     // 如果需要创建就创建一个,使用InodeTrait::do_create方法
     // 如果不需要创建就直接返回None
     let target_inode =  {
-        if let Some(inode) = Dentry::get_inode_from_path(&(target_abs_path.into())) {
+        if let Ok(inode) = Dentry::get_inode_from_path(&(target_abs_path.into())) {
             inode
         } else {
             if flags.contains(OpenFlags::O_CREAT) {
@@ -189,11 +184,16 @@ fn create_open_file(
             } else {
                 // no need to create
                 debug!("[create_open_file] path = {} no need to creat", target_abs_path);
-                return None;
+                return Err(Errno::ENOENT);
             }
             
         }
     };
+
+    if flags.contains(OpenFlags::O_DIRECTORY) && target_inode.node_type() != InodeType::Dir {
+        debug!("[create_open_file] target_path {} is not a directory", target_abs_path);
+        return Err(Errno::ENOTDIR);
+    }
     // info!("[create_file] got target inode");
 
     let res = {
@@ -206,15 +206,15 @@ fn create_open_file(
         FileClass::File(Arc::new(osinode))
     };
 
-    Some(res)
+    Ok(res)
 }
 
 
-pub fn open_file(path: &str, flags: OpenFlags) -> Option<FileClass> {
+pub fn open_file(path: &str, flags: OpenFlags) -> SysResult<FileClass> {
     open(&"/", path, flags)
 }
 
-pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
+pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> SysResult<FileClass> {
     info!("[fs_open] cwd = {}, path = {}, flags = {:?}", cwd, path, flags);
     let abs_path = Path::string2path(
         join_path_2_absolute(
@@ -226,9 +226,9 @@ pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> Option<FileClass> {
     // 临时保存这个机制,后期应当使用设备文件系统去代替
     if find_device(&abs_path.get()) {
         if let Some(device) = open_device_file(&abs_path.get()) {
-            return Some(FileClass::Abs(device));
+            return Ok(FileClass::Abs(device));
         }
-        return None;
+        return Err(Errno::EIO);
     }
     
     create_open_file(&abs_path.get(), &abs_path.get_parent_abs(), flags)
@@ -258,7 +258,7 @@ pub fn mkdir(target_abs_path: &str, mode: usize) -> SysResult<()> {
     // 首先探测有没有这个文件,如果有就报错
     // 否则使用 OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT 去创建
     // 最后返回OK就可以
-    if let Some(_) = Dentry::get_inode_from_path(&abs_path.get()) {
+    if let Ok(_) = Dentry::get_inode_from_path(&abs_path.get()) {
         return Err(Errno::EEXIST);
     } else {
         create_open_file(&abs_path.get(), &abs_path.get_parent_abs(), OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT);
@@ -275,7 +275,7 @@ pub fn chdir(target: &str) -> bool {
 
     // root.check_inode_exist(target, InodeTypes::EXT4_DE_DIR)
     let path: String = target.into();
-    if let Some(inode) = Dentry::get_inode_from_path(&path) {
+    if let Ok(inode) = Dentry::get_inode_from_path(&path) {
         if inode.node_type() == InodeType::Dir {
             return true;
         }

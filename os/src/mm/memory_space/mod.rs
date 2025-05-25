@@ -475,7 +475,7 @@ impl MemorySpace {
             // let interp_dentry: Arc<dyn Dentry> = interp_dentry.unwrap();
             // let interp_file = interp_dentry.open().ok().unwrap();
             let cwd = current_task().unwrap().get_current_path();
-            if let Some(FileClass::File(interp_file)) = open(&cwd, &interp, OpenFlags::O_RDONLY) {
+            if let Ok(FileClass::File(interp_file)) = open(&cwd, &interp, OpenFlags::O_RDONLY) {
                 let interp_elf_data = block_on(async { interp_file.get_inode().read_all().await })?;
                 let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
                 self.map_elf(interp_file, &interp_elf, DL_INTERP_OFFSET.into());
