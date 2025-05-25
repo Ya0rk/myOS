@@ -299,17 +299,27 @@ pub fn sys_statx(dirfd: i32, pathname: *const u8, flags: u32, mask: u32, statxbu
 
     let mut stat = Kstat::new();
     // 检查路径是否有效并打开文件
-    if let Some(FileClass::File(file)) = open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
-        file.fstat(&mut stat)?;
-        let mut statx: Statx = stat.into();
-        statx.set_mask(mask);
-        buffer.write(statx.as_bytes());
-        debug_point!("");
-        return Ok(0);
-    } else {
-        debug_point!("[sys_statx] open file failed");
-        info!("statx fail");
-        return Err(Errno::ENOENT);
+    match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
+        Ok(FileClass::File(file)) => {
+            file.fstat(&mut stat)?;
+            let mut statx: Statx = stat.into();
+            statx.set_mask(mask);
+            buffer.write(statx.as_bytes());
+            debug_point!("");
+            return Ok(0);
+        }
+        Ok(FileClass::Abs(file)) => {
+            file.fstat(&mut stat)?;
+            let mut statx: Statx = stat.into();
+            statx.set_mask(mask);
+            buffer.write(statx.as_bytes());
+            debug_point!("");
+            return Ok(0);
+        }
+        Err(e) => {
+            info!("statx fail {},  {}", cwd, target_path);
+            return Err(e);
+        }
     }
 }
 

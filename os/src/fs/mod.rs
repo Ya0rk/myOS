@@ -189,7 +189,6 @@ fn create_open_file(
     parent_path: &str,
     flags: OpenFlags,
 ) -> SysResult<FileClass> {
-    debug_point!();
     info!(
         "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
         flags, target_abs_path, parent_path
@@ -202,7 +201,6 @@ fn create_open_file(
     };
     if parent_dir.node_type() != InodeType::Dir {
         info!("[create_open_file] parent_path {} is not a directory", parent_path);
-        debug_point!();
         return Err(Errno::ENOTDIR);
     }
     let parent_dentry = Dentry::get_dentry_from_path(&(parent_path.into())).unwrap();

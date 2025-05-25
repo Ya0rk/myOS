@@ -124,12 +124,5 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_WRITEV => sys_writev(args[0] as usize, args[1] as usize, args[2] as usize).await,
         SysCode::SYSCALL_MPROTECT => sys_mprotect(args[0] as *const u8, args[1] as usize, args[2] as i32),
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
-    };
-    match res {
-        Ok(ret) => Ok(ret),
-        Err(e) => {
-            error!("syscall error: {}, syscall_id: {}", e.get_info(), syscall_id);
-            Err(e)
-        }
     }
 }

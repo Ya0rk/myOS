@@ -338,19 +338,16 @@ impl Dentry {
                     match dentry_now.get_inode() {
                         Some(mid_inode) => {
                             if !mid_inode.is_dir() && i < size_of_path - 1 {
-                                debug_point!();
                                 return Err(Errno::ENOTDIR)
                             }
                         },
                         None => {
-                            debug_point!();
                             return Err(Errno::ENOENT);
                         }
                     };
                 }
                 None => {
                     info!("[get_inode_from_path] no such file or directory: {}", path_now);
-                    debug_point!();
                     return Err(Errno::ENOENT);
                 }
             }
