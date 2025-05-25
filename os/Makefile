@@ -13,7 +13,7 @@ KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
-OVERWRITE := false
+OVERWRITE := true
 
 # fs image
 FS = lwext4_rust
@@ -157,7 +157,7 @@ else
   RUN_DEPS := build
 endif
 
-run-inner: qemu-version-check copy-img $(RUN_DEPS)
+run-inner: qemu-version-check $(RUN_DEPS)
 	echo "Running QEMU with arguments: $(QEMU_ARGS)"
 	$(QEMU_NAME) $(QEMU_ARGS)
 PHONY += run-inner

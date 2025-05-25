@@ -80,9 +80,6 @@ pub fn init() {
 }
 
 pub fn create_init_files() -> SysResult {
-    //创建/proc文件夹
-    // mkdir("/proc", 0);
-    // let proc = Ext4Inode::new("/proc", InodeTypes::EXT4_DE_DIR, None);
     // 创建musl glibc文件夹
     open_file("/musl/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     open_file("/glibc/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
@@ -116,10 +113,6 @@ pub fn create_init_files() -> SysResult {
     
     open("/", "/dev/null", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
     open("/", "/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
-    //创建/proc/mounts文件系统使用情况
-    open("/proc", "mounts", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
-    //创建/proc/meminfo系统内存使用情况
-    open("/proc", "meminfo", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建/etc/adjtime记录时间偏差
     open("/etc", "adjtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建./etc/localtime记录时区
@@ -136,7 +129,7 @@ pub fn create_init_files() -> SysResult {
 }
 
 fn dl_link(src: &str, target: &str) {
-    if let Some(inode) = Dentry::get_inode_from_path(&src.to_string()) {
+    if let Ok(inode) = Dentry::get_inode_from_path(&src.to_string()) {
         inode.link(&target.to_string());
     } else {
         panic!("no such dir: {}", src);
