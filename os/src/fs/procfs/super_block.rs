@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use log::info;
 
-use crate::fs::{procfs::inode::ProcFsInode, InodeTrait, SuperBlockTrait};
+use crate::fs::{procfs::inode::{ProcFsInode, ProcFsInodeInner}, InodeTrait, SuperBlockTrait};
 
 pub struct ProcFsSuperBlock {
     root: Arc<ProcFsInode>,
@@ -10,7 +10,7 @@ pub struct ProcFsSuperBlock {
 impl ProcFsSuperBlock {
     pub fn new(path: &str) -> Self {
         info!("init procfs superblock");
-        let root = Arc::new(ProcFsInode::new_root(path));
+        let root = Arc::new(ProcFsInode::new(path, ProcFsInodeInner::root));
         Self { root }
     }
 }

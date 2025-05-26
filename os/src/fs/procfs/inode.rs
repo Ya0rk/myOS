@@ -17,7 +17,7 @@ use crate::{fs::{dirent::build_dirents, ffi::MEMINFO, open, AbsPath, Dirent, Fil
 /// - exe: 代表当前执行的文件
 /// 
 /// - meminfo: 代表内存使用信息
-enum ProcFsInodeInner {
+pub enum ProcFsInodeInner {
     /// 根目录
     root,
     /// 当前进程的内容, 应当是一个文件夹
@@ -51,31 +51,11 @@ pub struct ProcFsInode {
 }
 
 impl ProcFsInode {
-    pub fn new_root(path: &str) -> Self {
-        Self { 
-            inner: ProcFsInodeInner::root,
-            path: String::from(path),
-            timestamp: SpinNoIrqLock::new(TimeStamp::new()),
-        }
-    }
-    pub fn new_self(path: &str) -> Self {
-        Self { 
-            inner: ProcFsInodeInner::_self,
-            path: String::from(path),
-            timestamp: SpinNoIrqLock::new(TimeStamp::new()),
-        }
-    }
-    pub fn new_exe(path: &str) -> Self {
-        Self { 
-            inner: ProcFsInodeInner::exe,
-            path: String::from(path),
-            timestamp: SpinNoIrqLock::new(TimeStamp::new()),
-        }
-    }
-    pub fn new_meminfo(path: &str) -> Self {
-        Self { 
-            inner: ProcFsInodeInner::meminfo,
-            path: String::from(path),
+    /// path为绝对路径，inner为要创建的类型
+    pub fn new(path: &str, inner: ProcFsInodeInner) -> Self {
+        Self {
+            inner,
+            path: path.into(),
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
         }
     }
@@ -112,7 +92,7 @@ impl InodeTrait for ProcFsInode {
         // 非常重要
         match self.inner {
             ProcFsInodeInner::exe => {
-                if let Ok(FileClass::File(exe)) = open(AbsPath::new(String::from("/bin/sh")), OpenFlags::O_RDONLY) {
+                if let Ok(FileClass::File(exe)) = open("/bin/sh".into(), OpenFlags::O_RDONLY) {
                     exe.metadata.inode.read_at(offset, &mut buf).await
                 } else {
                     // error!("open /bin/sh failed");
@@ -170,7 +150,7 @@ impl InodeTrait for ProcFsInode {
                 }
             }
             ProcFsInodeInner::meminfo => {
-                // 也是瞎**返回
+                // 也是随便返回
                 let mut buf = Vec::from(MEMINFO);
                 Ok(buf)
             }
@@ -185,16 +165,18 @@ impl InodeTrait for ProcFsInode {
         match self.inner {
             ProcFsInodeInner::root => {
                 if pattern == "self" {
-                    Some(Arc::new(ProcFsInode::new_self(path)))
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::_self)))
                 } else if pattern == "meminfo" {
-                    Some(Arc::new(ProcFsInode::new_meminfo(path)))
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::meminfo)))
+                } else if pattern == "mounts" {
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::mounts)))
                 } else {
                     None
                 }
             }
             ProcFsInodeInner::_self => {
                 if pattern == "exe" {
-                    Some(Arc::new(ProcFsInode::new_exe(path)))
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::exe)))
                 } else {
                     None
                 }
@@ -260,6 +242,7 @@ impl InodeTrait for ProcFsInode {
                     ("..", 0, 4),
                     ("self", 2, 4),
                     ("meminfo", 3, 8),
+                    ("mounts", 4, 8),
                 ];
 
                 Some(build_dirents(entries))

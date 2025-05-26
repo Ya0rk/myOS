@@ -12,7 +12,7 @@ use log::{debug, info};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{ chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Pipe, Statx, Stdout, StxMask, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, Stdout, StxMask, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::user_ptr::{user_cstr, user_ref_mut, user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
@@ -700,7 +700,7 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
 /// TODO:这里的rename好像没有真正实现
 pub fn sys_renameat2(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let token = task.get_user_token();
+    let flags = RenameFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
     let old_path = user_cstr(oldpath.into())?.unwrap();
     let new_path = user_cstr(newpath.into())?.unwrap();
     let cwd = task.get_current_path();
