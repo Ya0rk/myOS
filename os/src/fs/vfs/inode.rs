@@ -2,7 +2,7 @@ use core::sync::atomic::AtomicUsize;
 use crate::{
     fs::{ext4::NormalFile, ffi::InodeType, page_cache::PageCache, AbsPath, Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
-    utils::SysResult
+    utils::{Errno, SysResult}
 };
 use alloc::{
     string::String, sync::{Arc, Weak},
@@ -186,7 +186,9 @@ pub trait InodeTrait: Send + Sync {
     fn get_page_cache(&self) -> Option<Arc<PageCache>>;
 
     /// 更改名字
-    fn rename(&self, old_path: &String, new_path: &String);
+    fn rename(&self, old_path: &String, new_path: &String) -> SysResult<usize> {
+        Err(Errno::EBADCALL)
+    }
 
     /// 获得目录项
     fn read_dents(&self) -> Option<Vec<Dirent>>;

@@ -714,6 +714,7 @@ pub fn sys_renameat2(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: 
                 resolve_path(file.get_name()?, old_path)
             }
             None => {
+                // debug_point!("[sys_renameat2] return EBADF");
                 return Err(Errno::EBADF);
             }
         }
@@ -727,10 +728,33 @@ pub fn sys_renameat2(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: 
                 resolve_path(file.get_name()?, new_path)
             }
             None => {
+                // debug_point!("[sys_renameat2] return EBADF");
                 return Err(Errno::EBADF);
             }
         }
     };
+    // 简单的实现, 当目标路径存在文件的时候就返回存在
+    if let Ok(file) = open(new_path.clone(), OpenFlags::O_RDWR) {
+        // debug_point!("[sys_renameat2] return EEXIST");
+        return Err(Errno::EEXIST);
+    }
+
+    if let Ok(file) = open(old_path.clone(), OpenFlags::O_RDWR) {
+        let old_inode = file.file()?.get_inode();
+        if let Ok(_) = old_inode.rename(&old_path.get(), &new_path.get()) {
+            // 如果重命名成功，返回0
+            // debug_point!("[sys_renameat2] return Ok(0)");
+            return Ok(0);
+        } else {
+            // 如果重命名失败，返回错误
+            // debug_point!("[sys_renameat2] return EACCES");
+            return Err(Errno::EACCES);
+        }
+    } else {
+        // debug_point!("[sys_renameat2] return ENOENT");
+        return Err(Errno::ENOENT);
+    }
+    // debug_point!("[sys_renameat2] return Ok(0)");
     Ok(0)
 }
 

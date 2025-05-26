@@ -139,7 +139,7 @@ impl InodeTrait for DevZero {
         false
     }
 
-    fn rename(&self, _old_path: &String, _new_path: &String) {}
+    // fn rename(&self, _old_path: &String, _new_path: &String) {}
 
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         None

@@ -161,9 +161,9 @@ impl InodeTrait for DevNullInode {
         None // /dev/null 不支持页面缓存
     }
 
-    fn rename(&self, _old_path: &String, _new_path: &String) {
-        // /dev/null 不支持重命名操作
-    }
+    // fn rename(&self, _old_path: &String, _new_path: &String) {
+    //     // /dev/null 不支持重命名操作
+    // }
 
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         None // /dev/null 不支持目录项读取

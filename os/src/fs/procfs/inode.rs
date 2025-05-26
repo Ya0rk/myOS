@@ -230,9 +230,9 @@ impl InodeTrait for ProcFsInode {
             _ => false,
         }
     }
-    fn rename(&self, old_path: &String, new_path: &String) {
-        // 不可以改名字
-    }
+    // fn rename(&self, old_path: &String, new_path: &String) {
+    //     // 不可以改名字
+    // }
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         match self.inner {
             ProcFsInodeInner::root => {

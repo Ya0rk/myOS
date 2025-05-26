@@ -295,9 +295,11 @@ impl InodeTrait for Ext4Inode {
         self.metadata.file_type.is_dir()
     }
 
-    fn rename(&self, old_path: &String, new_path: &String) {
+    fn rename(&self, old_path: &String, new_path: &String) -> SysResult<usize> {
         let mut ext4file = self.file.lock();
-        ext4file.file_rename(&old_path, &new_path);
+        ext4file.file_rename(&old_path, &new_path)
+            .map_err(|_| Errno::EIO)
+            .map(|_| 0)
     }
 
     fn read_dents(&self) -> Option<Vec<Dirent>>{
