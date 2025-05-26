@@ -13,7 +13,7 @@ KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
-OVERWRITE := true
+OVERWRITE := false
 
 # fs image
 FS = lwext4_rust

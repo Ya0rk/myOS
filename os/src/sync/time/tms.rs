@@ -5,6 +5,7 @@ use crate::{sync::timer::get_time_ms, task::current_task};
 type clock_t = isize;
 
 #[derive(IntoBytes, Immutable)]
+#[repr(C)]
 pub struct Tms {
     /// 进程在用户态（user mode）消耗的 CPU 时间
     pub tms_utime: clock_t,
