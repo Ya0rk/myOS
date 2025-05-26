@@ -21,7 +21,7 @@ pub use ffi::*;
 use lwext4_rust::bindings::{self, O_CREAT, O_RDWR, O_TRUNC};
 use lwext4_rust::{Ext4File, InodeTypes};
 use page_cache::PageCache;
-pub use path::{Path, path_test, join_path_2_absolute};
+pub use path::{AbsPath, path_test, resolve_path};
 pub use dirent::Dirent;
 // pub use inode_cache::*;
 pub use mount::MNT_TABLE;
@@ -80,13 +80,20 @@ pub fn init() {
 }
 
 pub fn create_init_files() -> SysResult {
-    // 创建musl glibc文件夹
-    open_file("/musl/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
-    open_file("/glibc/ls", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
-    mkdir("/bin", 0);
-
     //创建/dev文件夹
-    mkdir("/dev", 0);
+    mkdir("/dev".into(), 0);
+    //创建./dev/misc文件夹
+    mkdir("/dev/misc".into(), 0);
+    // libctest中的pthread_cancel_points测试用例需要
+    mkdir("/dev/shm".into(), 0); 
+    mkdir("/lib".into(), 0);
+    mkdir("/bin".into(), 0);
+    mkdir("/etc".into(), 0);
+    if let Ok(FileClass::File(file)) = open("/etc/passwd".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
+        let buf = [0; 10];
+        file.write(&buf);
+    };
+    
     //注册设备/dev/rtc和/dev/rtc0
     register_device("/dev/rtc");
     register_device("/dev/rtc0");
@@ -96,40 +103,26 @@ pub fn create_init_files() -> SysResult {
     register_device("/dev/zero");
     //注册设备/dev/null
     // register_device("/dev/null");
-    
-    //创建./dev/misc文件夹
-    mkdir("/dev/misc", 0);
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
-    // libctest中的pthread_cancel_points测试用例需要
-    mkdir("/dev/shm", 0); 
-
-    //创建/etc文件夹
-    mkdir("/etc", 0);
-    if let Ok(FileClass::File(file)) = open_file("/etc/passwd", OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
-        let buf = [0; 10];
-        file.write(&buf);
-    };
     
-    open("/", "/dev/null", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
-    open("/", "/tmp", OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open("/dev/null".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open("/tmp".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
     //创建/etc/adjtime记录时间偏差
-    open("/etc", "adjtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    open("/etc/adjtime".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建./etc/localtime记录时区
-    open("/etc", "localtime", OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    open("/etc/localtime".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
 
     // 拷贝动态库
-    // 创建lib文件夹
-    mkdir("/lib", 0);
     dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64-sf.so.1");
-    dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
+    // dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
     dl_link("/musl/lib/tls_get_new-dtv_dso.so", "/lib/tls_get_new-dtv_dso.so");
 
     Ok(())
 }
 
 fn dl_link(src: &str, target: &str) {
-    if let Ok(inode) = Dentry::get_inode_from_path(&src.to_string()) {
+    if let Ok(inode) = Dentry::get_inode_from_path(src) {
         inode.link(&target.to_string());
     } else {
         panic!("no such dir: {}", src);
@@ -154,25 +147,25 @@ fn create_open_file(
     // 逻辑为获得一个Option<Arc InodeTrait>如果返回None直接返回None,因为代表父母节点都没有
     // 如果父母节点存在, 那么当父母节点是Dir的时候获得inode,如果父母节点不是Dir页直接返回None
     let parent_dir = {
-        Dentry::get_inode_from_path(&(parent_path.into()))?
+        Dentry::get_inode_from_path(parent_path)?
     };
     if parent_dir.node_type() != InodeType::Dir {
         info!("[create_open_file] parent_path {} is not a directory", parent_path);
         return Err(Errno::ENOTDIR);
     }
-    let parent_dentry = Dentry::get_dentry_from_path(&(parent_path.into())).unwrap();
+    let parent_dentry = Dentry::get_dentry_from_path(parent_path).unwrap();
     // info!("[create_file] got parent inode");
     // 通过Dentry直接返回target_inode,如果节点存在就直接返回
     // 如果节点不存在就检查创建的标志位,
     // 如果需要创建就创建一个,使用InodeTrait::do_create方法
     // 如果不需要创建就直接返回None
     let target_inode =  {
-        if let Ok(inode) = Dentry::get_inode_from_path(&(target_abs_path.into())) {
+        if let Ok(inode) = Dentry::get_inode_from_path(target_abs_path) {
             inode
         } else {
             if flags.contains(OpenFlags::O_CREAT) {
                 // need to create
-                let path = Path::string2path(String::from(target_abs_path));
+                let path: AbsPath = target_abs_path.into();
                 parent_dentry.add_child(&path.get_filename(), flags).unwrap()
             } else {
                 // no need to create
@@ -202,73 +195,59 @@ fn create_open_file(
     Ok(res)
 }
 
-
-pub fn open_file(path: &str, flags: OpenFlags) -> SysResult<FileClass> {
-    open(&"/", path, flags)
-}
-
-pub fn open(cwd: &str, path: &str, flags: OpenFlags) -> SysResult<FileClass> {
-    info!("[fs_open] cwd = {}, path = {}, flags = {:?}", cwd, path, flags);
-    let abs_path = Path::string2path(
-        join_path_2_absolute(
-            cwd.to_string(), 
-            path.to_string()
-    ));
+/// path为绝对路径
+pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<FileClass> {
+    info!("[fs_open] abspath = {}, flags = {:?}", path.get(), flags);
     // info!("[open] abspath = {}", abs_path.get());
+    if !path.is_absolute() {
+        panic!("[fs_open] path = {} is not absolte path.", path.get());
+    }
 
     // 临时保存这个机制,后期应当使用设备文件系统去代替
-    if find_device(&abs_path.get()) {
-        if let Some(device) = open_device_file(&abs_path.get()) {
+    if find_device(&path.get()) {
+        if let Some(device) = open_device_file(&path.get()) {
             return Ok(FileClass::Abs(device));
         }
         return Err(Errno::EIO);
     }
     
-    create_open_file(&abs_path.get(), &abs_path.get_parent_abs(), flags)
-    
+    create_open_file(&path.get(), &path.get_parent_abs(), flags)
 }
 
 /// 创建一个新的文件夹
 /// 
 /// - path: 文件夹目录（绝对路径）
 /// - mode: 创建模式
-pub fn mkdir(target_abs_path: &str, mode: usize) -> SysResult<()> {
-    debug!("[mkdir] new dir abs_path is {}", target_abs_path);
-
-    let abs_path = Path::string2path(target_abs_path.into());
+pub fn mkdir(target_abs_path: AbsPath, mode: usize) -> SysResult<()> {
+    debug!("[mkdir] new dir abs_path is {}", target_abs_path.get());
 
     // 查看当前路径是否是设备
-    if find_device(target_abs_path) {
+    if find_device(&target_abs_path.get()) {
         return Err(Errno::EEXIST);
     }
 
-    
     debug!(
         "[mkdir] path {}, mode {}",
-        target_abs_path, mode
+        target_abs_path.get(), mode
     );
 
     // 首先探测有没有这个文件,如果有就报错
     // 否则使用 OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT 去创建
     // 最后返回OK就可以
-    if let Ok(_) = Dentry::get_inode_from_path(&abs_path.get()) {
+    if let Ok(_) = Dentry::get_inode_from_path(&target_abs_path.get()) {
         return Err(Errno::EEXIST);
     } else {
-        create_open_file(&abs_path.get(), &abs_path.get_parent_abs(), OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT);
+        create_open_file(&target_abs_path.get(), &target_abs_path.get_parent_abs(), OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT);
     }
 
     Ok(())
 
 }
 
-pub fn chdir(target: &str) -> bool {
-    info!("[chdir] target = {}", target);
-    // let bind = root_inode();
-    // let mut root = bind.file.lock();
-
-    // root.check_inode_exist(target, InodeTypes::EXT4_DE_DIR)
-    let path: String = target.into();
-    if let Ok(inode) = Dentry::get_inode_from_path(&path) {
+pub fn chdir(target: AbsPath) -> bool {
+    info!("[chdir] target = {}", target.get());
+    
+    if let Ok(inode) = Dentry::get_inode_from_path(&target.get()) {
         if inode.node_type() == InodeType::Dir {
             return true;
         }

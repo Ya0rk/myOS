@@ -12,7 +12,7 @@ use log::{debug, info};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
-use crate::fs::{ chdir, join_path_2_absolute, mkdir, open, open_file, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, Statx, MountFlags, OpenFlags, Path, Pipe, Stdout, StxMask, UmountFlags, MNT_TABLE, SEEK_CUR};
+use crate::fs::{ chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Pipe, Statx, Stdout, StxMask, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::user_ptr::{user_cstr, user_ref_mut, user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
@@ -24,7 +24,6 @@ use super::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, AT_REMOVEDIR};
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
-    let token = current_user_token();
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
@@ -43,7 +42,6 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 }
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
-    let token = current_user_token();
     let task = current_task().unwrap();
     if fd >= task.fd_table_len() {
         // info!("[sys_read] task pid = {}", task.get_pid());
@@ -167,37 +165,31 @@ pub fn sys_fstatat(
     info!("[sys_fstatat] start cwd: {}, pathname: {}, flags: {}, dirfd = {}", cwd, path, flags, dirfd);
 
     // 计算目标路径
-    let target_path = if path.starts_with("/") {
-        // 绝对路径，忽略 dirfd
-        path
-    } else if dirfd == AT_FDCWD {
-        // 相对路径，以当前目录为起点
-        join_path_2_absolute(cwd.clone(), path)
+    let target_path = if dirfd == AT_FDCWD {
+        resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
         if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_fstatat] not found fd");
-        let other_cwd = cwd.clone();
-        // let other_cwd = inode.get_name()?;
-        join_path_2_absolute(other_cwd, path)
+        // let other_cwd = cwd.clone();
+        let other_cwd = inode.get_name()?; 
+        resolve_path(other_cwd, path)
     };
 
     let ptr = statbuf as *mut Kstat;
 
     let mut tempstat: Kstat = Kstat::new();
     // 检查路径是否有效并打开文件
-    match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
+    match open(target_path, OpenFlags::O_RDONLY) {
         Ok(FileClass::File(file)) => {
             file.fstat(&mut tempstat)?;
-            info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             unsafe{ core::ptr::write(ptr, tempstat); }
             return Ok(0);
         }
         Ok(FileClass::Abs(file)) => {
             file.fstat(&mut tempstat)?;
-            info!("[sys_fstatat] path = {} {:?}", target_path, tempstat);
             unsafe{ core::ptr::write(ptr, tempstat); }
             return Ok(0);
         }
@@ -257,12 +249,12 @@ pub fn sys_fstat(fd: usize, kst: usize) -> SysResult<usize> {
 /// 如果pathname是相对路径, 且dirfd不是AT_FDCWD, 那么就从dirfd指定的目录开始访问
 /// 
 /// 暂时忽略_mask就全部塞进去算了
-pub fn sys_statx(dirfd: i32, pathname: *const u8, flags: u32, mask: u32, statxbuf: *const u8) -> SysResult<usize> {
+pub fn sys_statx(dirfd: i32, pathname: usize, flags: u32, mask: u32, statxbuf: usize) -> SysResult<usize> {
     info!("[sys_statx] start");
     let dirfd = dirfd as isize;
     let task = current_task().unwrap();
     let token = task.get_user_token();
-    let path = translated_str(token, pathname);
+    let path = user_cstr(pathname.into())?.unwrap();
     let cwd = task.get_current_path();
 
     // 无效的掩码
@@ -274,12 +266,8 @@ pub fn sys_statx(dirfd: i32, pathname: *const u8, flags: u32, mask: u32, statxbu
     info!("[sys_statx] start cwd: {}, pathname: {}, flags: {}", cwd, path, flags);
 
     // 计算目标路径
-    let target_path = if path.starts_with("/") {
-        // 绝对路径，忽略 dirfd
-        path
-    } else if dirfd == AT_FDCWD {
-        // 相对路径，以当前目录为起点
-        join_path_2_absolute(cwd.clone(), path)
+    let target_path = if dirfd == AT_FDCWD {
+        resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
         if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
@@ -287,24 +275,17 @@ pub fn sys_statx(dirfd: i32, pathname: *const u8, flags: u32, mask: u32, statxbu
         }
         let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_statx] not found fd");
         let other_cwd = inode.get_name()?;
-        join_path_2_absolute(other_cwd, path)
+        resolve_path(other_cwd, path)
     };
-
-    let mut buffer = UserBuffer::new(
-        translated_byte_buffer(
-            token, 
-            statxbuf, 
-            core::mem::size_of::<Statx>()
-    ));
 
     let mut stat = Kstat::new();
     // 检查路径是否有效并打开文件
-    match open(&cwd, target_path.as_str(), OpenFlags::O_RDONLY) {
+    match open(target_path, OpenFlags::O_RDONLY) {
         Ok(FileClass::File(file)) => {
             file.fstat(&mut stat)?;
             let mut statx: Statx = stat.into();
             statx.set_mask(mask);
-            buffer.write(statx.as_bytes());
+            unsafe{ core::ptr::write(statxbuf as *mut Statx, statx); } // 这里没有做长度检查
             debug_point!("");
             return Ok(0);
         }
@@ -312,12 +293,11 @@ pub fn sys_statx(dirfd: i32, pathname: *const u8, flags: u32, mask: u32, statxbu
             file.fstat(&mut stat)?;
             let mut statx: Statx = stat.into();
             statx.set_mask(mask);
-            buffer.write(statx.as_bytes());
+            unsafe{ core::ptr::write(statxbuf as *mut Statx, statx); }
             debug_point!("");
             return Ok(0);
         }
         Err(e) => {
-            info!("statx fail {},  {}", cwd, target_path);
             return Err(e);
         }
     }
@@ -328,21 +308,16 @@ pub fn sys_statx(dirfd: i32, pathname: *const u8, flags: u32, mask: u32, statxbu
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult<usize> {
     info!("[sys_openat] start");
-
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = user_cstr(path.into())?.unwrap();
     let flags = OpenFlags::from_bits(flags as i32).unwrap();
+    let cwd = task.get_current_path();
     info!("[sys_openat] path = {}, flags = {:?}", path, flags);
 
     // 计算目标路径
-    let target_path = if path.starts_with("/") {
-        // 绝对路径，忽略 fd
-        path
-    } else if fd == AT_FDCWD {
-        // 相对路径，以当前目录为起点
-        let current_path = task.get_current_path();
-        join_path_2_absolute(current_path, path)
+    let target_path = if fd == AT_FDCWD {
+        resolve_path(cwd, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
         if fd < 0 || fd as usize > RLIMIT_NOFILE {
@@ -351,11 +326,11 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         let inode = task.get_file_by_fd(fd as usize).unwrap();
         let other_cwd = inode.get_name()?;
         info!("[sys_openat] other cwd = {}", other_cwd);
-        join_path_2_absolute(other_cwd, path)
+        resolve_path(other_cwd, path)
     };
-    let cwd = task.get_current_path();
+
     // 检查路径是否有效并打开文件
-    match open(cwd.as_str() , target_path.as_str(), flags) {
+    match open(target_path, flags) {
         Ok(fileclass) => {
             let fd = match fileclass {
                 FileClass::File(file) => {
@@ -558,21 +533,17 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 /// 
 /// Success: 0; Fail: 返回-1
 pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
-    // Err(Errno::EBADCALL)
     info!("[sys_mkdirat] start");
 
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = user_cstr(path.into())?.unwrap();
+    let cwd = task.get_current_path();
 
     // 计算目标路径
-    let target_path = if path.starts_with("/") {
-        // 绝对路径，忽略 dirfd
-        path
-    } else if dirfd == AT_FDCWD {
+    let target_path = if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
-        let current_path = task.get_current_path();
-        join_path_2_absolute(current_path, path)
+        resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
         if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
@@ -580,11 +551,9 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
         }
         let inode = task.get_file_by_fd(dirfd as usize).unwrap();
         let other_cwd = inode.get_name()?;
-        join_path_2_absolute(other_cwd, path)
+        resolve_path(other_cwd, path)
     };
     // info!("sys_mkdirat target_path is {}", target_path);
-
-    // drop(inner);
 
     // TODO
     // 返回错误码有问题,应当返回EEXIST:目录存在;EACCES:权限不足;EROFS:文件系统只读;
@@ -592,12 +561,13 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
     // ELOOP:符号链接过多;ENOSPC:没有足够的空间;EFAULT:路径错误;等
 
     // 检查路径是否有效并创建目录
-    match mkdir(target_path.as_str(), mode) {
+    match mkdir(target_path, mode) {
         Ok(_) => Ok(0), // 成功
         _ => Err(Errno::EBADCALL)
     }
 }
 
+// TODO: 有待完善，利用好flag，修改umount参数为AbsPath
 /// 卸载文件系统：https://man7.org/linux/man-pages/man2/umount.2.html
 /// 
 /// Success: 0; Fail: 返回-1
@@ -666,15 +636,11 @@ pub fn sys_chdir(path: usize) -> SysResult<usize> {
     let current_path = task.get_current_path();
 
     // 计算新路径
-    let target_path = if path.starts_with("/") {
-        path
-    } else {
-        join_path_2_absolute(current_path, path)
-    };
+    let target_path = resolve_path(current_path, path);
 
     // 检查路径是否有效
-    let result = if chdir(&target_path) {
-        task.set_current_path(target_path); // 更新当前路径
+    let result = if chdir(target_path.clone()) {
+        task.set_current_path(target_path.get()); // 更新当前路径
         Ok(0) // 成功
     } else {
         Err(Errno::EBADCALL) // 失败
@@ -690,10 +656,12 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     let token = task.get_user_token();
     let path = user_cstr(path.into())?.unwrap();
     // info!("[sys_unlink] start path = {}", path);
-    let is_relative = !path.starts_with("/");
     let base = task.get_current_path();
     info!("[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}", fd, base, path, flags);
-    match open(&base, &path, OpenFlags::O_RDWR) {
+
+    let target_path = resolve_path(base, path);
+
+    match open(target_path.clone(), OpenFlags::O_RDWR) {
         Ok(file_class) => {
             let file = file_class.file()?;
             // info!("[unlink] file path = {}", file.path);
@@ -704,8 +672,7 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
             if flags == AT_REMOVEDIR && !is_dir {
                 return Err(Errno::ENOTDIR);
             }
-            let child_abs = join_path_2_absolute(base, path);
-            file.get_inode().unlink(&child_abs);
+            file.get_inode().unlink(&target_path.get());
         }
         Err(e) => {
             // info!("[sys_unlinkat] open file failed: {:?}", e);
@@ -730,6 +697,7 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     Ok(0)
 }
 
+/// TODO:这里的rename好像没有真正实现
 pub fn sys_renameat2(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
@@ -738,36 +706,28 @@ pub fn sys_renameat2(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: 
     let cwd = task.get_current_path();
     info!("[sys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: {} ", &olddirfd, &old_path, &newdirfd, &new_path);
 
-    let old_path = if old_path.starts_with("/") {
-        old_path
+    let old_path = if olddirfd == AT_FDCWD {
+        resolve_path(cwd.clone(), old_path)
     } else {
-        if olddirfd == AT_FDCWD {
-            join_path_2_absolute(cwd.clone(), old_path)
-        } else {
-            match task.get_file_by_fd(olddirfd as usize) {
-                Some(file) => {
-                    join_path_2_absolute(file.get_name()?, old_path)
-                }
-                None => {
-                    return Err(Errno::EBADF);
-                }
+        match task.get_file_by_fd(olddirfd as usize) {
+            Some(file) => {
+                resolve_path(file.get_name()?, old_path)
+            }
+            None => {
+                return Err(Errno::EBADF);
             }
         }
     };
 
-    let new_path = if new_path.starts_with("/") {
-        new_path
+    let new_path = if newdirfd == AT_FDCWD {
+        resolve_path(cwd.clone(), new_path)
     } else {
-        if newdirfd == AT_FDCWD {
-            join_path_2_absolute(cwd.clone(), new_path)
-        } else {
-            match task.get_file_by_fd(newdirfd as usize) {
-                Some(file) => {
-                    join_path_2_absolute(file.get_name()?, new_path)
-                }
-                None => {
-                    return Err(Errno::EBADF);
-                }
+        match task.get_file_by_fd(newdirfd as usize) {
+            Some(file) => {
+                resolve_path(file.get_name()?, new_path)
+            }
+            None => {
+                return Err(Errno::EBADF);
             }
         }
     };
@@ -784,54 +744,46 @@ pub fn sys_linkat(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: usi
     let cwd = task.get_current_path();
     // info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: {}", &olddirfd, &old_path, &newdirfd, &new_path);
 
-    let old_path = if old_path.starts_with("/") {
-        old_path
+    let old_path = if olddirfd == AT_FDCWD {
+        resolve_path(cwd.clone(), old_path)
     } else {
-        if olddirfd == AT_FDCWD {
-            join_path_2_absolute(cwd.clone(), old_path)
-        } else {
-            match task.get_file_by_fd(olddirfd as usize) {
-                Some(file) => {
-                    join_path_2_absolute(file.get_name()?, old_path)
-                }
-                None => {
-                    return Err(Errno::EBADF);
-                }
+        match task.get_file_by_fd(olddirfd as usize) {
+            Some(file) => {
+                resolve_path(file.get_name()?, old_path)
+            }
+            None => {
+                return Err(Errno::EBADF);
             }
         }
     };
 
-    if let Ok(inode) = Dentry::get_inode_from_path(&old_path) {
+    if let Ok(inode) = Dentry::get_inode_from_path(&old_path.get()) {
         if inode.node_type() == InodeType::Dir {
             return Err(Errno::EISDIR);
         }
     }
 
-    let new_path = if old_path.starts_with("/") {
-        new_path
+    let new_path = if newdirfd == AT_FDCWD {
+        resolve_path(cwd.clone(), new_path)
     } else {
-        if newdirfd == AT_FDCWD {
-            join_path_2_absolute(cwd.clone(), old_path.clone())
-        } else {
-            match task.get_file_by_fd(newdirfd as usize) {
-                Some(file) => {
-                    join_path_2_absolute(file.get_name()?, new_path)
-                }
-                None => {
-                    return Err(Errno::EACCES);
-                }
+        match task.get_file_by_fd(newdirfd as usize) {
+            Some(file) => {
+                resolve_path(file.get_name()?, new_path)
+            }
+            None => {
+                return Err(Errno::EACCES);
             }
         }
     };
 
     if olddirfd == AT_FDCWD {
-        if let Ok(file_class) = open(&cwd, &old_path, OpenFlags::O_RDWR) {
+        if let Ok(file_class) = open(old_path, OpenFlags::O_RDWR) {
             let file = file_class.file()?;
-            let has_same = file.is_child(&new_path);
+            let has_same = file.is_child(&new_path.get());
             if has_same {
                 return Err(Errno::EEXIST);
             }
-            file.get_inode().link(&new_path);
+            file.get_inode().link(&new_path.get());
         }
     }
     Ok(0)
@@ -892,11 +844,11 @@ pub fn sys_faccessat(
     let mut path = user_cstr(pathname.into())?.unwrap();
     info!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
+    let cwd = task.get_current_path();
+    
     let abs = if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
-        let current_path = current_task().unwrap().get_current_path();
-        // path.insert(0, '.');
-        join_path_2_absolute(current_path, path)
+        resolve_path(cwd, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
         if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE {
@@ -904,11 +856,11 @@ pub fn sys_faccessat(
         }
         let inode = current_task().unwrap().get_file_by_fd(dirfd as usize).expect("[sys_faccessat] get file by fd failed");
         let other_cwd = inode.get_name()?;
-        join_path_2_absolute(other_cwd, path)
+        resolve_path(other_cwd, path)
     };
 
-    let cwd = task.get_current_path();
-    if let Ok(file_class) = open(&cwd, abs.as_str(), OpenFlags::O_RDONLY) {
+    
+    if let Ok(file_class) = open(abs, OpenFlags::O_RDONLY) {
         let file = file_class.file()?;
         let inode = file.get_inode();
         if mode.contains(FaccessatMode::F_OK) {
@@ -1081,25 +1033,20 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
     // 如果是空，那么就是dirfd对应文件
     let inode = if pathname != 0 {
         let cwd = task.get_current_path();
-        let mut path = user_cstr(pathname.into())?.unwrap();
+        let path = user_cstr(pathname.into())?.unwrap();
+        let target_path = resolve_path(cwd, path);
         
         let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
 
-        open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT)?.file()?.get_inode()
-
-        // let file = open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT).ok_or("error path");
-        // let file = if let Ok(file) = file {
-        //     file.file()?
-        // } else {
-        //     return Err(Errno::ENOENT);
-        // };
-        // file.get_inode()
+        open(target_path, OpenFlags::O_RDWR | OpenFlags::O_CREAT)?.file()?.get_inode()
     } else {
         let res = match dirfd {
             AT_FDCWD => { 
                 let cwd = task.get_current_path();
-                let mut path = user_cstr(pathname.into())?.unwrap();
-                open(&cwd, &path, OpenFlags::O_RDWR | OpenFlags::O_CREAT)?.file()?.get_inode()
+                let path = user_cstr(pathname.into())?.unwrap();
+                let target_path = resolve_path(cwd, path);
+
+                open(target_path, OpenFlags::O_RDWR | OpenFlags::O_CREAT)?.file()?.get_inode()
             }
             _ => {
                 let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -1157,12 +1104,12 @@ pub fn sys_utimensat(dirfd: isize, pathname: usize, times: *const [TimeSpec; 2],
 /// 注意到当前没有真正地实现,返回值全为0,代表不支持该功能
 pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let token = task.get_user_token();
+    let cwd = task.get_current_path();
     let pathname = user_cstr(pathname.into())?.unwrap();
     info!("[sys_readlinkat] start, dirfd: {}, pathname: {}.", dirfd, pathname);
 
-    let pathname = Path::string2path(pathname);
-    if !pathname.is_absolute() {
+    let target_path = resolve_path(cwd, pathname);
+    if !target_path.is_absolute() {
         if dirfd == AT_FDCWD {
             let cwd = task.get_current_path();
             todo!();
@@ -1171,7 +1118,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
         }
     } else {
         // 由于暂时没有实现软链接,所以先这么做吧,把这个文件重定向到/musl/busybox
-        if pathname.get() == "/proc/self/exe" {
+        if target_path.get() == "/proc/self/exe" {
             let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
                 buf
             } else {
@@ -1187,7 +1134,7 @@ pub fn sys_readlinkat(dirfd: isize, pathname: usize, buf: usize, bufsiz: usize) 
             }
         }
 
-        if let Ok(FileClass::File(file)) = open_file(&pathname.get(), OpenFlags::O_RDONLY) {
+        if let Ok(FileClass::File(file)) = open(target_path, OpenFlags::O_RDONLY) {
             let ub= if let Ok(Some(buf)) = user_slice_mut::<u8>(buf.into(), bufsiz) {
                 buf
             } else {

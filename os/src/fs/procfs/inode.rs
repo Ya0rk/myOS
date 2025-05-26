@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 use log::error;
 use lwext4_rust::bindings::O_RDONLY;
 use riscv::register::hcounteren::read;
-use crate::{fs::{dirent::build_dirents, ffi::MEMINFO, open_file, Dirent, FileClass, InodeTrait, InodeType, Kstat, OpenFlags, Path}, sync::{SpinNoIrqLock, TimeStamp}, utils::SysResult};
+use crate::{fs::{dirent::build_dirents, ffi::MEMINFO, open, AbsPath, Dirent, FileClass, InodeTrait, InodeType, Kstat, OpenFlags}, sync::{SpinNoIrqLock, TimeStamp}, utils::SysResult};
 
 /// ProcFsInodeInner 是一个枚举类型, 代表proc文件系统中的inode的类型
 /// 
@@ -26,6 +26,8 @@ enum ProcFsInodeInner {
     exe,
     /// 内存使用信息
     meminfo,
+    /// 记录当前系统挂载的所有文件系统信息(busybox的df测例)
+    mounts,
 }
 
 /// ProcFsInode is a struct that represents an inode in the proc filesystem.
@@ -103,13 +105,14 @@ impl InodeTrait for ProcFsInode {
             ProcFsInodeInner::_self => crate::fs::InodeType::Dir,
             ProcFsInodeInner::exe => crate::fs::InodeType::File,
             ProcFsInodeInner::meminfo => crate::fs::InodeType::File,
+            ProcFsInodeInner::mounts => crate::fs::InodeType::File,
         }
     }
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
         // 非常重要
         match self.inner {
             ProcFsInodeInner::exe => {
-                if let Ok(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
+                if let Ok(FileClass::File(exe)) = open(AbsPath::new(String::from("/bin/sh")), OpenFlags::O_RDONLY) {
                     exe.metadata.inode.read_at(offset, &mut buf).await
                 } else {
                     // error!("open /bin/sh failed");
@@ -159,8 +162,8 @@ impl InodeTrait for ProcFsInode {
         // Ok(alloc::vec![])
         match self.inner {
             ProcFsInodeInner::exe => {
-                // 瞎**返回一个, 在tcb里面没找到当前进程的可执行文件的路径
-                if let Ok(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
+                // 随便返回一个, 在tcb里面没找到当前进程的可执行文件的路径
+                if let Ok(FileClass::File(exe)) = open("/bin/sh".into(), OpenFlags::O_RDONLY) {
                     exe.metadata.inode.read_all().await
                 } else {
                     Err(crate::utils::Errno::EACCES)
@@ -178,7 +181,7 @@ impl InodeTrait for ProcFsInode {
         }
     }
     fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
-        let pattern = Path::string2path(String::from(path)).get_filename();
+        let pattern = AbsPath::new(String::from(path)).get_filename();
         match self.inner {
             ProcFsInodeInner::root => {
                 if pattern == "self" {
@@ -205,7 +208,7 @@ impl InodeTrait for ProcFsInode {
         let mut res = Kstat::new();
         match self.inner {
             ProcFsInodeInner::exe => {
-                if let Ok(FileClass::File(exe)) = open_file("/bin/sh", OpenFlags::O_RDONLY) {
+                if let Ok(FileClass::File(exe)) = open("/bin/sh".into(), OpenFlags::O_RDONLY) {
                     exe.metadata.inode.fstat()
                 } else {
                     // error!("open /bin/sh failed");

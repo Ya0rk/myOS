@@ -36,7 +36,6 @@ use crate::fs::{autorun, gbshell, initproc, mbshell};
 use crate::{fs::FileClass, sync::block_on};
 use thread_group::ThreadGroup;
 use crate::fs::OpenFlags;
-use crate::fs::open_file;
 use cfg_if::cfg_if;
 
 ///Add init process to the manager

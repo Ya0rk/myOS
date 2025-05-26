@@ -7,16 +7,27 @@ use core::fmt::Debug;
 use alloc::{format, string::{String, ToString}, vec::Vec};
 use log::info;
 
+use crate::task::current_task;
+
 /// Represents a file system path.
 /// 
 /// This structure wraps a string and provides various operations for path manipulation.
 #[derive(Debug, Clone)]
-pub struct Path {
+pub struct AbsPath {
     /// The underlying path string
     content: String,
 }
 
-impl Path {
+impl From<&str> for AbsPath {
+    /// 使用这里之前，需要明确一定是绝对路径
+    fn from(value: &str) -> Self {
+        Self {
+            content: value.to_string()
+        }
+    }
+}
+
+impl AbsPath {
     /// Splits a path into parent and child components using the given delimiter.
     /// 
     /// # Arguments
@@ -30,7 +41,7 @@ impl Path {
     /// # Examples
     /// 
     /// ```
-    /// let path = Path::string2path("/home/user/file.txt".to_string());
+    /// let path = AbsPath::new("/home/user/file.txt".to_string());
     /// let (parent, child) = path.split_with("/");
     /// assert_eq!(parent, "/home/user");
     /// assert_eq!(child, "file.txt");
@@ -51,7 +62,7 @@ impl Path {
     /// # Arguments
     /// 
     /// * `path` - The string to convert into a Path
-    pub fn string2path(path: String) -> Self {
+    pub fn new(path: String) -> Self {
         Self {
             content: parse_path(path)
         }
@@ -119,37 +130,7 @@ impl Path {
     }
 }
 
-/// Unit tests for the Path implementation.
-#[allow(unused)]
-pub fn path_test() {
-    let p1 = Path::string2path(String::from("foo/bar"));
-    let p2 = Path::string2path(String::from("/root"));
-
-    assert!(!p1.is_absolute(), "p1 should be relative path");
-    assert!(p2.is_absolute(), "p2 should be absolute path");
-
-    let root = Path::string2path(String::from("/"));
-    assert!(root.is_root(), "check root faild");
-
-    // 测试路径规范化
-    assert_eq!(parse_path("a/b/../c".to_string()), "a/c");
-    assert_eq!(parse_path("a/b/./c".to_string()), "a/b/c");
-    assert_eq!(parse_path("../a/../b".to_string()), "../b");
-    assert_eq!(parse_path("/./../a".to_string()), "/a");
-    assert_eq!(parse_path("//a//b//".to_string()), "/a/b");
-    
-    // 测试更多边界情况
-    assert_eq!(parse_path("/".to_string()), "/");
-    assert_eq!(parse_path("/..".to_string()), "/");
-    assert_eq!(parse_path("".to_string()), ".");
-    assert_eq!(parse_path(".".to_string()), ".");
-    assert_eq!(parse_path("..".to_string()), "..");
-    assert_eq!(parse_path("../../a".to_string()), "../../a");
-    assert_eq!(parse_path("/a/../../b".to_string()), "/b");
-
-    println!("path_test passed!");
-}
-
+/// 处理路径中..和.以及多于的/,可以参考下方的test实例
 fn parse_path(path: String) -> String {
     let components: Vec<&str> = path.split("/").collect();
     let mut normalized = Vec::new();
@@ -191,13 +172,55 @@ fn parse_path(path: String) -> String {
     }
 }
 
-pub fn join_path_2_absolute(base: String, suffix: String) -> String {
-    if suffix.starts_with("/") {
-        return suffix;
+/// 根据当前的路径和传入的目标路径， 获取目标地址 绝对路径
+/// 
+/// base: 是基地址，可以是当前绝对路径或者是其他绝对路径
+/// 
+/// path: 是目标路径，可以是绝对路径或相对路径
+pub fn resolve_path(base: String, path: String) -> AbsPath {
+    // 首先处理一下传入的path, 去掉多于的//、..和.等
+    let path = parse_path(path);
+    // 已经是绝对路径直接返回,忽略base
+    if path.starts_with("/") {
+        return AbsPath::new(path);
     }
-    let trim_base = base.trim_end_matches("/").to_string();
-    let temp = format!("{}/{}", trim_base, suffix);
-    let content = parse_path(temp);
 
-    content
+    // 根据当前路径进行拼接
+    let trim_base = base.trim_end_matches("/").to_string();
+    let target_abs = format!("{}/{}", trim_base, path);
+    let target_abs = parse_path(target_abs);
+
+    AbsPath::new(target_abs)
+}
+
+
+/// Unit tests for the Path implementation.
+#[allow(unused)]
+pub fn path_test() {
+    let p1 = AbsPath::new(String::from("foo/bar"));
+    let p2 = AbsPath::new(String::from("/root"));
+
+    assert!(!p1.is_absolute(), "p1 should be relative path");
+    assert!(p2.is_absolute(), "p2 should be absolute path");
+
+    let root = AbsPath::new(String::from("/"));
+    assert!(root.is_root(), "check root faild");
+
+    // 测试路径规范化
+    assert_eq!(parse_path("a/b/../c".to_string()), "a/c");
+    assert_eq!(parse_path("a/b/./c".to_string()), "a/b/c");
+    assert_eq!(parse_path("../a/../b".to_string()), "../b");
+    assert_eq!(parse_path("/./../a".to_string()), "/a");
+    assert_eq!(parse_path("//a//b//".to_string()), "/a/b");
+    
+    // 测试更多边界情况
+    assert_eq!(parse_path("/".to_string()), "/");
+    assert_eq!(parse_path("/..".to_string()), "/");
+    assert_eq!(parse_path("".to_string()), ".");
+    assert_eq!(parse_path(".".to_string()), ".");
+    assert_eq!(parse_path("..".to_string()), "..");
+    assert_eq!(parse_path("../../a".to_string()), "../../a");
+    assert_eq!(parse_path("/a/../../b".to_string()), "/b");
+
+    println!("path_test passed!");
 }

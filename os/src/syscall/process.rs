@@ -1,7 +1,7 @@
 use core::mem::size_of;
 use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
-use crate::fs::{join_path_2_absolute, open, open_file, FileClass, OpenFlags};
+use crate::fs::{open, resolve_path, AbsPath, FileClass, OpenFlags};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
@@ -210,7 +210,8 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // 应当去实现复杂的错误处理
     // 对于路径上文件的问题,返回值应当和open的返回值一样?
     // 当返回的文件不是可执行文件的时候应当返回 Errno::ENOEXEC?
-    if let Ok(FileClass::File(file)) = open(cwd.as_str(), path.as_str(), OpenFlags::O_RDONLY) {
+    let target_path = resolve_path(cwd, path);
+    if let Ok(FileClass::File(file)) = open(target_path, OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;
         Ok(0)

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use log::info;
 use sbi_spec::pmu::cache_event::NODE;
 use crate::{
-    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
+    fs::{ffi::RenameFlags, AbsPath, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 
@@ -222,12 +222,12 @@ impl FileTrait for NormalFile {
             return 0;
         };
 
-        // if self.path == "/musl/ltp" || self.path == "/musl/basic"
-        //     || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
+        if self.path == "/musl/ltp" || self.path == "/musl/basic"
+            || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
 
-        //         info!("alsdkjlaskdfj");
-        //         return 0;
-        // }
+                info!("alsdkjlaskdfj");
+                return 0;
+        }
         
         // Some(dir_entrys)
         let dirs = self.metadata.inode.read_dents();

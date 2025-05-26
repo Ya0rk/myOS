@@ -1,6 +1,6 @@
 use core::sync::atomic::AtomicUsize;
 use crate::{
-    fs::{ext4::NormalFile, ffi::InodeType, page_cache::PageCache, Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
+    fs::{ext4::NormalFile, ffi::InodeType, page_cache::PageCache, AbsPath, Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
     utils::SysResult
 };
@@ -152,7 +152,7 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `child_name` - The name of the child to unlink
+    /// * `child_name` - The abs path of the child to unlink
     ///
     /// # Returns
     ///
