@@ -89,6 +89,8 @@ pub enum SysCode {
     SYSCALL_SET_ROBUST_LIST = 99,
     SYSCALL_GET_ROBUST_LIST = 100,
     SYSCALL_NANOSLEEP = 101,
+    SYSCALL_GETITIMER  = 102,
+    SYSCALL_SETITIMER  = 103,
     SYSCALL_CLOCK_SETTIME = 112,
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_CLOCK_NANOSLEEP = 115,
@@ -157,6 +159,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_GETITIMER => "getitimer",
+            Self::SYSCALL_SETITIMER => "settimer",
             Self::MEMEBARRIER => "membarrier",
             Self::SYSCALL_GETRUSAGE => "getrusage",
             Self::SYSCALL_MREMAP => "mremap",
@@ -732,3 +736,5 @@ impl Rusage {
         ret
     }
 }
+
+

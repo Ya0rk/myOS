@@ -2,10 +2,10 @@ use core::mem::size_of;
 use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, resolve_path, AbsPath, FileClass, OpenFlags};
-use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref};
+use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
-use crate::sync::time::{CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, TIMER_ABSTIME};
+use crate::sync::time::{ITimerVal, CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, ITIMER_PROF, ITIMER_REAL, ITIMER_VIRTUAL, TIMER_ABSTIME};
 use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
 use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
 use crate::syscall::RLimit64;
@@ -21,7 +21,6 @@ use log::{debug, info};
 use lwext4_rust::bindings::true_;
 use num_enum::TryFromPrimitive;
 use zerocopy::IntoBytes;
-
 use super::ffi::Sysinfo;
 
 // use super::ffi::Utsname;
@@ -923,5 +922,62 @@ pub fn sys_getrusage(who: isize, usage: usize) -> SysResult<usize> {
     }
     let ptr = unsafe{ usage as *mut Rusage };
     unsafe{ core::ptr::write(ptr, res); }
+    Ok(0)
+}
+
+/// TODO(YJJ): 这个和getitimer是适配cyclic测例的，分数较低，最后实现。
+/// 设置进程的定时器, setitimer 是进程级别的，所有线程共享同一组定时器
+/// 用于设置定时器（Timer）的系统调用，允许进程在指定时间间隔后接收信号（如 SIGALRM）。
+/// 它是实现周期性任务或超时机制的核心工具之一。
+/// which: 指定时钟类型
+/// new_value：新定时器配置。
+/// old_value：旧定时器配置。如果不为null，就将旧的定时器配置写入到这个地址
+pub fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> SysResult<usize> {
+    info!("[sys_setitimer] start, which = {}, new_value = {:#x}, old_value = {:#x}", which, new_value, old_value);
+    if new_value == 0 {
+        info!("[sys_setitimer] new_value is null.");
+        return Err(Errno::EFAULT);
+    }
+
+    let task = current_task().unwrap();
+
+    // 先保存旧的itimer配置
+    if old_value != 0 {
+        let old_ptr = unsafe{ old_value as *mut ITimerVal };
+        let mut cur_itimer = task.itimers.lock()[which];
+        // 修改it_value为剩余时间
+        // 获取当前时间的timeval
+        let now = TimeVal::new();
+        cur_itimer.it_value = cur_itimer.it_value - now;
+        unsafe {
+            core::ptr::write(old_ptr, cur_itimer);
+        }
+    }
+
+    match which {
+        ITIMER_REAL => {
+            
+        }
+        ITIMER_VIRTUAL => { unimplemented!() }
+        ITIMER_PROF    => { unimplemented!() }
+        _ => {
+            info!("[sys_setitimer] invalid which = {}", which);
+            return Err(Errno::EINVAL);
+        }
+    }
+
+
+    Ok(0)
+}
+/// TODO(YJJ): 这个和getitimer是适配cyclic测例的，分数较低，最后实现。
+pub fn sys_getitimer(which: usize, curr_value: usize) -> SysResult<usize> {
+    info!("[sys_getitimer] start");
+    if curr_value == 0 {
+        info!("[sys_getitimer] curr_value is null.");
+        return Err(Errno::EFAULT);
+    }
+
+
+
     Ok(0)
 }

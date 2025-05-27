@@ -14,6 +14,7 @@ use crate::hal::config::INITPROC_PID;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
+use crate::sync::time::ITimerVal;
 use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
 use crate::syscall::CloneFlags;
 use crate::task::manager::get_init_proc;
@@ -31,21 +32,22 @@ use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 
 pub struct TaskControlBlock {
     // 不可变
-    pub pid:            Pid,
+    pub pid:        Pid,
 
     // 可变
-    tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
-    pgid:           AtomicUsize, // 所属进程组id号
-    task_status:    SpinNoIrqLock<TaskStatus>,
+    pub tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
+    pub pgid:           AtomicUsize, // 所属进程组id号
+    pub task_status:    SpinNoIrqLock<TaskStatus>,
 
     pub thread_group:   Shared<ThreadGroup>,
     pub memory_space:   Shared<MemorySpace>,
     pub parent:         Shared<Option<Weak<TaskControlBlock>>>,
-    pub children:   Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
-    pub fd_table:   Shared<FdTable>,
-    current_path:   Shared<String>,
-    pub robust_list: Shared<RobustList>,
-    pub futex_list: Shared<FutexBucket>,
+    pub children:       Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
+    pub fd_table:       Shared<FdTable>,
+    pub current_path:   Shared<String>,
+    pub robust_list:    Shared<RobustList>,
+    pub futex_list:     Shared<FutexBucket>,
+    pub itimers:        Shared<[ITimerVal; 3]>, // 三个定时器，分别对应SIGALRM, SIGVTALRM, SIGPROF
 
     // signal
     pub pending:        AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
@@ -56,13 +58,13 @@ pub struct TaskControlBlock {
     pub sig_stack:      SyncUnsafeCell<Option<SignalStack>>, // 信号栈，保存信号栈信息
 
 
-    waker:          SyncUnsafeCell<Option<Waker>>,
-    trap_cx:        SyncUnsafeCell<TrapContext>,
-    time_data:      SyncUnsafeCell<TimeData>,
-    clear_child_tid:SyncUnsafeCell<Option<usize>>,
-    set_child_tid:  SyncUnsafeCell<Option<usize>>,
+    pub waker:          SyncUnsafeCell<Option<Waker>>,
+    pub trap_cx:        SyncUnsafeCell<TrapContext>,
+    pub time_data:      SyncUnsafeCell<TimeData>,
+    pub clear_child_tid:SyncUnsafeCell<Option<usize>>,
+    pub set_child_tid:  SyncUnsafeCell<Option<usize>>,
 
-    exit_code:      AtomicI32,
+    pub exit_code:      AtomicI32,
 }
 
 impl TaskControlBlock {
@@ -100,6 +102,7 @@ impl TaskControlBlock {
             current_path: new_shared(String::from("/")), // root directory
             robust_list: new_shared(RobustList::new()),
             futex_list: new_shared(FutexBucket::new()),
+            itimers: new_shared([ITimerVal::default(); 3]),
 
             pending: AtomicBool::new(false),
             ucontext: AtomicUsize::new(0),
@@ -187,6 +190,7 @@ impl TaskControlBlock {
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
         let futex_list = new_shared(FutexBucket::new());
+        let itimers = new_shared([ITimerVal::default(); 3]);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().clone())
@@ -232,6 +236,7 @@ impl TaskControlBlock {
             current_path,
             robust_list,
             futex_list,
+            itimers,
 
             pending,
             ucontext,
@@ -281,6 +286,7 @@ impl TaskControlBlock {
         let set_child_tid = SyncUnsafeCell::new(None);
         let exit_code = AtomicI32::new(0);
         let futex_list = self.futex_list.clone();
+        let itimers = self.itimers.clone();
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) { // 修改这里的致命错误
             true  => self.fd_table.clone(),
             false => new_shared(self.fd_table.lock().deref().clone())
@@ -325,6 +331,7 @@ impl TaskControlBlock {
             sig_stack,
             robust_list,
             futex_list,
+            itimers,
 
             task_status,
             thread_group,
