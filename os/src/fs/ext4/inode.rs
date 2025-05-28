@@ -88,10 +88,11 @@ impl InodeTrait for Ext4Inode {
     /// 创建文件或者目录,self是父目录,path是子文件的绝对路径,这里是要创建一个Inode
     fn do_create(&self, path: &str, types: InodeType) -> Option<Arc<dyn InodeTrait>> {
         info!("[do_create] start {}", path);
-        let page_cache = match types.into() {
-            InodeTypes::EXT4_DE_REG_FILE => Some(PageCache::new_bare()),
-            _ => None
-        };
+        // let page_cache = match types.into() {
+        //     InodeTypes::EXT4_DE_REG_FILE => Some(PageCache::new_bare()),
+        //     _ => None
+        // };
+        let page_cache = Some(PageCache::new_bare());
         // 注意到原来这里是一个虚假的闯将,应当修改为在ext4文件系统中,真实的创建.
         // 这里文件创建的标识 O_RDWR | O_CREAT | O_TRUNC 和原来的fs/mod.rs::open函数中保持一致
         match types.clone().into() {
@@ -239,7 +240,8 @@ impl InodeTrait for Ext4Inode {
     fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
-            let page_cache = None;
+            // let page_cache = None;
+            let page_cache = Some(PageCache::new_bare());
             Some(Ext4Inode::new(path, InodeTypes::EXT4_DE_DIR, page_cache.clone()))
         } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
             let page_cache = Some(PageCache::new_bare());

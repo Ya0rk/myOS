@@ -80,6 +80,8 @@ pub fn init() {
 }
 
 pub fn create_init_files() -> SysResult {
+    mkdir("/usr".into(), 0);
+    mkdir("/tmp".into(), 0);
     //创建/dev文件夹
     mkdir("/dev".into(), 0);
     //创建./dev/misc文件夹
@@ -107,7 +109,6 @@ pub fn create_init_files() -> SysResult {
     register_device("/dev/misc/rtc");
     
     open("/dev/null".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
-    open("/tmp".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
     //创建/etc/adjtime记录时间偏差
     open("/etc/adjtime".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建./etc/localtime记录时区

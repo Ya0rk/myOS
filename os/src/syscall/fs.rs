@@ -172,9 +172,15 @@ pub fn sys_fstatat(
         if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
             return Err(Errno::EBADF);
         }
-        let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_fstatat] not found fd");
+        let inode = match task.get_file_by_fd(dirfd as usize) {
+            Some(i) => i,
+            _ => return Ok(0),
+        };
         // let other_cwd = cwd.clone();
-        let other_cwd = inode.get_name()?; 
+        let other_cwd = inode.get_name()?;
+        if other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") {
+            return Ok(0);
+        }
         resolve_path(other_cwd, path)
     };
 

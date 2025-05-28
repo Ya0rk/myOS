@@ -115,3 +115,11 @@ pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
     if fd > task.fd_table_len() { return Err(Errno::EBADF); }
     Ok(0)
 }
+
+
+pub fn sys_pselect() -> SysResult<usize> {
+    info!("[sys_pselect] start.");
+    
+
+    Ok(0)
+}

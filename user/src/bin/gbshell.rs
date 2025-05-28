@@ -55,9 +55,25 @@ fn main() -> i32 {
     //     "busybox ln -s /lib/glibc/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1 ",
     // );
     run_cmd("/glibc/busybox --install /bin\0");
+    let cd = "/glibc/";
+    chdir(&conert_str2byte(cd));
     if fork() == 0 {
         println!("main run sh");
-        run_cmd("/bin/sh\0");
+        execve(
+            "/glibc/busybox\0",
+            &[
+                "/glibc/busybox\0",
+                "sh\0",
+                "-c\0",
+                "/bin/sh\0",
+            ],
+            &[
+                "PATH=/bin:/\0",
+                "HOME=/\0",
+                "LD_LIBRARY_PATH=/\0",
+                "TERM=screen\0",
+            ],
+        );
     } else {
         println!("main parent");
         loop {
