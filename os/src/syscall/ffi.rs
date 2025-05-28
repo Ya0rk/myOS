@@ -60,9 +60,11 @@ pub enum SysCode {
     SYSCALL_MOUNT     = 40,
     SYSCALL_STATFS    = 43,
     SYSCALL_FTRUNCATE64 = 46,
+    SYSCALL_FALLOCAT  = 47,
     SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR     = 49,
     SYSCALL_FCHMODAT  = 53,
+    SYSCALL_FCHOWNAT  = 54,
     SYSCALL_OPENAT    = 56,
     SYSCALL_CLOSE     = 57,
     SYSCALL_PIPE2     = 59,
@@ -75,7 +77,7 @@ pub enum SysCode {
     SYSCALL_PREAD64   = 67,
     SYSCALL_PWRITE64  = 68,
     SYSCALL_SENDFILE  = 71,
-    // SYSCALL_PSELECT   = 72, // todo in io.rs
+    SYSCALL_PSELECT   = 72,
     SYSCALL_PPOLL     = 73,
     SYSCALL_READLINKAT = 78,
     SYSCALL_FSTATAT   = 79,
@@ -95,6 +97,8 @@ pub enum SysCode {
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_CLOCK_NANOSLEEP = 115,
     SYSCALL_SYSLOG    = 116,
+    SYSCALL_SCHED_SETAFFINITY = 122,
+    SYSCALL_SCHED_GETAFFINITY = 123,
     SYSCALL_YIELD     = 124,
     SYSCALL_KILL      = 129,
     SYSCALL_TKILL     = 130,
@@ -114,6 +118,7 @@ pub enum SysCode {
     SYSCALL_GETPPID   = 173,
     SYSCALL_GETUID    = 174,
     SYSCALL_GETEUID   = 175,
+    SYSCALL_GETGID    = 176,
     SYSCALL_GETEGID   = 177,
     SYSCALL_GETTID    = 178,
     SYSCALL_SYSINFO   = 179,
@@ -137,6 +142,7 @@ pub enum SysCode {
     SYSCALL_EXECVE    = 221,
     SYSCALL_MMAP      = 222,
     SYSCALL_MPROTECT  = 226,
+    SYSCALL_MSYNC     = 227,
     SYSCALL_MADVISE   = 233,
     SYSCALL_ACCEPT4   = 242,
     SYSCALL_WAIT4     = 260,
@@ -159,6 +165,13 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_PSELECT => "pselect",
+            Self::SYSCALL_FALLOCAT => "fallocate",
+            Self::SYSCALL_MSYNC => "msync",
+            Self::SYSCALL_FCHOWNAT => "fchownat",
+            Self::SYSCALL_GETGID => "getgid",
+            Self::SYSCALL_SCHED_GETAFFINITY => "sched_getaffinity",
+            Self::SYSCALL_SCHED_SETAFFINITY => "sched_setaffinity",
             Self::SYSCALL_GETITIMER => "getitimer",
             Self::SYSCALL_SETITIMER => "settimer",
             Self::MEMEBARRIER => "membarrier",
@@ -738,3 +751,18 @@ impl Rusage {
 }
 
 
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct CpuSet {
+    pub set: [u64; 16], // 128位的位图，表示CPU集
+}
+
+impl Default for CpuSet {
+    fn default() -> Self {
+        Self {
+            set: [1; 16], // 初始化为全1，表示包含任何CPU
+        }
+    }
+}
+
+pub const CPUSET_LEN: usize = size_of::<CpuSet>();

@@ -20,6 +20,7 @@ pub use ffi::CloneFlags;
 pub use ffi::ShutHow;
 pub use ffi::RLimit64;
 pub use ffi::StatFs;
+pub use ffi::CpuSet;
 use crate::sync::TimeSpec;
 use crate::utils::SysResult;
 
@@ -28,6 +29,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_FALLOCAT => sys_fallocate(),
+        SysCode::SYSCALL_MSYNC => sys_msync(),
+        SysCode::SYSCALL_FCHOWNAT => sys_fchownat(),
+        SysCode::SYSCALL_GETGID => sys_getgid(),
+        SysCode::SYSCALL_SCHED_GETAFFINITY => sys_sched_getaffinity(args[0] as usize, args[1] as usize, args[2] as usize),
+        SysCode::SYSCALL_SCHED_SETAFFINITY => sys_sched_setaffinity(args[0] as usize, args[1] as usize, args[2] as usize),
         SysCode::MEMEBARRIER => sys_membarrier(),
         SysCode::SYSCALL_GETRUSAGE => sys_getrusage(args[0] as isize, args[1] as usize),
         SysCode::SYSCALL_SETSOCKOPT => sys_setsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),

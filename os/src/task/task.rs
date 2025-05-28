@@ -16,7 +16,7 @@ use crate::mm::{memory_space, translated_refmut, MapPermission};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::time::ITimerVal;
 use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
-use crate::syscall::CloneFlags;
+use crate::syscall::{CloneFlags, CpuSet};
 use crate::task::manager::get_init_proc;
 use crate::task::{add_task, current_task, current_user_token, get_task_by_pid, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY};
 use crate::hal::trap::TrapContext;
@@ -63,6 +63,7 @@ pub struct TaskControlBlock {
     pub time_data:      SyncUnsafeCell<TimeData>,
     pub clear_child_tid:SyncUnsafeCell<Option<usize>>,
     pub set_child_tid:  SyncUnsafeCell<Option<usize>>,
+    pub cpuset:         SyncUnsafeCell<CpuSet>,
 
     pub exit_code:      AtomicI32,
 }
@@ -117,6 +118,7 @@ impl TaskControlBlock {
             time_data: SyncUnsafeCell::new(TimeData::new()),
             clear_child_tid: SyncUnsafeCell::new(None),
             set_child_tid:   SyncUnsafeCell::new(None),
+            cpuset: SyncUnsafeCell::new(CpuSet::default()),
 
             exit_code: AtomicI32::new(0),
         });
@@ -189,6 +191,7 @@ impl TaskControlBlock {
         let robust_list = new_shared(RobustList::new());
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
+        let cpuset = SyncUnsafeCell::new(CpuSet::default());
         let futex_list = new_shared(FutexBucket::new());
         let itimers = new_shared([ITimerVal::default(); 3]);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
@@ -251,6 +254,7 @@ impl TaskControlBlock {
             time_data,
             clear_child_tid,
             set_child_tid,
+            cpuset,
             exit_code,
         });
         // add child
@@ -284,6 +288,7 @@ impl TaskControlBlock {
         let time_data = SyncUnsafeCell::new(TimeData::new());
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
+        let cpuset = SyncUnsafeCell::new(CpuSet::default());
         let exit_code = AtomicI32::new(0);
         let futex_list = self.futex_list.clone();
         let itimers = self.itimers.clone();
@@ -345,6 +350,7 @@ impl TaskControlBlock {
             time_data,
             clear_child_tid,
             set_child_tid,
+            cpuset,
             exit_code,
         });
 
@@ -532,6 +538,15 @@ impl TaskControlBlock {
 }
 
 impl TaskControlBlock {
+    /// 获取cpuset
+    pub fn get_cpuset(&self) -> &CpuSet {
+        unsafe { &*self.cpuset.get() }
+    }
+    /// 设置cpuset
+    pub fn set_cpuset(&self, cpuset: CpuSet) {
+        unsafe{ *self.cpuset.get() = cpuset; }
+    }
+
     /// 检测pending字段，判断是否有信号需要处理
     pub fn pending(&self) -> bool {
         self.pending.load(core::sync::atomic::Ordering::SeqCst)

@@ -7,8 +7,8 @@ use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, trans
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{ITimerVal, CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, ITIMER_PROF, ITIMER_REAL, ITIMER_VIRTUAL, TIMER_ABSTIME};
 use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
-use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
-use crate::syscall::RLimit64;
+use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
+use crate::syscall::{CpuSet, RLimit64};
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, TaskStatus, MANAGER
 };
@@ -979,5 +979,82 @@ pub fn sys_getitimer(which: usize, curr_value: usize) -> SysResult<usize> {
 
 
 
+    Ok(0)
+}
+
+
+/// 设置 CPU 亲和力的掩码，从而将该线程或者进程和指定的CPU绑定
+/// 该函数设置进程为pid的这个进程,让它运行在mask所设定的CPU上
+/// 
+/// 如果pid的值为0,则表示指定的是当前进程,使当前进程运行在mask所设定的那些CPU上.
+/// 
+/// 第二个参数cpusetsize是mask所指定的数的长度.通常设定为sizeof(cpu_set_t).
+/// 如果当前pid所指定的进程此时没有运行在mask所指定的任意一个CPU上,则该指定的进程会从其它CPU上迁移到mask的指定的一个CPU上运行.
+/// 
+pub fn sys_sched_setaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SysResult<usize> {
+    info!("[sys_sched_setaffinity] start");
+    if mask == 0 {
+        info!("[sys_sched_setaffinity] mask is null");
+        return Err(Errno::EFAULT);
+    }
+    if cpusetsize < CPUSET_LEN {
+        info!("[sys_sched_setaffinity] cpusetsize is too small");
+        return Err(Errno::EINVAL);
+    }
+
+    let task = match pid {
+        0 => current_task().unwrap(),
+        _ => get_task_by_pid(pid).ok_or(Errno::ESRCH)?,
+    };
+
+    let mask_ptr = unsafe { mask as *const CpuSet };
+    task.set_cpuset(unsafe { *mask_ptr });
+
+    Ok(0)
+}
+
+/// 该函数获得pid所指示的进程的CPU位掩码,并将该掩码返回到mask所指向的结构中.
+/// 即获得指定pid当前可以运行在哪些CPU上.同样,如果pid的值为0.也表示的是当前进程
+pub fn sys_sched_getaffinity(pid: usize, cpusetsize: usize, mask: usize) -> SysResult<usize> {
+    info!("[sys_sched_getaffinity] start");
+    if mask == 0 {
+        info!("[sys_sched_getaffinity] mask is null");
+        return Err(Errno::EFAULT);
+    }
+    if cpusetsize < CPUSET_LEN {
+        info!("[sys_sched_getaffinity] cpusetsize is too small");
+        return Err(Errno::EINVAL);
+    }
+
+    let task = match pid {
+        0 => current_task().unwrap(),
+        _ => get_task_by_pid(pid).ok_or(Errno::ESRCH)?,
+    };
+
+    let mask_ptr = unsafe { mask as *mut CpuSet };
+    unsafe { core::ptr::write(mask_ptr, *task.get_cpuset()) };
+
+    Ok(0)
+}
+
+pub fn sys_getgid() -> SysResult<usize> {
+    info!("[sys_getgid] start");
+    Ok(0)
+}
+
+pub fn sys_fchownat() -> SysResult<usize> {
+    info!("[sys_fchownat] start");
+    Ok(0)
+}
+
+/// synchronize a file with a memory map
+/// TODO: 有待实现
+pub fn sys_msync() -> SysResult<usize> {
+    info!("[sys_msync] start");
+    Ok(0)
+}
+
+pub fn sys_fallocate() -> SysResult<usize> {
+    info!("[sys_fallocate] start");
     Ok(0)
 }

@@ -206,11 +206,12 @@ impl InodeTrait for Ext4Inode {
     fn truncate(&self, size: usize) -> usize {
         let mut file = self.file.lock();
 
-        let r = file.file_truncate(size as u64);
+        // let r = file.file_truncate(size as u64);  // 暂时注释
         self.set_size(size).expect("[truncate]: set size fail!");
 
         // file.file_close();
-        r.map_or_else(|_| Errno::EIO.into(), |_| 0)
+        // r.map_or_else(|_| Errno::EIO.into(), |_| 0) //暂时注释
+        0
     }
     /// 同步文件
     async fn sync(&self) {
