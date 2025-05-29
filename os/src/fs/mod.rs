@@ -172,6 +172,7 @@ fn create_open_file(
             } else {
                 // no need to create
                 debug!("[create_open_file] path = {} no need to creat", target_abs_path);
+                error!("no create file = {}", target_abs_path);
                 return Err(Errno::ENOENT);
             }
             

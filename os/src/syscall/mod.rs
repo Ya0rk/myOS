@@ -29,6 +29,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_GETITIMER => sys_getitimer(args[0] as usize, args[1] as usize),
+        SysCode::SYSCALL_SETITIMER => sys_setitimer(args[0] as usize, args[1] as usize, args[2] as usize).await,
         SysCode::SYSCALL_FALLOCAT => sys_fallocate(),
         SysCode::SYSCALL_MSYNC => sys_msync(),
         SysCode::SYSCALL_FCHOWNAT => sys_fchownat(),

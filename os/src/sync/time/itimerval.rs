@@ -1,3 +1,7 @@
+use core::time::Duration;
+
+use crate::sync::time_duration;
+
 use super::TimeVal;
 
 ///
@@ -19,4 +23,19 @@ pub struct ITimerVal {
     /// - 若两个字段均为 0，表示立即禁用定时器
     /// - 对应 `setitimer()` 中 `itimerval.it_value` 的语义
     pub it_value: TimeVal,
+}
+
+
+pub struct ItimerHelp {
+    pub it_interval: Duration,
+    pub it_value: Duration,
+}
+
+impl From<ITimerVal> for ItimerHelp {
+    fn from(value: ITimerVal) -> Self {
+        Self {
+            it_interval: Duration::from(value.it_interval),
+            it_value: Duration::from(value.it_value),
+        }
+    }
 }

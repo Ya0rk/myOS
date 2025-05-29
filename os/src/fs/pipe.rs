@@ -168,8 +168,13 @@ impl FileTrait for Pipe {
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        todo!()
+    fn fstat(&self, stat: &mut Kstat) -> SysResult {
+        *stat = Kstat::new();
+        stat.st_nlink = 1;
+        stat.st_size = PIPE_BUFFER_SIZE as i64;
+        stat.st_blksize = 512;
+        stat.st_blocks = (PIPE_BUFFER_SIZE / 512) as i64;
+        Ok(())
     }
 
     fn is_dir(&self) -> bool {

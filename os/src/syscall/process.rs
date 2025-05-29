@@ -1,4 +1,4 @@
-use core::mem::size_of;
+use core::mem::{size_of, uninitialized};
 use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, resolve_path, AbsPath, FileClass, OpenFlags};
@@ -6,11 +6,11 @@ use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
 use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
 use crate::sync::time::{ITimerVal, CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, ITIMER_PROF, ITIMER_REAL, ITIMER_VIRTUAL, TIMER_ABSTIME};
-use crate::sync::{get_waker, sleep_for, suspend_now, time_duration, yield_now, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
+use crate::sync::{get_waker, itimer_callback, sleep_for, suspend_now, time_duration, yield_now, ItimerFuture, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
 use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
 use crate::syscall::{CpuSet, RLimit64};
 use crate::task::{
-    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, spawn_user_task, TaskStatus, MANAGER
+    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, new_process_group, spawn_user_task, TaskStatus, MANAGER
 };
 use crate::utils::{Errno, SysResult, RNG};
 use alloc::ffi::CString;
@@ -245,7 +245,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
         match pid {
             // pid = -1: 等待任意子进程
             -1 => {
-                info!("wait any child");
+                info!("wait any child, child = {}", locked_child.len());
                 locked_child.values().find(|task| 
                     task.is_zombie() 
                     && task.thread_group.lock().thread_num() == 1
@@ -422,11 +422,17 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> SysResult<usize> {
     info!("[sys_setpgid] pid is {pid} old_pgid is {old_pgid}");
     if pgid == 0{
         let new_pgid = pid;
-        target_task.set_pgid(pid);
-        extract_proc_to_new_group(old_pgid, new_pgid, pid);
+        target_task.set_pgid(new_pgid);
+        new_process_group(new_pgid, pid);
+        // extract_proc_to_new_group(old_pgid, new_pgid, pid);
     } else {
         target_task.set_pgid(pgid);
-        extract_proc_to_new_group(old_pgid, pgid, pid);
+        if get_target_proc_group(pgid).is_none() {
+            new_process_group(pgid, pid);
+            return Ok(0);
+        }
+        add_proc_group_member(pgid, pid);
+        // extract_proc_to_new_group(old_pgid, pgid, pid);
     }
     Ok(0)
 }
@@ -666,7 +672,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
             // 获取当前进程组id
             let pgid = cur_task.get_pgid();
             let sender_pid = cur_task.get_pid();
-            let target_group = get_target_proc_group(pgid);
+            let target_group = get_target_proc_group(pgid).ok_or(Errno::ESRCH)?;
             info!("[sys_kill] target_group = {:?}", target_group);
             let siginfo = SigInfo::new(signum, SigCode::User, SigErr::empty(), SigDetails::Kill { pid: sender_pid, uid:0 } );
             for target_pid in target_group.into_iter().filter(|pid| *pid != sender_pid) {
@@ -705,7 +711,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
             return Ok(0);
         }
         Target::ProcessGroup(p) => {
-            let target_group = get_target_proc_group(p);
+            let target_group = get_target_proc_group(p).ok_or(Errno::ESRCH)?;
             println!("[sys_kill] target_group = {:?},", target_group);
             let cur_task = current_task().unwrap();
             let sender_pid = cur_task.get_pgid();
@@ -932,7 +938,7 @@ pub fn sys_getrusage(who: isize, usage: usize) -> SysResult<usize> {
 /// which: 指定时钟类型
 /// new_value：新定时器配置。
 /// old_value：旧定时器配置。如果不为null，就将旧的定时器配置写入到这个地址
-pub fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> SysResult<usize> {
+pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> SysResult<usize> {
     info!("[sys_setitimer] start, which = {}, new_value = {:#x}, old_value = {:#x}", which, new_value, old_value);
     if new_value == 0 {
         info!("[sys_setitimer] new_value is null.");
@@ -940,6 +946,7 @@ pub fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> SysRes
     }
 
     let task = current_task().unwrap();
+    let pid = task.get_pid();
 
     // 先保存旧的itimer配置
     if old_value != 0 {
@@ -956,7 +963,25 @@ pub fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> SysRes
 
     match which {
         ITIMER_REAL => {
-            
+            let new_itimer = unsafe{ *(new_value as *const ITimerVal) };
+            let next_expire = task.whit_itimers(|itimers|{
+                let itimer = &mut itimers[which];
+                
+                if new_itimer.it_value.is_zero() {
+                    itimer.it_value.set(0, 0);
+                    itimer.it_interval = new_itimer.it_interval;
+                    itimer.it_value
+                } else {
+                    itimer.it_value = (time_duration() + Duration::from(new_itimer.it_interval)).into();
+                    itimer.it_interval = new_itimer.it_interval;
+                    itimer.it_value
+                }
+            });
+            // 建立定时任务的回调函数，每到一个时间间隔就出发callback函数
+            if !new_itimer.it_value.is_zero() {
+                let callback = move || itimer_callback(pid, new_itimer.it_interval);
+                ItimerFuture::new(Duration::from(next_expire), callback, task, which).await;
+            }
         }
         ITIMER_VIRTUAL => { unimplemented!() }
         ITIMER_PROF    => { unimplemented!() }
@@ -965,7 +990,6 @@ pub fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> SysRes
             return Err(Errno::EINVAL);
         }
     }
-
 
     Ok(0)
 }
@@ -977,7 +1001,17 @@ pub fn sys_getitimer(which: usize, curr_value: usize) -> SysResult<usize> {
         return Err(Errno::EFAULT);
     }
 
-
+    let task = current_task().unwrap();
+    match which {
+        ITIMER_REAL => {
+            let curr_ptr = unsafe{ curr_value as *mut ITimerVal };
+            let itimer = task.itimers.lock()[which];
+            unsafe{ core::ptr::write(curr_ptr, itimer); }
+        }
+        ITIMER_PROF    => { unimplemented!() }
+        ITIMER_VIRTUAL => { unimplemented!() }
+        _ => return Err(Errno::EINVAL),
+    }
 
     Ok(0)
 }

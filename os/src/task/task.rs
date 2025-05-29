@@ -538,6 +538,14 @@ impl TaskControlBlock {
 }
 
 impl TaskControlBlock {
+    pub fn whit_itimers<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut [ITimerVal; 3]) -> R,
+    {
+        let mut itimers = self.itimers.lock();
+        f(&mut itimers)
+    }
+
     /// 获取cpuset
     pub fn get_cpuset(&self) -> &CpuSet {
         unsafe { &*self.cpuset.get() }
