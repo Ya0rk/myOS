@@ -61,6 +61,9 @@ impl FileTrait for DevTty {
         // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
         todo!()
     }
+    fn is_deivce(&self) -> bool {
+        false
+    }
 }
 
 

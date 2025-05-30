@@ -299,3 +299,5 @@ impl From<InodeType> for InodeTypes {
 
 pub const S_IFCHR: u32 = 0o0020000;
 pub const S_IFDIR: u32 = 0o0040000;
+pub const S_IFBLK: u32 = 0o0060000;
+

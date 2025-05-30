@@ -3,7 +3,11 @@ mod zero;
 mod null;
 mod rtc;
 mod urandom;
+mod root;
+mod dev_loop;
 
+use dev_loop::{DevLoop, DEVLOOP};
+use log::info;
 pub use tty::*;
 pub use zero::*;
 pub use null::*;
@@ -36,6 +40,8 @@ pub fn find_device(abs_path: &str) -> bool {
 
 pub fn open_device_file(abs_path: &str) -> Option<Arc<dyn FileTrait>> {
     // warning: just a fake implementation
+    info!("[open_device_file] {}", abs_path);
+    debug_point!("");
     if abs_path == "/dev/zero" {
         Some(Arc::new(DevZero::new()))
     } else if abs_path == "/dev/null" {
@@ -46,6 +52,8 @@ pub fn open_device_file(abs_path: &str) -> Option<Arc<dyn FileTrait>> {
         Some(Arc::new(DevRandom::new()))
     } else if abs_path == "/dev/tty" {
         Some(Arc::new(DevTty::new()))
+    } else if abs_path == "/dev/loop0" {
+        Some(DEVLOOP.clone())
     } else {
         None
     }

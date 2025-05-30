@@ -111,9 +111,19 @@ pub async fn sys_ppoll(
 
 /// control device
 pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
+    info!("[sys_ioctl] start fd: {}, op: {:#x}, arg: {:#x}", fd, op, arg);
     let task = current_task().unwrap();
     if fd > task.fd_table_len() { return Err(Errno::EBADF); }
-    Ok(0)
+    // Ok(0)
+    if let Some(file) = task.get_file_by_fd(fd) {
+        if file.is_deivce() {
+            file.get_inode().ioctl(op, arg)
+        } else {
+            return Ok(0)
+        }
+    } else {
+        Err(Errno::EBADF)
+    }
 }
 
 

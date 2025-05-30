@@ -222,12 +222,12 @@ impl FileTrait for NormalFile {
             return 0;
         };
 
-        if self.path == "/musl/ltp" || self.path == "/musl/basic"
-            || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
+        // if self.path == "/musl/ltp" || self.path == "/musl/basic"
+        //     || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
 
-                info!("alsdkjlaskdfj");
-                return 0;
-        }
+        //         info!("alsdkjlaskdfj");
+        //         return 0;
+        // }
         
         // Some(dir_entrys)
         let dirs = self.metadata.inode.read_dents();
@@ -261,6 +261,7 @@ impl FileTrait for NormalFile {
     }
     
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
+        // debug_point!("get_page_at");
         self.metadata.inode.get_page_cache().unwrap().get_page(offset).await
     }
 }

@@ -26,6 +26,7 @@ pub use dirent::Dirent;
 // pub use inode_cache::*;
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
+use riscv::register;
 // use sbi_rt::NonRetentive;
 use sbi_spec::pmu::cache_event::NODE;
 pub use stat::Kstat;
@@ -98,17 +99,19 @@ pub fn create_init_files() -> SysResult {
     
     //注册设备/dev/rtc和/dev/rtc0
     register_device("/dev/rtc");
+    register_device("/dev/null");
     register_device("/dev/rtc0");
     //注册设备/dev/tty
     register_device("/dev/tty");
     //注册设备/dev/zero
     register_device("/dev/zero");
+    register_device("/dev/loop0");
     //注册设备/dev/null
     // register_device("/dev/null");
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
     
-    open("/dev/null".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    // open("/dev/null".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
     //创建/etc/adjtime记录时间偏差
     open("/etc/adjtime".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建./etc/localtime记录时区
@@ -200,6 +203,7 @@ fn create_open_file(
 /// path为绝对路径
 pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<FileClass> {
     info!("[fs_open] abspath = {}, flags = {:?}", path.get(), flags);
+    debug_point!("[open]");
     // info!("[open] abspath = {}", abs_path.get());
     if !path.is_absolute() {
         panic!("[fs_open] path = {} is not absolte path.", path.get());

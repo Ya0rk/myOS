@@ -46,6 +46,11 @@ pub trait FileTrait: Send + Sync {
     fn writable(&self) -> bool;
     fn executable(&self) -> bool;
 
+    /// 临时机制, 为了在ioctl中判断
+    fn is_deivce(&self) -> bool {
+        false
+    } 
+
     /// 从文件中读取数据到用户缓冲区
     ///
     /// 尝试从文件中读取数据并填充到提供的缓冲区中，最多将缓冲区填满。

@@ -192,6 +192,11 @@ pub trait InodeTrait: Send + Sync {
 
     /// 获得目录项
     fn read_dents(&self) -> Option<Vec<Dirent>>;
+
+    /// io操作, 被sys_ioctl系统调用调用, 默认不支持这个操作
+    fn ioctl(&self, op: usize, arg: usize) -> SysResult<usize> {
+        Ok(0)
+    }
 }
 
 impl dyn InodeTrait {
