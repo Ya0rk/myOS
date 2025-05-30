@@ -144,6 +144,7 @@ pub enum SysCode {
     SYSCALL_MPROTECT  = 226,
     SYSCALL_MSYNC     = 227,
     SYSCALL_MADVISE   = 233,
+    SYSCALL_GET_MEMPOLICY = 236,
     SYSCALL_ACCEPT4   = 242,
     SYSCALL_WAIT4     = 260,
     SYSCALL_RENAMEAT2 = 276,
@@ -165,6 +166,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_GET_MEMPOLICY => "get_mempolicy",
             Self::SYSCALL_PSELECT => "pselect",
             Self::SYSCALL_FALLOCAT => "fallocate",
             Self::SYSCALL_MSYNC => "msync",
@@ -760,7 +762,7 @@ pub struct CpuSet {
 impl Default for CpuSet {
     fn default() -> Self {
         Self {
-            set: [1; 16], // 初始化为全1，表示包含任何CPU
+            set: [0u64; 16], // 初始化为全1，表示包含任何CPU
         }
     }
 }

@@ -81,6 +81,14 @@ pub fn init() {
 }
 
 pub fn create_init_files() -> SysResult {
+    // mkdir("/sys".into(), 0);
+    // mkdir("/sys/devices".into(), 0);
+    // mkdir("/sys/devices/system".into(), 0);
+    // mkdir("/sys/devices/system/node".into(), 0);
+    // mkdir("/sys/devices/system/node/node0".into(), 0);
+    // open("/sys/devices/system/node/node0/meminfo".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    // mkdir("/sys/devices/system/node/node1".into(), 0);
+    // open("/sys/devices/system/node/node1/meminfo".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     mkdir("/usr".into(), 0);
     mkdir("/tmp".into(), 0);
     //创建/dev文件夹
@@ -175,6 +183,7 @@ fn create_open_file(
             } else {
                 // no need to create
                 debug!("[create_open_file] path = {} no need to creat", target_abs_path);
+                error!("no create file = {}", target_abs_path);
                 return Err(Errno::ENOENT);
             }
             

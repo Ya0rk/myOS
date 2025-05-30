@@ -17,6 +17,15 @@ impl TimeVal {
         let tick = get_time_us();
         TimeVal { tv_sec: tick / USEC_PER_SEC, tv_usec: tick % USEC_PER_SEC }
     }
+
+    pub fn is_zero(&self) -> bool {
+        self.tv_sec == 0 && self.tv_usec == 0
+    }
+
+    pub fn set(&mut self, sec: usize, usec: usize) {
+        self.tv_sec = sec;
+        self.tv_usec = usec;
+    }
 }
 
 impl From<Duration> for TimeVal {
@@ -28,13 +37,19 @@ impl From<Duration> for TimeVal {
     }
 }
 
+impl From<TimeVal> for Duration {
+    fn from(value: TimeVal) -> Self {
+        Duration::new(value.tv_sec as u64, (value.tv_usec * 1000) as u32)
+    }
+}
+
 impl Sub for TimeVal {
     type Output = Self;
 
     /// 这里实现的是时间的差值，结果最小为0，不能是负数
     fn sub(self, other: Self) -> Self {
-        let sself = Duration::new(self.tv_sec as u64, (self.tv_usec * 1000) as u32);
-        let sother = Duration::new(other.tv_sec as u64, (other.tv_usec * 1000) as u32);
+        let sself = Duration::from(self);
+        let sother = Duration::from(other);
         let diff = sself.checked_sub(sother).unwrap_or(Duration::ZERO);
         TimeVal::from(diff)
     }

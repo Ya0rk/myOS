@@ -1,11 +1,9 @@
 use core::{cmp::Reverse, future::Future, pin::Pin, task::{Context, Poll}, time::Duration};
-
-use alloc::{collections::binary_heap::BinaryHeap, sync::Arc, vec::Vec};
+use alloc::{collections::binary_heap::BinaryHeap, sync::{Arc, Weak}, vec::Vec};
 use log::info;
 use spin::Lazy;
-use crate::{task::TaskControlBlock, utils::{Errno, SysResult}};
-
-use super::{timer::{time_duration, TimerTranc}, SpinNoIrqLock};
+use crate::{signal::{SigCode, SigDetails, SigErr, SigInfo, SigNom}, task::{get_task_by_pid, TaskControlBlock}, utils::{Errno, SysResult}};
+use super::{time::{ITimerVal, ItimerHelp}, timer::{self, time_duration, TimerTranc}, SpinNoIrqLock, TimeVal};
 
 // TODO(YJJ):使用时间轮和最小堆混合时间管理器来优化时间复杂度===========
 
@@ -52,7 +50,8 @@ impl TimerQueue {
 
 pub static TIMER_QUEUE: Lazy<TimerQueue> = Lazy::new(|| TimerQueue::new());
 
-/// 超时Future
+/// 超时Future，会在deadline之前反复调用，直到执行完成
+/// 如果超时后没有完成，就返回超时；和下面的定时任务不一样
 pub struct TimeoutFuture<F: Future> {
     inner: F,
     deadline: Duration,
@@ -127,4 +126,75 @@ impl Future for NullFuture {
         }
         Poll::Pending
     }
+}
+
+/// 用于itimer系统调用设置定时任务
+/// 超过时间就调用callback一次
+pub struct ItimerFuture<F: Fn() -> bool> {
+    pub next_expire: Duration,
+    pub task: Weak<TaskControlBlock>,
+    pub callback: F,
+    pub which: usize,
+}
+
+impl<F: Fn() -> bool> ItimerFuture<F> {
+    pub fn new(next_expire: Duration, callback: F, task: Arc<TaskControlBlock>, which: usize) -> Self {
+        Self {
+            next_expire,
+            task: Arc::downgrade(&task),
+            callback,
+            which
+        }
+    }
+
+}
+
+impl<F: Fn() -> bool> Future for ItimerFuture<F> {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe{ self.get_unchecked_mut() };
+        let res = this.task.upgrade().and_then(|task|{
+            // 加入时钟队列
+            let tmp = task.whit_itimers(|itimers| {
+                let cur_time = time_duration();
+                let real_time = itimers[this.which];
+
+                if cur_time >= this.next_expire {
+                    if !((this.callback)()) {
+                        return Some(Poll::Ready(()));
+                    }
+                }
+                let new_timer = TimerTranc::new(this.next_expire, cx.waker().clone());
+                TIMER_QUEUE.add(new_timer);
+                this.next_expire = (Duration::from(real_time.it_interval) + time_duration());
+                Some(Poll::Pending)
+            });
+            tmp
+        }).unwrap();
+        res
+    }
+}
+
+pub fn itimer_callback(pid: usize, iterval: TimeVal) -> bool {
+    let task = match get_task_by_pid(pid) {
+        Some(task) => task,
+        _ => return false,
+    };
+
+    let siginfo = SigInfo {
+        signo: SigNom::SIGALRM,
+        sigcode: SigCode::Kernel,
+        sigerr: SigErr::empty(),
+        sifields: SigDetails::None,
+    };
+
+    task.proc_recv_siginfo(siginfo);
+
+    // 如果iterval为0，代表不触发下一次
+    if iterval.is_zero() {
+        return false;
+    }
+
+    return true;
 }

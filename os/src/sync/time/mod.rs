@@ -11,6 +11,7 @@ pub use tms::Tms;
 pub use timedata::TimeData;
 pub use timestamp::TimeStamp;
 pub use itimerval::ITimerVal;
+pub use itimerval::ItimerHelp;
 
 /// 实时系统时钟，可能受系统时间调整影响 (例如NTP同步)
 pub const CLOCK_REALTIME: usize = 0;

@@ -139,6 +139,6 @@ pub fn extract_proc_to_new_group(old_pgid: PGid, new_pgid: PGid, pid: Pid) {
 }
 
 /// 获取一个进程组
-pub fn get_target_proc_group(pgid: PGid) -> Vec<Pid> {
-    MANAGER.process_group.lock().0.get(&pgid).cloned().unwrap()
+pub fn get_target_proc_group(pgid: PGid) -> Option<Vec<usize>> {
+    MANAGER.process_group.lock().0.get(&pgid).cloned()
 }
