@@ -10,7 +10,7 @@ use crate::sync::{get_waker, itimer_callback, sleep_for, suspend_now, time_durat
 use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
 use crate::syscall::{CpuSet, RLimit64};
 use crate::task::{
-    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, new_process_group, spawn_user_task, TaskStatus, MANAGER
+    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, new_process_group, spawn_kernel_task, spawn_user_task, TaskStatus, MANAGER
 };
 use crate::utils::{Errno, SysResult, RNG};
 use alloc::ffi::CString;
@@ -982,7 +982,7 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
             // 建立定时任务的回调函数，每到一个时间间隔就出发callback函数
             if !new_itimer.it_value.is_zero() {
                 let callback = move || itimer_callback(pid, new_itimer.it_interval);
-                ItimerFuture::new(Duration::from(next_expire), callback, task, which).await;
+                spawn_kernel_task(async move{ItimerFuture::new(Duration::from(next_expire), callback, task, which).await});
             }
         }
         ITIMER_VIRTUAL => { unimplemented!() }

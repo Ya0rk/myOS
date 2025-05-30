@@ -314,10 +314,14 @@ pub fn sys_statx(dirfd: i32, pathname: usize, flags: u32, mask: u32, statxbuf: u
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult<usize> {
     info!("[sys_openat] start");
+    if path == 0 {
+        info!("[sys_openat] path ptr is null, fault.");
+        return Err(Errno::EFAULT); 
+    }
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = user_cstr(path.into())?.unwrap();
-    let flags = OpenFlags::from_bits(flags as i32).unwrap();
+    let flags = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
     info!("[sys_openat] path = {}, flags = {:?}", path, flags);
 
