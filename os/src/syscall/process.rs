@@ -1092,3 +1092,8 @@ pub fn sys_fallocate() -> SysResult<usize> {
     info!("[sys_fallocate] start");
     Ok(0)
 }
+
+pub fn sys_get_mempolicy() -> SysResult<usize> {
+    info!("[sys_get_mempolicy] start");
+    Ok(0)
+}

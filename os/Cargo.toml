@@ -5,25 +5,22 @@ authors = ["Yao Junjie <345024941@qq.com>"]
 edition = "2021"
 
 [dependencies]
-# riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
-lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
-buddy_system_allocator = "0.11.0"
-bitflags = "2.8.0"
-xmas-elf = "0.10.0"
-# virtio-drivers = { path = "../vendor/virtio-drivers" }
-# virtio-drivers = { path = "../vendor/virtio-drivers-new" }
-virtio-drivers = { git = "https://github.com/rcore-os/virtio-drivers.git"}
-flat_device_tree = { version = "3.1.1" }
-log = "0.4"
-spin = "0.10.0"
-sbi-spec = "0.0.8"
-num_enum = { version = "0.7.2", default-features = false }
-zerocopy = { version = "0.8.21", features = ["derive"]}
+lazy_static = { path = "../vendor/lazy_static", version = "1.4.0", features = ["spin_no_std"] }
+buddy_system_allocator = { path = "../vendor/buddy_system_allocator", version = "0.11.0"}
+bitflags = { path = "../vendor/bitflags", version = "2.8.0"}
+xmas-elf = { path = "../vendor/xmas-elf",  version = "0.10.0"}
+virtio-drivers = { path = "../vendor/virtio-drivers"}
+flat_device_tree = { path = "../vendor/flat_device_tree", version = "3.1.1" }
+log = { path = "../vendor/log", version = "0.4"}
+spin = { path = "../vendor/spin", version = "0.10.0" }
+sbi-spec = { path = "../vendor/sbi-spec",  version = "0.0.8"}
+num_enum = { path = "../vendor/num_enum", version = "0.7.2", default-features = false }
+zerocopy = { path = "../vendor/zerocopy", version = "0.8.21", features = ["derive"]}
 lwext4_rust= {path = "../lwext4_rust"}
-hashbrown = "0.15.2"
-async-task = { version = "4.7.1", default-features = false }
-async-trait = { version = "0.1.88"}
-crossbeam-queue = { version = "0.3", default-features = false, features = ["alloc"] }
+hashbrown = { path = "../vendor/hashbrown", version = "0.15.2" }
+async-task = { path = "../vendor/async-task", version = "4.7.1", default-features = false }
+async-trait = { path = "../vendor/async-trait", version = "0.1.88"}
+crossbeam-queue = { path = "../vendor/crossbeam-queue", version = "0.3", default-features = false, features = ["alloc"] }
 smoltcp = { path = "../vendor/smoltcp-0.12.0", version = "0.12.0", default-features = false, features = [
     "alloc",
     "log",
@@ -39,17 +36,16 @@ smoltcp = { path = "../vendor/smoltcp-0.12.0", version = "0.12.0", default-featu
     "async",
     "log",
 ] }
-bitvec-rs = { version="0.2.1", default-features = false }
-cfg-if = { version = "1.0.0", default-features = false }
-# loongarch64 = { git = "https://github.com/Godones/loongArch64", package = "loongArch64" }
+bitvec-rs = { path = "../vendor/bitvec-rs", version="0.2.1", default-features = false }
+cfg-if = { path = "../vendor/cfg-if", version = "1.0.0", default-features = false }
 paste = "1"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
-riscv = { git = "https://github.com/rcore-os/riscv", features = ["inline-asm"] }
-sbi-rt = { version = "0.0.3", features = ["legacy"] }
+riscv = { path = "../vendor/riscv", features = ["inline-asm"] }
+sbi-rt = { path = "../vendor/sbi-rt", version = "0.0.3", features = ["legacy"] }
 
 [target.'cfg(target_arch = "loongarch64")'.dependencies]
-loongarch64 = { git = "https://github.com/Godones/loongArch64", package = "loongArch64" }
+loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 board_qemu = []

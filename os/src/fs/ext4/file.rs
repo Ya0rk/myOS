@@ -1,9 +1,11 @@
+use core::cmp::min;
+
 use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
 use async_trait::async_trait;
 use log::info;
 use sbi_spec::pmu::cache_event::NODE;
 use crate::{
-    fs::{ffi::RenameFlags, AbsPath, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
+    fs::{ffi::{RenameFlags, MEMINFO}, AbsPath, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 
@@ -89,6 +91,16 @@ impl FileTrait for NormalFile {
         // }
 
         let mut new_offset = self.metadata.offset();
+
+        // if self.path.contains("meminfo") {
+        //     let data = MEMINFO.as_bytes();
+        //     let len = min(data.len(), buf.len()-new_offset);
+        //     if len == 0 { return Ok(0); }
+        //     buf[0..len].copy_from_slice(&data[new_offset..len]);
+        //     self.metadata.set_offset(new_offset + len);
+        //     return Ok(len);
+        // }
+
         // 这边要使用 iter_mut()，因为要将数据写入
         let read_size = self.metadata.inode.read_at(new_offset, buf).await;
         new_offset += read_size;
