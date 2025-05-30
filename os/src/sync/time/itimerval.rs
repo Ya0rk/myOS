@@ -1,7 +1,5 @@
-use core::time::Duration;
-
+use core::{fmt::{Display, Formatter}, time::Duration};
 use crate::sync::time_duration;
-
 use super::TimeVal;
 
 ///
@@ -25,6 +23,16 @@ pub struct ITimerVal {
     pub it_value: TimeVal,
 }
 
+impl Display for ITimerVal {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "ITimerVal {{ it_interval: {}, it_value: {} }}",
+            self.it_interval,
+            self.it_value
+        )
+    }
+}
 
 pub struct ItimerHelp {
     pub it_interval: Duration,

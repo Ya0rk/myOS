@@ -1,4 +1,4 @@
-use core::{ops::Sub, time::Duration};
+use core::{fmt::{Display, Formatter}, ops::Sub, time::Duration};
 use zerocopy::{Immutable, IntoBytes};
 use crate::{board::CLOCK_FREQ, hal::arch::get_time, sync::{time_duration, timer::{get_time_s, get_time_us, USEC_PER_SEC}}};
 
@@ -9,6 +9,12 @@ pub struct TimeVal {
     pub tv_sec: usize,
     /// 微秒
     pub tv_usec: usize,
+}
+
+impl Display for TimeVal {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}.{:06}", self.tv_sec, self.tv_usec)
+    }
 }
 
 impl TimeVal {
