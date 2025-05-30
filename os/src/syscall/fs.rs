@@ -37,7 +37,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, len) };
             Ok(file.write(buf).await? as usize)
         }
-        _ => Err(Errno::EBADCALL),
+        _ => Err(Errno::EBADF),
     }
 }
 
@@ -57,7 +57,7 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
             Ok(file.read(buf).await? as usize)
         }
-        _ => Err(Errno::EBADCALL),
+        _ => Err(Errno::EBADF),
     }
 }
 
@@ -98,7 +98,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
             }
             Ok(res)
         }
-        _ => Err(Errno::EBADCALL),
+        _ => Err(Errno::EBADF),
     }
 }
 
@@ -135,7 +135,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
             // info!("nnnnnnnnnnnn");
             Ok(res)
         }
-        _ => Err(Errno::EBADCALL),
+        _ => Err(Errno::EBADF),
     }
 }
 
@@ -233,7 +233,7 @@ pub fn sys_fstat(fd: usize, kst: usize) -> SysResult<usize> {
             return Ok(0);
         }
         _ => {
-            return Err(Errno::EBADCALL);
+            return Err(Errno::EBADF);
         }
     }
 
@@ -573,7 +573,7 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
     // 检查路径是否有效并创建目录
     match mkdir(target_path, mode) {
         Ok(_) => Ok(0), // 成功
-        _ => Err(Errno::EBADCALL)
+        Err(e) => Err(e)
     }
 }
 
@@ -649,14 +649,9 @@ pub fn sys_chdir(path: usize) -> SysResult<usize> {
     let target_path = resolve_path(current_path, path);
 
     // 检查路径是否有效
-    let result = if chdir(target_path.clone()) {
-        task.set_current_path(target_path.get()); // 更新当前路径
-        Ok(0) // 成功
-    } else {
-        Err(Errno::EBADCALL) // 失败
-    };
-
-    result
+    chdir(target_path.clone())?;
+    task.set_current_path(target_path.get()); // 更新当前路径
+    Ok(0) // 成功
 }
 
 

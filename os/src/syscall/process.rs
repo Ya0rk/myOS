@@ -67,7 +67,7 @@ pub fn sys_times(tms: usize) -> SysResult<usize> {
     let ptr = tms as *mut Tms;
     if ptr.is_null() {
         info!("[sys_times] tms is null");
-        return Err(Errno::EBADCALL);
+        return Err(Errno::EFAULT);
     }
     let data = Tms::new();
     unsafe{ core::ptr::write(ptr, data); }
@@ -83,7 +83,7 @@ pub fn sys_gettimeofday(tv: usize, _tz: *const u8) -> SysResult<usize> {
     info!("[sys_gettimeofday] start");
     let ptr = tv as *mut TimeVal;
     if ptr.is_null() {
-        return Err(Errno::EBADCALL);
+        return Err(Errno::EFAULT);
     }
     let data = TimeVal::new();
     unsafe{ core::ptr::write(ptr, data); }
@@ -100,7 +100,7 @@ pub fn sys_uname(buf: usize) -> SysResult<usize> {
     info!("[sys_uname] start");
     let ptr = buf as *mut Utsname;
     if ptr.is_null() {
-        return Err(Errno::EBADCALL);
+        return Err(Errno::EFAULT);
     }
 
     let data = Utsname::new();
@@ -354,7 +354,7 @@ pub fn sys_clock_settime(
     info!("[sys_clock_settime] start");
     if timespec.is_null() {
         info!("[sys_clock_settime] timespec is null");
-        return Err(Errno::EBADCALL);
+        return Err(Errno::EFAULT);
     }
     Ok(0)
 }
@@ -367,7 +367,7 @@ pub fn sys_clock_gettime(
     let ptr = timespec as *mut TimeSpec;
     if ptr.is_null() {
         info!("[sys_clock_gettime] timespec is null");
-        return Err(Errno::EBADCALL);
+        return Err(Errno::EFAULT);
     }
     let time = match clock_id {
         CLOCK_REALTIME | CLOCK_MONOTONIC => TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration()),
@@ -466,7 +466,7 @@ pub fn sys_sysinfo(sysinfo: usize) -> SysResult<usize> {
     info!("[sys_sysinfo] start");
     let ptr = sysinfo as *mut Sysinfo;
     if ptr.is_null() {
-        return Err(Errno::EBADCALL);
+        return Err(Errno::EFAULT);
     }
     let proc_num = get_proc_num();
     let bind = Sysinfo::new(proc_num);

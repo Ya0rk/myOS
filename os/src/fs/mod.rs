@@ -259,13 +259,12 @@ pub fn mkdir(target_abs_path: AbsPath, mode: usize) -> SysResult<()> {
 
 }
 
-pub fn chdir(target: AbsPath) -> bool {
+pub fn chdir(target: AbsPath) -> SysResult<()> {
     info!("[chdir] target = {}", target.get());
     
-    if let Ok(inode) = Dentry::get_inode_from_path(&target.get()) {
-        if inode.node_type() == InodeType::Dir {
-            return true;
-        }
+    let inode = Dentry::get_inode_from_path(&target.get())?;
+    if inode.node_type() == InodeType::Dir {
+        return Ok(());
     }
-    false
+    return Err(Errno::ENOTDIR);
 }
