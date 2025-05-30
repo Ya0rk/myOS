@@ -951,6 +951,7 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
     // 先保存旧的itimer配置
     if old_value != 0 {
         let old_ptr = unsafe{ old_value as *mut ITimerVal };
+        info!("[sys_setitimer] old = {}", unsafe{*old_ptr});
         let mut cur_itimer = task.itimers.lock()[which];
         // 修改it_value为剩余时间
         // 获取当前时间的timeval
@@ -964,6 +965,7 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
     match which {
         ITIMER_REAL => {
             let new_itimer = unsafe{ *(new_value as *const ITimerVal) };
+            info!("[sys_setitimer] new = {}", new_itimer);
             let next_expire = task.whit_itimers(|itimers|{
                 let itimer = &mut itimers[which];
                 
@@ -972,7 +974,7 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
                     itimer.it_interval = new_itimer.it_interval;
                     itimer.it_value
                 } else {
-                    itimer.it_value = (time_duration() + Duration::from(new_itimer.it_interval)).into();
+                    itimer.it_value = (time_duration() + Duration::from(new_itimer.it_value)).into();
                     itimer.it_interval = new_itimer.it_interval;
                     itimer.it_value
                 }
