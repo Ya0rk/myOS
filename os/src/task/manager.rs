@@ -1,3 +1,5 @@
+use core::fmt::Display;
+
 use crate::{hal::config::INITPROC_PID, sync::SpinNoIrqLock};
 use super::TaskControlBlock;
 use alloc::{sync::{Arc, Weak}, vec::Vec};
@@ -46,6 +48,20 @@ impl TaskManager {
     /// 获取一个任务
     pub fn get(&self, pid: Pid) -> Option<Arc<TaskControlBlock>> {
         self.0.get(&pid).and_then(|weak| weak.upgrade())
+    }
+}
+
+impl Display for TaskManager {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "TaskManager with {} tasks:", self.0.len())?;
+        for (pid, task) in self.0.iter() {
+            if let Some(task) = task.upgrade() {
+                writeln!(f, "  PID: {}, Task Status: {:?}", pid, task.get_status())?;
+            } else {
+                writeln!(f, "  PID: {}, Task: <deallocated>", pid)?;
+            }
+        }
+        Ok(())
     }
 }
 
