@@ -1,5 +1,7 @@
+use core::fmt::Display;
+
 // #![allow(unused)]
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{format, string::String, sync::Arc, vec::Vec};
 use log::info;
 use lwext4_rust::bindings::O_WRONLY;
 use crate::{
@@ -64,6 +66,19 @@ impl FdInfo {
         }
         Ok(())
 
+    }
+}
+
+impl Display for FdTable {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut msgs = String::from("FD TABLE:");
+        for (i, item) in self.table.iter().enumerate() {
+            if let Some(file) = &item.file {
+                let msg = format!("\n   {}: {}", i, file.get_name().unwrap());
+                msgs.push_str(&msg);
+            }
+        };
+        write!(f, "{}", msgs)
     }
 }
 
