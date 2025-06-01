@@ -11,6 +11,17 @@ use crate::{fs::{ffi::InodeType, mkdir, open, path, procfs::PROCFS_SUPER_BLOCK, 
 use alloc::sync::{Arc, Weak};
 use super::{inode, InodeTrait, SuperBlockTrait};
 
+#[derive(Copy, Clone, PartialEq)]
+pub enum DentryStatus  {
+    Valid,
+    Unused,
+}
+
+impl DentryStatus {
+    fn new() -> RwLock<Self> {
+        RwLock::new(Self::Valid)
+    }
+}
 
 /// 一个目录项,文件树在内存当中的映射
 pub struct Dentry {
@@ -22,6 +33,8 @@ pub struct Dentry {
     children: RwLock<HashMap<String, Arc<Dentry>>>,
     /// 用栈去存储当前的挂载的inode对象
     inode: RwLock<Vec<Arc<dyn InodeTrait>>>,
+    /// dentry的状态
+    status: RwLock<DentryStatus>,
 }
 
 impl PartialEq for Dentry {
@@ -64,6 +77,7 @@ impl Dentry {
                 parent: weak_self.clone(),
                 children: RwLock::new(HashMap::new()),
                 inode: RwLock::new(Vec::new()),
+                status: DentryStatus::new(),
             }
         })
     }
@@ -79,6 +93,7 @@ impl Dentry {
             parent: Arc::downgrade(self),
             children: RwLock::new(HashMap::new()),
             inode: RwLock::new(inode),
+            status: DentryStatus::new(),
         };
         let result = Arc::new(res);
         result
@@ -95,12 +110,29 @@ impl Dentry {
             parent: Arc::downgrade(self),
             children: RwLock::new(HashMap::new()),
             inode: RwLock::new(inodes),
+            status: DentryStatus::new(),
         };
         let res = Arc::new(res);
         self.children.write().insert(name.clone(), res.clone());
         debug!("[Dentry::new] {} insert child {} ", self.name.read(), name);
         res.inode.write().push(inode);
         res
+    }
+
+    fn is_valid(&self) -> bool {
+        *self.status.read() == DentryStatus::Valid
+    }
+
+    fn is_unused(&self) -> bool {
+        *self.status.read() == DentryStatus::Unused
+    }
+
+    fn set_valid(&self) {
+        *self.status.write() = DentryStatus::Valid;
+    }
+
+    fn set_unused(&self) {
+        *self.status.write() = DentryStatus::Unused;
     }
 
     fn get_parent(self: Arc<Self>) -> Arc<Self> {
@@ -200,6 +232,20 @@ impl Dentry {
         None
     }
 
+    /// make a hard link to 
+    pub fn link_to(&self, new_path: &str) -> SysResult<usize> {
+        
+        if let Ok(new_dentry) = Self::get_dentry_from_path(new_path) {
+            if !new_dentry.is_unused() {
+                return Err(Errno::EEXIST)
+            }
+            if let Some(inode) = new_dentry.get_inode() {
+                if inode.is_valid() {return Err(Errno::EEXIST)}
+            }
+        }
+
+        Ok(0)
+    }
 
     /// 将一个dentry和inode绑定,如果inode是一个文件夹,就把为他的儿子创建一个新的dentry
     fn bind(self: &Arc<Self>, inode:Arc<dyn InodeTrait>) {
@@ -274,6 +320,11 @@ impl Dentry {
         {
             // info!("[get_inode] {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
         }
+        {
+            if self.is_unused() {
+                return None
+            }
+        }
         // 首先检查是否已有 inode（读锁）
         {
             let inode_guard = self.inode.read();
@@ -308,13 +359,17 @@ impl Dentry {
             let parent_inode = parent_dentry.get_inode()?;
             let this_inode = parent_inode.walk(&self.name.read())?;
             // 存储 inode 到栈
-            inode_guard.push(this_inode.clone());
-            this_inode
+            if this_inode.is_valid() {
+                inode_guard.push(this_inode.clone());
+                Some(this_inode)
+            } else {
+                None
+            }
         };
         // {
         //     self.flush_binding();
         // }
-        Some(res)
+        res
     }
 
     /// 根据绝对路径获取对应的inode
@@ -322,7 +377,7 @@ impl Dentry {
         // if INODE_CACHE.has_inode(path) {
         //     return INODE_CACHE.get(path)
         // }
-        info!("[get_inode_from_path] {}", path);
+        info!("    [get_inode_from_path] {}", path);
         if !path.starts_with('/') {
             panic!("path should start with /");
         }
