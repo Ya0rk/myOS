@@ -187,7 +187,7 @@ impl TaskControlBlock {
         let exit_code = AtomicI32::new(0);
         let waker = SyncUnsafeCell::new(None);
         let parent = new_shared(Some(Arc::downgrade(self)));
-        let current_path = self.current_path.clone();
+        let current_path = new_shared(self.current_path.lock().clone());
         let robust_list = new_shared(RobustList::new());
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
