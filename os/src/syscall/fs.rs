@@ -11,6 +11,7 @@ use alloc::vec;
 use log::{debug, info};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
+use crate::fs::procfs::inode;
 use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
 use crate::fs::{ chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, Stdout, StxMask, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::user_ptr::{user_cstr, user_ref_mut, user_slice, user_slice_mut};
@@ -106,7 +107,9 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
 /// system call writes iovcnt buffers from the file associated
 /// with the file descriptor fd into the buffers described by iov
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
-    // info!("[sys_writev] fd = {}", fd);
+    if fd != 1 {
+        info!("[sys_writev] fd = {}", fd);
+    }
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
@@ -126,6 +129,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
                 if len == 0 {
                     continue;
                 }
+                if fd !=1 {info!("    [sys_writev] len = {}", len);}
                 let base = (unsafe { &*iov_st }).iov_base;
                 let buffer = unsafe{core::slice::from_raw_parts(base as *const u8, len)};
                 // info!("aaaaaaaaaaaa");
@@ -190,6 +194,9 @@ pub fn sys_fstatat(
     // 检查路径是否有效并打开文件
     match open(target_path, OpenFlags::O_RDONLY) {
         Ok(FileClass::File(file)) => {
+            if !file.metadata.inode.is_valid() {
+                return Err(Errno::ENOENT);
+            }
             file.fstat(&mut tempstat)?;
             unsafe{ core::ptr::write(ptr, tempstat); }
             return Ok(0);
@@ -660,7 +667,7 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = user_cstr(path.into())?.unwrap();
-    // info!("[sys_unlink] start path = {}", path);
+    info!("[sys_unlink] start path = {}", path);
     let base = task.get_current_path();
     info!("[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}", fd, base, path, flags);
 
@@ -814,6 +821,12 @@ pub fn sys_linkat(olddirfd: isize, oldpath: usize, newdirfd: isize, newpath: usi
             }
             file.get_inode().link(&new_path.get());
         }
+        // if let      (Ok(inode), Ok(dentry)) = 
+        //             (Dentry::get_inode_from_path(&old_path.get()), Dentry::get_dentry_from_path(&old_path.get())) {
+        //     if let Ok(new_inode) = Dentry::get_inode_from_path(&new_path.get()) {
+        //         if new_inode.is_valid() {return Err(Errno::EEXIST);}
+        //     }  
+        // }
     }
     Ok(0)
 }

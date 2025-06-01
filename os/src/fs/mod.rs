@@ -26,6 +26,7 @@ pub use dirent::Dirent;
 // pub use inode_cache::*;
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
+use procfs::PROCFS_SUPER_BLOCK;
 use riscv::register;
 // use sbi_rt::NonRetentive;
 use sbi_spec::pmu::cache_event::NODE;
@@ -128,7 +129,7 @@ pub fn create_init_files() -> SysResult {
     // 拷贝动态库
     dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64-sf.so.1");
     dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64.so.1");
-    // dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
+    dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
     dl_link("/musl/lib/tls_get_new-dtv_dso.so", "/lib/tls_get_new-dtv_dso.so");
 
     Ok(())
@@ -153,17 +154,20 @@ fn create_open_file(
     flags: OpenFlags,
 ) -> SysResult<FileClass> {
     info!(
-        "[create_open_file] flags={:?}, abs_path={}, parent_path={}",
+        "    [create_open_file] flags={:?}, abs_path={}, parent_path={}",
         flags, target_abs_path, parent_path
     );
 
     // 逻辑为获得一个Option<Arc InodeTrait>如果返回None直接返回None,因为代表父母节点都没有
     // 如果父母节点存在, 那么当父母节点是Dir的时候获得inode,如果父母节点不是Dir页直接返回None
+    if find_device(parent_path) {
+        return Err(Errno::ENOTDIR);
+    };
     let parent_dir = {
         Dentry::get_inode_from_path(parent_path)?
     };
     if parent_dir.node_type() != InodeType::Dir {
-        info!("[create_open_file] parent_path {} is not a directory", parent_path);
+        info!("    [create_open_file] parent_path {} is not a directory", parent_path);
         return Err(Errno::ENOTDIR);
     }
     let parent_dentry = Dentry::get_dentry_from_path(parent_path).unwrap();
@@ -190,6 +194,10 @@ fn create_open_file(
         }
     };
 
+    if !target_inode.is_valid() {
+        return Err(Errno::ENOENT);
+    } 
+
     if flags.contains(OpenFlags::O_DIRECTORY) && target_inode.node_type() != InodeType::Dir {
         debug!("[create_open_file] target_path {} is not a directory", target_abs_path);
         return Err(Errno::ENOTDIR);
@@ -211,11 +219,11 @@ fn create_open_file(
 
 /// path为绝对路径
 pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<FileClass> {
-    info!("[fs_open] abspath = {}, flags = {:?}", path.get(), flags);
-    debug_point!("[open]");
+    info!("    [fs_open] abspath = {}, flags = {:?}", path.get(), flags);
+    debug_point!("    [open]");
     // info!("[open] abspath = {}", abs_path.get());
     if !path.is_absolute() {
-        panic!("[fs_open] path = {} is not absolte path.", path.get());
+        panic!("    [fs_open] path = {} is not absolte path.", path.get());
     }
 
     // 临时保存这个机制,后期应当使用设备文件系统去代替
@@ -245,7 +253,7 @@ pub fn mkdir(target_abs_path: AbsPath, mode: usize) -> SysResult<()> {
         "[mkdir] path {}, mode {}",
         target_abs_path.get(), mode
     );
-
+    debug_point!("[mkdir]");
     // 首先探测有没有这个文件,如果有就报错
     // 否则使用 OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT 去创建
     // 最后返回OK就可以
