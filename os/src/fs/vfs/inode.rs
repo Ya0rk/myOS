@@ -27,15 +27,17 @@ pub struct InodeMeta {
     pub file_type: InodeType,
     /// 时间戳
     pub timestamp: SpinNoIrqLock<TimeStamp>,
+    pub path: String,
 }
 
 impl InodeMeta {
-    pub fn new(file_type: InodeType, file_size: usize) -> Self {
+    pub fn new(file_type: InodeType, file_size: usize, path: &str) -> Self {
         Self {
             ino:  alloc_ino(), 
             size: AtomicUsize::new(file_size), 
             file_type,
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
+            path: String::from(path),
         }
     }
 }
@@ -47,6 +49,9 @@ impl InodeMeta {
 /// other file system object.
 #[async_trait]
 pub trait InodeTrait: Send + Sync {
+    fn is_valid(&self) -> bool {
+        true
+    }
     /// Returns the size of the file in bytes.
     ///
     /// # Returns

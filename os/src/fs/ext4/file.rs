@@ -208,7 +208,7 @@ impl FileTrait for NormalFile {
     }
 
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
-        let inode = self.metadata.inode.as_ref();
+        let inode: &(dyn InodeTrait + 'static) = self.metadata.inode.as_ref();
         *stat = inode.fstat();
         if self.path.contains("null") {
             stat.st_mode = S_IFCHR;

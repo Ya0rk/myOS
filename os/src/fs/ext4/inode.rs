@@ -1,11 +1,11 @@
-use core::sync::atomic::Ordering;
+use core::{error, sync::atomic::Ordering};
 use async_trait::async_trait;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use lwext4_rust::{
-    bindings::{EXT4_DE_DIR, EXT4_DE_REG_FILE, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, file, Ext4File, InodeTypes
+    bindings::{ext4_inode_stat, EXT4_DE_DIR, EXT4_DE_REG_FILE, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC, SEEK_SET}, file, Ext4File, InodeTypes
 };
 use crate::{
-    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, open, page_cache::PageCache, root_inode, stat::as_inode_stat, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat},
+    fs::{ffi::{as_ext4_de_type, as_inode_type, InodeType}, open, page_cache::PageCache, root_inode, stat::as_inode_stat, Dentry, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat},
     sync::{new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult}
 };
@@ -45,7 +45,7 @@ impl Ext4Inode {
         }
 
         let inode = Arc::new(Self {
-            metadata: InodeMeta::new(file_type, file_size as usize),
+            metadata: InodeMeta::new(file_type, file_size as usize, path),
             file    : ext4file,
             page_cache: page_cache.clone()
         });
@@ -68,6 +68,18 @@ impl Drop for Ext4Inode {
 
 #[async_trait]
 impl InodeTrait for Ext4Inode {
+
+    /// 检查inode是否有效
+    fn is_valid(&self) -> bool {
+        let mut file = self.file.lock();
+        let types = file.get_type();
+        let c_path = file.get_path();
+        let c_path = c_path.to_str().unwrap();
+        let res = file.check_inode_exist(c_path, types);
+        info!("[check inode is valid] path: {}, res: {}", c_path, res);
+        res
+    }
+
     fn get_page_cache(&self) -> Option<Arc<PageCache>> {
         return self.page_cache.as_ref().cloned();
     }
@@ -81,7 +93,7 @@ impl InodeTrait for Ext4Inode {
 
     fn set_size(&self, new_size: usize) -> SysResult {
         self.metadata.size.store(new_size, Ordering::Relaxed);
-        debug!("[set_size] {}", new_size);
+        info!("    [set_size] {}", new_size);
         Ok(())
     }
 
@@ -160,11 +172,13 @@ impl InodeTrait for Ext4Inode {
         let mut file = self.file.lock();
         let path = file.get_path();
         let path = path.to_str().unwrap();
-        file.file_open(path, O_RDONLY).map_err(|_| Errno::EIO).unwrap();
+        if file.file_open(path, O_RDONLY).is_err() {
+            return 0;
+        }
         file.file_seek(offset as i64, SEEK_SET)
             .map_err(|_| Errno::EIO).unwrap();
         let r = file.file_read(buf);
-        file.file_close().expect("[read_dirctly]: file close fail!");
+        file.file_close().expect("    [read_dirctly]: file close fail!");
         r.map_err(|_| Errno::EIO).unwrap()
     }
 
@@ -172,11 +186,11 @@ impl InodeTrait for Ext4Inode {
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         let write_size = match &self.page_cache {
             None => {
-                debug!("[write_at] no cache");
+                info!("    [write_at] no cache");
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
-                debug!("[write_at] has cache");
+                info!("    [write_at] has cache");
                 cache.write(buf, offset).await
             }
         };
@@ -184,6 +198,7 @@ impl InodeTrait for Ext4Inode {
         if self.get_size() < offset + write_size {
             self.set_size(offset + write_size);
         }
+        info!("    [write_at] return {}", write_size);
         write_size
     }
 
@@ -260,33 +275,56 @@ impl InodeTrait for Ext4Inode {
         let mut file = self.file.lock();
         // let size = self.size();
         match file.fstat() {
-            Ok(stat) => {
+            Ok(mut stat) => {
                 let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+                stat.st_mode += 0o1000;
                 as_inode_stat(stat, atime, mtime, ctime, size)
             }
-            Err(_) => Kstat::new()
+            Err(_) =>  {
+                let mut stat = ext4_inode_stat::default();
+                let (atime, mtime, ctime) = self.metadata.timestamp.lock().get();
+                stat.st_mode += 0o1000;
+                as_inode_stat(stat, atime, mtime, ctime, size)
+            }
         }
     }
     /// 删除文件
     fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
         // mayby bug? 这个用的parent cnt
         let mut lock_file = self.file.lock();
-        // info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
+        info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
         // INODE_CACHE.remove(child_abs_path);
-        match lock_file.links_cnt() {
-            Ok(cnt) if cnt <= 1 => {
-                // info!("[unlink] unlink file {}", child_abs_path);
-                if child_abs_path.contains("/tmp") { return Ok(0); } // TODO(YJJ):这里是为了通过libctest测试用例fscanf，有待修改
-                lock_file.file_remove(child_abs_path);
+        // match lock_file.links_cnt() {
+        //     Ok(cnt) if cnt <= 1 => {
+        //         // info!("[unlink] unlink file {}", child_abs_path);
+        //         if child_abs_path.contains("/tmp") { return Ok(0); } // TODO(YJJ):这里是为了通过libctest测试用例fscanf，有待修改
+        //         lock_file.file_remove(child_abs_path);
+        //     }
+        //     _ => { return Ok(0); }
+        // 
+        let res = if self.metadata.file_type.is_dir() {
+            // info!("[unlink] unlink dir {}", child_abs_path);
+            debug_point!("");
+            lock_file.dir_rm(child_abs_path)
+        } else {
+            debug_point!("");
+            lock_file.file_remove(child_abs_path)
+        };
+        match res {
+            Ok(_) => {
+                info!("[unlink] unlink success {}", child_abs_path);
+                Ok(0)
             }
-            _ => { return Ok(0); }
+            Err(e) => {
+                warn!("[unlink] unlink failed {}, error: {:?}", child_abs_path, e);
+                Err(Errno::EIO)
+            }
         }
-        Ok(0)
     }
 
     fn link(&self, new_path: &str) -> SysResult<usize> {
         let mut file = self.file.lock();
-        info!("[ext4_link] {} to {}", file.file_path.to_str().unwrap(), new_path);
+        info!("    [ext4_link] {} to {}", file.file_path.to_str().unwrap(), new_path);
         file.link(new_path);
         Ok(0)
     }

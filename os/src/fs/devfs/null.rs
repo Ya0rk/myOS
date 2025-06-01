@@ -80,7 +80,7 @@ unsafe impl Sync for DevNullInode {}
 impl DevNullInode {
     pub fn new() -> Self {
         Self {
-            metadata: InodeMeta::new(InodeType::CharDevice, 0),
+            metadata: InodeMeta::new(InodeType::CharDevice, 0, "/dev/null"),
         }
     }
 }
