@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::{sync::atomic::{AtomicUsize, Ordering}, task::Waker};
 use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, net::Socket, utils::{Errno, SysResult}};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
@@ -150,15 +150,16 @@ pub trait FileTrait: Send + Sync {
     }
 
     // ppoll处理,代表数据到达，可以读取数据
-    async fn pollin(&self) -> bool {
+    fn pollin(&self, waker: Waker) -> SysResult<bool> {
         // info!("[Filetrait::pollin] file: {}", self.get_name().unwrap());
         // info!("[pollin] use defaule implement");
-        true
+        // println!("default implement");
+        Ok(true)
     }
     // ppoll处理，代表可以写入数据，如 socket 发送缓冲区有空闲
-    async fn pollout(&self) -> bool {
+    fn pollout(&self, waker: Waker) -> SysResult<bool> {
         info!("[pollout] use defaule implement");
-        true
+        Ok(true)
     }
 }
 

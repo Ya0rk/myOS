@@ -489,7 +489,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     info!("[sys_dup] pid = {}, oldfd = {}", task.get_pid(), oldfd);
     // let mut inner = task.inner_lock();
 
-    let old_temp_fd = task.get_fd(oldfd);
+    let old_temp_fd = task.get_fd(oldfd)?;
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.off_Ocloexec(true);
     let new_fd = task.alloc_fd(new_temp_fd)?;
@@ -528,7 +528,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
         return Err(Errno::EBADF);
     }
 
-    let old_temp_fd = task.get_fd(oldfd);
+    let old_temp_fd = task.get_fd(oldfd)?;
     if old_temp_fd.is_none() { return Err(Errno::EBADF); }
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
     let new_temp_fd = old_temp_fd.clone().off_Ocloexec(!cloexec);
@@ -1185,5 +1185,15 @@ pub fn sys_statfs(path: usize, buf: usize) -> SysResult<usize> {
     let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, core::mem::size_of::<StatFs>()) };
     buf.copy_from_slice(&stat);
 
+    Ok(0)
+}
+
+pub fn sys_fsync() -> SysResult<usize> {
+    info!("[sys_fsync] start, Ok(0)");
+    Ok(0)
+}
+
+pub fn sys_umask() -> SysResult<usize> {
+    info!("[sys_umak] start, Ok(0)");
     Ok(0)
 }

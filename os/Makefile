@@ -174,7 +174,7 @@ debug: qemu-version-check build
 		tmux -2 attach-session -d
 PHONY += debug
 
-gdbserver: qemu-version-check build copy-img
+gdbserver: qemu-version-check build $(RUN_DEPS)
 	$(QEMU_NAME) $(QEMU_ARGS) -s -S
 PHONY += gdbserver
 

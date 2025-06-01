@@ -1,7 +1,8 @@
-use core::{cmp::min, future::Future, task::{Poll, Waker}};
+use core::{cmp::min, future::Future, pin::Pin, task::{Context, Poll, Waker}};
 use super::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags};
 use crate::{hal::config::PIPE_BUFFER_SIZE, mm::{page::Page, UserBuffer}, sync::{get_waker, once::LateInit, SpinNoIrqLock}, utils::{Errno, SysResult}};
 use alloc::{collections::vec_deque::VecDeque, string::{String, ToString}, sync::{Arc, Weak}, vec::Vec};
+use log::info;
 use spin::Mutex;
 use async_trait::async_trait;
 use alloc::boxed::Box;
@@ -9,6 +10,7 @@ use alloc::boxed::Box;
 pub struct Pipe {
     flags: OpenFlags,
     other : LateInit<Weak<Pipe>>,
+    is_reader: bool,
     buffer: Arc<SpinNoIrqLock<PipeInner>>,
 }
 
@@ -29,6 +31,7 @@ impl Pipe {
         Self {
             flags: OpenFlags::O_RDONLY,
             other: LateInit::new(),
+            is_reader: true,
             buffer,
         }
     }
@@ -37,7 +40,43 @@ impl Pipe {
         Self {
             flags: OpenFlags::O_WRONLY,
             other: LateInit::new(),
+            is_reader: false,
             buffer,
+        }
+    }
+    /// 判断当前pipe的缓冲区是否满
+    pub fn is_full(&self) -> bool {
+        self.buffer.lock().buf.len() < PIPE_BUFFER_SIZE
+    }
+    /// 判断对方是否存活,没有的话代表已经关闭通道
+    pub fn other_alive(&self) -> bool {
+        self.other.strong_count() != 0
+    }
+    /// 唤醒读者
+    pub fn wake_readers(&self, inner: &mut PipeInner) {
+        while let Some(reader) = inner.reader_waker.pop_front() {
+            reader.wake();
+        }
+    }
+    /// 唤醒写者
+    pub fn wake_writers(&self, inner: &mut PipeInner) {
+        while let Some(writer) = inner.writer_waker.pop_front() {
+            writer.wake();
+        }
+    }
+}
+
+impl Drop for Pipe {
+    fn drop(&mut self) {
+        let mut inner = self.buffer.lock();
+        if self.is_reader {
+            while let Some(waker) = inner.writer_waker.pop_front() {
+                waker.wake();
+            }
+        } else {
+            while let Some(waker) = inner.reader_waker.pop_front() {
+                waker.wake();
+            }
         }
     }
 }
@@ -51,9 +90,7 @@ enum RingBufferStatus {
 }
 
 pub struct PipeInner {
-    arr: [u8; PIPE_BUFFER_SIZE],
-    head: usize, // 指针开始位置
-    tail: usize, // 指针结束位置
+    buf: VecDeque<u8>,
     reader_waker: VecDeque<Waker>,
     writer_waker: VecDeque<Waker>,
     status: RingBufferStatus,
@@ -62,63 +99,22 @@ pub struct PipeInner {
 impl PipeInner {
     pub fn new() -> Self {
         Self {
-            arr: [0; PIPE_BUFFER_SIZE],
-            head: 0,
-            tail: 0,
+            buf: VecDeque::new(),
             reader_waker: VecDeque::new(),
             writer_waker: VecDeque::new(),
             status: RingBufferStatus::Empty,
         }
     }
-    /// 写n个字节到管道尾
-    pub fn write_nbyte(&mut self, nbyte: &[u8]) {
-        // 这里不用再判断是否不够用
-        self.status = RingBufferStatus::Normal;
-
-        for &c in nbyte {
-            self.arr[self.tail] = c;
-            self.tail = (self.tail + 1) % PIPE_BUFFER_SIZE;
-        }
-
-        if self.tail == self.head {
-            self.status = RingBufferStatus::Full;
-        }
-    }
-    /// 从管道头读n个字节
-    pub fn read_nbyte(&mut self, nbyte: usize) -> Vec<u8> {
-        // 这里不用再判断可读数量，因为len就是计算后的最小值，不会越界
-        self.status = RingBufferStatus::Normal;
-        let mut res = Vec::with_capacity(nbyte);
-
-        for _ in 0..nbyte {
-            res.push(self.arr[self.head]);
-            self.head = (self.head + 1) % PIPE_BUFFER_SIZE;
-        }
-
-        if self.head == self.tail {
-            self.status = RingBufferStatus::Empty;
-        }
-        res
-    }
+    
     /// 获取管道中剩余可读长度
-    pub fn available_read(&self, buf_len: usize) -> usize {
-        if self.status == RingBufferStatus::Empty {
-            0
-        } else if self.tail > self.head {
-            min(buf_len, self.tail - self.head)
-        } else {
-            min(buf_len, PIPE_BUFFER_SIZE - self.head + self.tail)
-        }
+    /// 需要比较用户buf还可以读多少数据，以及现在还剩多少数据
+    pub fn available_read(&self, userbuf_left: usize) -> usize {
+        return min(userbuf_left, self.buf.len())
     }
     /// 获取管道中剩余可写长度
-    pub fn available_write(&self, buf_len: usize) -> usize {
-        if self.status == RingBufferStatus::Full {
-            0
-        } else if self.tail > self.head {
-            min(buf_len, self.tail - self.head)
-        } else {
-            min(buf_len, PIPE_BUFFER_SIZE - self.head + self.tail)
-        }
+    /// 判断用户还有多少数据要写，以及现在pipe还剩余多少空间
+    pub fn available_write(&self, userbuf_left: usize) -> usize {
+        return min(userbuf_left, PIPE_BUFFER_SIZE - self.buf.len())
     }
 }
 
@@ -146,7 +142,7 @@ impl FileTrait for Pipe {
         }
         PipeReadFuture {
             pipe: self,
-            buf,
+            userbuf: buf,
             cur: 0,
         }.await
     }
@@ -157,7 +153,7 @@ impl FileTrait for Pipe {
         }
         PipeWriteFuture {
             pipe: self,
-            buf,
+            userbuf: buf,
             cur: 0,
         }.await
     }
@@ -188,49 +184,61 @@ impl FileTrait for Pipe {
     }
     /// 异步管道（Pipe）读取操作的核心逻辑，用于检查管道是否可读（有数据可读或对端已关闭），
     /// 并根据情况注册 Waker 以便在数据到达时唤醒异步任务。
-    async fn pollin(&self) -> bool {
-        if self.other.strong_count() == 0 || self.buffer.lock().status != RingBufferStatus::Empty {
-            return true;
+    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+        if !self.buffer.lock().buf.is_empty() || self.other.strong_count() == 0 {
+            return Ok(true);
         }
-        let waker = get_waker().await;
+
+        println!("pollin:no avaliable read");
         // 还没有数据，此时等待被唤醒
         self.buffer.lock().reader_waker.push_back(waker);
-        false
+        Ok(false)
     }
-    async fn pollout(&self) -> bool {
-        if self.other.strong_count() == 0 || self.buffer.lock().status != RingBufferStatus::Full {
-            return true;
-        }
-        let waker = get_waker().await;
+    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+        if self.other.strong_count() == 0 {
+            return Err(Errno::EPIPE)
+        } else if !self.is_full() {
+            // 缓冲区没有满代表可写
+            return Ok(true)
+        } 
+
         self.buffer.lock().writer_waker.push_back(waker);
-        false
+        Ok(false)
     }
 }
 
 struct PipeReadFuture<'a> {
     pipe: &'a Pipe,
-    buf: &'a mut [u8],
-    cur: usize
+    userbuf: &'a mut [u8],
+    cur: usize, // 记录当前用户数据buf读取到的位置
 }
 
 impl Future for PipeReadFuture<'_> {
     type Output = SysResult<usize>;
 
-    fn poll(mut self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
-        let mut inner = self.pipe.buffer.lock();
-        let size = inner.available_read(self.buf.len() - self.cur);
-        if size > 0 {
-            let len = min(self.buf.len(), size);
-            self.buf[..len].copy_from_slice(&inner.read_nbyte(len));
-            self.cur += size;
-            while let Some(waker) = inner.writer_waker.pop_front() {
-                waker.wake();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        info!("[poll read future] start");
+        let this = unsafe { self.get_unchecked_mut() };
+        let userbuf_left = this.userbuf.len() - this.cur; 
+        let read_size = {
+            let mut inner = this.pipe.buffer.lock();
+            inner.available_read(userbuf_left)
+        };
+        
+        if read_size > 0 {
+            let mut inner = this.pipe.buffer.lock();
+            let target = &mut this.userbuf[this.cur..this.cur+read_size];
+            for (i, byte) in inner.buf.drain(..read_size).enumerate() {
+                target[i] = byte;
             }
-            Poll::Ready(Ok(size))
+            this.cur += read_size;
+            this.pipe.wake_writers(&mut inner);
+            Poll::Ready(Ok(read_size))
+        } else if !this.pipe.other_alive() {
+            info!("[poll read future] other end closed");
+            return Poll::Ready(Ok(0));
         } else {
-            if self.pipe.other.strong_count() == 0 {
-                return Poll::Ready(Ok(0));
-            }
+            let mut inner = this.pipe.buffer.lock();
             inner.reader_waker.push_back(cx.waker().clone());
             Poll::Pending
         }
@@ -239,28 +247,35 @@ impl Future for PipeReadFuture<'_> {
 
 struct PipeWriteFuture<'a> {
     pipe: &'a Pipe,
-    buf: &'a [u8],
-    cur: usize
+    userbuf: &'a [u8],
+    cur: usize, // 记录当前用户buf已经写入的数据位置
 }
 
 impl Future for PipeWriteFuture<'_> {
     type Output = SysResult<usize>;
 
-    fn poll(mut self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
-        let mut inner = self.pipe.buffer.lock();
-        let size = inner.available_write(self.buf.len() - self.cur);
-        if size > 0 {
-            let len = min(self.buf.len(), size);
-            inner.write_nbyte(&self.buf[0..len]);
-            self.cur += size;
-            while let Some(waker) = inner.reader_waker.pop_front() {
-                waker.wake();
-            }
-            Poll::Ready(Ok(size))
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
+        info!("[pipe write future] start");
+        if !this.pipe.other_alive() {
+            info!("[pipe write future] read end closed");
+            return Poll::Ready(Err(Errno::EPIPE));
+        }
+
+        let write_size = {
+            let mut inner = this.pipe.buffer.lock();
+            let userbuf_left = this.userbuf.len() - this.cur;
+            inner.available_write(userbuf_left)
+        };
+
+        if write_size > 0 {
+            let mut inner = this.pipe.buffer.lock();
+            inner.buf.extend(&this.userbuf[this.cur..this.cur + write_size]);
+            this.cur += write_size;
+            this.pipe.wake_readers(&mut inner);
+            Poll::Ready(Ok(write_size))
         } else {
-            if self.pipe.other.strong_count() == 0 {
-                return Poll::Ready(Ok(size));
-            }
+            let mut inner = this.pipe.buffer.lock();
             inner.writer_waker.push_back(cx.waker().clone());
             Poll::Pending
         }

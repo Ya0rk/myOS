@@ -1,4 +1,4 @@
-use core::{net::Ipv4Addr, time::Duration};
+use core::{net::Ipv4Addr, task::Waker, time::Duration};
 use alloc::{string::String, sync::Arc, vec};
 use log::info;
 use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata, UdpMetadata}, storage::PacketBuffer, wire::{IpAddress, IpEndpoint}};
@@ -317,31 +317,29 @@ impl FileTrait for UdpSocket {
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<crate::mm::page::Page>> {
         unimplemented!()
     }
-    async fn pollin(&self) -> bool {
+    fn pollin(&self, waker: Waker) -> SysResult<bool> {
         NET_DEV.lock().poll();
-        let waker = get_waker().await;
         let res = self.with_socket(|socket| {
             if socket.can_recv() {
                 info!("[UdpSocket::pollin] have data can recv");
-                return true;
+                return Ok(true);
             }
             info!("[UdpSocket::pollin] don't have data, nothing to recv");
             socket.register_recv_waker(&waker);
-            return false;
+            return Ok(false);
         });
         res
     }
-    async fn pollout(&self) -> bool {
+    fn pollout(&self, waker: Waker) -> SysResult<bool> {
         NET_DEV.lock().poll();
-        let waker = get_waker().await;
         let res = self.with_socket(|socket| {
             if socket.can_send() {
                 info!("[UdpSocket::pollout] have data to send");
-                return true;
+                return Ok(true);
             }
             info!("[UdpSocket::pollout] nothing to send");
             socket.register_send_waker(&waker);
-            return false;
+            return Ok(false);
         });
         res
     }

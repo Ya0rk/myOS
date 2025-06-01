@@ -1,4 +1,5 @@
 use core::cell::UnsafeCell;
+use core::task::Waker;
 use core::time;
 use core::time::Duration;
 
@@ -509,25 +510,23 @@ impl FileTrait for TcpSocket {
     /// TCP Socket 的异步可读性检查方法，
     /// 用于判断当前 Socket 是否有数据可读或处于特定状态（如连接关闭），
     /// 并根据情况注册 Waker 以便在数据到达时唤醒异步任务。
-    async fn pollin(&self) -> bool {
+    fn pollin(&self, waker: Waker) -> SysResult<bool> {
         info!("[TcpSocket::pollin] start");
         // 调用底层网络接口轮询机制，处理待处理的网络事件, 确保 Socket 状态和数据缓冲区是最新的
         NET_DEV.lock().poll();
         if self.shoule_return_ready() {
-            return true;
+            return Ok(true);
         }
-        let waker = get_waker().await;
         self.with_socket(|socket| {
             info!("[TcpSocket::pollin] nothing to read, state {:?}", socket.state());
             socket.register_recv_waker(&waker);
         });
 
-        false
+        Ok(false)
     }
-    async fn pollout(&self) -> bool {
+    fn pollout(&self, waker: Waker) -> SysResult<bool> {
         info!("[TcpSocket::pollin] start");
         NET_DEV.lock().poll();
-        let waker = get_waker().await;
         let res = self.with_socket(|socket| {
             if socket.can_send() {
                 info!("[TcpSocket::pollout] can send");
@@ -536,6 +535,6 @@ impl FileTrait for TcpSocket {
             socket.register_send_waker(&waker);
             return false;
         });
-        res
+        Ok(res)
     }
 }

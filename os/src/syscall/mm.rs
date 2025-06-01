@@ -61,7 +61,7 @@ pub fn sys_mmap(
         }).unwrap();
         return Ok(start_va.0);
     } else {
-        let fd = task.get_fd(fd);
+        let fd = task.get_fd(fd)?;
         if fd.is_none() { return Err(Errno::EBADF); }
         if let Err(e) = fd.check_mmap_valid(flags, prot) {
             return Err(e);

@@ -83,6 +83,7 @@ pub enum SysCode {
     SYSCALL_FSTATAT   = 79,
     SYSCALL_FSTAT     = 80,
     SYSCALL_SYNC      = 81,
+    SYSCALL_FSYNC     = 82,
     SYSCALL_UTIMENSAT = 88,
     SYSCALL_EXIT      = 93,
     SYSCALL_EXIT_GROUP= 94,
@@ -113,6 +114,7 @@ pub enum SysCode {
     SYSCALL_SETSID    = 157,
     SYSCALL_UNAME     = 160,
     SYSCALL_GETRUSAGE = 165,
+    SYSCALL_UMASK     = 166,
     SYSCALL_GETTIMEOFDAY  = 169,
     SYSCALL_GETPID    = 172,
     SYSCALL_GETPPID   = 173,
@@ -166,6 +168,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_UMASK => "umask",
+            Self::SYSCALL_FSYNC => "fsync",
             Self::SYSCALL_GET_MEMPOLICY => "get_mempolicy",
             Self::SYSCALL_PSELECT => "pselect",
             Self::SYSCALL_FALLOCAT => "fallocate",
@@ -506,6 +510,16 @@ pub struct PollFd {
     pub fd: i32,      // 要监听的文件描述符
     pub events:  PollEvents, // 你关心的事件（输入参数）
     pub revents: PollEvents, // 实际发生的事件（输出参数）
+}
+
+impl PollFd {
+    pub fn new(fd: i32, events: PollEvents) -> Self {
+        Self {
+            fd,
+            events,
+            revents: PollEvents::empty()
+        }
+    }
 }
 
 bitflags! {
