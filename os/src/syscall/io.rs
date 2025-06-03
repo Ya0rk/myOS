@@ -13,13 +13,13 @@ use crate::{
 use super::io_async::UptrFmt;
 
 // 新增 Guard 结构体, 在函数返回时自动回复Sigmask为original
-struct SigMaskGuard {
-    task: Arc<TaskControlBlock>,
-    original_mask: Option<SigMask>,
+pub struct SigMaskGuard {
+    pub task: Arc<TaskControlBlock>,
+    pub original_mask: Option<SigMask>,
 }
 
 impl SigMaskGuard {
-    fn new(task: Arc<TaskControlBlock>, new_mask: Option<SigMask>) -> Self {
+    pub fn new(task: Arc<TaskControlBlock>, new_mask: Option<SigMask>) -> Self {
         let original_mask = task.get_blocked().clone();
         if let Some(mask) = new_mask {
             task.set_blocked(mask | original_mask);

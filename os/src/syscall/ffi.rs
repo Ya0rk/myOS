@@ -104,6 +104,7 @@ pub enum SysCode {
     SYSCALL_KILL      = 129,
     SYSCALL_TKILL     = 130,
     SYSCALL_TGKILL    = 131,
+    SYSCALL_SIGSUSPEND= 133,
     SYSCALL_SIGACTION = 134,
     SYSCALL_SIGPROCMASK = 135,
     SYSCALL_SIGTIMEDWAIT = 137,
@@ -168,6 +169,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SIGSUSPEND => "sigsuspend",
             Self::SYSCALL_UMASK => "umask",
             Self::SYSCALL_FSYNC => "fsync",
             Self::SYSCALL_GET_MEMPOLICY => "get_mempolicy",

@@ -8,6 +8,7 @@ use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, S
 use crate::sync::time::{ITimerVal, CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, ITIMER_PROF, ITIMER_REAL, ITIMER_VIRTUAL, TIMER_ABSTIME};
 use crate::sync::{get_waker, itimer_callback, sleep_for, suspend_now, time_duration, yield_now, ItimerFuture, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
 use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
+use crate::syscall::io::SigMaskGuard;
 use crate::syscall::{CpuSet, RLimit64};
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, new_process_group, spawn_kernel_task, spawn_user_task, TaskStatus, MANAGER
@@ -17,7 +18,7 @@ use alloc::ffi::CString;
 use alloc::string::{String, ToString};
 use alloc::task;
 use alloc::vec::Vec;
-use log::{debug, info};
+use log::{debug, error, info};
 use lwext4_rust::bindings::true_;
 use num_enum::TryFromPrimitive;
 use zerocopy::IntoBytes;
@@ -1098,4 +1099,28 @@ pub fn sys_fallocate() -> SysResult<usize> {
 pub fn sys_get_mempolicy() -> SysResult<usize> {
     info!("[sys_get_mempolicy] start");
     Ok(0)
+}
+
+/// temporarily replaces the signal mask of the calling
+/// thread with the mask given by mask and then suspends the thread
+/// until delivery of a signal whose action is to invoke a signal
+/// handler or to terminate a process
+/// It is not possible to block SIGKILL or SIGSTOP; specifying these
+/// signals in mask, has no effect on the thread's signal mask.
+pub async fn sys_sigsuspend(mask: usize) -> SysResult<usize> {
+    info!("[sys_sigsuspend] start");
+    if mask == 0 {
+        error!("[sys_sigsuspend] mask invalid");
+    }
+    let mut mask = unsafe{ *(mask as *const SigMask) };
+    mask.remove(SigMask::SIGSTOP | SigMask::SIGKILL); // 不能屏蔽这两个信号
+    info!("[sys_sigsuspend] now sigmask = {:?}", mask);
+
+    let task = current_task().unwrap();
+    let maskguard = SigMaskGuard::new(task.clone(), Some(mask));
+
+    task.set_wake_up_signal(!mask | SigMask::SIGCHLD | SigMask::SIGKILL | SigMask::SIGSTOP);
+    suspend_now().await;
+
+    Err(Errno::EINTR)
 }
