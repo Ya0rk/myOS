@@ -162,15 +162,15 @@ impl<F: Fn() -> bool> Future for ItimerFuture<F> {
 
                 if cur_time >= this.next_expire {
                     if !((this.callback)()) {
-                        return Some(Poll::Ready(()));
+                        return Poll::Ready(());
                     }
                 }
                 let new_timer = TimerTranc::new(this.next_expire, cx.waker().clone());
                 TIMER_QUEUE.add(new_timer);
                 this.next_expire = (Duration::from(real_time.it_interval) + time_duration());
-                Some(Poll::Pending)
+                Poll::Pending
             });
-            tmp
+            Some(tmp)
         }).unwrap();
         res
     }

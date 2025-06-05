@@ -621,7 +621,11 @@ impl TaskControlBlock {
     pub fn kill_all_thread(self: &Arc<Self>) {
         let lock_thread_gp = self.thread_group.lock();
         for (_, thread) in lock_thread_gp.tasks.iter() {
-            thread.upgrade().unwrap().set_zombie();
+            let task = match thread.upgrade() {
+                Some(a) => a,
+                None => continue,
+            };
+            task.set_zombie();
         }
     }
 

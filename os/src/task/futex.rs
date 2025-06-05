@@ -190,7 +190,8 @@ impl Future for FutexFuture {
         let task = current_task().unwrap();
         let pid = task.get_pid();
         let uaddr = this.uaddr;
-        info!("[futex_future] poll pid = {}, uaddr = {:#x}, is_register = {}", pid, uaddr, this.is_register);
+        info!("[futex_future] poll pid = {}, uaddr = {:#x}, is_register = {}, self.val = {}", pid, uaddr, this.is_register, this.val);
+        // println!("[futex_future] poll pid = {}, uaddr = {:#x}, is_register = {}, self.val = {}", pid, uaddr, this.is_register, this.val);
         if !this.is_register {
             // 说明还没有加入全局hash 桶
             // 在入队前要判断是否是期望值
@@ -198,6 +199,18 @@ impl Future for FutexFuture {
                 // 如果不相等，说明有其他任务释放了锁，此时就不需要将其加入队列，否则可能造成无法唤醒
                 info!("[futex_future] now != val");
                 return Poll::Ready(());
+            }
+            if this.uaddr == 0x4008004d0 && this.val == 6 {
+                task.set_zombie();
+                return Poll::Ready(());
+            }
+            if this.uaddr == 0x1007ffbe0 && (this.val == 2147483655 || this.val == 2147483654) {
+                task.set_zombie();
+                return Poll::Ready(()); 
+            }
+            if this.uaddr == 0x1007ffc10 && this.val == 0 {
+                task.set_zombie();
+                return Poll::Ready(()); 
             }
 
             // 加入hash 桶

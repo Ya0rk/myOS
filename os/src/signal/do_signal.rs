@@ -46,6 +46,11 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
         let k_action = task.handler.lock().fetch_signal_handler(signo);
         let sig_action = k_action.sa;
         info!("[do_signal] task id = {}, find a signal: {}, handler = {:#x}, flags = {:?}." , task.get_pid(), signo, sig_action.sa_handler, sig_action.sa_flags);
+        if sig_action.sa_flags.contains(SigActionFlag::SA_RESTART) {
+            info!("[do_signal] restart");
+            trap_cx.sepc -= 4;
+            trap_cx.restore_last_a0();
+        }
 
         match k_action.sa_type {
             SigHandlerType::IGNORE => {}

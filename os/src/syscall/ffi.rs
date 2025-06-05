@@ -109,6 +109,7 @@ pub enum SysCode {
     SYSCALL_SIGPROCMASK = 135,
     SYSCALL_SIGTIMEDWAIT = 137,
     SYSCALL_SIGRETURN = 139,
+    SYSCALL_SETGID    = 144,
     SYSCALL_TIMES     = 153,
     SYSCALL_SETPGID   = 154,
     SYSCALL_GETPGID   = 155,
@@ -169,6 +170,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SETGID => "setgid",
             Self::SYSCALL_SIGSUSPEND => "sigsuspend",
             Self::SYSCALL_UMASK => "umask",
             Self::SYSCALL_FSYNC => "fsync",

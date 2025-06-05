@@ -12,7 +12,7 @@ use log::{debug, info};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::fs::procfs::inode;
-use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
+use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
 use crate::fs::{ chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType, Kstat, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, Stdout, StxMask, UmountFlags, MNT_TABLE, SEEK_CUR};
 use crate::mm::user_ptr::{user_cstr, user_ref_mut, user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
@@ -458,8 +458,12 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 /// Success: 返回当前工作目录的长度;  Fail: 返回-1
 pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     info!("[sys_getcwd] start");
+    println!("[sys_getcwd] buf = {}, size = {}", buf, size);
+    if buf == 0 || buf > USER_SPACE_TOP || size > PATH_MAX {
+        return Err(Errno::EFAULT);
+    }
     let ptr = buf as *mut u8;
-    if ptr.is_null() || size == 0 {
+    if !ptr.is_null() && size == 0 {
         return Err(Errno::EINVAL);
     }
 
@@ -474,6 +478,7 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     if length > PATH_MAX {
         return Err(Errno::ENAMETOOLONG);
     }
+    println!("[sys_getcwd] size = {}, len = {}", size, length);
     if length > size {
         return Err(Errno::ERANGE);
     }

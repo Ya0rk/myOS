@@ -63,9 +63,10 @@ fn main() -> i32 {
 }
 
 
-const ENV: &[&str; 4] = &[
+const ENV: &[&str] = &[
                 "PATH=/bin:/musl/basic:/musl/ltp:/musl:/\0",
                 "HOME=/\0",
                 "LD_LIBRARY_PATH=/lib\0",
                 "TERM=screen\0",
+                "LTPROOT=Ya0rk\0",
             ];

@@ -75,21 +75,14 @@ impl FileClass {
     }
 }
 
-pub fn init() {
+pub async fn init() {
     // 应当初始化Dentry
+    println!("[Del0n1x] init fs start ...");
     Dentry::init();
-    create_init_files();
+    create_init_files().await;
 }
 
-pub fn create_init_files() -> SysResult {
-    // mkdir("/sys".into(), 0);
-    // mkdir("/sys/devices".into(), 0);
-    // mkdir("/sys/devices/system".into(), 0);
-    // mkdir("/sys/devices/system/node".into(), 0);
-    // mkdir("/sys/devices/system/node/node0".into(), 0);
-    // open("/sys/devices/system/node/node0/meminfo".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
-    // mkdir("/sys/devices/system/node/node1".into(), 0);
-    // open("/sys/devices/system/node/node1/meminfo".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+pub async fn create_init_files() -> SysResult {
     mkdir("/usr".into(), 0);
     mkdir("/tmp".into(), 0);
     //创建/dev文件夹
@@ -102,8 +95,8 @@ pub fn create_init_files() -> SysResult {
     mkdir("/bin".into(), 0);
     mkdir("/etc".into(), 0);
     if let Ok(FileClass::File(file)) = open("/etc/passwd".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR) {
-        let buf = [0; 10];
-        file.write(&buf);
+        let buf = "nobody:x:0:0:nobody:/nonexistent:/usr/sbin/nologin\0".as_bytes();  // 这里是提前往里面写数据
+        file.write(&buf).await;
     };
     
     //注册设备/dev/rtc和/dev/rtc0
@@ -128,6 +121,8 @@ pub fn create_init_files() -> SysResult {
 
     // 拷贝动态库
     dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64-sf.so.1");
+    dl_link("/musl/lib/libc.so", "/lib/ld-linux-riscv64-lp64d.so.1");
+    dl_link("/musl/lib/libc.so", "/ld-linux-riscv64-lp64d.so.1");
     dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64.so.1");
     dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
     dl_link("/musl/lib/tls_get_new-dtv_dso.so", "/lib/tls_get_new-dtv_dso.so");
