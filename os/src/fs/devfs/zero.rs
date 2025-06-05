@@ -1,9 +1,17 @@
-use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
-use log::info;
-use crate::{fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, sync::{SpinNoIrqLock, TimeStamp}, utils::{Errno, SysResult}};
-use async_trait::async_trait;
+use crate::{
+    fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
+    mm::{page::Page, UserBuffer},
+    sync::{SpinNoIrqLock, TimeStamp},
+    utils::{Errno, SysResult},
+};
 use alloc::boxed::Box;
-
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
+use async_trait::async_trait;
+use log::info;
 
 pub struct DevZero;
 
@@ -38,11 +46,11 @@ impl FileTrait for DevZero {
         user_buf.fill(0);
         Ok(len)
     }
-    async fn write(&self, user_buf: & [u8]) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("/dev/zero".to_string())
     }
@@ -65,7 +73,6 @@ impl FileTrait for DevZero {
         Some(Page::new())
     }
 }
-
 
 #[async_trait]
 impl InodeTrait for DevZero {
@@ -112,7 +119,7 @@ impl InodeTrait for DevZero {
         Ok(Vec::new())
     }
 
-    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None
     }
 
@@ -150,3 +157,4 @@ impl InodeTrait for DevZero {
         buf.len()
     }
 }
+

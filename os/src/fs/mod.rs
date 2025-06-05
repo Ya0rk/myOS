@@ -195,6 +195,7 @@ fn create_open_file(
     };
 
     if !target_inode.is_valid() {
+        info!("    [create_open_file] last check inode is no valid path: {}", target_abs_path);
         return Err(Errno::ENOENT);
     } 
 

@@ -1,18 +1,29 @@
 use core::cmp::min;
 
-use alloc::{string::String, sync::{Arc, Weak}, vec::Vec};
+use crate::{
+    fs::{
+        ffi::{RenameFlags, MEMINFO},
+        AbsPath, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END,
+        SEEK_SET, S_IFCHR,
+    },
+    hal::config::PATH_MAX,
+    mm::{page::Page, user_ptr::user_slice_mut, UserBuffer},
+    utils::{Errno, SysResult},
+};
+use alloc::boxed::Box;
+use alloc::{
+    string::String,
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 use async_trait::async_trait;
 use log::info;
 use sbi_spec::pmu::cache_event::NODE;
-use crate::{
-    fs::{ffi::{RenameFlags, MEMINFO}, AbsPath, Dirent, FileMeta, FileTrait, InodeTrait, Kstat, OpenFlags, SEEK_CUR, SEEK_END, SEEK_SET, S_IFCHR}, hal::config::PATH_MAX, mm::{page::Page, user_ptr::user_slice_mut, UserBuffer}, utils::{Errno, SysResult}
-};
-use alloc::boxed::Box;
 
 use super::Ext4Inode;
 
 pub struct NormalFile {
-    pub path: String, // 文件的路径
+    pub path: String,                         // 文件的路径
     pub parent: Option<Weak<dyn InodeTrait>>, // 对父目录的弱引用
     pub metadata: FileMeta,
 }
@@ -34,14 +45,13 @@ impl NormalFile {
     // 判断是否存在同名文件
     pub fn is_child(&self, path: &str) -> bool {
         // info!("[is_child] ? {}", path);
-        if let 
-            Some(_) = 
-            self.parent
-                .as_ref()
-                .expect("no parent, plz check!")
-                .upgrade()
-                .unwrap()
-                .walk(&path) 
+        if let Some(_) = self
+            .parent
+            .as_ref()
+            .expect("no parent, plz check!")
+            .upgrade()
+            .unwrap()
+            .loop_up(&path)
         {
             true
         } else {
@@ -49,9 +59,7 @@ impl NormalFile {
         }
     }
 
-    pub fn unlink(&self) {
-        
-    }
+    pub fn unlink(&self) {}
 }
 
 // 为 OSInode 实现 File Trait
@@ -83,7 +91,11 @@ impl FileTrait for NormalFile {
 
     async fn read(&self, mut buf: &mut [u8]) -> SysResult<usize> {
         let mut total_read_size = 0usize;
-        info!("read file: {}, offset: {}", self.path, self.metadata.offset());
+        info!(
+            "read file: {}, offset: {}",
+            self.path,
+            self.metadata.offset()
+        );
 
         // if self.metadata.inode.size() <= self.metadata.offset() || self.metadata.inode.size() == 0 {
         //     //读取位置超过文件大小，返回结果为EOF
@@ -138,7 +150,7 @@ impl FileTrait for NormalFile {
 
         let old_offset = self.metadata.offset();
         let write_size = self.metadata.inode.write_at(old_offset, buf).await;
-        self.metadata.set_offset(old_offset+write_size);
+        self.metadata.set_offset(old_offset + write_size);
         total_write_size += write_size;
         // info!("size = {} ============", self.metadata.inode.get_size());
 
@@ -151,7 +163,10 @@ impl FileTrait for NormalFile {
         let mut offset = offset;
         let file_size = self.metadata.inode.get_size();
         if offset > file_size - buf.len() {
-            self.metadata.inode.set_size(buf.len() + offset).expect("[pwrite]: set size fail!");
+            self.metadata
+                .inode
+                .set_size(buf.len() + offset)
+                .expect("[pwrite]: set size fail!");
         }
 
         let write_size = self.metadata.inode.write_at(offset, buf).await;
@@ -170,12 +185,12 @@ impl FileTrait for NormalFile {
             SEEK_SET => offset,
             SEEK_CUR => old_offset + offset,
             SEEK_END => offset + self.metadata.inode.get_size(),
-            _ => return Err(Errno::EINVAL)
+            _ => return Err(Errno::EINVAL),
         };
         self.metadata.set_offset(res);
         Ok(res)
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok(self.path.clone())
     }
@@ -203,7 +218,7 @@ impl FileTrait for NormalFile {
 
         self.metadata.inode.rename(&old_path, &new_path);
         self.path = new_path;
-        
+
         Ok(0)
     }
 
@@ -221,12 +236,16 @@ impl FileTrait for NormalFile {
     }
 
     fn read_dents(&self, mut ub: usize, len: usize) -> usize {
-        info!("[read_dents] {}, len: {}, now file offset: {}", self.path, len, self.metadata.offset());
+        info!(
+            "[read_dents] {}, len: {}, now file offset: {}",
+            self.path,
+            len,
+            self.metadata.offset()
+        );
         if !self.is_dir() {
             // info!("[read_dents] {} is not a dir", self.path);
             return 0;
         }
-
 
         let ub = if let Ok(Some(buf)) = user_slice_mut::<u8>(ub.into(), len) {
             buf
@@ -240,7 +259,7 @@ impl FileTrait for NormalFile {
         //         info!("alsdkjlaskdfj");
         //         return 0;
         // }
-        
+
         // Some(dir_entrys)
         let dirs = self.metadata.inode.read_dents();
         let dirs = match dirs {
@@ -254,26 +273,32 @@ impl FileTrait for NormalFile {
         for den in dirs {
             let den_len = den.len();
             // info!(
-            //     "[read_dents] \n\tname: {}\n\td_off: {:#X}\n\td_reclen: {:#X}", 
+            //     "[read_dents] \n\tname: {}\n\td_off: {:#X}\n\td_reclen: {:#X}",
             //     String::from_utf8(den.d_name.to_vec()).unwrap(),
             //     den.off(),
             //     den_len);
             if res + den_len > len {
-                break
+                break;
             };
             if den.off() - den.len() >= file_now_offset {
                 // ub.write_at(res, den.as_bytes());
                 ub[res..res + den.len()].copy_from_slice(den.as_bytes());
                 res += den.len();
             };
-        };
+        }
         self.metadata.set_offset(file_now_offset + res);
         // info!("[read_dents] path {} return {}", self.path, res);
         res
     }
-    
+
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         // debug_point!("get_page_at");
-        self.metadata.inode.get_page_cache().unwrap().get_page(offset).await
+        self.metadata
+            .inode
+            .get_page_cache()
+            .unwrap()
+            .get_page(offset)
+            .await
     }
 }
+

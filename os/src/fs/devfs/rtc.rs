@@ -1,8 +1,20 @@
-use core::{cmp::min, fmt::{Formatter, Debug}};
-use alloc::{format, string::{String, ToString}, sync::Arc, vec::Vec};
-use async_trait::async_trait;
+use crate::{
+    fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags, S_IFCHR},
+    mm::{page::Page, UserBuffer},
+    utils::SysResult,
+};
 use alloc::boxed::Box;
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, utils::SysResult};
+use alloc::{
+    format,
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
+use async_trait::async_trait;
+use core::{
+    cmp::min,
+    fmt::{Debug, Formatter},
+};
 
 pub struct DevRtc;
 
@@ -38,14 +50,14 @@ impl FileTrait for DevRtc {
         // do nothing
         Ok(user_buf.len())
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("/dev/rtc".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         todo!()
     }
-    
+
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
         *stat = Kstat::new();
         stat.st_mode = S_IFCHR;
@@ -176,7 +188,7 @@ impl InodeTrait for DevRtc {
         Ok(str.as_bytes().to_vec())
     }
 
-    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None
     }
 

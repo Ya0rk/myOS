@@ -1,22 +1,25 @@
-use core::sync::atomic::AtomicUsize;
+use super::alloc_ino;
 use crate::{
-    fs::{ext4::NormalFile, ffi::InodeType, page_cache::PageCache, AbsPath, Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END},
+    fs::{
+        ext4::NormalFile, ffi::InodeType, page_cache::PageCache, AbsPath, Dirent, FileClass,
+        FileTrait, Kstat, OpenFlags, SEEK_END,
+    },
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
-    utils::{Errno, SysResult}
-};
-use alloc::{
-    string::String, sync::{Arc, Weak},
-    vec::Vec
+    utils::{Errno, SysResult},
 };
 use alloc::boxed::Box;
+use alloc::{
+    string::String,
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 use async_trait::async_trait;
+use core::sync::atomic::AtomicUsize;
 use lwext4_rust::{Ext4File, InodeTypes};
 use spin::Mutex;
-use super::alloc_ino;
-
 
 /// inode的基础字段
-/// 
+///
 /// timestamp: 每次访问和修改都要更新
 pub struct InodeMeta {
     /// 节点的编号
@@ -33,8 +36,8 @@ pub struct InodeMeta {
 impl InodeMeta {
     pub fn new(file_type: InodeType, file_size: usize, path: &str) -> Self {
         Self {
-            ino:  alloc_ino(), 
-            size: AtomicUsize::new(file_size), 
+            ino: alloc_ino(),
+            size: AtomicUsize::new(file_size),
             file_type,
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
             path: String::from(path),
@@ -97,7 +100,7 @@ pub trait InodeTrait: Send + Sync {
         todo!()
     }
     /// 确实应当剥夺walk去创造Inode的权利
-    fn walk(&self, _path: &str) ->  Option<Arc<dyn InodeTrait>>{
+    fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         todo!()
     }
 
@@ -133,7 +136,7 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// 直接写
-    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize;    
+    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize;
 
     /// 将文件设置新的size，这里用于将文件size为0
     ///
@@ -209,5 +212,5 @@ impl dyn InodeTrait {
         self.get_timestamp().lock().set(timestamp);
         Ok(0)
     }
-
 }
+

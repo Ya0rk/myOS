@@ -1,14 +1,24 @@
-use crate::{fs::{ffi::RenameFlags, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, utils::{Errno, SysResult}};
-use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
-use async_trait::async_trait;
-use lwext4_rust::InodeTypes;
-use spin::Mutex;
 use crate::{
     fs::{ext4::NormalFile, page_cache::PageCache, Dirent, FileClass, SEEK_END},
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
 };
+use crate::{
+    fs::{
+        ffi::RenameFlags, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR,
+    },
+    mm::{page::Page, UserBuffer},
+    utils::{Errno, SysResult},
+};
 use alloc::boxed::Box;
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
+use async_trait::async_trait;
 use log::info;
+use lwext4_rust::InodeTypes;
+use spin::Mutex;
 
 pub struct DevNull {
     inode: Arc<DevNullInode>,
@@ -45,10 +55,10 @@ impl FileTrait for DevNull {
         user_buf.fill(0);
         Ok(len)
     }
-    async fn write(&self, user_buf: & [u8]) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         Ok(user_buf.len())
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("/dev/null".to_string())
     }
@@ -109,7 +119,7 @@ impl InodeTrait for DevNullInode {
         None // /dev/null 不支持创建子文件或目录
     }
 
-    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None // /dev/null 不支持路径解析
     }
 
@@ -150,7 +160,7 @@ impl InodeTrait for DevNullInode {
     }
 
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
-        &self.metadata.timestamp// 返回一个空的时间戳
+        &self.metadata.timestamp // 返回一个空的时间戳
     }
 
     fn is_dir(&self) -> bool {
@@ -169,3 +179,4 @@ impl InodeTrait for DevNullInode {
         None // /dev/null 不支持目录项读取
     }
 }
+
