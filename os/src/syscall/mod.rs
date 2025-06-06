@@ -9,7 +9,7 @@ mod io_async;
 
 use fs::*;
 use log::info;
-use mm::{sys_membarrier, sys_mprotect, sys_mremap};
+use mm::{sys_membarrier, sys_mprotect, sys_mremap, sys_shmat, sys_shmctl, sys_shmdt, sys_shmget};
 use mm::{sys_brk, sys_mmap, sys_munmap};
 use process::*;
 use io::*;
@@ -139,6 +139,13 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_GETSOCKOPT => sys_getsockopt(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize, args[4] as usize),
         SysCode::SYSCALL_WRITEV => sys_writev(args[0] as usize, args[1] as usize, args[2] as usize).await,
         SysCode::SYSCALL_MPROTECT => sys_mprotect(args[0] as *const u8, args[1] as usize, args[2] as i32),
+        SysCode::SYSCALL_SHMGET => sys_shmget(args[0] as isize, args[1] as usize, args[2] as i32),
+        SysCode::SYSCALL_SHMAT => sys_shmat(args[0] as isize, args[1] as *const u8, args[2] as i32),
+        SysCode::SYSCALL_SHMDT => sys_shmdt(args[0] as *const u8),
+        SysCode::SYSCALL_SHMCTL => sys_shmctl(args[0] as isize, args[1] as isize, args[2] as *const u8),
+        
+        
+        
         _ => panic!("Unsupported syscall_id: {}", syscall_id),
     }
 }

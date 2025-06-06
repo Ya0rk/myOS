@@ -5,12 +5,14 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, FutexBucket, RobustList, ThreadGroup};
+use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, FutexBucket, RobustList, ShmidTable, ThreadGroup};
 use super::{pid_alloc, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
 use crate::fs::{init, FileClass, FileTrait};
 use crate::hal::config::INITPROC_PID;
+use crate::ipc::shm::SHARED_MEMORY_MANAGER;
+use crate::ipc::IPCKey;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
@@ -48,6 +50,9 @@ pub struct TaskControlBlock {
     pub robust_list:    Shared<RobustList>,
     pub futex_list:     Shared<FutexBucket>,
     pub itimers:        Shared<[ITimerVal; 3]>, // 三个定时器，分别对应SIGALRM, SIGVTALRM, SIGPROF
+
+    /// to record shm ids (same as ipc key) to manage detaching at exit and execve
+    pub shmid_table:     Shared<ShmidTable>,
 
     // signal
     pub pending:        AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
@@ -105,6 +110,8 @@ impl TaskControlBlock {
             futex_list: new_shared(FutexBucket::new()),
             itimers: new_shared([ITimerVal::default(); 3]),
 
+            shmid_table: new_shared(ShmidTable::new()),
+
             pending: AtomicBool::new(false),
             ucontext: AtomicUsize::new(0),
             sig_pending: SpinNoIrqLock::new(SigPending::new()),
@@ -155,6 +162,7 @@ impl TaskControlBlock {
         unsafe { memory_space.switch_page_table() };
         let mut mem = self.memory_space.lock();
         *mem = memory_space;
+        self.detach_all_shm();
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), argv, env, auxv);
         
         // set trap cx
@@ -180,6 +188,7 @@ impl TaskControlBlock {
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
         let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
         let sig_stack = SyncUnsafeCell::new(None);
+        let shmid_table = new_shared(self.shmid_table.lock().clone());
         let thread_group = new_shared(ThreadGroup::new());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let children = new_shared(BTreeMap::new());
@@ -241,6 +250,8 @@ impl TaskControlBlock {
             futex_list,
             itimers,
 
+            shmid_table, 
+
             pending,
             ucontext,
             sig_pending,
@@ -277,6 +288,7 @@ impl TaskControlBlock {
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
         let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
         let sig_stack = SyncUnsafeCell::new(None);
+        let shmid_table = new_shared(self.shmid_table.lock().clone());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let thread_group = self.thread_group.clone();
         let parent = self.parent.clone();
@@ -337,6 +349,8 @@ impl TaskControlBlock {
             robust_list,
             futex_list,
             itimers,
+
+            shmid_table,
 
             task_status,
             thread_group,
@@ -439,6 +453,7 @@ impl TaskControlBlock {
         }
         
         self.clear_fd_table();
+        self.detach_all_shm();
         // self.recycle_data_pages();
     }
 
@@ -796,6 +811,12 @@ impl TaskControlBlock {
         self.fd_table.lock().clear();
     }
 
+    pub fn detach_all_shm(&self) {
+        for (_, shmid) in self.shmid_table.lock().iter() {
+            SHARED_MEMORY_MANAGER.write().get_mut(shmid).unwrap().detach_one(self.get_pid());
+        }
+    }
+
     /// cwd
     /// 获取当前进程的当前工作目录
     pub fn get_current_path(&self) -> String {
@@ -862,6 +883,10 @@ impl TaskControlBlock {
 
     pub fn with_mut_memory_space<T>(&self, f: impl FnOnce(&mut MemorySpace) -> T) -> T {
         f(&mut self.memory_space.lock())
+    }
+
+    pub fn with_mut_shmid_table<T>(&self, f: impl FnOnce(&mut ShmidTable) -> T) -> T {
+        f(&mut self.shmid_table.lock())
     }
 }
 

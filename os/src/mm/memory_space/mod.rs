@@ -511,6 +511,7 @@ impl MemorySpace {
         map_perm: MapPerm,
         pages: &mut Vec<Weak<Page>>,
     ) -> VirtAddr {
+        info!("[attach_shm] shmaddr: {:#x}, size: {:#x}, map_perm: {:?}, pages: {:?}", shmaddr.0, size, map_perm, pages);
         let mut ret_addr = shmaddr;
         let mut vm_area = if shmaddr == 0.into() {
             let shared_range: Range<VirtAddr> =

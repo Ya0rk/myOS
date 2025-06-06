@@ -53,7 +53,9 @@ bitflags! {
         const WX = Self::W.bits() | Self::X.bits();
         const RWX = Self::R.bits() | Self::W.bits() | Self::X.bits();
 
+        const UR = Self::U.bits() | Self::R.bits();
         const UW = Self::U.bits() | Self::W.bits();
+        const UX = Self::U.bits() | Self::X.bits();
         const URW = Self::U.bits() | Self::RW.bits();
         const URX = Self::U.bits() | Self::RX.bits();
         const UWX = Self::U.bits() | Self::WX.bits();
