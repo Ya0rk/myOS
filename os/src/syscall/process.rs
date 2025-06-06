@@ -269,7 +269,20 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
             p if p < -1 => {
                 locked_child.values().find(|task| task.get_pid() == p.abs() as usize).cloned()
             }
-            _ => unimplemented!(),
+            // 等待和当前进程组同组的任意一个进程
+            _ => {
+                drop(locked_child);
+                let pgid = task.get_pgid();
+                let target_group = get_target_proc_group(pgid).unwrap();
+                if let Some(ok) = target_group.iter().find(|pid| {
+                    let peer = get_task_by_pid(**pid).unwrap();
+                    peer.is_zombie() && peer.thread_group.lock().thread_num() == 1
+                }) {
+                    get_task_by_pid(*ok)
+                } else {
+                    None
+                }
+            },
         }
     };
 
@@ -307,7 +320,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
                                         break (find_pid, status, exit_code);
                                     }
                                 }
-                                _ => unimplemented!(),
+                                _ => break (find_pid, status, exit_code),
                             }
                         }
                     }

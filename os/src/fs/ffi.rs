@@ -39,6 +39,13 @@ bitflags! {
         const O_NOATIME     = 0o1000000;
         const O_PATH        = 0o10000000;
         const O_TMPFILE     = 0o20200000;
+        const FCNTL_MASK = Self::O_RDONLY.bits() 
+                          | Self::O_WRONLY.bits() 
+                          | Self::O_RDWR.bits() 
+                          | Self::O_CREAT.bits() 
+                          | Self::O_EXCL.bits() 
+                          | Self::O_NOCTTY.bits() 
+                          | Self::O_TRUNC.bits();
     }
 
     pub struct UmountFlags: u32 {

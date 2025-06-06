@@ -189,7 +189,7 @@ impl FileTrait for Pipe {
             return Ok(true);
         }
 
-        println!("pollin:no avaliable read");
+        // println!("pollin:no avaliable read");
         // 还没有数据，此时等待被唤醒
         self.buffer.lock().reader_waker.push_back(waker);
         Ok(false)

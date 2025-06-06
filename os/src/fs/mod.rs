@@ -197,7 +197,7 @@ fn create_open_file(
         debug!("[create_open_file] target_path {} is not a directory", target_abs_path);
         return Err(Errno::ENOTDIR);
     }
-    // info!("[create_file] got target inode");
+    info!("[create_file] got target inode, flags = {:?}", flags);
 
     let res = {
         let osinode = NormalFile::new(

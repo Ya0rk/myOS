@@ -947,7 +947,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
-    info!("[sys_fcntl] start, fd = {}, cmd = {:?}", fd, cmd);
+    info!("[sys_fcntl] start, fd = {}, cmd = {:?}, arg = {}", fd, cmd, arg);
     if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
     }
@@ -956,7 +956,18 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
         // F_SETFL：设置文件状态标志。它首先从参数arg中获取标志，然后设置文件描述符的标志。
         FcntlFlags::F_SETFL => {
             if let Some(file) = task.get_file_by_fd(fd) {
-                file.set_flags(OpenFlags::from_bits(arg as i32).ok_or(Errno::EINVAL)?);
+                // 1. 获取当前文件标志
+                let current_flags = file.get_flags();
+                // 2. 提取需要保留的标志位（FCNTL_MASK中的位）
+                let preserved_flags = current_flags & OpenFlags::FCNTL_MASK;
+                // 3. 获取用户传入的新标志，并过滤掉不允许修改的标志位
+                let user_flags = OpenFlags::from_bits(arg as i32).ok_or(Errno::EINVAL)?;
+                let filtered_user_flags = user_flags & !OpenFlags::FCNTL_MASK;
+                // 4. 合并保留的标志位和用户设置的新标志位
+                let new_flags = preserved_flags | filtered_user_flags;
+                
+                // println!("Updating flags: current={:?}, new={:?}", current_flags, new_flags);
+                file.set_flags(new_flags);
             }
             return Ok(0);
         }
@@ -964,24 +975,38 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
         // todo  Ok(file.available() as isize);
         // F_GETFD和F_GETFL：获取文件描述符的标志。它首先从文件描述符表中获取文件描述符的信息，
         // 然后返回文件描述符的标志。
-        FcntlFlags::F_GETFD | FcntlFlags::F_GETFL => {
-            // Return (as the function result) the file descriptor flags; arg is ignored.
+        FcntlFlags::F_GETFD => {
+            let fd_info = task.get_fd(fd)?;
+            let flag = fd_info.flags;
+            let mut res = 0;
+            if flag.contains(OpenFlags::O_CLOEXEC) {
+                res = FcntlArgFlags::FD_CLOEXEC.bits() as usize;
+            }
+            // println!("ok res = {:?}", res);
+            return Ok(res);
+        }
+        FcntlFlags::F_GETFL => {
             if let Some(file) = task.get_file_by_fd(fd) {
                 let flags = file.get_flags();
-                if flags.contains(OpenFlags::O_CLOEXEC) && cmd.contains(FcntlFlags::F_GETFD) {
-                    return Ok(FcntlArgFlags::bits(&FcntlArgFlags::FD_CLOEXEC) as usize);
-                } else {
-                    return Ok(OpenFlags::bits(&flags) as usize);
-                }
+                // println!("get flags = {:?}", flags);
+                // let res = OpenFlags::bits(&flags) as usize;
+                let res = flags.bits() as usize;
+                // println!("this is res = {:?}", res);
+                return Ok(res);
             }
-            return Err(Errno::EBADF);
+            return Err(Errno::EBADF); 
         }
         // F_SETFD：设置文件描述符的标志。它首先从参数arg中获取标志，然后设置文件描述符的标志。
         FcntlFlags::F_SETFD => {
             // Set the file descriptor flags to the value specified by arg.
-            if let Some(file) = task.get_file_by_fd(fd) {
-                let new_flags = FcntlArgFlags::from_bits(arg as u32).ok_or(Errno::EINVAL)?;
+            let mut table = task.fd_table.lock();
+            let mut fd_info = table.get_mut_fd(fd)?;
+            if arg == 1 {
+                fd_info.flags = OpenFlags::O_CLOEXEC;
+            } else {
+                fd_info.flags = OpenFlags::empty();
             }
+            drop(table);
             return Ok(0);
         }
         // F_DUPFD：复制文件描述符。它首先从文件描述符表中获取文件，然后分配一个新的文件描述符，
