@@ -9,14 +9,25 @@ endif
 
 ifeq ($(ARCH), riscv64)
 	TARGET := riscv64gc-unknown-none-elf
+	EVAL_OUTPUT := ../kernel-rv
 endif
 ifeq ($(ARCH), loongarch64)
 	TARGET := loongarch64-unknown-none
+	EVAL_OUTPUT := ../kernel-la
 endif
 MODE := release
 # IMG := sdcard
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
+
+# eval will copy to root dir named kernel-rv or kernel-la
+ifeq ($(ARCH), riscv64)
+	EVAL_FROM := $(KERNEL_BIN)
+endif
+ifeq ($(ARCH), loongarch64)
+	EVAL_FROM := $(KERNEL_ELF)
+endif
+
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
 OVERWRITE := false
@@ -128,6 +139,9 @@ kernel:
 	cargo build $(MODE_ARG) --target $(TARGET) -j 20
 	rm src/linker.ld
 PHONY += kernel
+
+eval: build
+	cp $(EVAL_FROM) $(EVAL_OUTPUT) -f
 
 clean:
 	cargo clean

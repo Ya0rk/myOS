@@ -15,3 +15,10 @@ build_docker:
 
 run:
 	docker exec -it myos /bin/bash
+
+all:
+	cd ./os/ && make clean && make eval ARCH=riscv64 && make eval ARCH=loongarch64
+
+clean:
+	rm kernel-la
+	rm kernel-rv
