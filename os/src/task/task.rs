@@ -18,7 +18,7 @@ use crate::mm::{memory_space, translated_refmut, MapPermission};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::time::ITimerVal;
 use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
-use crate::syscall::{CloneFlags, CpuSet};
+use crate::syscall::{CloneFlags, CpuSet, RLimit64};
 use crate::task::manager::get_init_proc;
 use crate::task::{add_task, current_task, current_user_token, get_task_by_pid, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY};
 use crate::hal::trap::TrapContext;
@@ -50,6 +50,7 @@ pub struct TaskControlBlock {
     pub robust_list:    Shared<RobustList>,
     pub futex_list:     Shared<FutexBucket>,
     pub itimers:        Shared<[ITimerVal; 3]>, // 三个定时器，分别对应SIGALRM, SIGVTALRM, SIGPROF
+    pub fsz_limit:      Shared<Option<RLimit64>>, // 记录当前进程最大文件大小
 
     /// to record shm ids (same as ipc key) to manage detaching at exit and execve
     pub shmid_table:     Shared<ShmidTable>,
@@ -70,6 +71,7 @@ pub struct TaskControlBlock {
     pub set_child_tid:  SyncUnsafeCell<Option<usize>>,
     pub cpuset:         SyncUnsafeCell<CpuSet>,
 
+    
     pub exit_code:      AtomicI32,
 }
 
@@ -109,6 +111,7 @@ impl TaskControlBlock {
             robust_list: new_shared(RobustList::new()),
             futex_list: new_shared(FutexBucket::new()),
             itimers: new_shared([ITimerVal::default(); 3]),
+            fsz_limit: new_shared(None),
 
             shmid_table: new_shared(ShmidTable::new()),
 
@@ -192,6 +195,7 @@ impl TaskControlBlock {
         let thread_group = new_shared(ThreadGroup::new());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let children = new_shared(BTreeMap::new());
+        let fsz_limit = new_shared(None);
         let time_data = SyncUnsafeCell::new(TimeData::new());
         let exit_code = AtomicI32::new(0);
         let waker = SyncUnsafeCell::new(None);
@@ -249,6 +253,7 @@ impl TaskControlBlock {
             robust_list,
             futex_list,
             itimers,
+            fsz_limit,
 
             shmid_table, 
 
@@ -285,6 +290,7 @@ impl TaskControlBlock {
         let tgid = AtomicUsize::new(self.get_tgid());
         let pending= AtomicBool::new(false);
         let ucontext = AtomicUsize::new(0);
+        let fsz_limit = self.fsz_limit.clone();
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
         let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
         let sig_stack = SyncUnsafeCell::new(None);
@@ -349,6 +355,7 @@ impl TaskControlBlock {
             robust_list,
             futex_list,
             itimers,
+            fsz_limit,
 
             shmid_table,
 

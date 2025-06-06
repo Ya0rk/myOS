@@ -8,7 +8,7 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::vec;
-use log::{debug, info};
+use log::{debug, info, warn};
 use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::fs::procfs::inode;
@@ -35,7 +35,12 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
-            let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, len) };
+            let mut size = len;
+            if task.fsz_limit.lock().is_some() {
+                size = task.fsz_limit.lock().unwrap().rlim_max;
+            }
+
+            let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, size) };
             Ok(file.write(buf).await? as usize)
         }
         _ => Err(Errno::EBADF),
@@ -1238,5 +1243,27 @@ pub fn sys_fsync() -> SysResult<usize> {
 
 pub fn sys_umask() -> SysResult<usize> {
     info!("[sys_umak] start, Ok(0)");
+    Ok(0)
+}
+
+/// 一个 POSIX 系统调用，用于将进程的当前工作目录更改为指定文件描述符对应的目录
+pub fn sys_fchdir(fd: usize) -> SysResult<usize> {
+    info!("[sys_fchdir] start, fd = {}", fd);
+    let task = current_task().unwrap();
+    if fd > task.fd_table_len() {
+        warn!("[sys_fchdir] fd out of bounds");
+        return Err(Errno::EBADF);
+    }
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    if !file.is_dir() {
+        warn!("[sys_fchdir] fd's file is not dir");
+        return Err(Errno::ENOTDIR);
+    }
+
+    let path = file.get_name()?;
+    let abs = AbsPath::new(path.clone());
+    chdir(abs)?;
+    task.set_current_path(path);
+
     Ok(0)
 }

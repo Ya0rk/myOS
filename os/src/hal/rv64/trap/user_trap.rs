@@ -80,9 +80,9 @@ pub async fn user_trap_handler() {
             let result = current_task().unwrap().with_mut_memory_space(|m| {
                 m.handle_page_fault(stval.into(), access_type)
             }).unwrap_or_else(|e| {
-                use log::warn;
+                use log::error;
                 task.set_zombie();
-                warn!("{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
+                error!("{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
             });;
 
 

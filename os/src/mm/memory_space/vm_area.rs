@@ -382,11 +382,11 @@ impl VmArea {
             // info!("type = {:?}", access_type);
             // info!("perm = {:?}", self.perm());
             backtrace();
-            log::warn!(
+            log::error!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
-            panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
+            // panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
             return Err(Errno::EFAULT);
         }
 

@@ -99,19 +99,7 @@ pub trait FileTrait: Send + Sync {
     /// ppoll处理
     // fn poll(&self, events: PollEvents) -> PollEvents;
 
-    /// 设置文件的当前偏移量
-    ///
-    /// 根据指定的偏移量和起始位置调整文件的当前读写位置。
-    /// 并非所有文件类型都支持此操作。
-    ///
-    /// # 参数
-    ///
-    /// * `_offset` - 偏移量，可以是正数或负数
-    /// * `_whence` - 起始位置，通常为 SEEK_SET(0)、SEEK_CUR(1) 或 SEEK_END(2)
-    ///
-    /// # 返回
-    ///
-    /// 设置后的新偏移量位置
+    /// 获取文件路径，这里是绝对路径
     fn get_name(&self) -> SysResult<String>;
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize>;
     fn fstat(&self, stat: &mut Kstat) -> SysResult;

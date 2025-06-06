@@ -29,6 +29,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_SETUID => sys_setuid(),
+        SysCode::SYSCALL_FCHDIR => sys_fchdir(args[0] as usize),
         SysCode::SYSCALL_SETGID => sys_setgid(args[0] as usize),
         SysCode::SYSCALL_SIGSUSPEND => sys_sigsuspend(args[0] as usize).await,
         SysCode::SYSCALL_UMASK => sys_umask(),

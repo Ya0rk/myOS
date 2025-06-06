@@ -63,6 +63,7 @@ pub enum SysCode {
     SYSCALL_FALLOCAT  = 47,
     SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR     = 49,
+    SYSCALL_FCHDIR    = 50,
     SYSCALL_FCHMODAT  = 53,
     SYSCALL_FCHOWNAT  = 54,
     SYSCALL_OPENAT    = 56,
@@ -110,6 +111,7 @@ pub enum SysCode {
     SYSCALL_SIGTIMEDWAIT = 137,
     SYSCALL_SIGRETURN = 139,
     SYSCALL_SETGID    = 144,
+    SYSCALL_SETUID    = 146,
     SYSCALL_TIMES     = 153,
     SYSCALL_SETPGID   = 154,
     SYSCALL_GETPGID   = 155,
@@ -174,6 +176,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SETUID => "setuid",
+            Self::SYSCALL_FCHDIR => "fchdir",
             Self::SYSCALL_SETGID => "setgid",
             Self::SYSCALL_SIGSUSPEND => "sigsuspend",
             Self::SYSCALL_UMASK => "umask",
@@ -625,10 +629,16 @@ impl From<i32> for SyslogCmd {
 
 /// 资源限制结构体
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct RLimit64 {
     pub rlim_cur: usize, // 实际生效的限制，进程可以自由降低或者提高，但是不能超过硬限制
     pub rlim_max: usize, // 硬限制，只有root用户可以修改
+}
+
+impl Display for RLimit64 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(rlim_cur = {}, rlim_max = {})", self.rlim_cur, self.rlim_max)
+    }
 }
 
 impl RLimit64 {
