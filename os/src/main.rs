@@ -44,6 +44,7 @@ pub mod net;
 // pub mod arch;
 pub mod signal;
 pub mod hal;
+pub mod ipc;
 
 
 use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};

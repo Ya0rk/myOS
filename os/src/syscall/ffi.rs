@@ -124,6 +124,10 @@ pub enum SysCode {
     SYSCALL_GETEGID   = 177,
     SYSCALL_GETTID    = 178,
     SYSCALL_SYSINFO   = 179,
+    SYSCALL_SHMGET    = 194,
+    SYSCALL_SHMCTL    = 195,
+    SYSCALL_SHMAT     = 196,
+    SYSCALL_SHMDT     = 197,
     SYSCALL_SOCKET    = 198,
     SYSCALL_SOCKETPAIR= 199,
     SYSCALL_BIND      = 200,
@@ -277,6 +281,10 @@ impl SysCode {
             Self::SYSCALL_UNKNOWN => "unknown",
             Self::GETRANDOM => "getrandom",
             Self::SYS_STATX => "statx",
+            Self::SYSCALL_SHMGET => "shmget",
+            Self::SYSCALL_SHMAT => "shmat",
+            Self::SYSCALL_SHMDT => "shmdt",
+            Self::SYSCALL_SHMCTL => "shmctl",
         }
     }
 }
@@ -782,3 +790,46 @@ impl Default for CpuSet {
 }
 
 pub const CPUSET_LEN: usize = size_of::<CpuSet>();
+
+
+
+/*
+/* 
+ * Control commands used with semctl, msgctl and shmctl 
+ * see also specific commands in sem.h, msg.h and shm.h
+ */
+#define IPC_RMID 0     /* remove resource */
+#define IPC_SET  1     /* set ipc_perm options */
+#define IPC_STAT 2     /* get ipc_perm options */
+#define IPC_INFO 3     /* see ipcs */
+
+
+
+/* super user shmctl commands */
+#define SHM_LOCK 	11
+#define SHM_UNLOCK 	12
+
+/* ipcs ctl commands */
+#define SHM_STAT	13
+#define SHM_INFO	14
+#define SHM_STAT_ANY    15
+
+*/
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive)]
+#[repr(isize)]
+#[allow(unused)]
+#[allow(non_camel_case_types)]
+pub enum ShmOp {
+    IPC_RMID = 0,
+    IPC_SET = 1,
+    IPC_STAT = 2,
+    IPC_INFO = 3,
+    SHM_LOCK = 11,
+    SHM_UNLOCK = 12,
+    SHM_STAT = 13,
+    SHM_INFO = 14,
+    SHM_STAT_ANY = 15,
+    #[num_enum(default)]
+    INVALID = -1,
+}

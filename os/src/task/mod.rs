@@ -6,6 +6,7 @@ mod processor;
 mod fd;
 mod sched;
 mod thread_group;
+mod ipc;
 pub mod aux;
 pub mod futex;
 pub mod executor;
@@ -29,6 +30,7 @@ pub use processor::{
     current_user_token, current_kernel_token, take_current_task, 
     get_current_hart_id, get_current_cpu
 };
+pub use ipc::ShmidTable;
 
 use async_task::Task;
 use log::info;
