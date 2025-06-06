@@ -77,7 +77,7 @@ lazy_static! {
 
 impl Dentry {
     /// 初始化dentry系统,将根节点和ext4文件系统绑定
-    pub fn init() {
+    pub fn init_dentry_sys() {
         info!("[dentry init]");
         Self::bind(&DENTRY_ROOT, crate::fs::ext4::SUPER_BLOCK.root_inode());
         info!("list root dir");
@@ -155,6 +155,12 @@ impl Dentry {
         self.inode.write().clear();
         *self.status.write() = DentryStatus::Negtive;
     }
+    fn get_status(&self) -> DentryStatus {
+        *self.status.read()
+    }
+    fn set_status(&self, status: DentryStatus) {
+        *self.status.write() = status
+    }
 
     /// 安全的获得 parent 方法， 当不存在上级文件夹的时候会返回 None
     fn parent(&self) -> Option<Arc<Self>> {
@@ -186,63 +192,38 @@ impl Dentry {
     }
 
     // TODO: 这个函数存在隐患， 不应当这么做
-    fn get_parent(self: Arc<Self>) -> Arc<Self> {
-        let mut dentry = self.clone();
-        if let Some(parent) = dentry.parent.upgrade() {
-            dentry = parent;
-        }
-        dentry
-    }
+    // fn get_parent(self: Arc<Self>) -> Arc<Self> {
+    //     let mut dentry = self.clone();
+    //     if let Some(parent) = dentry.parent.upgrade() {
+    //         dentry = parent;
+    //     }
+    //     dentry
+    // }
 
     // FIXME: 注意到这里原来的实现是使用的绝对路径作为 name 字段， 应当改为文件名作为 name 字段
-    /// pattern为绝对路径
-    fn get_child(self: Arc<Self>, pattern: &str) -> Option<Arc<Self>> {
+    /// pattern为文件名字
+    fn get_child(self: &Arc<Self>, pattern: &str) -> Option<Arc<Self>> {
         // info!("visit {}", pattern);
+        let status = { self.get_status() };
+        match status {
+            DentryStatus::Valid => {}
+            DentryStatus::Unint => {
+                self.init();
+            }
+            DentryStatus::Negtive => return None,
+        };
         if pattern.ends_with("/") || pattern.ends_with(".") || pattern == "" {
             // info!("return name is {}", self.name.read());
             return Some(self.clone());
         } else if pattern.ends_with("..") {
             // info!("return name is {}", self.name.read());
-            return Some(self.clone().get_parent());
+            return self.clone().parent();
         }
-        let pattern = AbsPath::new(pattern.to_string());
-        let pattern_abs = pattern.get();
-        let pattern_filename = pattern.get_filename();
+        // 直接检索当前的文件夹
         {
             let children = self.children.read();
-            if let Some(dentry) = children.get(&pattern_abs) {
+            if let Some(dentry) = children.get(pattern) {
                 return Some(dentry.clone());
-            }
-        }
-        // 注意到这里其实是一个临时的机制,因为一个子文件可能并不属于这个文件系统,而是外部挂载而来
-        // 应当改进flush_binding、mount、unmount的逻辑,实现粒度更小的操作
-        let dents = self.get_inode().unwrap().read_dents().unwrap();
-        let mut children_vec = self.children.write();
-        for dent in dents {
-            let name = Vec::from(dent.d_name);
-            match String::from_utf8(name) {
-                Ok(name) => {
-                    let real_name = name.replace("\0", "");
-                    debug!("compare between {:?} and {:?}", real_name, pattern_filename);
-                    if real_name == pattern_filename {
-                        // info!("hit {}", name);
-                        if name.ends_with("lost_found") {
-                            continue;
-                        } //临时添加
-                        let temp = if self.name.read().ends_with("/") {
-                            alloc::format!("{}{}", self.name.read(), real_name)
-                        } else {
-                            alloc::format!("{}/{}", self.name.read(), real_name)
-                        }; // temp是最后要创造的儿子的名字,使用父节点的名字进行拼接
-                        let temp = temp.replace('\0', ""); //去除掉“\0”字符
-                        let son = Self::new_bare(&self, &temp);
-                        children_vec.insert(temp, son.clone());
-                        return Some(son);
-                    }
-                }
-                Err(e) => {
-                    info!("no valid name {:?}", e);
-                }
             }
         }
         None
@@ -253,7 +234,10 @@ impl Dentry {
     /// 增加孩子, 只要父母是合法的, 那就一定会返回Dentry
     /// 即当Inode不存在的时候就会创建Inode
     pub fn add_child(self: Arc<Self>, name: &str, flag: OpenFlags) -> Option<Arc<dyn InodeTrait>> {
-        let self_name = self.name.read();
+        if self.is_negtive() {
+            return None;
+        }
+        let self_name = self.get_abs_path();
         debug!("[Dentry::add_child] add {} in {}", name, self_name);
         let target_name = if self_name.ends_with("/") {
             format!("{}{}", self_name, name)
@@ -311,54 +295,90 @@ impl Dentry {
         {
             self.inode.write().push(inode);
         }
-        Self::flush_binding(self);
+        self.set_status(DentryStatus::Unint);
+        self.init();
         info!("finished bind");
     }
 
+    // FIXME: 可能存在错误， 并没有实现逻辑
     pub fn unbind(self: &Arc<Self>) {
         {
             self.inode.write().pop();
         }
-        Self::flush_binding(self);
+        self.set_status(DentryStatus::Unint);
+        self.init();
         info!("finished unbind");
     }
 
     /// 获取dentry的inode栈顶,根据这个栈顶去刷新dentry的children
-    fn flush_binding(self: &Arc<Self>) {
-        {
-            let mut children_vec = self.children.write();
-            children_vec.clear();
-        }
-        match self.inode.read().last() {
-            None => {
-                return;
-            }
-            Some(inode) => {
-                if !inode.is_dir() {
-                    return;
-                }
+    // fn flush_binding(self: &Arc<Self>) {
+    //     {
+    //         let mut children_vec = self.children.write();
+    //         children_vec.clear();
+    //     }
+    //     match self.inode.read().last() {
+    //         None => {
+    //             return;
+    //         }
+    //         Some(inode) => {
+    //             if !inode.is_dir() {
+    //                 return;
+    //             }
+    //
+    //             info!("inode is dir");
+    //             let dents = inode.read_dents().unwrap();
+    //             for dent in dents {
+    //                 let name = Vec::from(dent.d_name);
+    //                 match String::from_utf8(name) {
+    //                     Ok(name) => {
+    //                         if name.ends_with("lost_found") {
+    //                             continue;
+    //                         } //临时添加
+    //                         let real_name = name.replace("\0", "");
+    //                         let son = Self::new_bare(&self, &real_name);
+    //                         son.get_inode();
+    //                         self.children.write().insert(real_name, son);
+    //                     }
+    //                     Err(e) => {
+    //                         error!("no valid name {:?}", e);
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
-                info!("inode is dir");
-                let dents = inode.read_dents().unwrap();
-                for dent in dents {
-                    let name = Vec::from(dent.d_name);
-                    match String::from_utf8(name) {
-                        Ok(name) => {
-                            if name.ends_with("lost_found") {
-                                continue;
-                            } //临时添加
-                            let real_name = name.replace("\0", "");
-                            let son = Self::new_bare(&self, &real_name);
-                            son.get_inode();
-                            self.children.write().insert(real_name, son);
-                        }
-                        Err(e) => {
-                            error!("no valid name {:?}", e);
-                        }
-                    }
-                }
-            }
+    fn init(self: &Arc<Self>) -> SysResult<usize> {
+        {
+            // 查看当前状态， 如果已经初始化成功就返回， 如果是无效的也直接返回
+            match self.get_status() {
+                DentryStatus::Negtive => return Err(Errno::ENOENT),
+                DentryStatus::Valid => return Ok(0),
+                DentryStatus::Unint => {}
+            };
         }
+        let inode = if let Some(inode) = self.get_inode() {
+            inode
+        } else {
+            return Err(Errno::ENOENT);
+        };
+        if inode.node_type() == InodeType::Dir {
+            let dents = inode.read_dents().unwrap();
+            for dent in dents {
+                let name_byte = dent.d_name;
+                let end = name_byte
+                    .iter()
+                    .position(|&b| b == 0)
+                    .unwrap_or(name_byte.len());
+                let real_name = String::from_utf8_lossy(&name_byte[0..end]);
+                let son = Self::new_bare(&self, &real_name);
+                self.children.write().insert(real_name.to_string(), son);
+            }
+        } else {
+            self.children.write().clear();
+        }
+        self.set_status(DentryStatus::Valid);
+        Ok(0)
     }
 
     /// 将一个dentry和一个superblock绑定
@@ -371,9 +391,21 @@ impl Dentry {
         info!("bind a superblock to dentry!");
     }
     /// 从一个dentry上获取inode
+    ///
+    /// 这个行为只会在 dentry 不是 negtive 的情况下有效
+    ///
+    /// 实际上这个函数是 get_inode 和
+    ///
+    /// 本应该属于 filesystem 的 alloc_inode
+    ///
+    /// 的功能二合一了
     fn get_inode(self: &Arc<Self>) -> Option<Arc<dyn InodeTrait>> {
         {
-            // info!("[get_inode] {:?}, inode vec len is {}", self.name.read(), self.inode.read().len());
+            info!(
+                "[get_inode] {:?}, inode vec len is {}",
+                self.name.read(),
+                self.inode.read().len()
+            );
         }
         {
             if self.is_negtive() {
@@ -387,44 +419,16 @@ impl Dentry {
                 return Some(inode.clone());
             }
         }
-        // 如果没有 inode，获取写锁并重新检查（避免并发重复计算）
-        let res = {
-            let mut inode_guard = self.inode.write();
-            // 双重检查，防止在获取写锁期间其他线程已写入 inode
-            if let Some(inode) = inode_guard.last() {
-                return Some(inode.clone());
-            }
-            {
-                if self.name.read().ends_with("/..") {
-                    info!("dentry hit .. , check in {:?}", *(self.name.read()));
-                    let this = Weak::upgrade(&self.parent)?.clone();
-                    let parent = Weak::upgrade(&this.parent)?.clone();
-                    return parent.get_inode();
-                }
-            }
-            {
-                if self.name.read().ends_with("/.") {
-                    info!("dentry hit . , check in {:?}", *(self.name.read()));
-                    return Weak::upgrade(&self.parent)?.clone().get_inode();
-                }
-            }
+        {
             // 获取父节点
             let parent_dentry = self.parent.upgrade()?;
             // 获取父节点的 inode 并执行 walk
             let parent_inode = parent_dentry.get_inode()?;
-            let this_inode = parent_inode.loop_up(&self.name.read())?;
+            let this_inode = parent_inode.loop_up(&self.get_abs_path())?;
             // 存储 inode 到栈
-            if this_inode.is_valid() {
-                inode_guard.push(this_inode.clone());
-                Some(this_inode)
-            } else {
-                None
-            }
-        };
-        // {
-        //     self.flush_binding();
-        // }
-        res
+            self.inode.write().push(this_inode.clone());
+            Some(this_inode)
+        }
     }
 
     /// 根据绝对路径获取对应的inode
@@ -445,12 +449,7 @@ impl Dentry {
         let path_split = path.split('/').enumerate();
         let size_of_path = path_split.clone().count();
         for (i, name) in path_split {
-            if path_now.ends_with("/") {
-                path_now = alloc::format!("{}{}", path_now, name);
-            } else {
-                path_now = alloc::format!("{}/{}", path_now, name);
-            }
-            match dentry_now.get_child(&path_now) {
+            match dentry_now.get_child(name) {
                 Some(child) => {
                     dentry_now = child;
                     match dentry_now.get_inode() {
@@ -473,10 +472,6 @@ impl Dentry {
                 }
             }
         }
-        // info!("[get_inode_from_path] successful {}", path);
-        // if let Some(inode) = dentry_now.get_inode() {
-        //     INODE_CACHE.insert(path, inode);
-        // };
         if let Some(inode) = dentry_now.get_inode() {
             if inode.is_valid() {
                 Ok(inode)
@@ -486,7 +481,6 @@ impl Dentry {
         } else {
             Err(Errno::ENOENT)
         }
-        // dentry_now.get_inode().ok_or(Errno::ENOENT)
     }
 
     /// 根据绝对路径找到dentry
@@ -533,47 +527,6 @@ impl Dentry {
             }
         }
         Ok(dentry_now)
-    }
-
-    pub fn hard_link(old: String, new: String) -> bool {
-        info!("[hard_link] {} TO {}", &old, &new);
-        if let (Ok(dentry), Ok(inode)) = (
-            Self::get_dentry_from_path(&old),
-            Self::get_inode_from_path(&old),
-        ) {
-            if inode.node_type() == InodeType::Dir {
-                error!("[hard link] failed target is dir! {} TO {} ", &old, &new);
-                return false;
-            }
-            let path = AbsPath::new(new.clone());
-            let parent_path = path.get_parent_abs();
-            let child_path_relative = path.get_filename();
-            if let Ok(parent) = Self::get_dentry_from_path(&parent_path) {
-                inode.link(&new);
-                info!(
-                    "[hard_link] inode info: cache: {}, size: {}",
-                    inode.get_page_cache().is_none(),
-                    inode.get_size()
-                );
-                if let Some(new_dentry) = parent.clone().get_child(&new) {
-                    new_dentry.unbind();
-                    new_dentry.bind(inode);
-                    true
-                } else {
-                    parent.new(&child_path_relative, inode);
-                    true
-                }
-            } else {
-                error!(
-                    "[hard link] failed to get target parent {} TO {} ",
-                    &old, &new
-                );
-                false
-            }
-        } else {
-            error!("[hard link] failed to get origin {} TO {} ", &old, &new);
-            false
-        }
     }
 }
 
@@ -698,35 +651,6 @@ pub async fn dentry_test() {
     // {if let Some(x) = DENTRY_ROOT.get_inode() {
     //     info!("root dentry stat is {:?}", x.fstat());
     // }}
-
-    info!("--------------------------------------test hard link--------------------------------------");
-    mkdir("/test_dir".into(), 0);
-    let flags = OpenFlags::O_RDWR | OpenFlags::O_CREAT;
-    if let Ok(FileClass::File(file)) = open("/test_dir/filea".into(), flags) {
-        info!("Successfully create /test_dir/filea");
-        let buf = [1; 256];
-        file.write(&buf).await;
-        info!("/test_dir/filea write\n{:?}", buf);
-    } else {
-        error!("Failed to create /test_dir/filea");
-    }
-    match Dentry::hard_link("/test_dir/filea".into(), "/test_dir/fileb".into()) {
-        true => {
-            info!("link succeed");
-        }
-        false => {
-            error!("link failed");
-        }
-    }
-    if let Ok(FileClass::File(file)) = open("/test_dir/fileb".into(), OpenFlags::O_RDONLY) {
-        info!("Successfully open /test_dir/fileb");
-        let mut buf = [0; 256];
-        file.read(&mut buf).await;
-        info!("/test_dir/fileb read \n{:?}", buf);
-    } else {
-        error!("Failed to open /test_dir/fileb");
-    }
-    info!("--------------------------------------finish hard link test-------------------------------------------");
     info!("finished dentry test");
     // panic!("dentry test");
 }
