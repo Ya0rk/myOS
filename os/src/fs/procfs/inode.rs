@@ -3,7 +3,6 @@ use async_trait::async_trait;
 use alloc::boxed::Box;
 use log::error;
 use lwext4_rust::bindings::O_RDONLY;
-use riscv::register::hcounteren::read;
 use crate::{fs::{dirent::build_dirents, ffi::MEMINFO, open, AbsPath, Dirent, FileClass, InodeTrait, InodeType, Kstat, OpenFlags}, sync::{SpinNoIrqLock, TimeStamp}, utils::SysResult};
 
 /// ProcFsInodeInner 是一个枚举类型, 代表proc文件系统中的inode的类型

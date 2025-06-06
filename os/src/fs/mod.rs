@@ -27,7 +27,6 @@ pub use dirent::Dirent;
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
 use procfs::PROCFS_SUPER_BLOCK;
-use riscv::register;
 // use sbi_rt::NonRetentive;
 use sbi_spec::pmu::cache_event::NODE;
 pub use stat::Kstat;
