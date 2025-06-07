@@ -511,6 +511,7 @@ impl MemorySpace {
         map_perm: MapPerm,
         pages: &mut Vec<Weak<Page>>,
     ) -> VirtAddr {
+        info!("[attach_shm] shmaddr: {:#x}, size: {:#x}, map_perm: {:?}, pages: {:?}", shmaddr.0, size, map_perm, pages);
         let mut ret_addr = shmaddr;
         let mut vm_area = if shmaddr == 0.into() {
             let shared_range: Range<VirtAddr> =
@@ -948,7 +949,7 @@ impl MemorySpace {
     ) -> SysResult<()> {
         log::trace!("[MemorySpace::handle_page_fault] {va:?}");
         let vm_area = self.areas_mut().get_mut(va.align_down()).ok_or_else(|| {
-            log::warn!("[handle_page_fault] no area containing {va:?}");
+            log::error!("[handle_page_fault] no area containing {va:?}");
             Errno::EFAULT
         })?;
         vm_area.handle_page_fault(self.page_table_mut(), va.floor(), access_type)?;

@@ -63,6 +63,7 @@ pub enum SysCode {
     SYSCALL_FALLOCAT  = 47,
     SYSCALL_FACCESSAT = 48,
     SYSCALL_CHDIR     = 49,
+    SYSCALL_FCHDIR    = 50,
     SYSCALL_FCHMODAT  = 53,
     SYSCALL_FCHOWNAT  = 54,
     SYSCALL_OPENAT    = 56,
@@ -110,6 +111,7 @@ pub enum SysCode {
     SYSCALL_SIGTIMEDWAIT = 137,
     SYSCALL_SIGRETURN = 139,
     SYSCALL_SETGID    = 144,
+    SYSCALL_SETUID    = 146,
     SYSCALL_TIMES     = 153,
     SYSCALL_SETPGID   = 154,
     SYSCALL_GETPGID   = 155,
@@ -126,6 +128,10 @@ pub enum SysCode {
     SYSCALL_GETEGID   = 177,
     SYSCALL_GETTID    = 178,
     SYSCALL_SYSINFO   = 179,
+    SYSCALL_SHMGET    = 194,
+    SYSCALL_SHMCTL    = 195,
+    SYSCALL_SHMAT     = 196,
+    SYSCALL_SHMDT     = 197,
     SYSCALL_SOCKET    = 198,
     SYSCALL_SOCKETPAIR= 199,
     SYSCALL_BIND      = 200,
@@ -170,6 +176,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SETUID => "setuid",
+            Self::SYSCALL_FCHDIR => "fchdir",
             Self::SYSCALL_SETGID => "setgid",
             Self::SYSCALL_SIGSUSPEND => "sigsuspend",
             Self::SYSCALL_UMASK => "umask",
@@ -281,6 +289,10 @@ impl SysCode {
             Self::SYSCALL_UNKNOWN => "unknown",
             Self::GETRANDOM => "getrandom",
             Self::SYS_STATX => "statx",
+            Self::SYSCALL_SHMGET => "shmget",
+            Self::SYSCALL_SHMAT => "shmat",
+            Self::SYSCALL_SHMDT => "shmdt",
+            Self::SYSCALL_SHMCTL => "shmctl",
         }
     }
 }
@@ -617,10 +629,16 @@ impl From<i32> for SyslogCmd {
 
 /// 资源限制结构体
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct RLimit64 {
     pub rlim_cur: usize, // 实际生效的限制，进程可以自由降低或者提高，但是不能超过硬限制
     pub rlim_max: usize, // 硬限制，只有root用户可以修改
+}
+
+impl Display for RLimit64 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(rlim_cur = {}, rlim_max = {})", self.rlim_cur, self.rlim_max)
+    }
 }
 
 impl RLimit64 {
@@ -786,3 +804,46 @@ impl Default for CpuSet {
 }
 
 pub const CPUSET_LEN: usize = size_of::<CpuSet>();
+
+
+
+/*
+/* 
+ * Control commands used with semctl, msgctl and shmctl 
+ * see also specific commands in sem.h, msg.h and shm.h
+ */
+#define IPC_RMID 0     /* remove resource */
+#define IPC_SET  1     /* set ipc_perm options */
+#define IPC_STAT 2     /* get ipc_perm options */
+#define IPC_INFO 3     /* see ipcs */
+
+
+
+/* super user shmctl commands */
+#define SHM_LOCK 	11
+#define SHM_UNLOCK 	12
+
+/* ipcs ctl commands */
+#define SHM_STAT	13
+#define SHM_INFO	14
+#define SHM_STAT_ANY    15
+
+*/
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromPrimitive)]
+#[repr(isize)]
+#[allow(unused)]
+#[allow(non_camel_case_types)]
+pub enum ShmOp {
+    IPC_RMID = 0,
+    IPC_SET = 1,
+    IPC_STAT = 2,
+    IPC_INFO = 3,
+    SHM_LOCK = 11,
+    SHM_UNLOCK = 12,
+    SHM_STAT = 13,
+    SHM_INFO = 14,
+    SHM_STAT_ANY = 15,
+    #[num_enum(default)]
+    INVALID = -1,
+}

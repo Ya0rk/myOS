@@ -177,6 +177,7 @@ fn create_open_file(
             if flags.contains(OpenFlags::O_CREAT) {
                 // need to create
                 let path: AbsPath = target_abs_path.into();
+                println!("path = {}", path.get());
                 parent_dentry.add_child(&path.get_filename(), flags).unwrap()
             } else {
                 // no need to create
@@ -196,7 +197,7 @@ fn create_open_file(
         debug!("[create_open_file] target_path {} is not a directory", target_abs_path);
         return Err(Errno::ENOTDIR);
     }
-    // info!("[create_file] got target inode");
+    info!("[create_file] got target inode, flags = {:?}", flags);
 
     let res = {
         let osinode = NormalFile::new(

@@ -5,18 +5,20 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, FutexBucket, RobustList, ThreadGroup};
+use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, FutexBucket, RobustList, ShmidTable, ThreadGroup};
 use super::{pid_alloc, Pid};
 use crate::fs::ext4::NormalFile;
 use crate::hal::arch::{sfence, shutdown};
 use crate::fs::{init, FileClass, FileTrait};
 use crate::hal::config::INITPROC_PID;
+use crate::ipc::shm::SHARED_MEMORY_MANAGER;
+use crate::ipc::IPCKey;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::time::ITimerVal;
 use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
-use crate::syscall::{CloneFlags, CpuSet};
+use crate::syscall::{CloneFlags, CpuSet, RLimit64};
 use crate::task::manager::get_init_proc;
 use crate::task::{add_task, current_task, current_user_token, get_task_by_pid, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY};
 use crate::hal::trap::TrapContext;
@@ -48,6 +50,10 @@ pub struct TaskControlBlock {
     pub robust_list:    Shared<RobustList>,
     pub futex_list:     Shared<FutexBucket>,
     pub itimers:        Shared<[ITimerVal; 3]>, // 三个定时器，分别对应SIGALRM, SIGVTALRM, SIGPROF
+    pub fsz_limit:      Shared<Option<RLimit64>>, // 记录当前进程最大文件大小
+
+    /// to record shm ids (same as ipc key) to manage detaching at exit and execve
+    pub shmid_table:     Shared<ShmidTable>,
 
     // signal
     pub pending:        AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
@@ -65,6 +71,7 @@ pub struct TaskControlBlock {
     pub set_child_tid:  SyncUnsafeCell<Option<usize>>,
     pub cpuset:         SyncUnsafeCell<CpuSet>,
 
+    
     pub exit_code:      AtomicI32,
 }
 
@@ -104,6 +111,9 @@ impl TaskControlBlock {
             robust_list: new_shared(RobustList::new()),
             futex_list: new_shared(FutexBucket::new()),
             itimers: new_shared([ITimerVal::default(); 3]),
+            fsz_limit: new_shared(None),
+
+            shmid_table: new_shared(ShmidTable::new()),
 
             pending: AtomicBool::new(false),
             ucontext: AtomicUsize::new(0),
@@ -155,6 +165,7 @@ impl TaskControlBlock {
         unsafe { memory_space.switch_page_table() };
         let mut mem = self.memory_space.lock();
         *mem = memory_space;
+        self.detach_all_shm();
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), argv, env, auxv);
         
         // set trap cx
@@ -180,9 +191,11 @@ impl TaskControlBlock {
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
         let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
         let sig_stack = SyncUnsafeCell::new(None);
+        let shmid_table = new_shared(self.shmid_table.lock().clone());
         let thread_group = new_shared(ThreadGroup::new());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let children = new_shared(BTreeMap::new());
+        let fsz_limit = new_shared(None);
         let time_data = SyncUnsafeCell::new(TimeData::new());
         let exit_code = AtomicI32::new(0);
         let waker = SyncUnsafeCell::new(None);
@@ -240,6 +253,9 @@ impl TaskControlBlock {
             robust_list,
             futex_list,
             itimers,
+            fsz_limit,
+
+            shmid_table, 
 
             pending,
             ucontext,
@@ -274,9 +290,11 @@ impl TaskControlBlock {
         let tgid = AtomicUsize::new(self.get_tgid());
         let pending= AtomicBool::new(false);
         let ucontext = AtomicUsize::new(0);
+        let fsz_limit = self.fsz_limit.clone();
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
         let blocked = SyncUnsafeCell::new(self.get_blocked().clone());
         let sig_stack = SyncUnsafeCell::new(None);
+        let shmid_table = new_shared(self.shmid_table.lock().clone());
         let task_status = SpinNoIrqLock::new(TaskStatus::Ready);
         let thread_group = self.thread_group.clone();
         let parent = self.parent.clone();
@@ -337,6 +355,9 @@ impl TaskControlBlock {
             robust_list,
             futex_list,
             itimers,
+            fsz_limit,
+
+            shmid_table,
 
             task_status,
             thread_group,
@@ -439,6 +460,7 @@ impl TaskControlBlock {
         }
         
         self.clear_fd_table();
+        self.detach_all_shm();
         // self.recycle_data_pages();
     }
 
@@ -796,6 +818,12 @@ impl TaskControlBlock {
         self.fd_table.lock().clear();
     }
 
+    pub fn detach_all_shm(&self) {
+        for (_, shmid) in self.shmid_table.lock().iter() {
+            SHARED_MEMORY_MANAGER.write().get_mut(shmid).unwrap().detach_one(self.get_pid());
+        }
+    }
+
     /// cwd
     /// 获取当前进程的当前工作目录
     pub fn get_current_path(&self) -> String {
@@ -862,6 +890,10 @@ impl TaskControlBlock {
 
     pub fn with_mut_memory_space<T>(&self, f: impl FnOnce(&mut MemorySpace) -> T) -> T {
         f(&mut self.memory_space.lock())
+    }
+
+    pub fn with_mut_shmid_table<T>(&self, f: impl FnOnce(&mut ShmidTable) -> T) -> T {
+        f(&mut self.shmid_table.lock())
     }
 }
 

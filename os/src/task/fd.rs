@@ -145,6 +145,9 @@ impl FdTable {
     }
 
     pub fn find_slot(&self, start: usize) -> Option<usize> {
+        if start >= self.table_len() {
+            return Some(start);
+        }
         if let Some(valid_fd) = (start..self.table_len()).find(|idx| self.table[*idx].is_none()) {
             return Some(valid_fd);
         }
@@ -189,6 +192,14 @@ impl FdTable {
             return Err(Errno::EBADF);
         }
         Ok(self.table[idx].clone())
+    }
+
+    /// 获取fdinfo的可变引用，修改里面的数据
+    pub fn get_mut_fd(&mut self, idx: usize) -> SysResult<&mut FdInfo> {
+        if idx >= self.table_len() {
+            return Err(Errno::EBADF);
+        }
+        Ok(&mut self.table[idx])
     }
 
     pub fn clear(&mut self) {

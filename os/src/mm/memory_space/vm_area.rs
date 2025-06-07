@@ -53,7 +53,9 @@ bitflags! {
         const WX = Self::W.bits() | Self::X.bits();
         const RWX = Self::R.bits() | Self::W.bits() | Self::X.bits();
 
+        const UR = Self::U.bits() | Self::R.bits();
         const UW = Self::U.bits() | Self::W.bits();
+        const UX = Self::U.bits() | Self::X.bits();
         const URW = Self::U.bits() | Self::RW.bits();
         const URX = Self::U.bits() | Self::RX.bits();
         const UWX = Self::U.bits() | Self::WX.bits();
@@ -380,11 +382,11 @@ impl VmArea {
             // info!("type = {:?}", access_type);
             // info!("perm = {:?}", self.perm());
             backtrace();
-            log::warn!(
+            log::error!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
-            panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
+            // panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
             return Err(Errno::EFAULT);
         }
 

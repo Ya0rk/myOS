@@ -11,7 +11,7 @@ use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, 
 use crate::syscall::io::SigMaskGuard;
 use crate::syscall::{CpuSet, RLimit64};
 use crate::task::{
-    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, new_process_group, spawn_kernel_task, spawn_user_task, TaskStatus, MANAGER
+    add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, new_process_group, remove_proc_group_member, spawn_kernel_task, spawn_user_task, TaskStatus, MANAGER
 };
 use crate::utils::{Errno, SysResult, RNG};
 use alloc::ffi::CString;
@@ -269,7 +269,29 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
             p if p < -1 => {
                 locked_child.values().find(|task| task.get_pid() == p.abs() as usize).cloned()
             }
-            _ => unimplemented!(),
+            // 等待和当前进程组同组的任意一个进程
+            _ => {
+                drop(locked_child);
+                let pgid = task.get_pgid();
+                let mut zombie_task = None;
+                let mut target_group = get_target_proc_group(pgid).unwrap();
+
+                // 移除无效 PID 和 找到 Zombie 进程
+                for &pid in target_group.iter() {
+                    match get_task_by_pid(pid) {
+                        None => {
+                            info!("[sys_wait4] task pid = {} has been dead, removing from group.", pid);
+                            remove_proc_group_member(pgid, pid);
+                        }
+                        Some(peer) if peer.is_zombie() && peer.thread_group.lock().thread_num() == 1 => {
+                            zombie_task = Some(peer);
+                            break; // 找到一个就停止
+                        }
+                        _ => {}
+                    }
+                }
+                zombie_task
+            },
         }
     };
 
@@ -307,7 +329,7 @@ pub async fn sys_wait4(pid: isize, wstatus: usize, options: usize, _rusage: usiz
                                         break (find_pid, status, exit_code);
                                     }
                                 }
-                                _ => unimplemented!(),
+                                _ => break (find_pid, status, exit_code),
                             }
                         }
                     }
@@ -741,6 +763,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
 /// old_limit: 用于返回旧的资源限制结构体；若为null，不返回旧值
 pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usize) -> SysResult<usize> {
     info!("[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}", pid, resource, new_limit, old_limit);
+    println!("[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}", pid, resource, new_limit, old_limit);
     let task = match pid {
         0 => current_task().unwrap(),
         p if p > 0 => get_task_by_pid(p).ok_or(Errno::ESRCH)?,
@@ -755,6 +778,7 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
             RlimResource::Nofile => task.fd_table.lock().rlimit,
             RlimResource::Stack => RLimit64::new(USER_STACK_SIZE, USER_STACK_SIZE),
             RlimResource::Data => RLimit64::new(KERNEL_HEAP_SIZE, KERNEL_HEAP_SIZE),
+            RlimResource::Nproc => task.fd_table.lock().rlimit,
             _ => RLimit64::new_bare(),
         };
         unsafe {
@@ -765,8 +789,16 @@ pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usi
     // 修改当前限制
     if new_limit != 0 {
         let new_limit = unsafe{ *(new_limit as *const RLimit64) };
+        println!("new limit = {:?}", new_limit);
         match rs {
             RlimResource::Nofile => {
+                task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;
+                task.fd_table.lock().rlimit.rlim_max = new_limit.rlim_max;
+            }
+            RlimResource::Fsize => {
+                *task.fsz_limit.lock() = Some(new_limit);
+            }
+            RlimResource::Nproc => {
                 task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;
                 task.fd_table.lock().rlimit.rlim_max = new_limit.rlim_max;
             }
@@ -1133,4 +1165,10 @@ pub async fn sys_sigsuspend(mask: usize) -> SysResult<usize> {
     suspend_now().await;
 
     Err(Errno::EINTR)
+}
+
+pub fn sys_setuid() -> SysResult<usize> {
+    info!("[sys_setuid] start");
+
+    Ok(0)
 }
