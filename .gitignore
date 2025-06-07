@@ -9,7 +9,7 @@
 
 *.img
 *.diff
-*.a
+
 *.log
 
 os/src/link_app.S

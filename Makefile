@@ -17,6 +17,8 @@ run:
 	docker exec -it myos /bin/bash
 
 all:
+	cp ./liblwext4-loongarch64.a ./lwext4_rust/c/lwext4/
+	cp ./liblwext4-riscv64.a ./lwext4_rust/c/lwext4/
 	cd ./os/ && make clean && make eval ARCH=riscv64 && make eval ARCH=loongarch64
 
 clean:
