@@ -119,7 +119,10 @@ pub fn shutdown(failuer: bool) -> ! {
     }
     loop {
         unsafe  {
-            asm!("idle 1");
+            println!("power off!");
+            // asm!("idle 1");
+            let power_off = 0x8000_0000_100e_001c as *mut u8;
+            power_off.write_volatile(0x34 as u8);
         }
     }
     unreachable!()

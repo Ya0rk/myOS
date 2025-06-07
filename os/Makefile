@@ -1,16 +1,33 @@
 # Building
-ARCH := riscv64
-# ARCH := loongarch64
+# 如果未指定 ARCH 参数，默认使用 riscv64
+ARCH ?= riscv64
+
+# 验证 ARCH 参数是否有效
+ifeq (,$(filter $(ARCH),riscv64 loongarch64))
+  $(error Unsupported ARCH: $(ARCH). Must be riscv64 or loongarch64)
+endif
+
 ifeq ($(ARCH), riscv64)
 	TARGET := riscv64gc-unknown-none-elf
+	EVAL_OUTPUT := ../kernel-rv
 endif
 ifeq ($(ARCH), loongarch64)
 	TARGET := loongarch64-unknown-none
+	EVAL_OUTPUT := ../kernel-la
 endif
 MODE := release
 # IMG := sdcard
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
+
+# eval will copy to root dir named kernel-rv or kernel-la
+ifeq ($(ARCH), riscv64)
+	EVAL_FROM := $(KERNEL_BIN)
+endif
+ifeq ($(ARCH), loongarch64)
+	EVAL_FROM := $(KERNEL_ELF)
+endif
+
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
 OVERWRITE := false
@@ -100,7 +117,7 @@ build: env $(KERNEL_BIN) initproc # copy_to_fs
 PHONY += build
 
 initproc:
-	@cd ../user && cargo clean && make build
+	@cd ../user && cargo clean && make build TARGET=$(TARGET)
 PHONY += initproc
 
 env:
@@ -119,13 +136,16 @@ kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
 	cp ./linker/linker-$(BOARD)-$(ARCH).ld ./src/linker.ld
-	cargo build $(MODE_ARG) -j 20
+	cargo build $(MODE_ARG) --target $(TARGET) -j 20
 	rm src/linker.ld
 PHONY += kernel
 
+eval: build
+	cp $(EVAL_FROM) $(EVAL_OUTPUT) -f
+
 clean:
 	cargo clean
-	cd ../user && make clean
+	cd ../user && make clean ARCH=$(ARCH)
 PHONY += clean
 
 disasm: kernel

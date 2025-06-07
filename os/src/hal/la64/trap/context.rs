@@ -28,6 +28,7 @@ pub struct TrapContext {
     /*  54  */ pub kernel_fp: usize,
     /*  55  */ pub kernel_tp: usize,
     /*  56  */ pub float_regs: UserFloatRegs,
+    /*  57  */ pub last_a0: usize,
 }
 
 /// 通用寄存器
@@ -173,6 +174,7 @@ impl TrapContext {
             kernel_fp: 0,
             kernel_tp: 0,
             float_regs: UserFloatRegs::new(),
+            last_a0: 0,
         };
         cx.set_sp(sp);
         cx
@@ -217,6 +219,12 @@ impl TrapContext {
         self.user_gp.ra = (sigret & 0xFFFF_FFFF_FFFF) | 0xFFFF_FFC0_0000_0000;
         self.user_gp.a0 = signo;
         self.user_gp.tp = tp;
+    }
+    pub fn save_last_a0(&mut self) {
+        self.last_a0 = self.user_gp.a0;
+    }
+    pub fn restore_last_a0(&mut self) {
+        self.user_gp.a0 = self.last_a0;
     }
 }
 

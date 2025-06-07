@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-use sbi_rt::Sta;
 use crate::{fs::Kstat, syscall::StatFs};
 
 use super::InodeTrait;
