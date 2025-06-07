@@ -18,7 +18,7 @@ use crate::mm::{memory_space, translated_refmut, MapPermission};
 use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
 use crate::sync::time::ITimerVal;
 use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
-use crate::syscall::{CloneFlags, CpuSet, RLimit64};
+use crate::syscall::{CloneFlags, CpuSet, RLimit64, SchedParam};
 use crate::task::manager::get_init_proc;
 use crate::task::{add_task, current_task, current_user_token, get_task_by_pid, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY};
 use crate::hal::trap::TrapContext;
@@ -70,6 +70,7 @@ pub struct TaskControlBlock {
     pub clear_child_tid:SyncUnsafeCell<Option<usize>>,
     pub set_child_tid:  SyncUnsafeCell<Option<usize>>,
     pub cpuset:         SyncUnsafeCell<CpuSet>,
+    pub prio:           SyncUnsafeCell<SchedParam>,
 
     
     pub exit_code:      AtomicI32,
@@ -129,6 +130,7 @@ impl TaskControlBlock {
             clear_child_tid: SyncUnsafeCell::new(None),
             set_child_tid:   SyncUnsafeCell::new(None),
             cpuset: SyncUnsafeCell::new(CpuSet::default()),
+            prio: SyncUnsafeCell::new(SchedParam::default()),
 
             exit_code: AtomicI32::new(0),
         });
@@ -205,6 +207,7 @@ impl TaskControlBlock {
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
         let cpuset = SyncUnsafeCell::new(CpuSet::default());
+        let prio = SyncUnsafeCell::new(SchedParam::default());
         let futex_list = new_shared(FutexBucket::new());
         let itimers = new_shared([ITimerVal::default(); 3]);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
@@ -271,6 +274,7 @@ impl TaskControlBlock {
             clear_child_tid,
             set_child_tid,
             cpuset,
+            prio,
             exit_code,
         });
         // add child
@@ -307,6 +311,7 @@ impl TaskControlBlock {
         let clear_child_tid = SyncUnsafeCell::new(None);
         let set_child_tid = SyncUnsafeCell::new(None);
         let cpuset = SyncUnsafeCell::new(CpuSet::default());
+        let prio = SyncUnsafeCell::new(SchedParam::default());
         let exit_code = AtomicI32::new(0);
         let futex_list = self.futex_list.clone();
         let itimers = self.itimers.clone();
@@ -372,6 +377,7 @@ impl TaskControlBlock {
             clear_child_tid,
             set_child_tid,
             cpuset,
+            prio,
             exit_code,
         });
 
@@ -628,6 +634,13 @@ impl TaskControlBlock {
     }
     pub fn get_time_data_mut(&self) -> &mut TimeData {
         unsafe { &mut *self.time_data.get() }
+    }
+    
+    pub fn get_prio(&self) -> &SchedParam {
+        unsafe { &*self.prio.get() }
+    }
+    pub fn get_prio_mut(&self) -> &mut SchedParam {
+        unsafe { &mut *self.prio.get() }
     }
 
     /// 向线程组增加成员

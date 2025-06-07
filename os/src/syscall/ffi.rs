@@ -2,7 +2,7 @@ use core::fmt::{self, Display};
 use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
-use crate::{hal::config::{BLOCK_SIZE, PATH_MAX}, sync::{timer::get_time_s, TimeVal}};
+use crate::{hal::config::{BLOCK_SIZE, PATH_MAX}, sync::{timer::get_time_s, TimeSpec, TimeVal}};
 
 #[derive(IntoBytes, Immutable)]
 #[allow(unused)]
@@ -99,6 +99,8 @@ pub enum SysCode {
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_CLOCK_NANOSLEEP = 115,
     SYSCALL_SYSLOG    = 116,
+    SYSCALL_SCHED_SETPARAM = 118,
+    SYSCALL_SCHED_GETPARAM = 121,
     SYSCALL_SCHED_SETAFFINITY = 122,
     SYSCALL_SCHED_GETAFFINITY = 123,
     SYSCALL_YIELD     = 124,
@@ -112,6 +114,7 @@ pub enum SysCode {
     SYSCALL_SIGRETURN = 139,
     SYSCALL_SETGID    = 144,
     SYSCALL_SETUID    = 146,
+    SYSCALL_SETRESUID = 147,
     SYSCALL_TIMES     = 153,
     SYSCALL_SETPGID   = 154,
     SYSCALL_GETPGID   = 155,
@@ -176,6 +179,9 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str{
         match self {
+            Self::SYSCALL_SCHED_GETPARAM => "sched_getparam",
+            Self::SYSCALL_SCHED_SETPARAM => "sched_setparam",
+            Self::SYSCALL_SETRESUID => "setresuid",
             Self::SYSCALL_SETUID => "setuid",
             Self::SYSCALL_FCHDIR => "fchdir",
             Self::SYSCALL_SETGID => "setgid",
@@ -846,4 +852,14 @@ pub enum ShmOp {
     SHM_STAT_ANY = 15,
     #[num_enum(default)]
     INVALID = -1,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+#[repr(C)]
+pub struct SchedParam {
+    pub sched_priority: u32, // 进程优先级（值越大优先级越高）
+    pub sched_ss_low_priority: i32,
+    pub sched_ss_repl_period: TimeSpec,
+    pub sched_ss_init_budget: TimeSpec,
+    pub sched_ss_max_repl: i32,
 }

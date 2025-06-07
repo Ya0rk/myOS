@@ -2,7 +2,7 @@ use core::{fmt::Display, time::Duration};
 use zerocopy::IntoBytes;
 use crate::{sync::timer::{get_time_ms, get_time_ns, get_time_s, time_duration, MSEC_PER_SEC, NSEC_PER_SEC}, task::current_task};
 
-#[derive(Copy, Clone, IntoBytes, Debug)]
+#[derive(Copy, Clone, IntoBytes, Debug, Default)]
 #[repr(C)]
 pub struct TimeSpec {
     /// 秒

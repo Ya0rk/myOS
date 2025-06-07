@@ -9,7 +9,7 @@ use crate::sync::time::{ITimerVal, CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCES
 use crate::sync::{get_waker, itimer_callback, sleep_for, suspend_now, time_duration, yield_now, ItimerFuture, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
 use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
 use crate::syscall::io::SigMaskGuard;
-use crate::syscall::{CpuSet, RLimit64};
+use crate::syscall::{CpuSet, RLimit64, SchedParam};
 use crate::task::{
     add_proc_group_member, add_task, current_task, current_user_token, extract_proc_to_new_group, get_proc_num, get_target_proc_group, get_task_by_pid, new_process_group, remove_proc_group_member, spawn_kernel_task, spawn_user_task, TaskStatus, MANAGER
 };
@@ -1169,6 +1169,49 @@ pub async fn sys_sigsuspend(mask: usize) -> SysResult<usize> {
 
 pub fn sys_setuid() -> SysResult<usize> {
     info!("[sys_setuid] start");
+
+    Ok(0)
+}
+
+pub fn sys_setresuid() -> SysResult<usize> {
+    info!("[sys_setresuid] start, 0");
+    Ok(0)
+}
+
+/// 设置进程的优先级
+pub fn sys_sched_setparam(pid: usize, param: usize) -> SysResult<usize> {
+    info!("[sys_sched_setparam] start");
+    if (pid as isize) < 0 || param == 0 {
+        return Err(Errno::EINVAL);
+    }
+
+    let task = match pid {
+        0 => current_task().unwrap(),
+        _ => get_task_by_pid(pid).ok_or(Errno::ESRCH)?,
+    };
+
+    let ptr = unsafe { *(param as *const SchedParam) };
+    let dst = task.get_prio_mut();
+    unsafe { core::ptr::write(dst, ptr); };
+
+
+    Ok(0)
+}
+
+pub fn sys_sched_getparam(pid: usize, param: usize) -> SysResult<usize> {
+    info!("[sys_sched_getparam] start");
+    if (pid as isize) < 0 || param == 0 {
+        return Err(Errno::EINVAL);
+    }
+
+    let task = match pid {
+        0 => current_task().unwrap(),
+        _ => get_task_by_pid(pid).ok_or(Errno::ESRCH)?,
+    };
+
+    let mut ptr = unsafe { param as *mut SchedParam };
+    let src = *task.get_prio();
+    unsafe{ core::ptr::write(ptr, src); }
 
     Ok(0)
 }

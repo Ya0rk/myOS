@@ -21,6 +21,7 @@ pub use ffi::ShutHow;
 pub use ffi::RLimit64;
 pub use ffi::StatFs;
 pub use ffi::CpuSet;
+pub use ffi::SchedParam;
 use crate::sync::TimeSpec;
 use crate::utils::SysResult;
 
@@ -29,6 +30,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_SCHED_GETPARAM => sys_sched_getparam(args[0] as usize, args[1] as usize),
+        SysCode::SYSCALL_SCHED_SETPARAM => sys_sched_setparam(args[0] as usize, args[1] as usize),
+        SysCode::SYSCALL_SETRESUID => sys_setresuid(),
         SysCode::SYSCALL_SETUID => sys_setuid(),
         SysCode::SYSCALL_FCHDIR => sys_fchdir(args[0] as usize),
         SysCode::SYSCALL_SETGID => sys_setgid(args[0] as usize),
@@ -148,6 +152,9 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         
         
         
-        _ => panic!("Unsupported syscall_id: {}", syscall_id),
+        _ => {
+            log::error!("Unsupported syscall_id: {}", syscall_id);
+            Ok(0)
+        }
     }
 }

@@ -291,7 +291,7 @@ pub fn sys_statx(dirfd: i32, pathname: usize, flags: u32, mask: u32, statxbuf: u
         if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
             return Err(Errno::EBADF);
         }
-        let inode = task.get_file_by_fd(dirfd as usize).expect("[sys_statx] not found fd");
+        let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
         resolve_path(other_cwd, path)
     };
@@ -345,7 +345,11 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         if fd < 0 || fd as usize > RLIMIT_NOFILE {
             return Err(Errno::EBADF);
         }
-        let inode = task.get_file_by_fd(fd as usize).unwrap();
+        let inode = task.get_file_by_fd(fd as usize).ok_or(Errno::EBADF)?;
+        if !inode.is_dir() {
+            log::error!("[sys_openat] fd = {} is not a dir.", fd);
+            return Err(Errno::ENOTDIR);
+        }
         let other_cwd = inode.get_name()?;
         info!("[sys_openat] other cwd = {}", other_cwd);
         resolve_path(other_cwd, path)
