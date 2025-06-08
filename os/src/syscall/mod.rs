@@ -116,7 +116,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_SET_TID_ADDRESS => sys_set_tid_address(args[0] as usize),
         SysCode::SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i32),
         SysCode::SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0] as usize, args[1] as usize),
-        SysCode::SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0] as usize, args[1] as *const u8),
+        SysCode::SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SENDFILE => sys_sendfile(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
         SysCode::SYSCALL_FACCESSAT => sys_faccessat(args[0] as isize, args[1] as usize, args[2] as u32, args[3] as u32),
         SysCode::SYSCALL_LSEEK => sys_lseek(args[0] as usize, args[1] as isize, args[2] as usize),

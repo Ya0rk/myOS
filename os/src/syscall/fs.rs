@@ -1,6 +1,7 @@
 use core::cell::SyncUnsafeCell;
 use core::cmp::{max, min};
 use core::error;
+use core::intrinsics::unlikely;
 use core::ops::Add;
 use alloc::boxed::Box;
 use alloc::ffi::CString;
@@ -26,17 +27,17 @@ use super::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, AT_REMOVEDIR};
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() {
+    if unlikely(fd >= task.fd_table_len()) {
         return Err(Errno::EBADF);
     }
     match task.get_file_by_fd(fd) {
         Some(file) => {
-            if !file.writable() {
+            if unlikely(!file.writable()) {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
             let mut size = len;
-            if task.fsz_limit.lock().is_some() {
+            if unlikely(task.fsz_limit.lock().is_some()) {
                 size = task.fsz_limit.lock().unwrap().rlim_max;
             }
 
@@ -49,14 +50,14 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() {
+    if unlikely(fd >= task.fd_table_len()) {
         // info!("[sys_read] task pid = {}", task.get_pid());
         // info!("[sys_read] fd = {}, but fd len is {}", fd, task.fd_table_len());
         return Err(Errno::EBADF);
     }
     match task.get_file_by_fd(fd) {
         Some(file) => {
-            if !file.readable() {
+            if unlikely(!file.readable()) {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
@@ -178,7 +179,7 @@ pub fn sys_fstatat(
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize) {
             return Err(Errno::EBADF);
         }
         let inode = match task.get_file_by_fd(dirfd as usize) {
@@ -187,7 +188,7 @@ pub fn sys_fstatat(
         };
         // let other_cwd = cwd.clone();
         let other_cwd = inode.get_name()?;
-        if other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") {
+        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout")) {
             return Ok(0);
         }
         resolve_path(other_cwd, path)
@@ -199,7 +200,7 @@ pub fn sys_fstatat(
     // 检查路径是否有效并打开文件
     match open(target_path, OpenFlags::O_RDONLY) {
         Ok(FileClass::File(file)) => {
-            if !file.metadata.inode.is_valid() {
+            if unlikely(!file.metadata.inode.is_valid()) {
                 return Err(Errno::ENOENT);
             }
             file.fstat(&mut tempstat)?;
@@ -227,12 +228,12 @@ pub fn sys_fstat(fd: usize, kst: usize) -> SysResult<usize> {
     info!("[sys_fstat] start");
     let task = current_task().unwrap();
     // let inner = task.inner_lock();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
 
     let ptr = kst as *mut Kstat;
-    if ptr.is_null() {
+    if unlikely(ptr.is_null()) {
         return Err(Errno::EFAULT);
     }
 
@@ -326,7 +327,7 @@ pub fn sys_statx(dirfd: i32, pathname: usize, flags: u32, mask: u32, statxbuf: u
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult<usize> {
     info!("[sys_openat] start");
-    if path == 0 {
+    if unlikely(path == 0) {
         info!("[sys_openat] path ptr is null, fault.");
         return Err(Errno::EFAULT); 
     }
@@ -342,11 +343,11 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
-        if fd < 0 || fd as usize > RLIMIT_NOFILE {
+        if unlikely(fd < 0 || fd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(fd as usize).ok_or(Errno::EBADF)?;
-        if !inode.is_dir() {
+        if unlikely(!inode.is_dir()) {
             log::error!("[sys_openat] fd = {} is not a dir.", fd);
             return Err(Errno::ENOTDIR);
         }
@@ -368,7 +369,7 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
                 _ => { unreachable!() }
             };
             info!("[sys_openat] taskid = {}, alloc fd finished, new fd = {}",task.get_pid(), fd);
-            if fd > RLIMIT_NOFILE {
+            if unlikely(fd > RLIMIT_NOFILE) {
                 return Err(Errno::EMFILE);
             } else {
                 return Ok(fd);
@@ -384,7 +385,7 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
 pub fn sys_close(fd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     info!("[sys_close] start, pid = {}, closed fd = {}", task.get_pid(), fd);
-    if fd >= task.fd_table_len() {
+    if unlikely(fd >= task.fd_table_len()) {
         return Err(Errno::EMFILE);
     }
     
@@ -443,13 +444,13 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     info!("[sys_getdents64] start fd: {}, len: {}", fd, len);
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         log::error!("[sys_getdents64] fd {} invalid", fd);
         return Err(Errno::EBADF);
     }
 
-    let buf = buf as *mut u8;
-    if buf.is_null() {
+    let ptr = buf as *mut u8;
+    if unlikely(buf == 0) {
         log::error!("[sys_getdents64] buf is null");
         return Err(Errno::EFAULT);
     }
@@ -457,7 +458,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 
     let token = task.get_user_token();
     let file = task.get_file_by_fd(fd).unwrap();
-    let res = file.read_dents(buf as usize, len);
+    let res = file.read_dents(ptr as usize, len);
     info!("[sys_getdents64] return = {}", res);
     Ok(res)
 }
@@ -468,11 +469,11 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     info!("[sys_getcwd] start");
     println!("[sys_getcwd] buf = {}, size = {}", buf, size);
-    if buf == 0 || buf > USER_SPACE_TOP || size > PATH_MAX {
+    if unlikely(buf == 0 || buf > USER_SPACE_TOP || size > PATH_MAX) {
         return Err(Errno::EFAULT);
     }
     let ptr = buf as *mut u8;
-    if !ptr.is_null() && size == 0 {
+    if unlikely(!ptr.is_null() && size == 0) {
         return Err(Errno::EINVAL);
     }
 
@@ -484,11 +485,11 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     info!("[sys_getcwd] cwd is {}", cwd);
     let cs_cwd: CString = CString::new(cwd).expect("can translate to cstring");
 
-    if length > PATH_MAX {
+    if unlikely(length > PATH_MAX) {
         return Err(Errno::ENAMETOOLONG);
     }
     println!("[sys_getcwd] size = {}, len = {}", size, length);
-    if length > size {
+    if unlikely(length > size) {
         return Err(Errno::ERANGE);
     }
 
@@ -577,7 +578,7 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize) {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).unwrap();
@@ -907,7 +908,7 @@ pub fn sys_faccessat(
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
-        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE {
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
         let inode = current_task().unwrap().get_file_by_fd(dirfd as usize).expect("[sys_faccessat] get file by fd failed");
@@ -943,7 +944,7 @@ pub fn sys_faccessat(
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     info!("[sys_lseek] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
@@ -957,7 +958,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
     info!("[sys_fcntl] start, fd = {}, cmd = {:?}, arg = {}", fd, cmd, arg);
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     
@@ -1047,7 +1048,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
 pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
     info!("[sys_ftruncate64] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
@@ -1071,11 +1072,11 @@ pub async fn sys_pread64(
 ) -> SysResult<usize> {
     info!("[sys_pread64] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
-    if !file.readable() {
+    if unlikely(!file.readable()) {
         return Err(Errno::EPERM);
     }
     let buffer = unsafe{ core::slice::from_raw_parts_mut(buf as *mut u8, count) };
@@ -1092,11 +1093,11 @@ pub async fn sys_pwrite64(
 ) -> SysResult<usize> {
     info!("[sys_pwrite64] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
-    if !file.writable() {
+    if unlikely(!file.writable()) {
         return Err(Errno::EPERM);
     }
     let buffer = unsafe{ core::slice::from_raw_parts(buf as *const u8, count) };
@@ -1254,12 +1255,12 @@ pub fn sys_umask() -> SysResult<usize> {
 pub fn sys_fchdir(fd: usize) -> SysResult<usize> {
     info!("[sys_fchdir] start, fd = {}", fd);
     let task = current_task().unwrap();
-    if fd > task.fd_table_len() {
+    if unlikely(fd > task.fd_table_len()) {
         warn!("[sys_fchdir] fd out of bounds");
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
-    if !file.is_dir() {
+    if unlikely(!file.is_dir()) {
         warn!("[sys_fchdir] fd's file is not dir");
         return Err(Errno::ENOTDIR);
     }

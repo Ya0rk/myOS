@@ -1,3 +1,5 @@
+use core::intrinsics::unlikely;
+
 use log::{info, warn};
 use smoltcp::wire::IpAddress;
 use crate::{
@@ -16,7 +18,7 @@ pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usi
     let type_ = SocketType::from_bits(type_ as u32).ok_or(Errno::EINVAL)?;
     let protocol = protocol as u8;
     let cloexec_enable = type_.contains(SocketType::SOCK_CLOEXEC);
-    if domain == AF_UNIX.into() { return Ok(4); } // 这里是特殊处理，通过musl libctest的网络测例，后序要修改
+    if unlikely(domain == AF_UNIX.into()) { return Ok(4); } // 这里是特殊处理，通过musl libctest的网络测例，后序要修改
 
     // 根据协议族、套口类型、传输层协议创建套口
     let socket = <dyn Socket>::new(domain as u16, type_)
@@ -124,12 +126,12 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
 
     let (remote_end, newfd) = socket.accept(OpenFlags::empty()).await?;
     // 将remote_end保存在addr中
-    let addr = addr as *mut u8;
-    if addr.is_null() {
+    let ptr = addr as *mut u8;
+    if unlikely(addr == 0) {
         return Err(Errno::EFAULT);
     }
 
-    let buf = unsafe { core::slice::from_raw_parts_mut(addr, addrlen) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(ptr, addrlen) };
     let user_sockaddr = match remote_end.addr {
         IpAddress::Ipv4(addr) => {
             let port = remote_end.port;
@@ -162,13 +164,13 @@ pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32)
     let socket = file.get_socket()?;
 
     let (remote_end, newfd) = socket.accept(flags).await?;
-    let addr = addr as *mut u8;
-    if addr.is_null() {
+    let ptr = addr as *mut u8;
+    if unlikely(addr == 0) {
         return Err(Errno::EFAULT);
     }
 
     // maybe bug: 需要检查懒分配
-    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    let buf = unsafe{ core::slice::from_raw_parts_mut(ptr, addrlen) };
     let user_sockaddr = match remote_end.addr {
         IpAddress::Ipv4(addr) => {
             let port = remote_end.port;
@@ -199,8 +201,8 @@ pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32)
 pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
     info!("[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
     let task = current_task().unwrap();
-    let addr = addr as *mut u8;
-    if addr.is_null() { return Err(Errno::EINVAL); }
+    let ptr = addr as *mut u8;
+    if unlikely(addr == 0) { return Err(Errno::EINVAL); }
 
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
@@ -210,7 +212,7 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         _ => { return Err(Errno::ENOTSOCK); }
     };
 
-    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    let buf = unsafe{ core::slice::from_raw_parts_mut(ptr, addrlen) };
     sockname.write2user(buf, addrlen)?;
     Ok(0)
 }
@@ -218,8 +220,8 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
 pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
     info!("[sys_sockpeername] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
     let task = current_task().unwrap();
-    let addr = addr as *mut u8;
-    if addr.is_null() { return Err(Errno::EINVAL); }
+    let ptr = addr as *mut u8;
+    if unlikely(ptr.is_null()) { return Err(Errno::EINVAL); }
 
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
@@ -229,7 +231,7 @@ pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         Err(e) => { return Err(e); }
     };
 
-    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    let buf = unsafe{ core::slice::from_raw_parts_mut(ptr, addrlen) };
     peername.write2user(buf, addrlen)?;
     Ok(0)
 }

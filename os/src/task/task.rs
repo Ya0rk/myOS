@@ -439,8 +439,8 @@ impl TaskControlBlock {
                     init_proc.proc_recv_siginfo(sig_info);
                 }
                 child.set_parent(Some(Arc::downgrade(&init_proc)));
-                init_proc.add_child(child.clone());
             }
+            init_proc.children.lock().extend(lock_child.clone());
             lock_child.clear();
         }
         drop(lock_child);
@@ -462,12 +462,16 @@ impl TaskControlBlock {
                 );
                 parent.proc_recv_siginfo(sig_info);
             }
-            None => panic!("this proc has no parent!"),
+            None => {
+                use log::error;
+                error!("proc {} has no parent!", self.get_pid());
+                // return;
+            }
         }
         
         self.clear_fd_table();
         self.detach_all_shm();
-        // self.recycle_data_pages();
+        self.recycle_data_pages();
     }
 
     pub fn do_wait4(&self, pid: usize, wstatus: usize, exit_code: i32) {

@@ -1,5 +1,5 @@
 // this file is used for ppoll and pselect6
-use core::{ptr::NonNull, time::Duration};
+use core::{intrinsics::unlikely, ptr::NonNull, time::Duration};
 use alloc::{sync::Arc, vec::Vec};
 use hashbrown::{HashMap, HashSet};
 use log::info;
@@ -111,7 +111,7 @@ pub async fn sys_ppoll(
 pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
     info!("[sys_ioctl] start fd: {}, op: {:#x}, arg: {:#x}", fd, op, arg);
     let task = current_task().unwrap();
-    if fd > task.fd_table_len() { return Err(Errno::EBADF); }
+    if unlikely(fd > task.fd_table_len()) { return Err(Errno::EBADF); }
     // Ok(0)
     if let Some(file) = task.get_file_by_fd(fd) {
         if file.is_deivce() {
