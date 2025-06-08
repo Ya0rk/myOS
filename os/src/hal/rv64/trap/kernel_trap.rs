@@ -51,7 +51,7 @@ pub fn kernel_trap_handler() {
                     use log::error;
 
                     task.set_zombie();
-                    error!("{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
+                    error!("kernel trap:{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
                 });;
             },
             _ => {
