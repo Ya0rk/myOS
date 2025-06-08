@@ -11,12 +11,12 @@ use user_lib::{chdir, execve, fork, wait, yield_};
 const TESTCASES: &[&str] = &[
     // "./time-test\0",
     // "./test-splice.sh\0",
+    "./libctest_testcode.sh\0",
     "./basic_testcode.sh\0",
     "./busybox_testcode.sh\0",
     "./lua_testcode.sh\0",
     // "./netperf_testcode.sh\0",
     "./libcbench_testcode.sh\0",
-    "./libctest_testcode.sh\0",
     // "./iozone_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
@@ -40,7 +40,7 @@ fn run_cmd(cmd: &str, pwd: &str) {
             &[
                 ["PATH=", "/bin:", pwd.strip_suffix("/").unwrap(), ].concat().as_str(),
                 "HOME=/\0",
-                "LD_LIBRARY_PATH=/\0",
+                "LD_LIBRARY_PATH=/lib\0",
                 "TERM=screen\0",
             ],
         );
@@ -55,6 +55,7 @@ fn run_cmd(cmd: &str, pwd: &str) {
 
 #[no_mangle]
 fn main() -> i32 {
+    // run_cmd("/glibc/busybox --install /bin\0");
     if fork() == 0 {
         let cd = "/glibc/";
         chdir(&conert_str2byte(cd));

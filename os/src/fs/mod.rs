@@ -119,13 +119,16 @@ pub async fn create_init_files() -> SysResult {
     open("/etc/localtime".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
 
     // 拷贝动态库
-    dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64-sf.so.1");
-    dl_link("/musl/lib/libc.so", "/lib/ld-linux-riscv64-lp64d.so.1");
-    dl_link("/musl/lib/libc.so", "/ld-linux-riscv64-lp64d.so.1");
-    dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64.so.1");
-    dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
-    dl_link("/musl/lib/tls_get_new-dtv_dso.so", "/lib/tls_get_new-dtv_dso.so");
-
+    {   // musl
+        dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64-sf.so.1");
+        dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64.so.1");
+        dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
+        dl_link("/musl/lib/tls_get_new-dtv_dso.so", "/lib/tls_get_new-dtv_dso.so");
+    }
+    {   // glibc
+        dl_link("/musl/lib/libc.so", "/lib/ld-linux-riscv64-lp64d.so.1"); // 这里两行需要改为/glibc目录，由于目前会报错，所以暂时用musl目录，bug修正后改回
+        dl_link("/musl/lib/libc.so", "/ld-linux-riscv64-lp64d.so.1");
+    }
     Ok(())
 }
 
