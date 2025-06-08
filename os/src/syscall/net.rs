@@ -6,7 +6,7 @@ use crate::{
     fs::{FileTrait, OpenFlags, Pipe}, hal::config::USER_SPACE_TOP, net::{
         addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, 
         Congestion, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS
-    }, task::{current_task, sock_map_fd, FdInfo}, utils::{Errno, SysResult}
+    }, syscall::ffi::{IPPROTO_IP, IPPROTO_TCP, SO_OOBINLINE}, task::{current_task, sock_map_fd, FdInfo}, utils::{Errno, SysResult}
 };
 use super::ffi::{ShutHow, CONGESTION, MAXSEGMENT, NODELAY, SOL_SOCKET, SOL_TCP, SO_KEEPALIVE, SO_RCVBUF, SO_SNDBUF};
 
@@ -200,9 +200,17 @@ pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32)
 /// in this case, addrlen will return a value greater than was supplied to the call.
 pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
     info!("[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
+    println!("[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
+    if unlikely(addrlen == 0 || addrlen == 1) {
+        return Err(Errno::EFAULT);
+    }
+    let len = unsafe { *(addrlen as *const i32) };
+    if unlikely(len < 0) {
+        return Err(Errno::EINVAL);
+    }
     let task = current_task().unwrap();
     let ptr = addr as *mut u8;
-    if unlikely(addr == 0) { return Err(Errno::EINVAL); }
+    if unlikely(addr == 0) { return Err(Errno::EFAULT); }
 
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
@@ -212,8 +220,8 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         _ => { return Err(Errno::ENOTSOCK); }
     };
 
-    let buf = unsafe{ core::slice::from_raw_parts_mut(ptr, addrlen) };
-    sockname.write2user(buf, addrlen)?;
+    let buf = unsafe{ core::slice::from_raw_parts_mut(ptr, len as usize) };
+    sockname.write2user(buf, len as usize)?;
     Ok(0)
 }
 
@@ -360,7 +368,22 @@ pub fn sys_getsockopt(
     optlen: usize,
 ) -> SysResult<usize> {
     info!("[sys_getsockopt] start, sockfd = {}, level = {}, optname = {}, optlen = {}", sockfd, level, optname, optlen);
+    if unlikely((optname as isize) < 0) {
+        return Err(Errno::ENOPROTOOPT);
+    }
+    if unlikely(optval_ptr == 0 || optlen == 0) {
+        return Err(Errno::EFAULT);
+    }
     match (level as u8, optname as u32) {
+        (SOL_SOCKET, SO_OOBINLINE) => {
+            let task = current_task().unwrap();
+            let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
+            let socket = file.get_socket()?;
+            let len = unsafe { *(optlen as *const i32) };
+            if unlikely(len <= 0) {
+                return Err(Errno::EINVAL);
+            }
+        }
         (SOL_SOCKET, SO_SNDBUF) => {
             let task = current_task().unwrap();
             let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
@@ -400,13 +423,14 @@ pub fn sys_getsockopt(
             buf.copy_from_slice(bytes);
             unsafe{ *(optlen as *mut u32) = name_len as u32 };
         }
-        _ => { 
+        _ => {
             warn!("[sys_getsockopt] sockfd: {:?}, level: {:?}, optname: {:?}, optval_ptr: {:?}, optlen: {:?}",
             sockfd,
             level,
             optname,
             optval_ptr,
-            optlen); 
+            optlen);
+            return Err(Errno::EOPNOTSUPP);
         }
     }
 
