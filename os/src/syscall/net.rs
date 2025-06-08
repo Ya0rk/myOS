@@ -3,7 +3,7 @@ use core::intrinsics::unlikely;
 use log::{info, warn};
 use smoltcp::wire::IpAddress;
 use crate::{
-    fs::{FileTrait, OpenFlags, Pipe}, net::{
+    fs::{FileTrait, OpenFlags, Pipe}, hal::config::USER_SPACE_TOP, net::{
         addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, 
         Congestion, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS
     }, task::{current_task, sock_map_fd, FdInfo}, utils::{Errno, SysResult}
@@ -219,6 +219,15 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
 
 pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
     info!("[sys_sockpeername] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
+    println!("addr = {}, addrlen = {}", addr, addrlen);
+    if unlikely(addr > USER_SPACE_TOP || addrlen == 0){
+        return Err(Errno::EFAULT);
+    }
+    let len = unsafe { *(addrlen as *const usize) };
+    if unlikely((len as isize) < 0) {
+        return Err(Errno::EINVAL);
+    }
+    
     let task = current_task().unwrap();
     let ptr = addr as *mut u8;
     if unlikely(ptr.is_null()) { return Err(Errno::EINVAL); }
@@ -231,8 +240,8 @@ pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         Err(e) => { return Err(e); }
     };
 
-    let buf = unsafe{ core::slice::from_raw_parts_mut(ptr, addrlen) };
-    peername.write2user(buf, addrlen)?;
+    let buf = unsafe{ core::slice::from_raw_parts_mut(ptr, len) };
+    peername.write2user(buf, len)?;
     Ok(0)
 }
 

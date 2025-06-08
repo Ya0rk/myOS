@@ -469,12 +469,8 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     info!("[sys_getcwd] start");
     println!("[sys_getcwd] buf = {}, size = {}", buf, size);
-    if unlikely(buf == 0 || buf > USER_SPACE_TOP || size > PATH_MAX) {
+    if unlikely(buf > USER_SPACE_TOP || size > PATH_MAX) {
         return Err(Errno::EFAULT);
-    }
-    let ptr = buf as *mut u8;
-    if unlikely(!ptr.is_null() && size == 0) {
-        return Err(Errno::EINVAL);
     }
 
     let task =  current_task().unwrap();
@@ -491,6 +487,11 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     println!("[sys_getcwd] size = {}, len = {}", size, length);
     if unlikely(length > size) {
         return Err(Errno::ERANGE);
+    }
+    
+    let ptr = buf as *mut u8;
+    if unlikely(buf != 0 && size == 0) {
+        return Err(Errno::EINVAL);
     }
 
     // drop(task_inner);
