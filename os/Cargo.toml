@@ -65,3 +65,7 @@ qemu_riscv = []
 
 [profile.release]
 debug = true
+
+# 关键：覆盖指定包
+[patch.crates-io]
+cty = { path = "../cty" }
