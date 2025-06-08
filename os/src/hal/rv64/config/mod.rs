@@ -1,6 +1,6 @@
 //! `os/src/hal/rv64/config/mod.rs`
-//! 
-//! 
+//!
+//!
 pub use crate::board::{CLOCK_FREQ, MEMORY_END, MMIO};
 
 pub const KB: usize = 1024;
@@ -25,8 +25,7 @@ pub const PTES_PER_PAGE: usize = PAGE_SIZE / PTE_SIZE;
 /// 3 level for sv39 page table
 pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
-
-// TODO: no longer addr offset 
+// TODO: no longer addr offset
 pub const KERNEL_ADDR_OFFSET: usize = 0xffff_ffc0_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
 pub const KERNEL_PG_ADDR_BASE: usize = 0xffff_ffc0_0000_0000;
@@ -34,8 +33,6 @@ pub const KERNEL_PGNUM_BASE: usize = KERNEL_PG_ADDR_BASE >> PAGE_SIZE_BITS;
 pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_PGNUM_BASE;
 pub const KERNEL_VADDR_MASK: usize = 0x0000_003f_ffff_ffff;
 pub const KERNEL_VPN_MASK: usize = KERNEL_VADDR_MASK >> PAGE_SIZE_BITS;
-
-
 
 pub const USER_SPACE_TOP: usize = 0x30_0000_0000;
 pub const USER_TRAP_CONTEXT: usize = USER_SPACE_TOP - PAGE_SIZE;
@@ -49,7 +46,6 @@ pub const HART_NUM: usize = 2;
 pub const IDLE_PID: usize = 0;
 pub const INITPROC_PID: usize = 1;
 
-
 // File system
 /// max path name len
 pub const PATH_MAX: usize = 4096;
@@ -58,13 +54,11 @@ pub const RLIMIT_NOFILE: usize = 1024;
 /// 当 filename 为相对路径的情况下将当前进程的工作目录设置为起始路径
 pub const AT_FDCWD: isize = -100;
 
-
 /// From Phoenix
 pub const BLOCK_SIZE: usize = 512;
 pub const MMAP_PRE_ALLOC_PAGES: usize = 8;
 // pub const USER_STACK_SIZE: usize = 8 * 1024 * 1024;
 pub const USER_STACK_PRE_ALLOC_SIZE: usize = 4 * PAGE_SIZE;
-
 
 pub const USER_ELF_PRE_ALLOC_PAGE_CNT: usize = 0;
 
@@ -114,7 +108,6 @@ pub const K_SEG_DTB_END: usize = 0xffff_ffff_f000_0000;
 pub const MAX_DTB_SIZE: usize = PAGE_SIZE * PAGE_SIZE;
 
 /// End From Phoenix
-
 
 pub fn align_down_by_page(addr: usize) -> usize {
     addr & !PAGE_MASK

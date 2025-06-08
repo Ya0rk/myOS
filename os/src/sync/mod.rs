@@ -1,25 +1,34 @@
 // mod interrupt;
-mod up;
 mod misc;
 pub mod mutex;
-pub mod time;
-pub mod timer;
 pub mod once;
+pub mod time;
 pub mod time_async;
+pub mod timer;
+mod up;
 
-use core::{future::Future, task::{Context, Poll}, time::Duration};
-use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, task::Wake, vec::Vec, vec};
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, task::Wake, vec, vec::Vec};
+use core::{
+    future::Future,
+    task::{Context, Poll},
+    time::Duration,
+};
 use spin::Lazy;
 use time::{CLOCK_MONOTONIC, CLOCK_REALTIME};
 
-pub use crate::hal::arch::interrupt::{enable_interrupt, disable_interrupt, interrupt_is_enabled, enable_timer_interrupt};
+pub use crate::hal::arch::interrupt::{
+    disable_interrupt, enable_interrupt, enable_timer_interrupt, interrupt_is_enabled,
+};
+pub use misc::{get_waker, suspend_now, yield_now};
 pub use mutex::{new_shared, new_sleep_shared};
-pub use timer::{sleep_for, set_next_trigger, time_duration};
-pub use misc::{get_waker, yield_now, suspend_now};
-pub use up::SyncUnsafeCell;
+pub use mutex::{
+    MutexGuard, MutexOperations, NoIrqLock, NoopLock, Shared, SleepLock, SleepShared, SpinLock,
+    SpinNoIrqLock,
+};
+pub use time::{TimeData, TimeSpec, TimeStamp, TimeVal, Tms};
 pub use time_async::*;
-pub use time::{TimeVal, TimeSpec, Tms, TimeData, TimeStamp};
-pub use mutex::{SpinLock, SpinNoIrqLock, SleepLock, MutexGuard, MutexOperations, NoIrqLock, NoopLock, Shared, SleepShared};
+pub use timer::{set_next_trigger, sleep_for, time_duration};
+pub use up::SyncUnsafeCell;
 
 struct BlockWaker;
 
@@ -30,7 +39,7 @@ impl Wake for BlockWaker {
 /// 阻塞当前线程直到 future 执行完成
 ///
 /// future 不会被调度，而是一直被轮询直到返回 Ready
-pub fn block_on<T>(fut: impl Future<Output=T>) -> T {
+pub fn block_on<T>(fut: impl Future<Output = T>) -> T {
     let mut fut = Box::pin(fut);
 
     let waker = Arc::new(BlockWaker).into();
@@ -45,14 +54,11 @@ pub fn block_on<T>(fut: impl Future<Output=T>) -> T {
 }
 
 /// Clock manager that used for looking for a given process
-pub static CLOCK_MANAGER: Lazy<SpinNoIrqLock<Vec<Duration>>> = Lazy::new(|| SpinNoIrqLock::new(Vec::new()));
+pub static CLOCK_MANAGER: Lazy<SpinNoIrqLock<Vec<Duration>>> =
+    Lazy::new(|| SpinNoIrqLock::new(Vec::new()));
 
 pub fn time_init() {
-    CLOCK_MANAGER
-        .lock()
-        .insert(CLOCK_REALTIME, Duration::ZERO);
-    
-    CLOCK_MANAGER
-        .lock()
-        .insert(CLOCK_MONOTONIC, Duration::ZERO);
+    CLOCK_MANAGER.lock().insert(CLOCK_REALTIME, Duration::ZERO);
+
+    CLOCK_MANAGER.lock().insert(CLOCK_MONOTONIC, Duration::ZERO);
 }

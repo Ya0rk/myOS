@@ -1,7 +1,10 @@
 use spin::Mutex;
 use virtio_drivers::{device::blk::VirtIOBlk, transport::Transport, Hal};
 
-use crate::{drivers::{BaseDriver, BlockDriver, DevResult, DeviceType}, sync::SpinNoIrqLock};
+use crate::{
+    drivers::{BaseDriver, BlockDriver, DevResult, DeviceType},
+    sync::SpinNoIrqLock,
+};
 
 use super::as_dev_err;
 
@@ -9,13 +12,15 @@ pub struct VirtIoBlkDev<H: Hal, T: Transport> {
     inner: SpinNoIrqLock<VirtIOBlk<H, T>>,
 }
 
-unsafe impl<H: Hal,T: Transport> Send for VirtIoBlkDev<H, T> {}
-unsafe impl<H: Hal,T: Transport> Sync for VirtIoBlkDev<H, T> {}
+unsafe impl<H: Hal, T: Transport> Send for VirtIoBlkDev<H, T> {}
+unsafe impl<H: Hal, T: Transport> Sync for VirtIoBlkDev<H, T> {}
 
 impl<H: Hal, T: Transport> VirtIoBlkDev<H, T> {
     pub fn new(header: T) -> Self {
         Self {
-            inner: SpinNoIrqLock::new(VirtIOBlk::<H, T>::new(header).expect("VirtIOBlk create failed")),
+            inner: SpinNoIrqLock::new(
+                VirtIOBlk::<H, T>::new(header).expect("VirtIOBlk create failed"),
+            ),
         }
     }
 }

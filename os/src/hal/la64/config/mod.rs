@@ -1,9 +1,7 @@
 pub const UART_ADDR: usize = 0x0_1FE0_01E0 + 0x9000_0000_0000_0000;
 
-
 pub const TICKS_PER_SEC: usize = 100;
 pub const MSEC_PER_SEC: usize = 1000;
-
 
 pub const PALEN: usize = 48;
 
@@ -38,7 +36,6 @@ pub const PTES_PER_PAGE: usize = PAGE_SIZE / PTE_SIZE;
 /// 3 level for sv39 page table
 pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
-
 // #[cfg(target_arch = "loongarch64")]
 pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
@@ -49,7 +46,6 @@ pub const KERNEL_PGNUM_OFFSET: usize = KERNEL_PGNUM_BASE;
 pub const KERNEL_VADDR_MASK: usize = 0x0000_ffff_ffff_ffff;
 pub const KERNEL_PG_VADDR_MASK: usize = 0x0000_003f_ffff_ffff;
 pub const KERNEL_VPN_MASK: usize = KERNEL_PG_VADDR_MASK >> PAGE_SIZE_BITS;
-
 
 // TODO: 使用正确的虚拟地址
 
@@ -66,7 +62,6 @@ pub const HART_NUM: usize = 2;
 pub const IDLE_PID: usize = 0;
 pub const INITPROC_PID: usize = 1;
 
-
 // File system
 /// max path name len
 pub const PATH_MAX: usize = 4096;
@@ -75,13 +70,11 @@ pub const RLIMIT_NOFILE: usize = 1024;
 /// 当 filename 为相对路径的情况下将当前进程的工作目录设置为起始路径
 pub const AT_FDCWD: isize = -100;
 
-
 /// From Phoenix
 pub const BLOCK_SIZE: usize = 512;
 pub const MMAP_PRE_ALLOC_PAGES: usize = 8;
 // pub const USER_STACK_SIZE: usize = 8 * 1024 * 1024;
 pub const USER_STACK_PRE_ALLOC_SIZE: usize = 4 * PAGE_SIZE;
-
 
 pub const USER_ELF_PRE_ALLOC_PAGE_CNT: usize = 0;
 
@@ -137,7 +130,6 @@ pub const K_SEG_DTB_END: usize = 0xffff_ffff_f000_0000;
 pub const MAX_DTB_SIZE: usize = PAGE_SIZE * PAGE_SIZE;
 
 /// End From Phoenix
-
 
 pub fn align_down_by_page(addr: usize) -> usize {
     addr & !PAGE_MASK

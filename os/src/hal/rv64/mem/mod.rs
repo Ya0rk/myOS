@@ -1,6 +1,5 @@
-pub mod page_table;
 pub mod address;
-
+pub mod page_table;
 
 pub fn mmu_init() {}
 

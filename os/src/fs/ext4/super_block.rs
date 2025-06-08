@@ -4,7 +4,8 @@ use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
 
 use crate::{
     drivers::Disk,
-    fs::{page_cache::PageCache, Ext4Inode, Kstat, SuperBlockTrait}, syscall::StatFs,
+    fs::{page_cache::PageCache, Ext4Inode, Kstat, SuperBlockTrait},
+    syscall::StatFs,
 };
 
 use alloc::sync::Arc;
@@ -14,7 +15,7 @@ use super::InodeTrait;
 unsafe impl Send for Ext4SuperBlock {}
 unsafe impl Sync for Ext4SuperBlock {}
 
-pub struct Ext4SuperBlock{
+pub struct Ext4SuperBlock {
     inner: Ext4BlockWrapper<Disk>,
     root: Arc<dyn InodeTrait>,
 }
@@ -47,4 +48,3 @@ impl SuperBlockTrait for Ext4SuperBlock {
             .for_each(|s| println!("{}", s));
     }
 }
-

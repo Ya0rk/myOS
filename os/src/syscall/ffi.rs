@@ -2,22 +2,25 @@ use core::fmt::{self, Display};
 use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
-use crate::{hal::config::{BLOCK_SIZE, PATH_MAX}, sync::{timer::get_time_s, TimeVal}};
+use crate::{
+    hal::config::{BLOCK_SIZE, PATH_MAX},
+    sync::{timer::get_time_s, TimeVal},
+};
 
 #[derive(IntoBytes, Immutable)]
 #[allow(unused)]
 #[repr(C)]
 pub struct Utsname {
     /// 操作系统名称
-    pub sysname:    [u8; 65],
+    pub sysname: [u8; 65],
     /// 节点名称（主机名称）
-    pub nodename:   [u8; 65],
+    pub nodename: [u8; 65],
     /// 操作系统的发布版本
-    pub release:    [u8; 65],
+    pub release: [u8; 65],
     /// 操作系统的版本信息
-    pub version:    [u8; 65],
+    pub version: [u8; 65],
     /// 硬件架构标识符
-    pub machine:    [u8; 65],
+    pub machine: [u8; 65],
     /// NIS 或 YP 域名
     pub domainname: [u8; 65],
 }
@@ -48,120 +51,120 @@ impl Utsname {
 #[allow(unused)]
 #[allow(non_camel_case_types)]
 pub enum SysCode {
-    SYSCALL_GETCWD    = 17,
-    SYSCALL_DUP       = 23,
-    SYSCALL_DUP3      = 24,
-    SYSCALL_FCNTL     = 25,
-    SYSCALL_IOCTL     = 29,
-    SYSCALL_MKDIRAT   = 34,
-    SYSCALL_UNLINKAT  = 35,
-    SYSCALL_LINKAT    = 37,
-    SYSCALL_UMOUNT2   = 39,
-    SYSCALL_MOUNT     = 40,
-    SYSCALL_STATFS    = 43,
+    SYSCALL_GETCWD = 17,
+    SYSCALL_DUP = 23,
+    SYSCALL_DUP3 = 24,
+    SYSCALL_FCNTL = 25,
+    SYSCALL_IOCTL = 29,
+    SYSCALL_MKDIRAT = 34,
+    SYSCALL_UNLINKAT = 35,
+    SYSCALL_LINKAT = 37,
+    SYSCALL_UMOUNT2 = 39,
+    SYSCALL_MOUNT = 40,
+    SYSCALL_STATFS = 43,
     SYSCALL_FTRUNCATE64 = 46,
-    SYSCALL_FALLOCAT  = 47,
+    SYSCALL_FALLOCAT = 47,
     SYSCALL_FACCESSAT = 48,
-    SYSCALL_CHDIR     = 49,
-    SYSCALL_FCHDIR    = 50,
-    SYSCALL_FCHMODAT  = 53,
-    SYSCALL_FCHOWNAT  = 54,
-    SYSCALL_OPENAT    = 56,
-    SYSCALL_CLOSE     = 57,
-    SYSCALL_PIPE2     = 59,
-    SYSCALL_GETDENTS64= 61,
-    SYSCALL_LSEEK     = 62,  
-    SYSCALL_READ      = 63,
-    SYSCALL_WRITE     = 64,
-    SYSCALL_READV     = 65,
-    SYSCALL_WRITEV    = 66,
-    SYSCALL_PREAD64   = 67,
-    SYSCALL_PWRITE64  = 68,
-    SYSCALL_SENDFILE  = 71,
-    SYSCALL_PSELECT   = 72,
-    SYSCALL_PPOLL     = 73,
+    SYSCALL_CHDIR = 49,
+    SYSCALL_FCHDIR = 50,
+    SYSCALL_FCHMODAT = 53,
+    SYSCALL_FCHOWNAT = 54,
+    SYSCALL_OPENAT = 56,
+    SYSCALL_CLOSE = 57,
+    SYSCALL_PIPE2 = 59,
+    SYSCALL_GETDENTS64 = 61,
+    SYSCALL_LSEEK = 62,
+    SYSCALL_READ = 63,
+    SYSCALL_WRITE = 64,
+    SYSCALL_READV = 65,
+    SYSCALL_WRITEV = 66,
+    SYSCALL_PREAD64 = 67,
+    SYSCALL_PWRITE64 = 68,
+    SYSCALL_SENDFILE = 71,
+    SYSCALL_PSELECT = 72,
+    SYSCALL_PPOLL = 73,
     SYSCALL_READLINKAT = 78,
-    SYSCALL_FSTATAT   = 79,
-    SYSCALL_FSTAT     = 80,
-    SYSCALL_SYNC      = 81,
-    SYSCALL_FSYNC     = 82,
+    SYSCALL_FSTATAT = 79,
+    SYSCALL_FSTAT = 80,
+    SYSCALL_SYNC = 81,
+    SYSCALL_FSYNC = 82,
     SYSCALL_UTIMENSAT = 88,
-    SYSCALL_EXIT      = 93,
-    SYSCALL_EXIT_GROUP= 94,
+    SYSCALL_EXIT = 93,
+    SYSCALL_EXIT_GROUP = 94,
     SYSCALL_SET_TID_ADDRESS = 96,
-    SYSCALL_FUTEX     = 98,
+    SYSCALL_FUTEX = 98,
     SYSCALL_SET_ROBUST_LIST = 99,
     SYSCALL_GET_ROBUST_LIST = 100,
     SYSCALL_NANOSLEEP = 101,
-    SYSCALL_GETITIMER  = 102,
-    SYSCALL_SETITIMER  = 103,
+    SYSCALL_GETITIMER = 102,
+    SYSCALL_SETITIMER = 103,
     SYSCALL_CLOCK_SETTIME = 112,
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_CLOCK_NANOSLEEP = 115,
-    SYSCALL_SYSLOG    = 116,
+    SYSCALL_SYSLOG = 116,
     SYSCALL_SCHED_SETAFFINITY = 122,
     SYSCALL_SCHED_GETAFFINITY = 123,
-    SYSCALL_YIELD     = 124,
-    SYSCALL_KILL      = 129,
-    SYSCALL_TKILL     = 130,
-    SYSCALL_TGKILL    = 131,
-    SYSCALL_SIGSUSPEND= 133,
+    SYSCALL_YIELD = 124,
+    SYSCALL_KILL = 129,
+    SYSCALL_TKILL = 130,
+    SYSCALL_TGKILL = 131,
+    SYSCALL_SIGSUSPEND = 133,
     SYSCALL_SIGACTION = 134,
     SYSCALL_SIGPROCMASK = 135,
     SYSCALL_SIGTIMEDWAIT = 137,
     SYSCALL_SIGRETURN = 139,
-    SYSCALL_SETGID    = 144,
-    SYSCALL_SETUID    = 146,
-    SYSCALL_TIMES     = 153,
-    SYSCALL_SETPGID   = 154,
-    SYSCALL_GETPGID   = 155,
-    SYSCALL_SETSID    = 157,
-    SYSCALL_UNAME     = 160,
+    SYSCALL_SETGID = 144,
+    SYSCALL_SETUID = 146,
+    SYSCALL_TIMES = 153,
+    SYSCALL_SETPGID = 154,
+    SYSCALL_GETPGID = 155,
+    SYSCALL_SETSID = 157,
+    SYSCALL_UNAME = 160,
     SYSCALL_GETRUSAGE = 165,
-    SYSCALL_UMASK     = 166,
-    SYSCALL_GETTIMEOFDAY  = 169,
-    SYSCALL_GETPID    = 172,
-    SYSCALL_GETPPID   = 173,
-    SYSCALL_GETUID    = 174,
-    SYSCALL_GETEUID   = 175,
-    SYSCALL_GETGID    = 176,
-    SYSCALL_GETEGID   = 177,
-    SYSCALL_GETTID    = 178,
-    SYSCALL_SYSINFO   = 179,
-    SYSCALL_SHMGET    = 194,
-    SYSCALL_SHMCTL    = 195,
-    SYSCALL_SHMAT     = 196,
-    SYSCALL_SHMDT     = 197,
-    SYSCALL_SOCKET    = 198,
-    SYSCALL_SOCKETPAIR= 199,
-    SYSCALL_BIND      = 200,
-    SYSCALL_LISTEN    = 201,
-    SYSCALL_ACCEPT    = 202,
-    SYSCALL_CONNECT   = 203,
+    SYSCALL_UMASK = 166,
+    SYSCALL_GETTIMEOFDAY = 169,
+    SYSCALL_GETPID = 172,
+    SYSCALL_GETPPID = 173,
+    SYSCALL_GETUID = 174,
+    SYSCALL_GETEUID = 175,
+    SYSCALL_GETGID = 176,
+    SYSCALL_GETEGID = 177,
+    SYSCALL_GETTID = 178,
+    SYSCALL_SYSINFO = 179,
+    SYSCALL_SHMGET = 194,
+    SYSCALL_SHMCTL = 195,
+    SYSCALL_SHMAT = 196,
+    SYSCALL_SHMDT = 197,
+    SYSCALL_SOCKET = 198,
+    SYSCALL_SOCKETPAIR = 199,
+    SYSCALL_BIND = 200,
+    SYSCALL_LISTEN = 201,
+    SYSCALL_ACCEPT = 202,
+    SYSCALL_CONNECT = 203,
     SYSCALL_GETSOCKNAME = 204,
     SYSCALL_GETPEERNAME = 205,
-    SYSCALL_SENDTO    = 206,
-    SYSCALL_RECVFROM  = 207,
-    SYSCALL_SETSOCKOPT= 208,
-    SYSCALL_GETSOCKOPT= 209,
-    SYSCALL_SHUTDOWN  = 210,
-    SYSCALL_BRK       = 214,
-    SYSCALL_MUNMAP    = 215,
-    SYSCALL_MREMAP    = 216,
-    SYSCALL_CLONE     = 220,
-    SYSCALL_EXECVE    = 221,
-    SYSCALL_MMAP      = 222,
-    SYSCALL_MPROTECT  = 226,
-    SYSCALL_MSYNC     = 227,
-    SYSCALL_MADVISE   = 233,
+    SYSCALL_SENDTO = 206,
+    SYSCALL_RECVFROM = 207,
+    SYSCALL_SETSOCKOPT = 208,
+    SYSCALL_GETSOCKOPT = 209,
+    SYSCALL_SHUTDOWN = 210,
+    SYSCALL_BRK = 214,
+    SYSCALL_MUNMAP = 215,
+    SYSCALL_MREMAP = 216,
+    SYSCALL_CLONE = 220,
+    SYSCALL_EXECVE = 221,
+    SYSCALL_MMAP = 222,
+    SYSCALL_MPROTECT = 226,
+    SYSCALL_MSYNC = 227,
+    SYSCALL_MADVISE = 233,
     SYSCALL_GET_MEMPOLICY = 236,
-    SYSCALL_ACCEPT4   = 242,
-    SYSCALL_WAIT4     = 260,
+    SYSCALL_ACCEPT4 = 242,
+    SYSCALL_WAIT4 = 260,
     SYSCALL_RENAMEAT2 = 276,
     SYSCALL_PRLIMIT64 = 261,
-    GETRANDOM         = 278,
-    MEMEBARRIER       = 283,
-    SYS_STATX         = 291,
+    GETRANDOM = 278,
+    MEMEBARRIER = 283,
+    SYS_STATX = 291,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -174,7 +177,7 @@ impl Display for SysCode {
 }
 
 impl SysCode {
-    pub fn get_info(&self) -> &'static str{
+    pub fn get_info(&self) -> &'static str {
         match self {
             Self::SYSCALL_SETUID => "setuid",
             Self::SYSCALL_FCHDIR => "fchdir",
@@ -460,7 +463,6 @@ pub struct IoVec {
     pub iov_len: usize,
 }
 
-
 bitflags! {
     #[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
     pub struct FcntlFlags: u32 {
@@ -512,19 +514,19 @@ pub const SOL_TCP: u8 = 6;
 
 /// 如果协议是TCP，并且当前的套接字状态不是侦听(listen)或关闭(close)，
 /// 那么，当option_value不是零时，启用TCP保活定时 器，否则关闭保活定时器。
-pub const SO_KEEPALIVE: u32 = 9;// 设置是否保持连接
-pub const SO_SNDBUF: u32 = 7;   // 设置发送缓冲区大小
-pub const SO_RCVBUF: u32 = 8;   // 设置接收缓冲区大小
-pub const MAXSEGMENT: u32 = 2;  // 限制TCP 最大段大小 MSS
+pub const SO_KEEPALIVE: u32 = 9; // 设置是否保持连接
+pub const SO_SNDBUF: u32 = 7; // 设置发送缓冲区大小
+pub const SO_RCVBUF: u32 = 8; // 设置接收缓冲区大小
+pub const MAXSEGMENT: u32 = 2; // 限制TCP 最大段大小 MSS
 pub const CONGESTION: u32 = 13; // 拥塞控制算法
-pub const NODELAY: u32 = 1;     // 关闭Nagle算法
+pub const NODELAY: u32 = 1; // 关闭Nagle算法
 
 /// 主要用于ppoll系统调用
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PollFd {
-    pub fd: i32,      // 要监听的文件描述符
-    pub events:  PollEvents, // 你关心的事件（输入参数）
+    pub fd: i32,             // 要监听的文件描述符
+    pub events: PollEvents,  // 你关心的事件（输入参数）
     pub revents: PollEvents, // 实际发生的事件（输出参数）
 }
 
@@ -533,7 +535,7 @@ impl PollFd {
         Self {
             fd,
             events,
-            revents: PollEvents::empty()
+            revents: PollEvents::empty(),
         }
     }
 }
@@ -637,7 +639,11 @@ pub struct RLimit64 {
 
 impl Display for RLimit64 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(rlim_cur = {}, rlim_max = {})", self.rlim_cur, self.rlim_max)
+        write!(
+            f,
+            "(rlim_cur = {}, rlim_max = {})",
+            self.rlim_cur, self.rlim_max
+        )
     }
 }
 
@@ -645,14 +651,11 @@ impl RLimit64 {
     pub fn new_bare() -> Self {
         Self {
             rlim_cur: 0,
-            rlim_max: 0
+            rlim_max: 0,
         }
     }
     pub fn new(rlim_cur: usize, rlim_max: usize) -> Self {
-        Self {
-            rlim_cur,
-            rlim_max
-        }
+        Self { rlim_cur, rlim_max }
     }
 }
 
@@ -693,7 +696,6 @@ pub enum RlimResource {
     Rttime = 15,
     // 注：`RLIMIT_NLIMITS`（16）是总数，非实际资源类型
 }
-
 
 #[derive(Default, Debug, Clone, Copy, IntoBytes, Immutable)]
 #[repr(C)]
@@ -752,31 +754,29 @@ impl StatFs {
     }
 }
 
-
-pub const RUSAGE_SELF:     isize = 0;
+pub const RUSAGE_SELF: isize = 0;
 pub const RUSAGE_CHILDREN: isize = -1;
-pub const RUSAGE_THREAD:   isize = 1;
-
+pub const RUSAGE_THREAD: isize = 1;
 
 #[derive(Clone, Copy, Default)]
 #[repr(C)]
 pub struct Rusage {
-    pub utime: TimeVal,   // 用户态 CPU 时间（进程在用户模式下的总执行时间）
-    pub stime: TimeVal,   // 内核态 CPU 时间（进程在内核模式下的总执行时间）
-    pub maxrss: usize,    // 最大驻留集大小（进程使用的物理内存峰值，单位通常为 KB）
-    pub ixrss: usize,     // 共享内存大小（历史字段，现代系统通常不再使用）
-    pub idrss: usize,     // 非共享数据内存大小（历史字段，现代系统通常不再使用）
-    pub isrss: usize,     // 非共享栈内存大小（历史字段，现代系统通常不再使用）
-    pub minflt: usize,    // 软缺页次数（无需磁盘 I/O 的页故障，如写时复制）
-    pub majflt: usize,    // 硬缺页次数（需磁盘 I/O 的页故障，如页面未加载）
-    pub nswap: usize,     // 交换次数（进程被换出物理内存的次数）
-    pub inblock: usize,   // 块输入操作次数（从存储设备读取数据的次数）
-    pub oublock: usize,   // 块输出操作次数（向存储设备写入数据的次数）
-    pub msgsnd: usize,    // 发送的消息数（IPC 相关，现代系统通常不再使用）
-    pub msgrcv: usize,    // 接收的消息数（IPC 相关，现代系统通常不再使用）
-    pub nsignals: usize,  // 接收的信号数量（历史字段，现代系统通常不再使用）
-    pub nvcsw: usize,     // 自愿上下文切换次数（进程主动释放 CPU，如等待 I/O）
-    pub nivcsw: usize,    // 非自愿上下文切换次数（进程被强制切换，如时间片耗尽）
+    pub utime: TimeVal,  // 用户态 CPU 时间（进程在用户模式下的总执行时间）
+    pub stime: TimeVal,  // 内核态 CPU 时间（进程在内核模式下的总执行时间）
+    pub maxrss: usize,   // 最大驻留集大小（进程使用的物理内存峰值，单位通常为 KB）
+    pub ixrss: usize,    // 共享内存大小（历史字段，现代系统通常不再使用）
+    pub idrss: usize,    // 非共享数据内存大小（历史字段，现代系统通常不再使用）
+    pub isrss: usize,    // 非共享栈内存大小（历史字段，现代系统通常不再使用）
+    pub minflt: usize,   // 软缺页次数（无需磁盘 I/O 的页故障，如写时复制）
+    pub majflt: usize,   // 硬缺页次数（需磁盘 I/O 的页故障，如页面未加载）
+    pub nswap: usize,    // 交换次数（进程被换出物理内存的次数）
+    pub inblock: usize,  // 块输入操作次数（从存储设备读取数据的次数）
+    pub oublock: usize,  // 块输出操作次数（向存储设备写入数据的次数）
+    pub msgsnd: usize,   // 发送的消息数（IPC 相关，现代系统通常不再使用）
+    pub msgrcv: usize,   // 接收的消息数（IPC 相关，现代系统通常不再使用）
+    pub nsignals: usize, // 接收的信号数量（历史字段，现代系统通常不再使用）
+    pub nvcsw: usize,    // 自愿上下文切换次数（进程主动释放 CPU，如等待 I/O）
+    pub nivcsw: usize,   // 非自愿上下文切换次数（进程被强制切换，如时间片耗尽）
 }
 
 impl Rusage {
@@ -787,7 +787,6 @@ impl Rusage {
         ret
     }
 }
-
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -805,11 +804,9 @@ impl Default for CpuSet {
 
 pub const CPUSET_LEN: usize = size_of::<CpuSet>();
 
-
-
 /*
-/* 
- * Control commands used with semctl, msgctl and shmctl 
+/*
+ * Control commands used with semctl, msgctl and shmctl
  * see also specific commands in sem.h, msg.h and shm.h
  */
 #define IPC_RMID 0     /* remove resource */

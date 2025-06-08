@@ -1,6 +1,6 @@
+use alloc::sync::Arc;
 use log::{debug, error, info, warn};
 use lwext4_rust::KernelDevOp;
-use alloc::sync::Arc;
 
 use crate::{drivers::BlockDriver, utils::logger};
 
@@ -177,7 +177,9 @@ impl KernelDevOp for Disk {
                 .position()
                 .checked_add_signed(off as isize)
                 .map(|v| v as i64),
-            lwext4_rust::bindings::SEEK_END => size.checked_add_signed(off as isize).map(|v| v as i64),
+            lwext4_rust::bindings::SEEK_END => {
+                size.checked_add_signed(off as isize).map(|v| v as i64)
+            }
             _ => {
                 error!("invalid seek() whence: {}", whence);
                 Some(off)

@@ -1,12 +1,12 @@
 pub mod context;
-pub mod user_trap;
 pub mod kernel_trap;
+pub mod user_trap;
 
 use alloc::sync::Arc;
-use log::info;
-use user_trap::{user_trap_handler, user_trap_return};
 use core::arch::global_asm;
 use core::fmt::Display;
+use log::info;
+use user_trap::{user_trap_handler, user_trap_return};
 
 use crate::signal::do_signal;
 use crate::sync::{get_waker, suspend_now};
@@ -20,11 +20,11 @@ use riscv::register::mtvec::TrapMode;
 use riscv::register::stvec;
 // loongarch架构有关
 #[cfg(target_arch = "loongarch64")]
-use loongarch64::register::*;
-#[cfg(target_arch = "loongarch64")]
 use loongarch64::register::ecfg::LineBasedInterrupt;
 #[cfg(target_arch = "loongarch64")]
 use loongarch64::register::estat::{Exception, Interrupt, Trap};
+#[cfg(target_arch = "loongarch64")]
+use loongarch64::register::*;
 #[cfg(target_arch = "loongarch64")]
 use loongarch64::time::get_timer_freq;
 
@@ -47,7 +47,6 @@ pub fn init() {
     set_trap_handler(IndertifyMode::Kernel);
 }
 
-
 /// 用户态陷入内核态后，执行完内核态代码后，返回用户态
 pub async fn trap_loop(task: Arc<TaskControlBlock>) {
     // 设置task的waker TODO：将这个放入 UserTaskFuture中
@@ -57,7 +56,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
         match task.get_status() {
             TaskStatus::Zombie => break,
             TaskStatus::Stopped => suspend_now().await,
-            _ => {},
+            _ => {}
         }
 
         set_trap_handler(IndertifyMode::User);
@@ -67,7 +66,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
         match task.get_status() {
             TaskStatus::Zombie => break,
             TaskStatus::Stopped => suspend_now().await,
-            _ => {},
+            _ => {}
         }
 
         user_trap_handler().await;
@@ -75,7 +74,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
         match task.get_status() {
             TaskStatus::Zombie => break,
             TaskStatus::Stopped => suspend_now().await,
-            _ => {},
+            _ => {}
         }
 
         if task.pending() {
@@ -85,8 +84,6 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
 
     task.do_exit();
 }
-
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(unused)]
@@ -107,15 +104,11 @@ impl Display for IndertifyMode {
 #[cfg(target_arch = "riscv64")]
 fn set_trap_handler(mode: IndertifyMode) {
     match mode {
-        IndertifyMode::User => {
-            unsafe {
-                stvec::write(__trap_from_user as usize, TrapMode::Direct);
-            }
+        IndertifyMode::User => unsafe {
+            stvec::write(__trap_from_user as usize, TrapMode::Direct);
         },
-        IndertifyMode::Kernel => {
-            unsafe {
-                stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
-            }
+        IndertifyMode::Kernel => unsafe {
+            stvec::write(__trap_from_kernel as usize, TrapMode::Direct);
         },
     }
 }
@@ -123,21 +116,16 @@ fn set_trap_handler(mode: IndertifyMode) {
 #[inline]
 fn set_trap_handler(mode: IndertifyMode) {
     match mode {
-        IndertifyMode::User => {
-            unsafe {
-                ecfg::set_vs(0);
-                eentry::set_eentry(__trap_from_user as usize);
-            }
+        IndertifyMode::User => unsafe {
+            ecfg::set_vs(0);
+            eentry::set_eentry(__trap_from_user as usize);
         },
-        IndertifyMode::Kernel => {
-            unsafe {
-                ecfg::set_vs(0);
-                eentry::set_eentry(__trap_from_kernel as usize);
-            }
+        IndertifyMode::Kernel => unsafe {
+            ecfg::set_vs(0);
+            eentry::set_eentry(__trap_from_kernel as usize);
         },
     }
 }
 
 #[cfg(target_arch = "loongarch64")]
-pub fn init_loongarch() {
-}
+pub fn init_loongarch() {}

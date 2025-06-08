@@ -6,15 +6,16 @@ use hashbrown::HashMap;
 use log::info;
 
 use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
-use alloc::sync::Arc;
 use crate::sync::SpinNoIrqLock;
+use alloc::sync::Arc;
 
 use super::VirtIoHalImpl;
+use core::ptr::NonNull;
 use lazy_static::*;
 use spin::RwLock;
-use core::ptr::NonNull;
 
-
+use alloc::boxed::Box;
+use spin::mutex::Mutex;
 use virtio_drivers::{
     device::{
         blk::VirtIOBlk,
@@ -35,10 +36,9 @@ use virtio_drivers::{
             virtio_device_type, PciTransport,
         },
         DeviceType, Transport,
-    }, Result,
+    },
+    Result,
 };
-use spin::mutex::Mutex;
-use alloc::boxed::Box;
 
 lazy_static! {
     pub static ref BLOCKDEVICE_ADDR_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
@@ -48,10 +48,9 @@ lazy_static! {
     pub static ref BLOCKDEVICE_SIZE_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
 }
 
-
 pub fn probe(fd: u64) {
     println!("fd addr @{:X}", fd);
-    let fdt = unsafe {Fdt::from_ptr(fd as _).expect("fdt trans from ptr error")};
+    let fdt = unsafe { Fdt::from_ptr(fd as _).expect("fdt trans from ptr error") };
     for node in fdt.all_nodes() {
         println!(
             "name: {} {:?}",
@@ -61,8 +60,7 @@ pub fn probe(fd: u64) {
         for range in node.reg() {
             println!(
                 "   {:#018x?}, length {:?}",
-                range.starting_address,
-                range.size
+                range.starting_address, range.size
             )
         }
         if let (Some(compatible), Some(region)) = (node.compatible(), node.reg().next()) {
@@ -73,7 +71,10 @@ pub fn probe(fd: u64) {
                 let size = region.size.unwrap();
                 let addr = region.starting_address as usize + 0xffff_ffc0_0000_0000;
                 let header = NonNull::new(addr as *mut VirtIOHeader).unwrap();
-                println!("addr: {:X} size: {:X} start trans to MmioTransport", addr, size);
+                println!(
+                    "addr: {:X} size: {:X} start trans to MmioTransport",
+                    addr, size
+                );
                 match unsafe { MmioTransport::new(header, size) } {
                     Err(e) => println!("Error creating VirtIO MMIO transport: {:?}", e),
                     Ok(transport) => {
@@ -108,7 +109,6 @@ pub fn probe(fd: u64) {
         super::pci::enumerate_pci(pcie_node, Cam::Ecam);
     }
 }
-
 
 pub fn virtio_device(transport: impl Transport + 'static) {
     match transport.device_type() {

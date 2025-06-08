@@ -2,9 +2,9 @@
 use riscv::register::{sie, sstatus};
 
 #[cfg(target_arch = "loongarch64")]
-use loongarch64::register::*;
-#[cfg(target_arch = "loongarch64")]
 use loongarch64::register::ecfg::LineBasedInterrupt;
+#[cfg(target_arch = "loongarch64")]
+use loongarch64::register::*;
 
 #[cfg(target_arch = "riscv64")]
 #[inline(always)]
@@ -21,7 +21,6 @@ pub fn enable_interrupt() {
         crmd::set_ie(true);
         // prmd::set_pie(true);
     }
-    
 }
 
 #[cfg(target_arch = "riscv64")]
@@ -66,7 +65,7 @@ pub unsafe fn enable_timer_interrupt() {
 #[inline(always)]
 pub unsafe fn enable_timer_interrupt() {
     unsafe {
-        ecfg::set_lie(LineBasedInterrupt::TIMER|LineBasedInterrupt::HWI0);
+        ecfg::set_lie(LineBasedInterrupt::TIMER | LineBasedInterrupt::HWI0);
         crmd::set_ie(true);
     }
 }

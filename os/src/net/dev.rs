@@ -1,10 +1,10 @@
-use smoltcp::{
-    iface::{Config, Interface}, 
-    phy::{Loopback, Medium, Tracer}, 
-    time::Instant, 
-    wire::{EthernetAddress, IpAddress, IpCidr}
-};
 use crate::sync::{once::LateInit, timer::get_time_ms, SpinNoIrqLock};
+use smoltcp::{
+    iface::{Config, Interface},
+    phy::{Loopback, Medium, Tracer},
+    time::Instant,
+    wire::{EthernetAddress, IpAddress, IpCidr},
+};
 
 use super::SOCKET_SET;
 
@@ -29,11 +29,7 @@ impl NetDev {
         let mut loopback = Loopback::new(Medium::Ethernet);
         let config = Config::new(EthernetAddress([0x02, 0x00, 0x00, 0x00, 0x00, 0x01]).into());
         let instant = Instant::from_millis(get_time_ms() as i64);
-        let mut iface = Interface::new(
-            config,
-            &mut loopback,
-            instant,
-        );
+        let mut iface = Interface::new(config, &mut loopback, instant);
         iface.update_ip_addrs(|ip_addrs| {
             ip_addrs
                 .push(IpCidr::new(IpAddress::v4(127, 0, 0, 1), 24))

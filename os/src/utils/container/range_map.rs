@@ -1,8 +1,4 @@
-
-
 //! Adapted from MankorOS
-
-
 
 use alloc::collections::BTreeMap;
 use core::ops::{Add, Range};

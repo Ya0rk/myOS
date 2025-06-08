@@ -10,10 +10,10 @@ use super::path;
 #[repr(C)]
 // #[derive(Debug)]
 pub struct Dirent {
-    d_ino: u64,        // 索引节点号
-    d_off: i64,        // 从 0 开始到下一个 dirent 的偏移
-    d_reclen: u16,     // 当前 dirent 的长度
-    d_type: u8,        // 文件类型
+    d_ino: u64,            // 索引节点号
+    d_off: i64,            // 从 0 开始到下一个 dirent 的偏移
+    d_reclen: u16,         // 当前 dirent 的长度
+    d_type: u8,            // 文件类型
     pub d_name: [u8; 256], // 文件名
 }
 
@@ -37,7 +37,7 @@ impl Dirent {
             //     tmp[..name.len()].copy_from_slice(name.as_bytes());
             //     tmp
             // },
-            d_name: name
+            d_name: name,
         }
     }
     #[inline(always)]
@@ -79,23 +79,23 @@ impl Debug for Dirent {
 }
 
 /// (path, ino, d_type)
-/// 
+///
 ///    DT_UNKNOWN = 0,
-/// 
+///
 ///    DT_FIFO = 1,
-/// 
+///
 ///    DT_CHR = 2,
-/// 
+///
 ///    DT_DIR = 4,
-/// 
+///
 ///    DT_BLK = 6,
-/// 
+///
 ///    DT_REG = 8,
-/// 
+///
 ///    DT_LNK = 10,
-/// 
+///
 ///    DT_SOCK = 12,
-/// 
+///
 ///    DT_WHT = 14
 ///  };
 pub fn build_dirents(entries: Vec<(&str, u64, u8)>) -> Vec<Dirent> {

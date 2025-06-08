@@ -166,11 +166,10 @@
 
 extern crate alloc;
 
-use alloc::collections::VecDeque;
-use core::future::Future;
-use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use crate::sync::SpinNoIrqLock;
-
+use alloc::collections::VecDeque;
+use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
+use core::future::Future;
 
 static TASK_QUEUE: TaskQueue = TaskQueue::new();
 
@@ -256,12 +255,12 @@ pub fn run() {
     let mut trycnt = 0;
     loop {
         let tasks = run_once();
-        if tasks == 0{
+        if tasks == 0 {
             trycnt += 1;
         } else {
             trycnt = 0;
         }
-        if trycnt > 0x10000000{
+        if trycnt > 0x10000000 {
             println!("no task");
             return;
         }
@@ -271,7 +270,7 @@ pub fn run() {
     // }
 }
 
-pub fn run_once() -> usize{
+pub fn run_once() -> usize {
     let mut tasks = 0;
     while let Some(task) = TASK_QUEUE.fetch() {
         task.run();

@@ -1,7 +1,7 @@
 //! The global allocator
-use core::cell::UnsafeCell;
 use crate::hal::config::KERNEL_HEAP_SIZE;
 use buddy_system_allocator::LockedHeap;
+use core::cell::UnsafeCell;
 
 #[global_allocator]
 /// heap allocator instance

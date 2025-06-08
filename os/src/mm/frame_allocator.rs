@@ -1,10 +1,13 @@
 use super::{PhysAddr, PhysPageNum};
-use crate::{hal::{config::{MEMORY_END, KERNEL_ADDR_OFFSET}}, mm::address::KernelAddr};
-use crate::{sync::SpinNoIrqLock};
+use crate::sync::SpinNoIrqLock;
+use crate::{
+    hal::config::{KERNEL_ADDR_OFFSET, MEMORY_END},
+    mm::address::KernelAddr,
+};
 use alloc::vec::Vec;
-use spin::Mutex;
 use core::fmt::{self, Debug, Formatter};
 use lazy_static::*;
+use spin::Mutex;
 
 /// manage a frame which has the same lifecycle as the tracker
 pub struct FrameTracker {
@@ -95,16 +98,13 @@ pub fn init_frame_allocator() {
         fn ekernel();
     }
     FRAME_ALLOCATOR.lock().init(
-        PhysAddr::from(KernelAddr(0x9000_0000+KERNEL_ADDR_OFFSET)).ceil(),
+        PhysAddr::from(KernelAddr(0x9000_0000 + KERNEL_ADDR_OFFSET)).ceil(),
         PhysAddr::from(KernelAddr(MEMORY_END)).floor(),
     );
 }
 /// allocate a frame
 pub fn frame_alloc() -> Option<FrameTracker> {
-    FRAME_ALLOCATOR
-        .lock()
-        .alloc()
-        .map(FrameTracker::new)
+    FRAME_ALLOCATOR.lock().alloc().map(FrameTracker::new)
 }
 /// deallocate a frame
 pub fn frame_dealloc(ppn: PhysPageNum) {

@@ -1,17 +1,17 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use core::arch::asm;
-use core::ops::Range;
 use crate::board::{MEMORY_END, MMIO};
 use crate::hal::arch::kernel_token_write;
 use crate::mm::{Direct, PageNum};
+use core::arch::asm;
+use core::ops::Range;
 // use crate::mm::address::kva_d2pg;
-use crate::sync::SpinNoIrqLock;
-use super::address::{KernelAddr};
+use super::address::KernelAddr;
 use super::memory_space::vm_area::MapPerm;
+use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 use crate::hal::mem::page_table::*;
-use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use crate::sync::SpinNoIrqLock;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
@@ -113,7 +113,7 @@ use spin::Mutex;
 //     fn set_executable(&mut self, executable: bool) {
 //         self.set(PTEFlags::X, executable);
 //     }
-    
+
 // }
 
 // impl UserAccessFlags for PTEFlags {
@@ -125,9 +125,6 @@ use spin::Mutex;
 //     }
 // }
 
-
-
-
 pub unsafe fn switch_user_page_table(user_token: usize) {
     // unimplemented!()
     // satp::write(page_table_token);
@@ -136,12 +133,11 @@ pub unsafe fn switch_user_page_table(user_token: usize) {
     crate::hal::arch::sfence();
 }
 
-
 // TODO: 优化结构
 lazy_static! {
-    pub static ref KERNEL_PAGE_TABLE: Arc<SpinNoIrqLock<PageTable>> = Arc::new(SpinNoIrqLock::new(PageTable::init_kernel_page_table()));
+    pub static ref KERNEL_PAGE_TABLE: Arc<SpinNoIrqLock<PageTable>> =
+        Arc::new(SpinNoIrqLock::new(PageTable::init_kernel_page_table()));
 }
-
 
 pub struct PageTable {
     pub root_ppn: PhysPageNum,
@@ -157,7 +153,6 @@ impl PageTable {
             frames: vec![frame],
         }
     }
-
 
     /// Temporarily used to get arguments from user space.
     pub fn from_token(satp: usize) -> Self {
@@ -215,7 +210,7 @@ impl PageTable {
         // info!("[map_leaf] {:#x} to {:#x}", vpn.0, ppn.0);
         let pte = self.find_pte_create(vpn).unwrap();
         debug_assert!(!pte.is_valid(), "vpn {:?} is mapped before mapping", vpn); // 避免重复映射
-        // TODO: to avoid exposed flag bits
+                                                                                  // TODO: to avoid exposed flag bits
         *pte = PageTableEntry::new(ppn, flags);
         // info!("[map_leaf] pte is {:#x}", pte.bits);
     }
@@ -229,13 +224,17 @@ impl PageTable {
     pub fn map_kernel_range(&mut self, range_va: Range<VirtAddr>, perm: MapPerm) {
         // println!("[map kernel range] range_va:{:?}", range_va);
         let range_vpn = range_va.start.paged_va().floor()..range_va.end.paged_va().ceil();
-        println!("[map_kernel_range] map area:{:#x}..{:#x}", range_va.start.paged_va().0, range_va.end.paged_va().0);
+        println!(
+            "[map_kernel_range] map area:{:#x}..{:#x}",
+            range_va.start.paged_va().0,
+            range_va.end.paged_va().0
+        );
         for vpn in range_vpn {
             let ppn = vpn.ppn();
             // println!("[map vpn] vpn:{:#x}, ppn:{:#x}", vpn.0, ppn.0);
             self.map_leaf(vpn, ppn, perm.into());
         }
-    }    
+    }
 
     pub fn map_kernel_huge_page(&mut self, base_pa: PhysAddr, perm: MapPerm) {
         // TODO: to avoid exposed flag bits
@@ -246,8 +245,13 @@ impl PageTable {
         *pte = PageTableEntry::new(base_pa.into(), perm.into());
     }
     pub fn unmap_kernel_range(&mut self, range_va: Range<VirtAddr>) {
-        let range_vpn: Range<VirtPageNum> = range_va.start.paged_va().floor()..range_va.end.paged_va().ceil();
-        info!("[unmap_kernel_range] unmap area:{:#x}..{:#x}", range_va.start.paged_va().0, range_va.end.paged_va().0);
+        let range_vpn: Range<VirtPageNum> =
+            range_va.start.paged_va().floor()..range_va.end.paged_va().ceil();
+        info!(
+            "[unmap_kernel_range] unmap area:{:#x}..{:#x}",
+            range_va.start.paged_va().0,
+            range_va.end.paged_va().0
+        );
         for vpn in range_vpn {
             let ppn = vpn.ppn();
             self.unmap(vpn);
@@ -275,20 +279,15 @@ impl PageTable {
         })
     }
 
-
     pub unsafe fn enable(&self) {
         switch_user_page_table(self.token());
     }
-
 }
-
-
 
 /// NOTE: should be used no more than init phase
 pub fn enable_kernel_pgtable() {
     // unsafe { KERNEL_PAGE_TABLE.lock().enable(); }
-    kernel_token_write( KERNEL_PAGE_TABLE.lock().token() );
-
+    kernel_token_write(KERNEL_PAGE_TABLE.lock().token());
 }
 // TODO: all below is to be discarded
 /// translate a pointer to a mutable u8 Vec through page table
@@ -357,13 +356,18 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
     let va = ptr as usize;
 
     // 检查指针
-    assert!(ptr as usize % core::mem::align_of::<T>() == 0, "[translated_refmut] ptr not aligned");
+    assert!(
+        ptr as usize % core::mem::align_of::<T>() == 0,
+        "[translated_refmut] ptr not aligned"
+    );
     assert!(!ptr.is_null(), "[translated_refmut] ptr is null");
 
-    KernelAddr::from(page_table
-        .translate_va(VirtAddr::from(va))
-        .expect("[translated_refmut] translate failed"))
-        .get_mut()
+    KernelAddr::from(
+        page_table
+            .translate_va(VirtAddr::from(va))
+            .expect("[translated_refmut] translate failed"),
+    )
+    .get_mut()
 }
 /// 通过token，将一个指针转化为 特定的数据结构
 pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
@@ -371,9 +375,5 @@ pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
     let page_table = PageTable::from_token(token);
     let va = ptr as usize;
 
-    KernelAddr::from(page_table
-        .translate_va(VirtAddr::from(va))
-        .unwrap())
-        .get_ref()
+    KernelAddr::from(page_table.translate_va(VirtAddr::from(va)).unwrap()).get_ref()
 }
-

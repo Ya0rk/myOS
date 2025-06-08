@@ -1,8 +1,17 @@
-use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
-use crate::{fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, sync::{SpinNoIrqLock, TimeStamp}, task::get_init_proc, utils::SysResult};
-use async_trait::async_trait;
+use crate::{
+    fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
+    mm::{page::Page, UserBuffer},
+    sync::{SpinNoIrqLock, TimeStamp},
+    task::get_init_proc,
+    utils::SysResult,
+};
 use alloc::boxed::Box;
-
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
+use async_trait::async_trait;
 
 pub struct DevTty;
 
@@ -42,7 +51,7 @@ impl FileTrait for DevTty {
             panic!("get Stdout error!");
         }
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("/dev/tty".to_string())
     }
@@ -65,7 +74,6 @@ impl FileTrait for DevTty {
         false
     }
 }
-
 
 #[async_trait]
 impl InodeTrait for DevTty {

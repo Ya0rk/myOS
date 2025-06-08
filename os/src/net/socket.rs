@@ -1,13 +1,18 @@
-use alloc::sync::Arc;
-use async_trait::async_trait;
+use super::{
+    addr::{IpType, Sock, SockAddr},
+    tcp::TcpSocket,
+    udp::UdpSocket,
+    unix::UnixSocket,
+    SockClass, SocketType, AF_INET, AF_INET6,
+};
 use crate::{
-    fs::{FileMeta, FileTrait, OpenFlags}, syscall::ShutHow, 
-    utils::{Errno, SysResult}
+    fs::{FileMeta, FileTrait, OpenFlags},
+    syscall::ShutHow,
+    utils::{Errno, SysResult},
 };
 use alloc::boxed::Box;
-use super::{
-    addr::{IpType, Sock, SockAddr}, tcp::TcpSocket, udp::UdpSocket, unix::UnixSocket, SockClass, SocketType, AF_INET, AF_INET6
-};
+use alloc::sync::Arc;
+use async_trait::async_trait;
 use smoltcp::{socket::tcp, wire::IpEndpoint};
 pub type TcpState = tcp::State;
 
@@ -40,7 +45,6 @@ impl SockMeta {
 #[allow(unused)]
 #[async_trait]
 pub trait Socket: FileTrait {
-
     async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)>;
 
     fn bind(&self, addr: &SockAddr) -> SysResult<()>;
@@ -77,7 +81,7 @@ pub trait Socket: FileTrait {
 impl dyn Socket {
     pub fn new(family: u16, socket_type: SocketType) -> SysResult<SockClass> {
         match family {
-            AF_INET =>  Self::new_socket(IpType::Ipv4, socket_type),
+            AF_INET => Self::new_socket(IpType::Ipv4, socket_type),
             AF_INET6 => Self::new_socket(IpType::Ipv6, socket_type),
             AF_UNIX => todo!(),
             _ => return Err(Errno::EAFNOSUPPORT),

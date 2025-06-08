@@ -23,7 +23,6 @@ pub struct IPCPerm {
 }
 
 impl IPCPerm {
-
     pub fn new(key: IPCKey, mode: IPCPermMode) -> Self {
         Self {
             key,
@@ -40,9 +39,7 @@ impl IPCPerm {
         // self.mode.contains(mode)
         true
     }
-    
 }
-
 
 bitflags! {
     #[derive(Debug,Clone,Copy)]
@@ -64,7 +61,6 @@ bitflags! {
 
 }
 impl IPCPermMode {
-    
     pub fn from_str(s: &str) -> IPCPermMode {
         let bytes = s.as_bytes();
         let mut mode = IPCPermMode::empty();
@@ -78,21 +74,19 @@ impl IPCPermMode {
     }
 }
 
-
-
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct IPCKey(pub i32);
 pub struct IPCKeyAllocator {
     current: i32,
-    recycled: BTreeSet<i32>
+    recycled: BTreeSet<i32>,
 }
 
 impl IPCKeyAllocator {
     pub fn new() -> Self {
         IPCKeyAllocator {
             current: 0,
-            recycled: BTreeSet::new()
+            recycled: BTreeSet::new(),
         }
     }
     pub fn alloc(&mut self) -> IPCKey {
@@ -109,12 +103,10 @@ impl IPCKeyAllocator {
     }
 }
 
-
-lazy_static!{
-    pub static ref IPC_KEY_ALLOCATOR: SpinNoIrqLock<IPCKeyAllocator> = SpinNoIrqLock::new(IPCKeyAllocator::new());
-
+lazy_static! {
+    pub static ref IPC_KEY_ALLOCATOR: SpinNoIrqLock<IPCKeyAllocator> =
+        SpinNoIrqLock::new(IPCKeyAllocator::new());
 }
-
 
 impl IPCKey {
     pub fn new_alloc() -> IPCKey {
@@ -129,7 +121,6 @@ impl IPCKey {
             IPCKey(user_key)
         }
     }
-    
 }
 
 impl Drop for IPCKey {

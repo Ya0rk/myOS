@@ -16,7 +16,7 @@ pub struct Kstat {
     pub st_size: i64,    // 总大小，以字节为单位
     pub st_blksize: i32, // 文件系统 I/O 的块大小
     pub __pad2: i32,
-    pub st_blocks: i64,     // 分配的 512B 块数
+    pub st_blocks: i64,       // 分配的 512B 块数
     pub st_atime_sec: isize,  // 上次访问时间
     pub st_atime_nsec: isize, // 上次访问时间（纳秒精度）
     pub st_mtime_sec: isize,  // 上次修改时间
@@ -63,10 +63,15 @@ impl Kstat {
     }
 }
 
-
 /// 将 ext4_inode_stat 转换为 Kstat
 #[allow(unused)]
-pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeSpec, ctime: TimeSpec, size: usize) -> Kstat {
+pub(crate) fn as_inode_stat(
+    stat: ext4_inode_stat,
+    atime: TimeSpec,
+    mtime: TimeSpec,
+    ctime: TimeSpec,
+    size: usize,
+) -> Kstat {
     Kstat {
         st_dev: stat.st_dev as u32,
         st_ino: stat.st_ino as u64,
@@ -78,7 +83,7 @@ pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeS
         __pad: 0,   // 填充字段
         st_size: size as i64,
         st_blksize: BLOCK_SIZE as i32,
-        __pad2: 0,  // 填充字段
+        __pad2: 0, // 填充字段
         st_blocks: stat.st_blocks as i64,
         st_atime_sec: atime.tv_sec as isize,
         st_atime_nsec: atime.tv_nsec as isize,
@@ -89,8 +94,6 @@ pub(crate) fn as_inode_stat(stat: ext4_inode_stat, atime: TimeSpec, mtime: TimeS
         // __unused: [0; 2], // 填充字段
     }
 }
-
-
 
 /// man 2 statx 中的定义
 ///
@@ -121,7 +124,7 @@ pub struct Statx {
     stx_ino: u64,
     stx_size: u64,
     stx_blocks: u64,
-    stx_attributes_mask: u64, 
+    stx_attributes_mask: u64,
 
     /// 最后访问时间
     stx_atime: Statx_timestamp,
@@ -131,8 +134,8 @@ pub struct Statx {
     stx_ctime: Statx_timestamp,
     /// 最后修改时间
     stx_mtime: Statx_timestamp,
-    
-    /// 主设备ID 
+
+    /// 主设备ID
     stx_dev_major: u32,
     // 设备示例ID
     stx_dev_minor: u32,
@@ -177,7 +180,6 @@ impl From<Kstat> for Statx {
 }
 
 impl Statx {
-
     pub fn set_mask(&mut self, mask: u32) {
         self.stx_mask = mask;
     }
@@ -186,5 +188,4 @@ impl Statx {
         let size = core::mem::size_of::<Self>();
         unsafe { core::slice::from_raw_parts(self as *const _ as usize as *const u8, size) }
     }
-
 }

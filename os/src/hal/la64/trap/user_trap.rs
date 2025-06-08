@@ -1,17 +1,17 @@
 #![allow(unused_import_braces)]
 #![allow(unused)]
-use log::info;
-use core::arch::asm;
+use super::{__return_to_user, set_trap_handler, IndertifyMode};
 use crate::hal::arch::sstatus::SPP;
 use crate::sync::{disable_interrupt, set_next_trigger, yield_now};
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, executor, get_current_hart_id};
-use super::{__return_to_user, set_trap_handler, IndertifyMode};
+use core::arch::asm;
+use log::info;
+#[cfg(target_arch = "riscv64")]
+use riscv::register::scause::{self, Exception, Interrupt, Trap};
 /// 导入riscv架构相关的包
 #[cfg(target_arch = "riscv64")]
 use riscv::register::stval;
-#[cfg(target_arch = "riscv64")]
-use riscv::register::scause::{self, Exception, Interrupt, Trap};
 
 #[cfg(target_arch = "riscv64")]
 #[no_mangle]
@@ -108,17 +108,22 @@ pub async fn user_trap_handler() {
 #[cfg(target_arch = "loongarch64")]
 #[no_mangle]
 pub async fn user_trap_handler() {
-
-
     use log::error;
-    use loongarch64::{asm, register::{badi, badv, crmd, era, estat::{self, Exception, Interrupt, Trap}, ticlr, CpuMode}};
+    use loongarch64::{
+        asm,
+        register::{
+            badi, badv, crmd, era,
+            estat::{self, Exception, Interrupt, Trap},
+            ticlr, CpuMode,
+        },
+    };
 
     use crate::{mm::memory_space::PageFaultAccessType, sync::TIMER_QUEUE};
     let estat = estat::read();
     let crmd = crmd::read();
     let era = era::read();
     // println!("[user_trap_handler] cause:{:?}, crmd:{:?}, era:{:#x}", estat.cause(), crmd, era.pc());
-    let task= current_task().unwrap();
+    let task = current_task().unwrap();
     if crmd.plv() != CpuMode::Ring0 {
         // 只有在内核态才会触发中断
         panic!("{:?}", estat.cause());
@@ -144,21 +149,19 @@ pub async fn user_trap_handler() {
                     let mut cx = current_trap_cx();
                     cx.sepc += 4;
                     let syscall_id = cx.user_gp.a7;
-                    let args  = [cx.user_gp.a0,
+                    let args = [
+                        cx.user_gp.a0,
                         cx.user_gp.a1,
                         cx.user_gp.a2,
                         cx.user_gp.a3,
                         cx.user_gp.a4,
-                        cx.user_gp.a5];
+                        cx.user_gp.a5,
+                    ];
                     // info!("[user_trap_handler] syscall id:{}, args:{:?}", syscall_id, args);
-                    let result = syscall(
-                        syscall_id,
-                        args
-                    ).await;
-                    
-        
+                    let result = syscall(syscall_id, args).await;
+
                     cx = current_trap_cx();
-        
+
                     match result {
                         Ok(ret) => {
                             cx.user_gp.a0 = ret as usize;
@@ -175,14 +178,13 @@ pub async fn user_trap_handler() {
                         }
                     }
                 }
-        
-                Exception::LoadPageFault |
-                Exception::StorePageFault |
-                Exception::FetchPageFault |
-                Exception::PageModifyFault |
-                Exception::PageNonReadableFault |
-                Exception::PageNonExecutableFault => {
 
+                Exception::LoadPageFault
+                | Exception::StorePageFault
+                | Exception::FetchPageFault
+                | Exception::PageModifyFault
+                | Exception::PageNonReadableFault
+                | Exception::PageNonExecutableFault => {
                     let access_type = match e {
                         Exception::LoadPageFault | Exception::PageNonReadableFault => {
                             PageFaultAccessType::RO
@@ -193,21 +195,34 @@ pub async fn user_trap_handler() {
                         Exception::FetchPageFault | Exception::PageNonExecutableFault => {
                             PageFaultAccessType::RX
                         }
-                        _=> {
+                        _ => {
                             unreachable!()
                         }
                     };
-                    
-                    let va = badv::read().vaddr();  
+
+                    let va = badv::read().vaddr();
                     // if (va == 0) {
                     //     panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
                     // }
-                    current_task().unwrap().with_mut_memory_space(|m| {
-                        m.handle_page_fault(va.into(), access_type)
-                    }).unwrap_or_else(|e| {panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());});
+                    current_task()
+                        .unwrap()
+                        .with_mut_memory_space(|m| m.handle_page_fault(va.into(), access_type))
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "{:?} pc: {:#x} BADV: {:#x}",
+                                estat.cause(),
+                                era.pc(),
+                                badv::read().vaddr()
+                            );
+                        });
                 }
                 Exception::InstructionNotExist => {
-                    error!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                    error!(
+                        "{:?} pc: {:#x} BADV: {:#x}",
+                        estat.cause(),
+                        era.pc(),
+                        badv::read().vaddr()
+                    );
                     unsafe {
                         let pc = era.pc() as *const usize;
                         info!("[user_trap_handler] inst: {:b}", *pc);
@@ -215,19 +230,34 @@ pub async fn user_trap_handler() {
                     }
                 }
                 _ => {
-                    panic!("Cause:{:?} ecode:{:#x} is:{:#x} pc: {:#x} BADV: {:#x} BADI: {:#x}", estat.cause(), estat.ecode(), estat.is(), era.pc(), badv::read().vaddr(), badi::read().inst());
+                    panic!(
+                        "Cause:{:?} ecode:{:#x} is:{:#x} pc: {:#x} BADV: {:#x} BADI: {:#x}",
+                        estat.cause(),
+                        estat.ecode(),
+                        estat.is(),
+                        era.pc(),
+                        badv::read().vaddr(),
+                        badi::read().inst()
+                    );
                 }
             }
         }
 
-        
         _ => {
             unsafe {
                 let mut fcsr0 = current_trap_cx().float_regs.fcsr;
                 // asm!("movfcsr2gr {}, $fcsr0", out(reg) fcsr0);
                 error!("[user_trap_handler] fcsr: {:#b}", fcsr0);
             }
-            panic!("Cause:{:?} ecode:{:#x} is:{:#x} pc: {:#x} BADV: {:#x} BADI: {:#x}", estat.cause(), estat.ecode(), estat.is(), era.pc(), badv::read().vaddr(), badi::read().inst());
+            panic!(
+                "Cause:{:?} ecode:{:#x} is:{:#x} pc: {:#x} BADV: {:#x} BADI: {:#x}",
+                estat.cause(),
+                estat.ecode(),
+                estat.is(),
+                era.pc(),
+                badv::read().vaddr(),
+                badi::read().inst()
+            );
         }
     }
     // era::set_pc(era.pc());
@@ -244,14 +274,16 @@ pub fn user_trap_return() {
     // info!("[user_trap_return] 1");
     trap_cx.sstatus.set_spp(SPP::User);
     trap_cx.sstatus.set_pie(true);
-    
+
     // disable_interrupt();
     let task = current_task().unwrap();
 
     task.get_time_data_mut().set_trap_out_time();
     // info!("[user_trap_return] entering __return_to_user, cx:{:?}", *trap_cx);
 
-    unsafe { __return_to_user(trap_cx); }
+    unsafe {
+        __return_to_user(trap_cx);
+    }
     // info!("[user_trap_return] entering trap");
     task.get_time_data_mut().set_trap_in_time();
 

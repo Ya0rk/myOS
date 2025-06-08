@@ -1,30 +1,38 @@
+use super::ffi::{
+    ShutHow, CONGESTION, MAXSEGMENT, NODELAY, SOL_SOCKET, SOL_TCP, SO_KEEPALIVE, SO_RCVBUF,
+    SO_SNDBUF,
+};
+use crate::{
+    fs::{FileTrait, OpenFlags, Pipe},
+    net::{
+        addr::{IpType, Ipv4, Ipv6, Sock, SockAddr},
+        Congestion, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS,
+    },
+    task::{current_task, sock_map_fd, FdInfo},
+    utils::{Errno, SysResult},
+};
 use log::{info, warn};
 use smoltcp::wire::IpAddress;
-use crate::{
-    fs::{FileTrait, OpenFlags, Pipe}, net::{
-        addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, 
-        Congestion, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS
-    }, task::{current_task, sock_map_fd, FdInfo}, utils::{Errno, SysResult}
-};
-use super::ffi::{ShutHow, CONGESTION, MAXSEGMENT, NODELAY, SOL_SOCKET, SOL_TCP, SO_KEEPALIVE, SO_RCVBUF, SO_SNDBUF};
-
 
 /// domain：即协议域，又称为协议族（family）, 协议族决定了socket的地址类型
 /// 常用的协议族有，AF_INET、AF_INET6、AF_LOCAL（或称AF_UNIX，Unix域socket）、AF_ROUTE等
 pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usize> {
-    info!("[sys_socket] start, domain = {}, type_ = {}, protocol = {}", domain, type_, protocol);
+    info!(
+        "[sys_socket] start, domain = {}, type_ = {}, protocol = {}",
+        domain, type_, protocol
+    );
     let type_ = SocketType::from_bits(type_ as u32).ok_or(Errno::EINVAL)?;
     let protocol = protocol as u8;
     let cloexec_enable = type_.contains(SocketType::SOCK_CLOEXEC);
-    if domain == AF_UNIX.into() { return Ok(4); } // 这里是特殊处理，通过musl libctest的网络测例，后序要修改
+    if domain == AF_UNIX.into() {
+        return Ok(4);
+    } // 这里是特殊处理，通过musl libctest的网络测例，后序要修改
 
     // 根据协议族、套口类型、传输层协议创建套口
-    let socket = <dyn Socket>::new(domain as u16, type_)
-        .map_err(|_| Errno::EAFNOSUPPORT)?;
+    let socket = <dyn Socket>::new(domain as u16, type_).map_err(|_| Errno::EAFNOSUPPORT)?;
 
     // 将socket和一个fd绑定
-    let fd = sock_map_fd(socket.get(), cloexec_enable)
-        .map_err(|_| Errno::EMFILE)?;
+    let fd = sock_map_fd(socket.get(), cloexec_enable).map_err(|_| Errno::EMFILE)?;
 
     info!("[sys_socket] finished, fd = {}", fd);
     Ok(fd)
@@ -56,7 +64,10 @@ pub fn sys_bind(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> 
 /// of type SOCK_STREAM or SOCK_SEQPACKET.
 /// The backlog argument defines the maximum length to which the queue of pending connections for sockfd may grow.
 pub fn sys_listen(sockfd: usize, backlog: usize) -> SysResult<usize> {
-    info!("[sys_listen] start, sockfd = {}, basklog = {}", sockfd, backlog);
+    info!(
+        "[sys_listen] start, sockfd = {}, basklog = {}",
+        sockfd, backlog
+    );
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
@@ -82,7 +93,7 @@ pub fn sys_shutdown(sockfd: usize, how: u8) -> SysResult<usize> {
 /// addrlen argument specifies the size of addr.  The format of the
 /// address in addr is determined by the address space of the socket
 /// sockfd; see socket(2) for further details.
-/// 
+///
 /// If the socket sockfd is of type SOCK_DGRAM, then addr is the
 /// address to which datagrams are sent by default, and the only
 /// address from which datagrams are received.  If the socket is of
@@ -90,7 +101,10 @@ pub fn sys_shutdown(sockfd: usize, how: u8) -> SysResult<usize> {
 /// connection to the socket that is bound to the address specified by
 /// addr.
 pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
-    info!("[sys_connect] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
+    info!(
+        "[sys_connect] start, sockfd = {}, addr = {}, addrlen = {}",
+        sockfd, addr, addrlen
+    );
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
@@ -110,13 +124,16 @@ pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResul
 /// accept函数的第一个参数为服务器的socket描述字，第二个参数为指向struct sockaddr *的指针，
 /// 用于返回客户端的协议地址，第三个参数为协议地址的长度。
 /// 如果accpet成功，那么其返回值是由内核自动生成的一个全新的描述字，代表与返回客户的TCP连接。
-/// 
+///
 /// 注意：accept的第一个参数为服务器的socket描述字，是服务器开始调用socket()函数生成的，称为监听socket描述字；
 /// 而accept函数返回的是 已连接的socket描述字。一个服务器通常通常仅仅只创建一个监听socket描述字，
 /// 它在该服务器的生命周期内一直存在。内核为每个由服务器进程接受的客户连接创建了一个已连接socket描述字，
 /// 当服务器完成了对某个客户的服务，相应的已连接socket描述字就被关闭.
 pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
-    info!("[sys_accept] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
+    info!(
+        "[sys_accept] start, sockfd = {}, addr = {}, addrlen = {}",
+        sockfd, addr, addrlen
+    );
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let flags = file.get_flags();
@@ -153,9 +170,19 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
 
 /// accept a connection on a socket
 /// If flags is 0, then accept4() is the same as accept().
-pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32) -> SysResult<usize> {
-    info!("[sys_accept4] start, sockfd = {}, addr = {}, addrlen = {}, flags = {}", sockfd, addr, addrlen, flags);
-    if flags == 0 { return sys_accept(sockfd, addr, addrlen).await; }
+pub async fn sys_accept4(
+    sockfd: usize,
+    addr: usize,
+    addrlen: usize,
+    flags: u32,
+) -> SysResult<usize> {
+    info!(
+        "[sys_accept4] start, sockfd = {}, addr = {}, addrlen = {}, flags = {}",
+        sockfd, addr, addrlen, flags
+    );
+    if flags == 0 {
+        return sys_accept(sockfd, addr, addrlen).await;
+    }
     let flags = OpenFlags::from_bits(flags as i32).expect("[sys_accept4] flag parse fail");
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
@@ -168,7 +195,7 @@ pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32)
     }
 
     // maybe bug: 需要检查懒分配
-    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(addr, addrlen) };
     let user_sockaddr = match remote_end.addr {
         IpAddress::Ipv4(addr) => {
             let port = remote_end.port;
@@ -189,47 +216,65 @@ pub async fn sys_accept4(sockfd: usize, addr: usize, addrlen: usize, flags: u32)
     Ok(newfd)
 }
 
-/// getsockname() returns the current address to which the socket sockfd is bound, in the buffer pointed to by addr. 
+/// getsockname() returns the current address to which the socket sockfd is bound, in the buffer pointed to by addr.
 /// The addrlen argument should be initialized to
-/// indicate the amount of space (in bytes) pointed to by addr. 
+/// indicate the amount of space (in bytes) pointed to by addr.
 /// On return it contains the actual size of the socket address.
 ///
-/// The returned address is truncated if the buffer provided is too small; 
+/// The returned address is truncated if the buffer provided is too small;
 /// in this case, addrlen will return a value greater than was supplied to the call.
 pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
-    info!("[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
+    info!(
+        "[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}",
+        sockfd, addr, addrlen
+    );
     let task = current_task().unwrap();
     let addr = addr as *mut u8;
-    if addr.is_null() { return Err(Errno::EINVAL); }
+    if addr.is_null() {
+        return Err(Errno::EINVAL);
+    }
 
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
     let sockname = match socket.get_sockname() {
-        Ok(SockAddr::Unspec) => { return Err(Errno::ENOTSOCK); }
+        Ok(SockAddr::Unspec) => {
+            return Err(Errno::ENOTSOCK);
+        }
         Ok(res) => res,
-        _ => { return Err(Errno::ENOTSOCK); }
+        _ => {
+            return Err(Errno::ENOTSOCK);
+        }
     };
 
-    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(addr, addrlen) };
     sockname.write2user(buf, addrlen)?;
     Ok(0)
 }
 
 pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
-    info!("[sys_sockpeername] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
+    info!(
+        "[sys_sockpeername] start, sockfd = {}, addr = {}, addrlen = {}",
+        sockfd, addr, addrlen
+    );
     let task = current_task().unwrap();
     let addr = addr as *mut u8;
-    if addr.is_null() { return Err(Errno::EINVAL); }
+    if addr.is_null() {
+        return Err(Errno::EINVAL);
+    }
 
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
     let peername = match socket.get_peername() {
-        Ok(SockAddr::Unspec) => { return Err(Errno::ENOTSOCK); }
+        Ok(SockAddr::Unspec) => {
+            return Err(Errno::ENOTSOCK);
+        }
         Ok(res) => res,
-        Err(e) => { return Err(e); }
+        Err(e) => {
+            return Err(e);
+        }
     };
 
-    let buf = unsafe{ core::slice::from_raw_parts_mut(addr, addrlen) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(addr, addrlen) };
     peername.write2user(buf, addrlen)?;
     Ok(0)
 }
@@ -257,11 +302,11 @@ pub async fn sys_sendto(
         SockAddr::Unspec => {
             info!("[sys_sendto] invalid dest_addr");
             return Err(Errno::EINVAL);
-        },
-        _ => {},
+        }
+        _ => {}
     }
 
-    let buf = unsafe{ core::slice::from_raw_parts(message as *const u8, msg_len) };
+    let buf = unsafe { core::slice::from_raw_parts(message as *const u8, msg_len) };
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
 
@@ -271,7 +316,7 @@ pub async fn sys_sendto(
             socket.connect(&dest_sockaddr).await;
             socket.send_msg(buf, &dest_sockaddr).await?
         }
-        _ => todo!()
+        _ => todo!(),
     };
 
     Ok(res)
@@ -289,17 +334,20 @@ pub async fn sys_recvfrom(
     src_addr: usize,
     addrlen: usize,
 ) -> SysResult<usize> {
-    info!("[sys_recvfrom] start, sockfd = {}, flags = {}", sockfd, flags);
+    info!(
+        "[sys_recvfrom] start, sockfd = {}, flags = {}",
+        sockfd, flags
+    );
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
 
-    let buf = unsafe{ core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buflen) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, buflen) };
     let (size, remote_end) = socket.recv_msg(buf).await?;
     if src_addr != 0 {
         // 将远程地址写到用户空间
         // maybe bug: 需要检查懒分配
-        let buf = unsafe{ core::slice::from_raw_parts_mut(src_addr as *mut u8, addrlen) };
+        let buf = unsafe { core::slice::from_raw_parts_mut(src_addr as *mut u8, addrlen) };
         remote_end.write2user(buf, addrlen)?;
     }
 
@@ -313,16 +361,14 @@ pub async fn sys_recvfrom(
 /// The file descriptors used in referencing the new sockets are
 /// returned in sv[0] and sv[1].  The two sockets are
 /// indistinguishable.
-pub fn sys_socketpair(
-    domain: usize,
-    _type: usize,
-    protocol: usize,
-    sv: usize,
-) -> SysResult<usize> {
-    info!("[sys_socketpair] start, domain = {}, _type = {}, protocol = {}", domain, _type, protocol);
+pub fn sys_socketpair(domain: usize, _type: usize, protocol: usize, sv: usize) -> SysResult<usize> {
+    info!(
+        "[sys_socketpair] start, domain = {}, _type = {}, protocol = {}",
+        domain, _type, protocol
+    );
     let task = current_task().unwrap();
     let length = core::mem::size_of::<i32>();
-    let sv = unsafe{ core::slice::from_raw_parts_mut(sv as *mut i32, length) };
+    let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut i32, length) };
 
     let (read_fd, write_fd) = {
         let (read_end, write_end) = Pipe::new();
@@ -340,7 +386,7 @@ pub fn sys_socketpair(
 /// get options on sockets
 /// getsockopt() and setsockopt() manipulate options for the socket
 /// referred to by the file descriptor sockfd.
-/// 
+///
 pub fn sys_getsockopt(
     sockfd: usize,
     level: usize,
@@ -348,7 +394,10 @@ pub fn sys_getsockopt(
     optval_ptr: usize,
     optlen: usize,
 ) -> SysResult<usize> {
-    info!("[sys_getsockopt] start, sockfd = {}, level = {}, optname = {}, optlen = {}", sockfd, level, optname, optlen);
+    info!(
+        "[sys_getsockopt] start, sockfd = {}, level = {}, optname = {}, optlen = {}",
+        sockfd, level, optname, optlen
+    );
     match (level as u8, optname as u32) {
         (SOL_SOCKET, SO_SNDBUF) => {
             let task = current_task().unwrap();
@@ -382,20 +431,18 @@ pub fn sys_getsockopt(
         (SOL_TCP, CONGESTION) => {
             // 获取 TCP 拥塞控制算法名称
             let name_len = Congestion.len();
-            let buf = unsafe {
-                core::slice::from_raw_parts_mut(optval_ptr as *mut u8, name_len)
-            };
+            let buf = unsafe { core::slice::from_raw_parts_mut(optval_ptr as *mut u8, name_len) };
             let bytes = Congestion.as_bytes();
             buf.copy_from_slice(bytes);
-            unsafe{ *(optlen as *mut u32) = name_len as u32 };
+            unsafe { *(optlen as *mut u32) = name_len as u32 };
         }
-        _ => { 
+        _ => {
             warn!("[sys_getsockopt] sockfd: {:?}, level: {:?}, optname: {:?}, optval_ptr: {:?}, optlen: {:?}",
             sockfd,
             level,
             optname,
             optval_ptr,
-            optlen); 
+            optlen);
         }
     }
 
@@ -409,27 +456,30 @@ pub fn sys_setsockopt(
     optval_ptr: usize,
     optlen: usize,
 ) -> SysResult<usize> {
-    info!("[sys_setsockopt] start, sockfd = {}, level = {}, optname = {}, optlen = {}", sockfd, level, optname, optlen);
+    info!(
+        "[sys_setsockopt] start, sockfd = {}, level = {}, optname = {}, optlen = {}",
+        sockfd, level, optname, optlen
+    );
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
     match (level as u8, optname as u32) {
         (SOL_SOCKET, SO_SNDBUF) => {
             // 修改发送缓冲区大小
-            let new_size = unsafe{ *(optval_ptr as *const u32) };
+            let new_size = unsafe { *(optval_ptr as *const u32) };
             socket.set_send_buf_size(new_size)?;
         }
         (SOL_SOCKET, SO_RCVBUF) => {
             // 修改接受缓冲区大小
-            let new_size = unsafe{ *(optval_ptr as *const u32) };
+            let new_size = unsafe { *(optval_ptr as *const u32) };
             socket.set_recv_buf_size(new_size)?;
         }
         (SOL_SOCKET, SO_KEEPALIVE) => {
-            let action = unsafe{ *(optval_ptr as *const u32) };
+            let action = unsafe { *(optval_ptr as *const u32) };
             socket.set_keep_alive(action)?;
         }
         (SOL_TCP, NODELAY) => {
-            let action = unsafe{ *(optval_ptr as *const u32) };
+            let action = unsafe { *(optval_ptr as *const u32) };
             socket.enable_nagle(action);
         }
         _ => {}

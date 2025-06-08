@@ -1,6 +1,6 @@
+use crate::task::{current_task, get_current_hart_id};
 use alloc::task;
 use log::{Level, LevelFilter, Metadata, Record};
-use crate::task::{current_task, get_current_hart_id};
 
 #[cfg(feature = "error")]
 const LOG_LEVEL: log::LevelFilter = LevelFilter::Error;

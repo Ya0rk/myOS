@@ -1,9 +1,9 @@
-use core::{future::Future, pin::Pin};
-use alloc::sync::Arc;
-use crate::hal::trap::trap_loop;
 use super::{executor, processor::get_current_cpu, TaskControlBlock};
+use crate::hal::trap::trap_loop;
+use alloc::sync::Arc;
+use core::{future::Future, pin::Pin};
 
-pub enum TaskFuture<F: Future<Output=()> + Send + 'static> {
+pub enum TaskFuture<F: Future<Output = ()> + Send + 'static> {
     UserTaskFuture {
         task: Arc<TaskControlBlock>,
         future: F,
@@ -13,7 +13,7 @@ pub enum TaskFuture<F: Future<Output=()> + Send + 'static> {
     },
 }
 
-impl<F: Future<Output=()> + Send + 'static> TaskFuture<F> {
+impl<F: Future<Output = ()> + Send + 'static> TaskFuture<F> {
     /// 创建一个用户任务的 Future
     pub fn user_task(task: Arc<TaskControlBlock>, future: F) -> Self {
         TaskFuture::UserTaskFuture { task, future }
@@ -25,11 +25,13 @@ impl<F: Future<Output=()> + Send + 'static> TaskFuture<F> {
     }
 }
 
-
-impl<F: Future<Output=()> + Send + 'static> Future for TaskFuture<F> {
+impl<F: Future<Output = ()> + Send + 'static> Future for TaskFuture<F> {
     type Output = F::Output;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
 
         match this {

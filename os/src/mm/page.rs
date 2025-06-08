@@ -1,4 +1,8 @@
-use crate::{hal::config::{BLOCK_SIZE, PAGE_SIZE}, fs::FileClass, mm::frame_allocator::{frame_alloc, FrameTracker}};
+use crate::{
+    fs::FileClass,
+    hal::config::{BLOCK_SIZE, PAGE_SIZE},
+    mm::frame_allocator::{frame_alloc, FrameTracker},
+};
 use alloc::sync::Arc;
 use hashbrown::HashSet;
 use log::info;
@@ -18,8 +22,8 @@ pub enum PageType {
 
 impl Page {
     pub fn new_file() -> Arc<Self> {
-        Arc::new(Self { 
-            frame: frame_alloc().expect("frame alloc failed"), 
+        Arc::new(Self {
+            frame: frame_alloc().expect("frame alloc failed"),
             page_type: PageType::File(SleepLock::new(HashSet::new())),
         })
     }
@@ -46,22 +50,17 @@ impl Page {
         match &self.page_type {
             PageType::File(dirty_set) => {
                 dirty_set.lock().await.clear();
-            },
+            }
             _ => {
                 panic!("Cannot get dirty blocks for an anonymous map!");
             }
-            
         }
     }
 
     pub fn dirty_set(&self) -> Option<&DirtySet> {
         match &self.page_type {
-            PageType::File(dirty_set) => {
-                Some(&dirty_set)
-            }
-            _ => {
-                None
-            }
+            PageType::File(dirty_set) => Some(&dirty_set),
+            _ => None,
         }
     }
 
@@ -85,14 +84,12 @@ impl Page {
     pub fn fill_zero(&self) {
         self.get_bytes_array().fill(0);
     }
-
 }
 
 impl Drop for Page {
     fn drop(&mut self) {
         // info!("Page Dropped, ppn:{:#x}", self.frame.ppn.0);
     }
-    
 }
 
 pub type DirtySet = SleepLock<HashSet<usize>>;
@@ -107,6 +104,4 @@ impl DirtySet {
     pub async fn get_blocks(&self) -> HashSet<usize> {
         self.lock().await.clone()
     }
-
-    
 }

@@ -1,27 +1,25 @@
-use core::alloc::Layout;
-use alloc::sync::Arc;
-use log::info;
 use crate::{
-    hal::trap::__sigret_helper, 
-    mm::translated_byte_buffer, 
-    signal::{LinuxSigInfo, SigActionFlag, SigHandlerType, SigNom, UContext, SIG_DFL, SIG_IGN}, 
-    task::TaskControlBlock
+    hal::trap::__sigret_helper,
+    mm::translated_byte_buffer,
+    signal::{LinuxSigInfo, SigActionFlag, SigHandlerType, SigNom, UContext, SIG_DFL, SIG_IGN},
+    task::TaskControlBlock,
 };
+use alloc::sync::Arc;
+use core::alloc::Layout;
+use log::info;
 
 /// 这里包含了所有默认的信号处理方式
 
-pub fn do_signal(task:&Arc<TaskControlBlock>) {
+pub fn do_signal(task: &Arc<TaskControlBlock>) {
     let trap_cx = task.get_trap_cx_mut();
     let all_len = task.sig_pending.lock().len();
     let mut cur = 0;
     let old_sigmask = *task.get_blocked();
 
-    loop {    
+    loop {
         let siginfo = {
             match task.sig_pending.lock().take_one(old_sigmask) {
-                Some(siginfo) => {
-                    siginfo
-                }
+                Some(siginfo) => siginfo,
                 None => {
                     break;
                 }
@@ -34,9 +32,9 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
         }
         // 被阻塞的信号需要跳过，注意SIGKILL和SIGSTOP不能被屏蔽
         let signo = siginfo.signo as usize;
-        if old_sigmask.have(signo) 
+        if old_sigmask.have(signo)
             && signo != SigNom::SIGKILL as usize
-            && signo != SigNom::SIGSTOP as usize 
+            && signo != SigNom::SIGSTOP as usize
         {
             // 再将信号重新放回队列
             task.sig_pending.lock().add(siginfo);
@@ -45,7 +43,13 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
         let k_action = task.handler.lock().fetch_signal_handler(signo);
         let sig_action = k_action.sa;
-        info!("[do_signal] task id = {}, find a signal: {}, handler = {:#x}, flags = {:?}." , task.get_pid(), signo, sig_action.sa_handler, sig_action.sa_flags);
+        info!(
+            "[do_signal] task id = {}, find a signal: {}, handler = {:#x}, flags = {:?}.",
+            task.get_pid(),
+            signo,
+            sig_action.sa_handler,
+            sig_action.sa_flags
+        );
         if sig_action.sa_flags.contains(SigActionFlag::SA_RESTART) {
             info!("[do_signal] restart");
             trap_cx.sepc -= 4;
@@ -54,13 +58,13 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
 
         match k_action.sa_type {
             SigHandlerType::IGNORE => {}
-            SigHandlerType::DEFAULT => { default_func(task, siginfo.signo); }
+            SigHandlerType::DEFAULT => {
+                default_func(task, siginfo.signo);
+            }
             SigHandlerType::Customized { handler } => {
                 // 如果没有SA_NODEFER，在执行当前信号处理函数期间，自动阻塞当前信号
-                if !sig_action
-                    .sa_flags
-                    .contains(SigActionFlag::SA_NODEFER) {
-                        task.get_blocked_mut().insert_sig(signo);
+                if !sig_action.sa_flags.contains(SigActionFlag::SA_NODEFER) {
+                    task.get_blocked_mut().insert_sig(signo);
                 }
 
                 // 可能有其他信号也需要阻塞
@@ -112,16 +116,16 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 let mut gp: usize;
 
                 // loongarch has no global pointer reg
-                #[cfg(target_arch="riscv64")]
+                #[cfg(target_arch = "riscv64")]
                 {
                     gp = ucontext.get_user_gp().gp; // gp
                 }
-                #[cfg(target_arch="loongarch64")]
+                #[cfg(target_arch = "loongarch64")]
                 {
                     gp = 0;
                 }
                 let tp = ucontext.get_user_gp().tp; // tp
-                
+
                 // 修改trap_cx，函数trap return后返回到用户自定义的函数，
                 // 自定义函数执行完后返回到sigreturn,这里的__sigret_helper是一个汇编，触发sigreturn
                 // 这里的sigreturn是一个系统调用，返回到内核态
@@ -130,7 +134,6 @@ pub fn do_signal(task:&Arc<TaskControlBlock>) {
                 // break;
             }
         }
-
     }
     task.set_pending(!task.sig_pending.lock().is_empty());
 }
@@ -140,9 +143,11 @@ fn default_func(task: &Arc<TaskControlBlock>, signo: SigNom) {
     info!("[default_func] signo = {:?}", signo);
     match signo {
         // TODO(YJJ):有待完善
-        SigNom::SIGCHLD | SigNom::SIGURG  | SigNom::SIGWINCH => {}, // no Core Dump
-        SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => do_signal_stop(task, signo),   // no core dump
-        SigNom::SIGCONT => do_signal_continue(task, signo),         // no core dump
+        SigNom::SIGCHLD | SigNom::SIGURG | SigNom::SIGWINCH => {} // no Core Dump
+        SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => {
+            do_signal_stop(task, signo)
+        } // no core dump
+        SigNom::SIGCONT => do_signal_continue(task, signo),       // no core dump
         _ => do_group_exit(task, signo),
     }
 }

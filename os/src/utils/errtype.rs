@@ -1,4 +1,4 @@
-pub type SysResult<T=()> = Result<T, Errno>;
+pub type SysResult<T = ()> = Result<T, Errno>;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Errno {
@@ -140,7 +140,7 @@ pub enum Errno {
 }
 
 impl Errno {
-    pub fn get_info(&self) -> &'static str{
+    pub fn get_info(&self) -> &'static str {
         use self::Errno::*;
         match self {
             EBADCALL => "syscall failed",

@@ -1,13 +1,28 @@
-use core::{net::Ipv4Addr, task::Waker, time::Duration};
-use alloc::{string::String, sync::Arc, vec};
-use log::info;
-use smoltcp::{iface::SocketHandle, socket::udp::{self, PacketMetadata, UdpMetadata}, storage::PacketBuffer, wire::{IpAddress, IpEndpoint}};
-use crate::{fs::{FileMeta, OpenFlags, RenameFlags}, net::{addr::do_addr127, do_port, net_async::UdpSendFuture, MAX_BUFFER_SIZE}, sync::{get_waker, yield_now, NullFuture, SpinNoIrqLock, TimeoutFuture}, syscall::ShutHow, task::current_task, utils::{Errno, SysResult}};
-use super::{addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET};
-use alloc::boxed::Box;
+use super::{
+    addr::{IpType, Ipv4, Ipv6, Sock, SockAddr},
+    SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET,
+};
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
+use crate::{
+    fs::{FileMeta, OpenFlags, RenameFlags},
+    net::{addr::do_addr127, do_port, net_async::UdpSendFuture, MAX_BUFFER_SIZE},
+    sync::{get_waker, yield_now, NullFuture, SpinNoIrqLock, TimeoutFuture},
+    syscall::ShutHow,
+    task::current_task,
+    utils::{Errno, SysResult},
+};
+use alloc::boxed::Box;
+use alloc::{string::String, sync::Arc, vec};
 use async_trait::async_trait;
+use core::{net::Ipv4Addr, task::Waker, time::Duration};
+use log::info;
+use smoltcp::{
+    iface::SocketHandle,
+    socket::udp::{self, PacketMetadata, UdpMetadata},
+    storage::PacketBuffer,
+    wire::{IpAddress, IpEndpoint},
+};
 
 /// UDP 是一种无连接的报文套接字
 pub struct UdpSocket {
@@ -20,14 +35,7 @@ impl UdpSocket {
     pub fn new(iptype: IpType) -> Self {
         let socket = Self::new_socket();
         let handle = SOCKET_SET.lock().add(socket);
-        let sockmeta = SpinNoIrqLock::new(
-            SockMeta::new(
-                Sock::Udp,
-                iptype,
-                BUFF_SIZE,
-                BUFF_SIZE,
-            )
-        );
+        let sockmeta = SpinNoIrqLock::new(SockMeta::new(Sock::Udp, iptype, BUFF_SIZE, BUFF_SIZE));
         // TODO(YJJ): maybe bug
         NET_DEV.lock().poll();
         Self {
@@ -38,18 +46,11 @@ impl UdpSocket {
     }
 
     fn new_socket() -> udp::Socket<'static> {
-        let recv_buf = PacketBuffer::new(
-            vec![PacketMetadata::EMPTY; META_SIZE],
-            vec![0; BUFF_SIZE], 
-        );
-        let send_buf = PacketBuffer::new(
-            vec![PacketMetadata::EMPTY; META_SIZE],
-            vec![0; BUFF_SIZE], 
-        );
-        udp::Socket::new(
-            recv_buf,
-            send_buf,
-        )
+        let recv_buf =
+            PacketBuffer::new(vec![PacketMetadata::EMPTY; META_SIZE], vec![0; BUFF_SIZE]);
+        let send_buf =
+            PacketBuffer::new(vec![PacketMetadata::EMPTY; META_SIZE], vec![0; BUFF_SIZE]);
+        udp::Socket::new(recv_buf, send_buf)
     }
 
     /// 这里不只是要检查地址，还要本地是否绑定local end，没有的话就bind一个
@@ -66,7 +67,7 @@ impl UdpSocket {
             }
             _ => return Err(Errno::EAFNOSUPPORT),
         }
-        
+
         if sockmeta.local_end.is_none() {
             match sockmeta.iptype {
                 IpType::Ipv4 => {
@@ -162,7 +163,7 @@ impl Socket for UdpSocket {
     }
     async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)> {
         // 完成timer 队列后再来实现，需要控制接收速度
-        // NET_DEV.lock().poll(); 
+        // NET_DEV.lock().poll();
         // TODO: (YJJ)将这里修改为future形式
         loop {
             NET_DEV.lock().poll(); // 更新队列，保持队列是最新状态
@@ -198,13 +199,11 @@ impl Socket for UdpSocket {
                 }
                 return None;
             });
-            
+
             info!("[Udp::recv_msg] do not recv");
             match res {
                 Some(res) => return Ok(res),
-                None => {
-                    yield_now().await
-                }
+                None => yield_now().await,
             }
         }
     }
@@ -232,10 +231,17 @@ impl Socket for UdpSocket {
         Ok(())
     }
     fn get_sockname(&self) -> SysResult<SockAddr> {
-        let local_end = self.sockmeta.lock().local_end.expect("[udp] get_sockname no local_end");
+        let local_end = self
+            .sockmeta
+            .lock()
+            .local_end
+            .expect("[udp] get_sockname no local_end");
         let port = local_end.port;
         let addr = local_end.addr;
-        info!("[udp]get_sockname local end port: {}, addr = {}", port, addr);
+        info!(
+            "[udp]get_sockname local end port: {}, addr = {}",
+            port, addr
+        );
         match addr {
             IpAddress::Ipv4(addr) => {
                 let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));
@@ -252,7 +258,10 @@ impl Socket for UdpSocket {
         let remote_end = self.sockmeta.lock().remote_end.ok_or(Errno::ENOTCONN)?;
         let port = remote_end.port;
         let addr = remote_end.addr;
-        info!("[udp]get_sockname local end port: {}, addr = {}", port, addr);
+        info!(
+            "[udp]get_sockname local end port: {}, addr = {}",
+            port, addr
+        );
         match addr {
             IpAddress::Ipv4(addr) => {
                 let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));

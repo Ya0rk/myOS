@@ -1,21 +1,18 @@
+pub mod interrupt;
 pub mod sstatus;
 pub mod uart;
-pub mod interrupt;
 
 // 供外部使用
-pub use loongarch64::register::*;
 pub use loongarch64::register::ecfg::LineBasedInterrupt;
 pub use loongarch64::register::estat::{Exception, Interrupt, Trap};
+pub use loongarch64::register::*;
 pub use loongarch64::time::get_timer_freq;
-
 
 // 该文件使用
 use core::{arch::asm, intrinsics::unreachable};
 use log::{debug, info};
 
 use crate::hal::PAGE_SIZE_BITS;
-
-
 
 pub fn tp_read() -> usize {
     unsafe {
@@ -100,8 +97,8 @@ pub fn set_timer(timer: usize) {
     tcfg::set_init_val(timer_freq / super::TICKS_PER_SEC);
     tcfg::set_en(true);
     tcfg::set_periodic(true);
-    
-    ecfg::set_lie(LineBasedInterrupt::TIMER|LineBasedInterrupt::HWI0);
+
+    ecfg::set_lie(LineBasedInterrupt::TIMER | LineBasedInterrupt::HWI0);
     crmd::set_ie(true);
     // Crmd::read().set_ie(true).write();
     // info!("interrupt enable: {:?}", ecfg::read().lie());
@@ -118,7 +115,7 @@ pub fn shutdown(failuer: bool) -> ! {
         println!("NoReason die no failure; shutdown(false)");
     }
     loop {
-        unsafe  {
+        unsafe {
             println!("power off!");
             // asm!("idle 1");
             let power_off = 0x8000_0000_100e_001c as *mut u8;
@@ -135,13 +132,13 @@ extern "C" {
 /// use sbi call to start the specific core
 pub fn hart_start_success(hartid: usize, start_addr: usize) -> bool {
     // 来自polyhal multicore
-    unsafe {    
-        let sp_top = boot_stack_top  - 4096 * 16 * hartid;
+    unsafe {
+        let sp_top = boot_stack_top - 4096 * 16 * hartid;
         loongarch64::ipi::csr_mail_send(super::HART_START_ADDR as _, hartid, 0);
         loongarch64::ipi::csr_mail_send(sp_top as _, hartid, 1);
         loongarch64::ipi::send_ipi_single(1, 1);
     }
-    
+
     true
 }
 

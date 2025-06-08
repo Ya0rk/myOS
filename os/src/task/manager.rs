@@ -1,10 +1,13 @@
 use core::fmt::Display;
 
-use crate::{hal::config::INITPROC_PID, sync::SpinNoIrqLock};
 use super::TaskControlBlock;
-use alloc::{sync::{Arc, Weak}, vec::Vec};
-use lazy_static::*;
+use crate::{hal::config::INITPROC_PID, sync::SpinNoIrqLock};
+use alloc::{
+    sync::{Arc, Weak},
+    vec::Vec,
+};
 use hashbrown::HashMap;
+use lazy_static::*;
 
 type Pid = usize;
 type PGid = usize;
@@ -25,7 +28,7 @@ pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
 
 impl Manager {
     pub fn new() -> Self {
-        Self { 
+        Self {
             task_manager: SpinNoIrqLock::new(TaskManager(HashMap::new())),
             process_group: SpinNoIrqLock::new(ProcessGroupManager(HashMap::new())),
         }
@@ -39,7 +42,7 @@ impl TaskManager {
         let pid = task.get_pid();
         self.0.insert(pid, Arc::downgrade(task));
     }
-    
+
     /// 删除一个任务
     pub fn remove(&mut self, pid: Pid) {
         self.0.remove(&pid);
@@ -86,7 +89,7 @@ impl ProcessGroupManager {
     fn add_new_group(&mut self, pgid: PGid, pid: usize) {
         let mut vec: Vec<usize> = Vec::new();
         if pid != INITPROC_PID {
-            vec.push(pid); 
+            vec.push(pid);
         }
         self.0.insert(pgid, vec);
     }

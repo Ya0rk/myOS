@@ -1,5 +1,5 @@
-use core::fmt::{self, Write};
 use crate::{hal::arch::console_putchar, sync::SpinNoIrqLock};
+use core::fmt::{self, Write};
 use lazy_static::*;
 use log::{error, info};
 
@@ -19,7 +19,7 @@ lazy_static! {
 }
 pub fn print(args: fmt::Arguments) {
     // unsafe {
-        MUTEX_STDOUT.lock().write_fmt(args);
+    MUTEX_STDOUT.lock().write_fmt(args);
     // }
 }
 
@@ -42,7 +42,11 @@ macro_rules! println {
 #[macro_export]
 macro_rules! debug_point {
     ($msg:expr) => {
-        info!("\x1b[32m[debug_point]\x1b[0m \x1b[31m{}:{}\x1b[0m {}", file!(), line!(), $msg);
+        info!(
+            "\x1b[32m[debug_point]\x1b[0m \x1b[31m{}:{}\x1b[0m {}",
+            file!(),
+            line!(),
+            $msg
+        );
     };
 }
-

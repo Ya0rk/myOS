@@ -1,14 +1,17 @@
 use core::fmt::Display;
 
 // #![allow(unused)]
+use crate::{
+    fs::{FileTrait, OpenFlags, Stdin, Stdout},
+    hal::config::RLIMIT_NOFILE,
+    mm::memory_space::{MmapFlags, MmapProt},
+    net::Socket,
+    syscall::RLimit64,
+    utils::{Errno, SysResult},
+};
 use alloc::{format, string::String, sync::Arc, vec::Vec};
 use log::info;
 use lwext4_rust::bindings::O_WRONLY;
-use crate::{
-    fs::{FileTrait, OpenFlags, Stdin, Stdout}, 
-    hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, 
-    net::Socket, syscall::RLimit64, utils::{Errno, SysResult}
-};
 
 use super::current_task;
 
@@ -57,15 +60,17 @@ impl FdInfo {
         self
     }
 
-    pub fn check_mmap_valid(&self, flags:MmapFlags, prot: MmapProt) -> SysResult {
+    pub fn check_mmap_valid(&self, flags: MmapFlags, prot: MmapProt) -> SysResult {
         if self.flags.contains(OpenFlags::O_WRONLY) {
             return Err(Errno::EACCES);
         }
-        if flags.contains(MmapFlags::MAP_SHARED) && !self.flags.writable() && prot.contains(MmapProt::PROT_WRITE) {
+        if flags.contains(MmapFlags::MAP_SHARED)
+            && !self.flags.writable()
+            && prot.contains(MmapProt::PROT_WRITE)
+        {
             return Err(Errno::EACCES);
         }
         Ok(())
-
     }
 }
 
@@ -77,7 +82,7 @@ impl Display for FdTable {
                 let msg = format!("\n   {}: {}", i, file.get_name().unwrap());
                 msgs.push_str(&msg);
             }
-        };
+        }
         write!(f, "{}", msgs)
     }
 }
@@ -85,7 +90,7 @@ impl Display for FdTable {
 impl FdTable {
     pub fn new() -> Self {
         // 自带三个文件描述符，分别是标准输入、标准输出、标准错误
-        let stdin  = FdInfo::new(Arc::new(Stdin), OpenFlags::O_RDONLY);
+        let stdin = FdInfo::new(Arc::new(Stdin), OpenFlags::O_RDONLY);
         let stdout = FdInfo::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
         let stderr = FdInfo::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
         let mut fd_table = Vec::new();
@@ -94,7 +99,10 @@ impl FdTable {
         fd_table.push(stderr);
         FdTable {
             table: fd_table,
-            rlimit: RLimit64 { rlim_cur: RLIMIT_NOFILE, rlim_max: RLIMIT_NOFILE }
+            rlimit: RLimit64 {
+                rlim_cur: RLIMIT_NOFILE,
+                rlim_max: RLIMIT_NOFILE,
+            },
         }
     }
 
@@ -182,7 +190,7 @@ impl FdTable {
     pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn FileTrait>>> {
         if idx >= self.table_len() {
             info!("[getfilebyfd] fdtable len = {}", self.table_len());
-            return  Err(Errno::EBADF);
+            return Err(Errno::EBADF);
         }
         Ok(self.table[idx].file.as_ref().map(|fd| fd.clone()))
     }

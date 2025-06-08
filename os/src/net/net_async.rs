@@ -1,9 +1,18 @@
+use super::{tcp::TcpSocket, udp::UdpSocket, TcpState, NET_DEV};
+use crate::{
+    fs::OpenFlags,
+    net::SOCKET_SET,
+    utils::{Errno, SysResult},
+};
 use core::{future::Future, task::Poll};
 use log::info;
-use smoltcp::{socket::{tcp::{self, Socket}, udp::{self, UdpMetadata}}, wire::IpEndpoint};
-use crate::{fs::OpenFlags, net::SOCKET_SET, utils::{Errno, SysResult}};
-use super::{tcp::TcpSocket, udp::UdpSocket, TcpState, NET_DEV};
-
+use smoltcp::{
+    socket::{
+        tcp::{self, Socket},
+        udp::{self, UdpMetadata},
+    },
+    wire::IpEndpoint,
+};
 
 pub struct TcpAcceptFuture<'a> {
     /// 正在阻塞等待accept的socket
@@ -12,16 +21,17 @@ pub struct TcpAcceptFuture<'a> {
 
 impl<'a> TcpAcceptFuture<'a> {
     pub fn new(socket: &'a TcpSocket) -> Self {
-        Self {
-            socket, 
-        }
+        Self { socket }
     }
 }
 
 impl<'a> Future for TcpAcceptFuture<'a> {
     type Output = SysResult<IpEndpoint>;
 
-    fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
         NET_DEV.lock().poll();
         let ret = self.socket.with_socket(|socket| {
             let cur_state = socket.state();
@@ -31,7 +41,9 @@ impl<'a> Future for TcpAcceptFuture<'a> {
                 TcpState::Established | TcpState::SynReceived => {
                     // 代表已经建立好链接，此时服务器知道了远端链接的地址，可以返回远端
                     self.socket.set_state(cur_state);
-                    let remote_end = socket.remote_endpoint().expect("[tcpacceptFuture] poll fail: remote is none.");
+                    let remote_end = socket
+                        .remote_endpoint()
+                        .expect("[tcpacceptFuture] poll fail: remote is none.");
                     return Poll::Ready(Ok(remote_end));
                 }
                 _ => {
@@ -59,7 +71,7 @@ impl<'a> TcpSendFuture<'a> {
     pub fn new(msg_buf: &'a [u8], socket: &'a TcpSocket) -> Self {
         Self {
             msg_buf,
-            tcpsocket: socket
+            tcpsocket: socket,
         }
     }
 }
@@ -67,7 +79,10 @@ impl<'a> TcpSendFuture<'a> {
 impl<'a> Future for TcpSendFuture<'a> {
     type Output = SysResult<usize>;
 
-    fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> Poll<Self::Output> {
         info!("[TcpSendFuture] start");
         NET_DEV.lock().poll();
         let ret = self.tcpsocket.with_socket(|socket| {
@@ -81,16 +96,16 @@ impl<'a> Future for TcpSendFuture<'a> {
                 socket.register_send_waker(cx.waker());
                 return Poll::Pending;
             }
-            
+
             match socket.send_slice(self.msg_buf) {
                 Ok(size) => {
                     NET_DEV.lock().poll();
                     return Poll::Ready(Ok(size));
-                },
+                }
                 Err(_) => return Poll::Ready(Err(Errno::ENOBUFS)),
             };
         });
-        ret        
+        ret
     }
 }
 
@@ -105,7 +120,7 @@ impl<'a> UdpSendFuture<'a> {
         Self {
             msg_buf,
             udpsocket: socket,
-            meta
+            meta,
         }
     }
 }
@@ -113,7 +128,10 @@ impl<'a> UdpSendFuture<'a> {
 impl<'a> Future for UdpSendFuture<'a> {
     type Output = SysResult<usize>;
 
-    fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> Poll<Self::Output> {
         NET_DEV.lock().poll();
         let mut binding = SOCKET_SET.lock();
         let socket = binding.get_mut::<udp::Socket>(self.udpsocket.handle);
@@ -147,17 +165,17 @@ pub struct TcpRecvFuture<'a> {
 
 impl<'a> TcpRecvFuture<'a> {
     pub fn new(msg_buf: &'a mut [u8], tcpsocket: &'a TcpSocket) -> Self {
-        Self {
-            msg_buf, 
-            tcpsocket
-        }
+        Self { msg_buf, tcpsocket }
     }
 }
 
 impl<'a> Future for TcpRecvFuture<'a> {
     type Output = SysResult<usize>;
 
-    fn poll(mut self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> Poll<Self::Output> {
+    fn poll(
+        mut self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> Poll<Self::Output> {
         NET_DEV.lock().poll();
         let res = self.tcpsocket.with_socket(|socket| {
             if socket.state() == TcpState::CloseWait || socket.state() == TcpState::TimeWait {
@@ -184,9 +202,8 @@ impl<'a> Future for TcpRecvFuture<'a> {
                     return Poll::Ready(Err(Errno::ENOTCONN));
                 }
             }
-
         });
-        
+
         res
     }
 }

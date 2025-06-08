@@ -1,15 +1,30 @@
-use core::{cmp::min, future::Future, pin::Pin, task::{Context, Poll, Waker}};
 use super::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags};
-use crate::{hal::config::PIPE_BUFFER_SIZE, mm::{page::Page, UserBuffer}, sync::{get_waker, once::LateInit, SpinNoIrqLock}, utils::{Errno, SysResult}};
-use alloc::{collections::vec_deque::VecDeque, string::{String, ToString}, sync::{Arc, Weak}, vec::Vec};
+use crate::{
+    hal::config::PIPE_BUFFER_SIZE,
+    mm::{page::Page, UserBuffer},
+    sync::{get_waker, once::LateInit, SpinNoIrqLock},
+    utils::{Errno, SysResult},
+};
+use alloc::boxed::Box;
+use alloc::{
+    collections::vec_deque::VecDeque,
+    string::{String, ToString},
+    sync::{Arc, Weak},
+    vec::Vec,
+};
+use async_trait::async_trait;
+use core::{
+    cmp::min,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
 use log::info;
 use spin::Mutex;
-use async_trait::async_trait;
-use alloc::boxed::Box;
 
 pub struct Pipe {
     flags: OpenFlags,
-    other : LateInit<Weak<Pipe>>,
+    other: LateInit<Weak<Pipe>>,
     is_reader: bool,
     buffer: Arc<SpinNoIrqLock<PipeInner>>,
 }
@@ -19,7 +34,7 @@ impl Pipe {
     /// 创建一个管道并返回管道的读端和写端 (read_end, write_end)
     pub fn new() -> (Arc<Self>, Arc<Self>) {
         let buffer = Arc::new(SpinNoIrqLock::new(PipeInner::new()));
-        let read_end  = Arc::new(Self::read_end_with_buffer(buffer.clone()));
+        let read_end = Arc::new(Self::read_end_with_buffer(buffer.clone()));
         let write_end = Arc::new(Self::write_end_with_buffer(buffer));
         read_end.other.init(Arc::downgrade(&write_end));
         write_end.other.init(Arc::downgrade(&read_end));
@@ -105,16 +120,16 @@ impl PipeInner {
             status: RingBufferStatus::Empty,
         }
     }
-    
+
     /// 获取管道中剩余可读长度
     /// 需要比较用户buf还可以读多少数据，以及现在还剩多少数据
     pub fn available_read(&self, userbuf_left: usize) -> usize {
-        return min(userbuf_left, self.buf.len())
+        return min(userbuf_left, self.buf.len());
     }
     /// 获取管道中剩余可写长度
     /// 判断用户还有多少数据要写，以及现在pipe还剩余多少空间
     pub fn available_write(&self, userbuf_left: usize) -> usize {
-        return min(userbuf_left, PIPE_BUFFER_SIZE - self.buf.len())
+        return min(userbuf_left, PIPE_BUFFER_SIZE - self.buf.len());
     }
 }
 
@@ -137,27 +152,29 @@ impl FileTrait for Pipe {
     }
     async fn read(&self, buf: &mut [u8]) -> SysResult<usize> {
         assert!(self.readable());
-        if buf.len() == 0{
+        if buf.len() == 0 {
             return Ok(0);
         }
         PipeReadFuture {
             pipe: self,
             userbuf: buf,
             cur: 0,
-        }.await
+        }
+        .await
     }
     async fn write(&self, buf: &[u8]) -> SysResult<usize> {
         assert!(self.writable());
-        if buf.len() == 0{
+        if buf.len() == 0 {
             return Ok(0);
         }
         PipeWriteFuture {
             pipe: self,
             userbuf: buf,
             cur: 0,
-        }.await
+        }
+        .await
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("[getname] this is pipe file".to_string())
     }
@@ -196,11 +213,11 @@ impl FileTrait for Pipe {
     }
     fn pollout(&self, waker: Waker) -> SysResult<bool> {
         if self.other.strong_count() == 0 {
-            return Err(Errno::EPIPE)
+            return Err(Errno::EPIPE);
         } else if !self.is_full() {
             // 缓冲区没有满代表可写
-            return Ok(true)
-        } 
+            return Ok(true);
+        }
 
         self.buffer.lock().writer_waker.push_back(waker);
         Ok(false)
@@ -219,15 +236,15 @@ impl Future for PipeReadFuture<'_> {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         info!("[poll read future] start");
         let this = unsafe { self.get_unchecked_mut() };
-        let userbuf_left = this.userbuf.len() - this.cur; 
+        let userbuf_left = this.userbuf.len() - this.cur;
         let read_size = {
             let mut inner = this.pipe.buffer.lock();
             inner.available_read(userbuf_left)
         };
-        
+
         if read_size > 0 {
             let mut inner = this.pipe.buffer.lock();
-            let target = &mut this.userbuf[this.cur..this.cur+read_size];
+            let target = &mut this.userbuf[this.cur..this.cur + read_size];
             for (i, byte) in inner.buf.drain(..read_size).enumerate() {
                 target[i] = byte;
             }
@@ -270,7 +287,9 @@ impl Future for PipeWriteFuture<'_> {
 
         if write_size > 0 {
             let mut inner = this.pipe.buffer.lock();
-            inner.buf.extend(&this.userbuf[this.cur..this.cur + write_size]);
+            inner
+                .buf
+                .extend(&this.userbuf[this.cur..this.cur + write_size]);
             this.cur += write_size;
             this.pipe.wake_readers(&mut inner);
             Poll::Ready(Ok(write_size))

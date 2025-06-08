@@ -2,17 +2,24 @@ mod device;
 mod disk;
 pub mod virtio_driver;
 
+use crate::hal::config::KERNEL_ADDR_OFFSET;
+use alloc::{sync::Arc, vec::Vec};
+use core::any::Any;
+use core::ptr::NonNull;
 pub use device::*;
 pub use disk::*;
-pub use virtio_driver::*;
-use virtio_drivers::{device::console::Size, transport::{self, mmio::{MmioTransport, VirtIOHeader}, pci::PciTransport, Transport}};
-use core::ptr::NonNull;
-use core::any::Any;
 use log::*;
-use alloc::{vec::Vec, sync::Arc};
 use spin::RwLock;
-use crate::hal::config::KERNEL_ADDR_OFFSET;
-
+pub use virtio_driver::*;
+use virtio_drivers::{
+    device::console::Size,
+    transport::{
+        self,
+        mmio::{MmioTransport, VirtIOHeader},
+        pci::PciTransport,
+        Transport,
+    },
+};
 
 use device::Device;
 
@@ -41,18 +48,17 @@ pub fn get_block_device() -> Option<Arc<dyn BlockDriver>> {
 /// 特别地在外部使用get_block_device去获得一个块设备
 pub fn init() {
     #[cfg(target_arch = "riscv64")]
-        let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
-        #[cfg(target_arch = "loongarch64")]
-        let dt_root: usize = 0x9000_0000_0010_0000;
-        info!("satrt probe fdt tree root: {:X}", dt_root);
-        crate::drivers::virtio_driver::probe::probe(dt_root as u64);
+    let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
+    #[cfg(target_arch = "loongarch64")]
+    let dt_root: usize = 0x9000_0000_0010_0000;
+    info!("satrt probe fdt tree root: {:X}", dt_root);
+    crate::drivers::virtio_driver::probe::probe(dt_root as u64);
 }
 
 // #[cfg(target_arch = "riscv64")]
 // pub type BlockDeviceImpl = VirtIoBlkDev<VirtIoHalImpl, MmioTransport<'static>>;
 // #[cfg(target_arch = "loongarch64")]
 // pub type BlockDeviceImpl = VirtIoBlkDev<VirtIoHalImpl, PciTransport<'static>>;
-
 
 // impl BlockDeviceImpl {
 //     pub fn new_device() -> Self {
@@ -73,15 +79,13 @@ pub fn init() {
 //                 unsafe { VirtIoBlkDev::new(transport) }
 //             }
 //         }
-        
+
 //     }
 // }
 
-
-
 // use alloc::vec;
 // pub fn block_device_test() {
-//     let block_size: usize = 512; 
+//     let block_size: usize = 512;
 //     info!("create a new BlockDeviceImpl test");
 //         let VIRTIO0: usize = crate::hal::config::VIRTIO0;
 //         let mut dev:VirtIoBlkDev<VirtIoHalImpl> = unsafe { VirtIoBlkDev::new(&mut *(VIRTIO0 as *mut VirtIOHeader))};

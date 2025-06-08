@@ -1,12 +1,19 @@
-use core::{intrinsics::{atomic_load_acquire, atomic_load_relaxed}, time::Duration};
+use crate::{
+    mm::VirtAddr,
+    sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture},
+    task::{
+        current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid,
+        FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE,
+    },
+    utils::{Errno, SysResult},
+};
 use alloc::task;
+use core::{
+    intrinsics::{atomic_load_acquire, atomic_load_relaxed},
+    time::Duration,
+};
 use log::info;
 use num_enum::TryFromPrimitive;
-use crate::{
-    mm::VirtAddr, sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture}, 
-    task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid, FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE}, 
-    utils::{Errno, SysResult}
-};
 
 /// fast user-space locking
 /// uaddr就是用户态下共享内存的地址，里面存放的是一个对齐的整型计数器。
@@ -26,7 +33,9 @@ pub async fn sys_futex(
 ) -> SysResult<usize> {
     let mut op = FutexOp::from_bits(futex_op).ok_or(Errno::EINVAL)?;
     info!("[sys_futex] start, futex_op = {:?}", op);
-    if uaddr == 0 { return Err(Errno::EACCES); }
+    if uaddr == 0 {
+        return Err(Errno::EACCES);
+    }
     let key = FutexHashKey::get_futex_key(uaddr, op);
     // 按照linux做一些判断
     if op.contains(FutexOp::FUTEX_CLOCK_REALTIME) {
@@ -41,18 +50,31 @@ pub async fn sys_futex(
     match use_op {
         FutexOp::FUTEX_WAIT => {
             // // 如果futex word中仍然保存着参数val给定的值，那么当前线程则进入睡眠，等待FUTEX_WAKE的操作唤醒它。
-            let now_val = unsafe{ atomic_load_acquire(uaddr as *const u32) };
-            info!("[sys_futex] wait, uaddr = {:#x}, taskid = {}, now_val = {}, val = {}", uaddr, current_task().unwrap().get_pid(), now_val, val);
+            let now_val = unsafe { atomic_load_acquire(uaddr as *const u32) };
+            info!(
+                "[sys_futex] wait, uaddr = {:#x}, taskid = {}, now_val = {}, val = {}",
+                uaddr,
+                current_task().unwrap().get_pid(),
+                now_val,
+                val
+            );
             // // 如果uaddr指向地址的值 != val，那么就返回错误
-            if now_val != val { return Err(Errno::EAGAIN); }
+            if now_val != val {
+                return Err(Errno::EAGAIN);
+            }
 
-            info!("[sys_futex] wait, now_val = {}, val = {}, timeout = {}", now_val, val, timeout);
+            info!(
+                "[sys_futex] wait, now_val = {}, val = {}, timeout = {}",
+                now_val, val, timeout
+            );
             let res = do_futex_wait(uaddr, val, timeout, FUTEX_BITSET_MATCH_ANY, key).await;
             return res;
         }
         FutexOp::FUTEX_WAIT_BITSET => {
-            let now_val = unsafe{ atomic_load_acquire(uaddr as *const u32) };
-            if now_val != val { return Err(Errno::EAGAIN); }
+            let now_val = unsafe { atomic_load_acquire(uaddr as *const u32) };
+            if now_val != val {
+                return Err(Errno::EAGAIN);
+            }
 
             let res = do_futex_wait(uaddr, val, timeout, val3, key).await;
             return res;
@@ -84,7 +106,7 @@ pub async fn sys_futex(
         }
         FutexOp::FUTEX_CMP_REQUEUE => {
             // 和上面一样，只是多使用了一个val3判断
-            let now = unsafe{ atomic_load_relaxed(uaddr as *const u32) };
+            let now = unsafe { atomic_load_relaxed(uaddr as *const u32) };
             if now != val3 {
                 return Err(Errno::EAGAIN);
             }
@@ -98,9 +120,11 @@ pub async fn sys_futex(
             return Ok(wake_n);
         }
 
-        _ => { unimplemented!() }
+        _ => {
+            unimplemented!()
+        }
     }
-    
+
     Ok(0)
 }
 
@@ -110,7 +134,13 @@ pub async fn sys_futex(
 /// 否则执行下一步，即调用futex_wait_queue_me。
 /// 后者主要做了几件事：1、将当前的task插入等待队列；2、启动定时任务；3、触发重新调度。
 /// 接下来当task能够继续执行时会判断自己是如何被唤醒的，并释放hrtimer退出。
-async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key: FutexHashKey) -> SysResult<usize> {
+async fn do_futex_wait(
+    uaddr: usize,
+    val: u32,
+    timeout: usize,
+    bitset: u32,
+    key: FutexHashKey,
+) -> SysResult<usize> {
     if bitset == 0 {
         return Err(Errno::EINVAL);
     }
@@ -125,7 +155,7 @@ async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key:
         // 此时不需要等待，立即执行
         0 => futex_future.await,
         _ => {
-            let tp = unsafe{ *(timeout as *const TimeSpec) };
+            let tp = unsafe { *(timeout as *const TimeSpec) };
             let timeout = Duration::from(tp);
             info!("[do_futex_wait] timeout = {:?}", timeout);
             if let Err(Errno::ETIMEDOUT) = TimeoutFuture::new(futex_future, timeout).await {

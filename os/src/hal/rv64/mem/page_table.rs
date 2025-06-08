@@ -6,9 +6,6 @@
 //         core::arch::asm!("sfence.vma");
 //     }
 // }
-
-
-
 use alloc::vec;
 
 use crate::board::MEMORY_END;
@@ -16,10 +13,9 @@ use crate::mm::memory_space::vm_area::MapPerm;
 use crate::mm::page_table::KERNEL_PAGE_TABLE;
 use crate::mm::{frame_alloc, PageTable, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 
-use crate::hal::config::{PPN_SHIFT, PPN_LEN, PA_LEN, KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
+use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PA_LEN, PPN_LEN, PPN_SHIFT};
 // use paste::paste;
 use crate::{impl_flag_checker, impl_flag_setter};
-
 
 bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -50,7 +46,7 @@ bitflags! {
 
 // macro_rules! impl_flag_set {
 //     ($class:ident, $flag:ident) => {
-//         paste!{   
+//         paste!{
 //             impl $class {
 //                 pub fn [<set_ $flag>](&mut self, val: bool) -> &mut Self {
 //                     self.set(Self::$flag, val);
@@ -62,7 +58,6 @@ bitflags! {
 // }
 
 impl PTEFlags {
-
     impl_flag_checker!(
         pub U,
         pub V,
@@ -87,20 +82,16 @@ impl PTEFlags {
         let flags = Self::V;
         flags
     }
-    
 }
-
-
 
 impl From<MapPerm> for PTEFlags {
     fn from(perm: MapPerm) -> Self {
         *Self::new_valid()
-            .set_U( perm.contains(MapPerm::U) )
-            .set_G(!perm.contains(MapPerm::U) )
-            .set_R( perm.contains(MapPerm::R) )
-            .set_W( perm.contains(MapPerm::W) )
-            .set_X( perm.contains(MapPerm::X) )
-        
+            .set_U(perm.contains(MapPerm::U))
+            .set_G(!perm.contains(MapPerm::U))
+            .set_R(perm.contains(MapPerm::R))
+            .set_W(perm.contains(MapPerm::W))
+            .set_X(perm.contains(MapPerm::X))
 
         // ret |= PTEFlags::V;
         // if perm.contains(MapPerm::U) {
@@ -128,8 +119,6 @@ pub struct PageTableEntry {
     ///PTE
     pub bits: usize,
 }
-
-
 
 impl PageTableEntry {
     ///Create a PTE from ppn
@@ -170,7 +159,6 @@ impl PageTableEntry {
         self.bits = ((self.bits >> PPN_SHIFT) << PPN_SHIFT) | flags.bits() as usize;
     }
 }
-
 
 impl PageTable {
     pub fn init_kernel_page_table() -> Self {
@@ -221,13 +209,13 @@ impl PageTable {
             (sigret as usize).into()..(esigret as usize).into(),
             MapPerm::RX | MapPerm::U,
         );
-        
+
         println!("mapping .text section left");
         kernel_page_table.map_kernel_range(
             (esigret as usize).into()..(etext as usize).into(),
             MapPerm::RX,
         );
-        
+
         println!("mapping .rodata section");
         // memory_set.push(
         //     MapArea::new(
@@ -285,23 +273,15 @@ impl PageTable {
         // );
         // TODO: la: use direct mapping instead of page mapping
         // TODO: to avoid exposed flag bits
-        kernel_page_table.map_kernel_range(
-            (ekernel as usize).into()..(MEMORY_END).into(),
-            MapPerm::RW,
-        );
+        kernel_page_table
+            .map_kernel_range((ekernel as usize).into()..(MEMORY_END).into(), MapPerm::RW);
         // ffff_ffc0_8020_0000
         // ffff_ffc0_8800_0000
         println!("mapping devices");
         // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
         // TODO: to adapt la
-        kernel_page_table.map_kernel_huge_page(
-            (0x0000_0000).into(),
-            MapPerm::RW
-        );
-        kernel_page_table.map_kernel_huge_page(
-            (0x4000_0000).into(),
-            MapPerm::RW
-        );
+        kernel_page_table.map_kernel_huge_page((0x0000_0000).into(), MapPerm::RW);
+        kernel_page_table.map_kernel_huge_page((0x4000_0000).into(), MapPerm::RW);
         // for pair in MMIO {
         //     memory_set.push(
         //         MapArea::new(
@@ -324,7 +304,6 @@ impl PageTable {
         kernel_page_table
     }
 
-
     // only in rv
     pub fn new_user() -> Self {
         let frame = frame_alloc().unwrap();
@@ -333,7 +312,8 @@ impl PageTable {
         // TODO: refine KERNEL_PGNUM_OFFSET to KERNEL_PGNUM_START
         // 第一级页表
         let index = VirtPageNum::from(KERNEL_PGNUM_OFFSET).indexes()[0];
-        frame.ppn.get_pte_array()[index..].copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
+        frame.ppn.get_pte_array()[index..]
+            .copy_from_slice(&kernel_root_ppn.get_pte_array()[index..]);
         PageTable {
             root_ppn: frame.ppn,
             frames: vec![frame],
@@ -346,9 +326,6 @@ impl PageTable {
         8usize << 60 | self.root_ppn.0
     }
 }
-
-
-
 
 // /// translate kernel virtual addr into physical addr
 // pub fn kaddr_v2p(va: VirtAddr) -> PhysAddr {

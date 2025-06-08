@@ -1,3 +1,36 @@
+use super::{
+    add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, FutexBucket, RobustList,
+    ShmidTable, ThreadGroup,
+};
+use super::{pid_alloc, Pid};
+use crate::fs::ext4::NormalFile;
+use crate::fs::{init, FileClass, FileTrait};
+use crate::hal::arch::{sfence, shutdown};
+use crate::hal::config::INITPROC_PID;
+use crate::hal::trap::TrapContext;
+use crate::ipc::shm::SHARED_MEMORY_MANAGER;
+use crate::ipc::IPCKey;
+use crate::mm::address::VirtAddr;
+use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
+use crate::mm::memory_space::{init_stack, vm_area::MapPerm, MemorySpace};
+use crate::mm::{memory_space, translated_refmut, MapPermission};
+use crate::signal::{
+    SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom,
+    SigPending, SigStruct, SignalStack,
+};
+use crate::sync::time::ITimerVal;
+use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
+use crate::syscall::{CloneFlags, CpuSet, RLimit64};
+use crate::task::manager::get_init_proc;
+use crate::task::{
+    add_task, current_task, current_user_token, get_task_by_pid, new_process_group,
+    remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY,
+};
+use crate::utils::SysResult;
+use alloc::collections::btree_map::BTreeMap;
+use alloc::string::String;
+use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
 use core::cell::SyncUnsafeCell;
 use core::fmt::{Debug, Display};
 use core::future::Ready;
@@ -5,99 +38,71 @@ use core::ops::Deref;
 use core::sync::atomic::{AtomicBool, AtomicI32, AtomicUsize};
 use core::task::Waker;
 use core::time::Duration;
-use super::{add_proc_group_member, remove_proc_group_member, FdInfo, FdTable, FutexBucket, RobustList, ShmidTable, ThreadGroup};
-use super::{pid_alloc, Pid};
-use crate::fs::ext4::NormalFile;
-use crate::hal::arch::{sfence, shutdown};
-use crate::fs::{init, FileClass, FileTrait};
-use crate::hal::config::INITPROC_PID;
-use crate::ipc::shm::SHARED_MEMORY_MANAGER;
-use crate::ipc::IPCKey;
-use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
-use crate::mm::{memory_space, translated_refmut, MapPermission};
-use crate::signal::{SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, SigPending, SigStruct, SignalStack};
-use crate::sync::time::ITimerVal;
-use crate::sync::{get_waker, new_shared, Shared, SpinNoIrqLock, TimeData};
-use crate::syscall::{CloneFlags, CpuSet, RLimit64};
-use crate::task::manager::get_init_proc;
-use crate::task::{add_task, current_task, current_user_token, get_task_by_pid, new_process_group, remove_task_by_pid, spawn_user_task, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY};
-use crate::hal::trap::TrapContext;
-use crate::utils::SysResult;
-use alloc::collections::btree_map::BTreeMap;
-use alloc::string::String;
-use alloc::sync::{Arc, Weak};
-use alloc::vec::Vec;
 use log::{debug, info};
 use xmas_elf::dynamic;
-use crate::mm::address::VirtAddr;
-use crate::mm::memory_space::{MemorySpace, init_stack, vm_area::MapPerm};
 
 pub struct TaskControlBlock {
     // 不可变
-    pub pid:        Pid,
+    pub pid: Pid,
 
     // 可变
-    pub tgid:           AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
-    pub pgid:           AtomicUsize, // 所属进程组id号
-    pub task_status:    SpinNoIrqLock<TaskStatus>,
+    pub tgid: AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
+    pub pgid: AtomicUsize, // 所属进程组id号
+    pub task_status: SpinNoIrqLock<TaskStatus>,
 
-    pub thread_group:   Shared<ThreadGroup>,
-    pub memory_space:   Shared<MemorySpace>,
-    pub parent:         Shared<Option<Weak<TaskControlBlock>>>,
-    pub children:       Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
-    pub fd_table:       Shared<FdTable>,
-    pub current_path:   Shared<String>,
-    pub robust_list:    Shared<RobustList>,
-    pub futex_list:     Shared<FutexBucket>,
-    pub itimers:        Shared<[ITimerVal; 3]>, // 三个定时器，分别对应SIGALRM, SIGVTALRM, SIGPROF
-    pub fsz_limit:      Shared<Option<RLimit64>>, // 记录当前进程最大文件大小
+    pub thread_group: Shared<ThreadGroup>,
+    pub memory_space: Shared<MemorySpace>,
+    pub parent: Shared<Option<Weak<TaskControlBlock>>>,
+    pub children: Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
+    pub fd_table: Shared<FdTable>,
+    pub current_path: Shared<String>,
+    pub robust_list: Shared<RobustList>,
+    pub futex_list: Shared<FutexBucket>,
+    pub itimers: Shared<[ITimerVal; 3]>, // 三个定时器，分别对应SIGALRM, SIGVTALRM, SIGPROF
+    pub fsz_limit: Shared<Option<RLimit64>>, // 记录当前进程最大文件大小
 
     /// to record shm ids (same as ipc key) to manage detaching at exit and execve
-    pub shmid_table:     Shared<ShmidTable>,
+    pub shmid_table: Shared<ShmidTable>,
 
     // signal
-    pub pending:        AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
-    pub ucontext:       AtomicUsize, // ucontext指针，保存用户数据，在sigreturn需要用到来恢复用户环境
-    pub sig_pending:    SpinNoIrqLock<SigPending>, // signal 等待队列
-    pub blocked:        SyncUnsafeCell<SigMask>,   // 信号屏蔽字,表明进程不处理的信号
-    pub handler:        Shared<SigStruct>, // 表示信号相应的处理方法,一共64个信号
-    pub sig_stack:      SyncUnsafeCell<Option<SignalStack>>, // 信号栈，保存信号栈信息
+    pub pending: AtomicBool, // 表示是否有sig在等待，用于快速检查是否需要处理信号
+    pub ucontext: AtomicUsize, // ucontext指针，保存用户数据，在sigreturn需要用到来恢复用户环境
+    pub sig_pending: SpinNoIrqLock<SigPending>, // signal 等待队列
+    pub blocked: SyncUnsafeCell<SigMask>, // 信号屏蔽字,表明进程不处理的信号
+    pub handler: Shared<SigStruct>, // 表示信号相应的处理方法,一共64个信号
+    pub sig_stack: SyncUnsafeCell<Option<SignalStack>>, // 信号栈，保存信号栈信息
 
+    pub waker: SyncUnsafeCell<Option<Waker>>,
+    pub trap_cx: SyncUnsafeCell<TrapContext>,
+    pub time_data: SyncUnsafeCell<TimeData>,
+    pub clear_child_tid: SyncUnsafeCell<Option<usize>>,
+    pub set_child_tid: SyncUnsafeCell<Option<usize>>,
+    pub cpuset: SyncUnsafeCell<CpuSet>,
 
-    pub waker:          SyncUnsafeCell<Option<Waker>>,
-    pub trap_cx:        SyncUnsafeCell<TrapContext>,
-    pub time_data:      SyncUnsafeCell<TimeData>,
-    pub clear_child_tid:SyncUnsafeCell<Option<usize>>,
-    pub set_child_tid:  SyncUnsafeCell<Option<usize>>,
-    pub cpuset:         SyncUnsafeCell<CpuSet>,
-
-    
-    pub exit_code:      AtomicI32,
+    pub exit_code: AtomicI32,
 }
 
 impl TaskControlBlock {
     /// 创建新task,只有initproc会调用
     pub async fn new(elf_file: Arc<dyn FileTrait>) -> Arc<Self> {
-        let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf(elf_file).await;
+        let (mut memory_space, entry_point, sp_init, auxv) =
+            MemorySpace::new_user_from_elf(elf_file).await;
         info!("entry point: {:#x}", entry_point);
-        
 
         unsafe { memory_space.switch_page_table() };
-        crate::hal::arch::set_sum(); 
+        crate::hal::arch::set_sum();
         // unsafe{riscv::register::sstatus::set_sum();}
-        let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
-        let trap_cx = TrapContext::app_init_context(
-            entry_point,
-            user_sp,
-        );
+        let (user_sp, argc, argv_p, env_p) =
+            init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
+        let trap_cx = TrapContext::app_init_context(entry_point, user_sp);
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
         let tgid = pid_handle.0;
-        
+
         // push a task context which goes to trap_return to the top of kernel stack
         let new_task = Arc::new(Self {
             pid: pid_handle,
-            
+
             // Shared
             pgid: AtomicUsize::new(0),
             tgid: AtomicUsize::new(tgid),
@@ -121,13 +126,13 @@ impl TaskControlBlock {
             blocked: SyncUnsafeCell::new(SigMask::empty()),
             handler: new_shared(SigStruct::new()),
             sig_stack: SyncUnsafeCell::new(None),
-            
+
             // SyncUnsafeCell
-            waker:   SyncUnsafeCell::new(None),
+            waker: SyncUnsafeCell::new(None),
             trap_cx: SyncUnsafeCell::new(trap_cx),
             time_data: SyncUnsafeCell::new(TimeData::new()),
             clear_child_tid: SyncUnsafeCell::new(None),
-            set_child_tid:   SyncUnsafeCell::new(None),
+            set_child_tid: SyncUnsafeCell::new(None),
             cpuset: SyncUnsafeCell::new(CpuSet::default()),
 
             exit_code: AtomicI32::new(0),
@@ -147,10 +152,11 @@ impl TaskControlBlock {
     pub async fn execve(&self, elf_file: Arc<dyn FileTrait>, argv: Vec<String>, env: Vec<String>) {
         info!("execve start");
         // info!("[execve] argv:{:?}, env:{:?}", argv, env);
-        let (mut memory_space, entry_point, sp_init, auxv) = MemorySpace::new_user_from_elf_lazily(elf_file).await;
-        
+        let (mut memory_space, entry_point, sp_init, auxv) =
+            MemorySpace::new_user_from_elf_lazily(elf_file).await;
+
         // info!("execve memory_set created");
-        
+
         // 终止所有子线程
         for (_, weak_task) in self.thread_group.lock().tasks.iter() {
             let task = weak_task.upgrade().unwrap();
@@ -167,7 +173,7 @@ impl TaskControlBlock {
         *mem = memory_space;
         self.detach_all_shm();
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), argv, env, auxv);
-        
+
         // set trap cx
         let trap_cx = self.get_trap_cx_mut();
         trap_cx.set_sepc(entry_point);
@@ -208,11 +214,12 @@ impl TaskControlBlock {
         let futex_list = new_shared(FutexBucket::new());
         let itimers = new_shared([ITimerVal::default(); 3]);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
-            true  => self.fd_table.clone(),
-            false => new_shared(self.fd_table.lock().clone())
+            true => self.fd_table.clone(),
+            false => new_shared(self.fd_table.lock().clone()),
         };
-        let sig = match flag.contains(CloneFlags::CLONE_SIGHAND) { // 修改这里的致命判断错误
-            true  => {
+        let sig = match flag.contains(CloneFlags::CLONE_SIGHAND) {
+            // 修改这里的致命判断错误
+            true => {
                 info!("[process_fork] sigchld");
                 self.handler.clone() // 和父进程共享，只是增加父进程sig的引用计数，效率高
             }
@@ -228,11 +235,14 @@ impl TaskControlBlock {
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
         let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
-            true  => self.memory_space.clone(),
+            true => self.memory_space.clone(),
             false => {
                 info!("[process_fork] self memoty space.");
-                let child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
-                unsafe { sfence(); }
+                let child_memory_space =
+                    MemorySpace::from_user_lazily(&mut self.memory_space.lock());
+                unsafe {
+                    sfence();
+                }
                 new_shared(child_memory_space)
             }
         };
@@ -255,7 +265,7 @@ impl TaskControlBlock {
             itimers,
             fsz_limit,
 
-            shmid_table, 
+            shmid_table,
 
             pending,
             ucontext,
@@ -277,9 +287,13 @@ impl TaskControlBlock {
         self.add_child(new_task.clone());
         add_proc_group_member(new_task.get_pgid(), new_task.get_pid());
         new_task.add_thread_group_member(new_task.clone());
-        info!("process fork success, new pid = {}, parent pid = {}", new_task.get_pid(), new_task.get_parent().unwrap().get_pid());
+        info!(
+            "process fork success, new pid = {}, parent pid = {}",
+            new_task.get_pid(),
+            new_task.get_parent().unwrap().get_pid()
+        );
         // info!("task fdtable len = {}", new_task.fd_table_len());
-        
+
         new_task
     }
 
@@ -288,7 +302,7 @@ impl TaskControlBlock {
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(self.get_tgid());
-        let pending= AtomicBool::new(false);
+        let pending = AtomicBool::new(false);
         let ucontext = AtomicUsize::new(0);
         let fsz_limit = self.fsz_limit.clone();
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
@@ -310,12 +324,13 @@ impl TaskControlBlock {
         let exit_code = AtomicI32::new(0);
         let futex_list = self.futex_list.clone();
         let itimers = self.itimers.clone();
-        let fd_table = match flag.contains(CloneFlags::CLONE_FILES) { // 修改这里的致命错误
-            true  => self.fd_table.clone(),
-            false => new_shared(self.fd_table.lock().deref().clone())
+        let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
+            // 修改这里的致命错误
+            true => self.fd_table.clone(),
+            false => new_shared(self.fd_table.lock().deref().clone()),
         };
         let sig = match flag.contains(CloneFlags::CLONE_SIGHAND) {
-            true  => {
+            true => {
                 info!("[thread_fork] sigchld");
                 self.handler.clone() // 和父进程共享，只是增加父进程sig的引用计数，效率高
             }
@@ -327,20 +342,23 @@ impl TaskControlBlock {
         };
 
         let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
-            true  => self.memory_space.clone(),
+            true => self.memory_space.clone(),
             false => {
-                let child_memory_space = MemorySpace::from_user_lazily(&mut self.memory_space.lock());
-                unsafe { sfence(); }
+                let child_memory_space =
+                    MemorySpace::from_user_lazily(&mut self.memory_space.lock());
+                unsafe {
+                    sfence();
+                }
                 new_shared(child_memory_space)
             }
         };
-        
+
         info!(
             "[fork]: child thread tid {}, parent process pid {}",
             pid, self.pid
         );
 
-        let new_task = Arc::new(TaskControlBlock{
+        let new_task = Arc::new(TaskControlBlock {
             pid,
 
             pgid,
@@ -379,20 +397,25 @@ impl TaskControlBlock {
 
         new_task
     }
-    
+
     pub fn do_exit(&self) {
         info!("[do_exit] Task pid = {} exit;", self.get_pid());
         let pid = self.get_pid();
 
         // 如果是init进程
         if pid == INITPROC_PID {
-            info!("init process exit with exit_code {} ...", self.get_exit_code());
+            info!(
+                "init process exit with exit_code {} ...",
+                self.get_exit_code()
+            );
             shutdown(false);
         }
 
         if let Some(tidaddress) = self.get_child_cleartid() {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
-            unsafe{ core::ptr::write(tidaddress as *mut usize, 0); }
+            unsafe {
+                core::ptr::write(tidaddress as *mut usize, 0);
+            }
             let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
             let mut binding = self.futex_list.lock();
             binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
@@ -403,7 +426,10 @@ impl TaskControlBlock {
         if !self.is_leader() {
             self.children.lock().clear();
             self.remove_thread_group_member(pid);
-            info!("[do_exit] task is not leader, threadgroup len = {}", self.thread_group.lock().tasks.len());
+            info!(
+                "[do_exit] task is not leader, threadgroup len = {}",
+                self.thread_group.lock().tasks.len()
+            );
             remove_task_by_pid(pid);
             return; // 致命错误，这里是处理线程的分支
         }
@@ -411,24 +437,21 @@ impl TaskControlBlock {
         // 将当前进程的子进程移动到initproc下
         // info!("[do_exit] task is leader");
         let mut lock_child = self.children.lock();
-        if !lock_child.is_empty(){
+        if !lock_child.is_empty() {
             info!("[do_exit] task has child");
             let init_proc = get_init_proc();
-            for (child_pid, child) in 
-                lock_child.
-                iter()
-            {
+            for (child_pid, child) in lock_child.iter() {
                 if child.is_zombie() {
                     info!("[do_exit] child pdi = {} is zmobie", child_pid);
                     let sig_info = SigInfo::new(
-                        SigNom::SIGCHLD, 
-                        SigCode::CLD_EXITED, 
-                        SigErr::empty(), 
-                        SigDetails::Chld { 
-                            pid: *child_pid, 
+                        SigNom::SIGCHLD,
+                        SigCode::CLD_EXITED,
+                        SigErr::empty(),
+                        SigDetails::Chld {
+                            pid: *child_pid,
                             status: child.get_status(),
-                            exit_code: child.get_exit_code()
-                        }
+                            exit_code: child.get_exit_code(),
+                        },
                     );
                     init_proc.proc_recv_siginfo(sig_info);
                 }
@@ -441,24 +464,28 @@ impl TaskControlBlock {
         // 当前是leader，需要将信号发送给leader的父进程，表示自己已经执行完成
         match self.get_parent() {
             Some(parent) => {
-                info!("[do_exit] task to info parent pid = {}, exit code = {}", parent.get_pid(), self.get_exit_code());
+                info!(
+                    "[do_exit] task to info parent pid = {}, exit code = {}",
+                    parent.get_pid(),
+                    self.get_exit_code()
+                );
                 let sig_info = SigInfo::new(
-            SigNom::SIGCHLD, 
-            SigCode::CLD_EXITED, 
-                SigErr::empty(), 
-                SigDetails::Chld { 
-                        pid, 
-                        status: self.get_status(), 
+                    SigNom::SIGCHLD,
+                    SigCode::CLD_EXITED,
+                    SigErr::empty(),
+                    SigDetails::Chld {
+                        pid,
+                        status: self.get_status(),
                         // 这里需要将exitcode移回去，因为在sys_exit中位移过
                         // exit_code: (self.get_exit_code() & 0xff00) >> 8
-                        exit_code: self.get_exit_code()
-                    }
+                        exit_code: self.get_exit_code(),
+                    },
                 );
                 parent.proc_recv_siginfo(sig_info);
             }
             None => panic!("this proc has no parent!"),
         }
-        
+
         self.clear_fd_table();
         self.detach_all_shm();
         // self.recycle_data_pages();
@@ -469,11 +496,12 @@ impl TaskControlBlock {
         // 将退出状态写入用户提供的指针
         if wstatus != 0 {
             let wstatus = wstatus as *mut i32;
-            unsafe { wstatus.write_volatile(exit_code)  };
+            unsafe { wstatus.write_volatile(exit_code) };
             // *translated_refmut(self.get_user_token(), wstatus) = (exit_code & 0xff) << 8;
         }
         let (utime, stime) = zombie_child.get_time_data().get_ustime();
-        self.get_time_data_mut().update_child_time_when_exit(utime, stime);
+        self.get_time_data_mut()
+            .update_child_time_when_exit(utime, stime);
         remove_task_by_pid(pid);
         remove_proc_group_member(zombie_child.get_pgid(), pid);
     }
@@ -493,28 +521,28 @@ impl TaskControlBlock {
             .fetch_signal_handler(SigNom::SIGCHLD as usize);
 
         if si_signo == SigNom::SIGCHLD
-            && ( p_handler.sa_type == SigHandlerType::IGNORE
-            ||  p_handler.sa.sa_flags.contains(SigActionFlag::SA_NOCLDSTOP) ) 
+            && (p_handler.sa_type == SigHandlerType::IGNORE
+                || p_handler.sa.sa_flags.contains(SigActionFlag::SA_NOCLDSTOP))
         {
-            return ;
+            return;
         }
 
         let sig_info = SigInfo::new(
-            si_signo, 
-            si_code, 
-            SigErr::from_bits(0).unwrap(), 
-            SigDetails::None
+            si_signo,
+            si_code,
+            SigErr::from_bits(0).unwrap(),
+            SigDetails::None,
         );
 
         parent.thread_recv_siginfo(sig_info);
     }
 
     /// 进程级信号:
-    /// 
+    ///
     /// 发送给整个线程组的（例如 kill -INT <pid>），必须保证至少有一个线程能处理它
-    /// 
+    ///
     /// 随机选择一个没有阻塞当前信号的线程来接受信号
-    /// 
+    ///
     /// 避免信号风暴或信号丢失
     pub fn proc_recv_siginfo(&self, sig_info: SigInfo) {
         debug_assert!(self.is_leader());
@@ -522,9 +550,7 @@ impl TaskControlBlock {
 
         // 特权信号（SIGKILL/SIGSTOP）：
         // 应绕过阻塞检查，直接递送给任意线程（需特殊判断）：
-        if sig_info.signo == SigNom::SIGKILL 
-            || sig_info.signo == SigNom::SIGSTOP 
-        {
+        if sig_info.signo == SigNom::SIGKILL || sig_info.signo == SigNom::SIGSTOP {
             let thread = tg.tasks.values().next().unwrap().upgrade().unwrap();
             thread.thread_recv_siginfo(sig_info);
             return;
@@ -545,9 +571,9 @@ impl TaskControlBlock {
     }
 
     /// 线程级信号:
-    /// 
+    ///
     /// 通过 pthread_kill(tid, sig) 或 tgkill(pid, tid, sig) 发送给特定线程
-    /// 
+    ///
     /// 直接递送给目标线程，无视其他线程
     pub fn thread_recv_siginfo(&self, sig_info: SigInfo) {
         let mut sig_pending = self.sig_pending.lock();
@@ -574,7 +600,9 @@ impl TaskControlBlock {
     }
     /// 设置cpuset
     pub fn set_cpuset(&self, cpuset: CpuSet) {
-        unsafe{ *self.cpuset.get() = cpuset; }
+        unsafe {
+            *self.cpuset.get() = cpuset;
+        }
     }
 
     /// 检测pending字段，判断是否有信号需要处理
@@ -583,7 +611,8 @@ impl TaskControlBlock {
     }
     /// 设置pending，代表 是否 有信号等待被处理
     pub fn set_pending(&self, value: bool) {
-        self.pending.store(value, core::sync::atomic::Ordering::SeqCst);
+        self.pending
+            .store(value, core::sync::atomic::Ordering::SeqCst);
     }
 
     /// 取出task中的sig stack 留下None
@@ -606,7 +635,8 @@ impl TaskControlBlock {
 
     /// 设置ucontext
     pub fn set_ucontext(&self, addr: usize) {
-        self.ucontext.store(addr, core::sync::atomic::Ordering::SeqCst);
+        self.ucontext
+            .store(addr, core::sync::atomic::Ordering::SeqCst);
     }
     /// 获取ucontext
     pub fn get_ucontext(&self) -> usize {
@@ -615,7 +645,11 @@ impl TaskControlBlock {
 
     /// 获取parent的pid
     pub fn get_ppid(&self) -> usize {
-        self.parent.lock().as_ref().map(|p| p.upgrade().unwrap().pid.0).unwrap_or(0)
+        self.parent
+            .lock()
+            .as_ref()
+            .map(|p| p.upgrade().unwrap().pid.0)
+            .unwrap_or(0)
     }
     /// 获取当前进程的pid
     pub fn get_pid(&self) -> usize {
@@ -668,7 +702,6 @@ impl TaskControlBlock {
         }
         // self.do_notify_parent(signo, SigCode::CLD_STOPPED);
         self.do_notify_parent(SigNom::SIGCHLD, SigCode::CLD_STOPPED);
-
     }
 
     /// 当收到SIGCONT时，将stopped的子线程设置为running
@@ -680,12 +713,14 @@ impl TaskControlBlock {
         }
         // self.do_notify_parent(signo, SigCode::CLD_CONTINUED);
         self.do_notify_parent(SigNom::SIGCHLD, SigCode::CLD_CONTINUED);
-
     }
 
     /// 进程收到kill或者stop信号
     pub fn rv_intr(&self) -> bool {
-        let (res, _, _) = self.sig_pending.lock().has_expected(SigMask::SIGKILL | SigMask::SIGSTOP);
+        let (res, _, _) = self
+            .sig_pending
+            .lock()
+            .has_expected(SigMask::SIGKILL | SigMask::SIGSTOP);
         res
     }
 
@@ -698,7 +733,7 @@ impl TaskControlBlock {
         self.pgid.store(pgid, core::sync::atomic::Ordering::SeqCst);
     }
 
-    pub fn get_tgid(&self) ->usize {
+    pub fn get_tgid(&self) -> usize {
         self.tgid.load(core::sync::atomic::Ordering::SeqCst)
     }
 
@@ -742,7 +777,9 @@ impl TaskControlBlock {
 
     /// 刷新TLB
     pub fn switch_pgtable(&self) {
-        unsafe { self.memory_space.lock().switch_page_table(); };
+        unsafe {
+            self.memory_space.lock().switch_page_table();
+        };
     }
 
     // exit code
@@ -752,7 +789,8 @@ impl TaskControlBlock {
     }
     /// 修改进程exit code
     pub fn set_exit_code(&self, exit_code: i32) {
-        self.exit_code.store(exit_code, core::sync::atomic::Ordering::SeqCst);
+        self.exit_code
+            .store(exit_code, core::sync::atomic::Ordering::SeqCst);
     }
 
     // children
@@ -765,9 +803,12 @@ impl TaskControlBlock {
         self.children.lock().clear();
     }
     /// 删除一个子线程
-    pub fn remove_child(&self, pid: usize) -> Arc<TaskControlBlock>{
+    pub fn remove_child(&self, pid: usize) -> Arc<TaskControlBlock> {
         // info!("[remove_child] self pid = {}", pid);
-        self.children.lock().remove(&pid).expect("[remove_child] task has no such pid task")
+        self.children
+            .lock()
+            .remove(&pid)
+            .expect("[remove_child] task has no such pid task")
     }
     /// 设置父进程
     pub fn set_parent(&self, parent: Option<Weak<TaskControlBlock>>) {
@@ -782,7 +823,7 @@ impl TaskControlBlock {
     pub fn recycle_data_pages(&self) {
         self.memory_space.lock().recycle_data_pages();
     }
-    
+
     // fd
     /// 通过fd获取文件
     pub fn get_file_by_fd(&self, fd: usize) -> Option<Arc<dyn FileTrait>> {
@@ -803,7 +844,10 @@ impl TaskControlBlock {
     }
     /// 为以前分配了Fd的file，分配一个大于than的新fd
     pub fn alloc_fd_than(&self, fd: FdInfo, than: usize) -> usize {
-        self.fd_table.lock().alloc_fd_than(fd, than).expect("task alloc fd fail")
+        self.fd_table
+            .lock()
+            .alloc_fd_than(fd, than)
+            .expect("task alloc fd fail")
     }
     /// 删除fd
     pub fn remove_fd(&self, fd: usize) -> SysResult {
@@ -811,7 +855,10 @@ impl TaskControlBlock {
     }
     /// 在指定位置设置fd
     pub fn put_fd_in(&self, fd: FdInfo, idx: usize) {
-        self.fd_table.lock().put_in(fd, idx).expect("task [put fd in] fail")
+        self.fd_table
+            .lock()
+            .put_in(fd, idx)
+            .expect("task [put fd in] fail")
     }
     /// 清空fd_table
     pub fn clear_fd_table(&self) {
@@ -820,7 +867,11 @@ impl TaskControlBlock {
 
     pub fn detach_all_shm(&self) {
         for (_, shmid) in self.shmid_table.lock().iter() {
-            SHARED_MEMORY_MANAGER.write().get_mut(shmid).unwrap().detach_one(self.get_pid());
+            SHARED_MEMORY_MANAGER
+                .write()
+                .get_mut(shmid)
+                .unwrap()
+                .detach_one(self.get_pid());
         }
     }
 
@@ -872,7 +923,7 @@ impl TaskControlBlock {
                 stime += st;
             }
         }
-        utime+stime
+        utime + stime
     }
 
     pub fn process_ustime(&self) -> (Duration, Duration) {

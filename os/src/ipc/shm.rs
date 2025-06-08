@@ -1,16 +1,12 @@
-use alloc::{sync::Weak, sync::Arc, vec::Vec};
-use hashbrown::HashMap;
 use crate::{mm::page::Page, sync::SpinNoIrqLock};
+use alloc::{sync::Arc, sync::Weak, vec::Vec};
+use hashbrown::HashMap;
 use spin::RwLock;
 use virtio_drivers::device::console::Size;
 
 use crate::sync::timer::{get_time_ns, get_time_s};
 
 use super::{IPCKey, IPCPerm};
-
-
-
-
 
 #[repr(C)]
 #[derive(Clone, Debug)]
@@ -40,9 +36,7 @@ impl ShmidDs {
             shm_nattch: 0,
         }
     }
-    
 }
-
 
 bitflags! {
     /// other bits is not generally used in operating systems
@@ -55,7 +49,7 @@ bitflags! {
 }
 
 bitflags! {
-    
+
     #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub struct ShmAtFlags: i32 {
         /// Attach the segment for read-only access.If this flag is not specified,
@@ -92,7 +86,7 @@ impl ShmObject {
     pub fn ipc_key(&self) -> i32 {
         self.shmid_ds.shm_perm.key.0
     }
-    
+
     pub fn attach_one(&mut self, lpid: usize) {
         self.shmid_ds.shm_nattch += 1;
         self.shmid_ds.shm_lpid = lpid;
@@ -103,9 +97,10 @@ impl ShmObject {
         self.shmid_ds.shm_nattch -= 1;
         self.shmid_ds.shm_lpid = lpid;
         self.shmid_ds.shm_dtime = get_time_s();
-        
+
         /// return true if last detach , otherwise false
-        self.shmid_ds.shm_nattch == 0
+        self.shmid_ds.shm_nattch
+            == 0
     }
 }
 

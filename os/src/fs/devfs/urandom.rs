@@ -1,7 +1,16 @@
-use crate::{fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR}, mm::{page::Page, UserBuffer}, sync::{SpinNoIrqLock, TimeStamp}, utils::{SysResult, RNG}};
-use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
-use async_trait::async_trait;
+use crate::{
+    fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
+    mm::{page::Page, UserBuffer},
+    sync::{SpinNoIrqLock, TimeStamp},
+    utils::{SysResult, RNG},
+};
 use alloc::boxed::Box;
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
+use async_trait::async_trait;
 
 pub struct DevRandom;
 
@@ -32,7 +41,7 @@ impl FileTrait for DevRandom {
         // do nothing
         Ok(user_buf.len())
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("/dev/random".to_string())
     }
@@ -52,7 +61,6 @@ impl FileTrait for DevRandom {
         todo!()
     }
 }
-
 
 #[async_trait]
 impl InodeTrait for DevRandom {

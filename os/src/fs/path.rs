@@ -1,16 +1,20 @@
 //! Path manipulation utilities.
-//! 
+//!
 //! This module provides functionality for working with file system paths,
 //! including path joining, splitting, and path type checking operations.
 
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::fmt::Debug;
-use alloc::{format, string::{String, ToString}, vec::Vec};
 use log::info;
 
 use crate::task::current_task;
 
 /// Represents a file system path.
-/// 
+///
 /// This structure wraps a string and provides various operations for path manipulation.
 #[derive(Debug, Clone)]
 pub struct AbsPath {
@@ -22,24 +26,24 @@ impl From<&str> for AbsPath {
     /// 使用这里之前，需要明确一定是绝对路径
     fn from(value: &str) -> Self {
         Self {
-            content: value.to_string()
+            content: value.to_string(),
         }
     }
 }
 
 impl AbsPath {
     /// Splits a path into parent and child components using the given delimiter.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `delima` - The delimiter to split on (usually "/")
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A tuple containing (parent_path, child_name) as strings
-    /// 
+    ///
     /// # Examples
-    /// 
+    ///
     /// ```
     /// let path = AbsPath::new("/home/user/file.txt".to_string());
     /// let (parent, child) = path.split_with("/");
@@ -58,49 +62,49 @@ impl AbsPath {
     }
 
     /// Creates a new Path from a String.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `path` - The string to convert into a Path
     pub fn new(path: String) -> Self {
         Self {
-            content: parse_path(path)
+            content: parse_path(path),
         }
     }
 
     /// Returns a clone of the path's content.
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A String containing the path
     pub fn get(&self) -> String {
         self.content.clone()
     }
 
     /// Checks if the path represents the root directory ("/").
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// `true` if the path is "/", `false` otherwise
     pub fn is_root(&self) -> bool {
         self.content == "/"
     }
 
     /// Checks if the path is absolute (starts with '/').
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// `true` if the path starts with '/', `false` otherwise
     pub fn is_absolute(&self) -> bool {
         self.content.starts_with('/')
     }
 
     /// 通过一个路径获得文件名
-    /// 
+    ///
     /// 使用/对目录进行分割
-    /// 
+    ///
     /// 然后获得的最后一个条目就是文件名
-    /// 
+    ///
     /// 注意到如果’/‘是最后一个字符返回的是空字符串
     pub fn get_filename(&self) -> String {
         let path = self.content.trim_end_matches('/');
@@ -138,12 +142,12 @@ fn parse_path(path: String) -> String {
 
     for comp in components {
         match comp {
-            "."  => continue,
+            "." => continue,
             ".." => {
                 if is_absolute {
                     if !normalized.is_empty() {
                         normalized.pop();
-                    } 
+                    }
                 } else {
                     // 相对路径下，保留无法返回的..
                     if normalized.last().map_or(true, |&s| s == "..") {
@@ -154,28 +158,31 @@ fn parse_path(path: String) -> String {
                 }
             }
             "" => continue,
-            _  => normalized.push(comp),
+            _ => normalized.push(comp),
         }
     }
 
     let content = match is_absolute {
-        true  => format!("/{}", normalized.join("/")),
-        false => normalized.join("/")
+        true => format!("/{}", normalized.join("/")),
+        false => normalized.join("/"),
     };
 
     match content.is_empty() {
-        true  => {
-            if is_absolute { return "/".to_string(); }
-            else { return ".".to_string(); }
+        true => {
+            if is_absolute {
+                return "/".to_string();
+            } else {
+                return ".".to_string();
+            }
         }
         false => return content,
     }
 }
 
 /// 根据当前的路径和传入的目标路径， 获取目标地址 绝对路径
-/// 
+///
 /// base: 是基地址，可以是当前绝对路径或者是其他绝对路径
-/// 
+///
 /// path: 是目标路径，可以是绝对路径或相对路径
 pub fn resolve_path(base: String, path: String) -> AbsPath {
     // 首先处理一下传入的path, 去掉多于的//、..和.等
@@ -192,7 +199,6 @@ pub fn resolve_path(base: String, path: String) -> AbsPath {
 
     AbsPath::new(target_abs)
 }
-
 
 /// Unit tests for the Path implementation.
 #[allow(unused)]
@@ -212,7 +218,7 @@ pub fn path_test() {
     assert_eq!(parse_path("../a/../b".to_string()), "../b");
     assert_eq!(parse_path("/./../a".to_string()), "/a");
     assert_eq!(parse_path("//a//b//".to_string()), "/a/b");
-    
+
     // 测试更多边界情况
     assert_eq!(parse_path("/".to_string()), "/");
     assert_eq!(parse_path("/..".to_string()), "/");

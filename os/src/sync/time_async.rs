@@ -1,9 +1,27 @@
-use core::{cmp::Reverse, future::Future, pin::Pin, task::{Context, Poll}, time::Duration};
-use alloc::{collections::binary_heap::BinaryHeap, sync::{Arc, Weak}, vec::Vec};
+use super::{
+    time::{ITimerVal, ItimerHelp},
+    timer::{self, time_duration, TimerTranc},
+    SpinNoIrqLock, TimeVal,
+};
+use crate::{
+    signal::{SigCode, SigDetails, SigErr, SigInfo, SigNom},
+    task::{get_task_by_pid, TaskControlBlock},
+    utils::{Errno, SysResult},
+};
+use alloc::{
+    collections::binary_heap::BinaryHeap,
+    sync::{Arc, Weak},
+    vec::Vec,
+};
+use core::{
+    cmp::Reverse,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
 use log::info;
 use spin::Lazy;
-use crate::{signal::{SigCode, SigDetails, SigErr, SigInfo, SigNom}, task::{get_task_by_pid, TaskControlBlock}, utils::{Errno, SysResult}};
-use super::{time::{ITimerVal, ItimerHelp}, timer::{self, time_duration, TimerTranc}, SpinNoIrqLock, TimeVal};
 
 // TODO(YJJ):使用时间轮和最小堆混合时间管理器来优化时间复杂度===========
 
@@ -28,7 +46,7 @@ impl TimerQueue {
     pub fn handle_expired(&self) {
         let mut wake_list = Vec::new();
         let current_ns = time_duration();
-        
+
         {
             let mut heap = self.timers.lock();
             while let Some(timer) = heap.peek() {
@@ -40,7 +58,7 @@ impl TimerQueue {
                 }
             }
         } // 提前释放锁
-        
+
         for waker in wake_list {
             info!("[TimerQueue] wake up task");
             waker.wake(); // 在锁外执行唤醒
@@ -81,7 +99,10 @@ impl<F: Future> Future for TimeoutFuture<F> {
 
         // 检查是否已经超时
         let current = time_duration();
-        info!("timeout future: checking time, current = {:?}, deadline = {:?}", current, this.deadline);
+        info!(
+            "timeout future: checking time, current = {:?}, deadline = {:?}",
+            current, this.deadline
+        );
         if current >= this.deadline {
             info!("[TimeoutFuture] time use out");
             return Poll::Ready(Err(Errno::ETIMEDOUT));
@@ -101,15 +122,12 @@ impl<F: Future> Future for TimeoutFuture<F> {
 /// 用来空转,如果被信号kill、stop打断，那么返回剩余时间
 pub struct NullFuture {
     pub task: Arc<TaskControlBlock>,
-    pub deadline: Duration // 空转的时间
+    pub deadline: Duration, // 空转的时间
 }
 
 impl NullFuture {
     pub fn new(task: Arc<TaskControlBlock>, deadline: Duration) -> Self {
-        Self {
-            task,
-            deadline
-        }
+        Self { task, deadline }
     }
 }
 
@@ -138,40 +156,48 @@ pub struct ItimerFuture<F: Fn() -> bool> {
 }
 
 impl<F: Fn() -> bool> ItimerFuture<F> {
-    pub fn new(next_expire: Duration, callback: F, task: Arc<TaskControlBlock>, which: usize) -> Self {
+    pub fn new(
+        next_expire: Duration,
+        callback: F,
+        task: Arc<TaskControlBlock>,
+        which: usize,
+    ) -> Self {
         Self {
             next_expire,
             task: Arc::downgrade(&task),
             callback,
-            which
+            which,
         }
     }
-
 }
 
 impl<F: Fn() -> bool> Future for ItimerFuture<F> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = unsafe{ self.get_unchecked_mut() };
-        let res = this.task.upgrade().and_then(|task|{
-            // 加入时钟队列
-            let tmp = task.whit_itimers(|itimers| {
-                let cur_time = time_duration();
-                let real_time = itimers[this.which];
+        let this = unsafe { self.get_unchecked_mut() };
+        let res = this
+            .task
+            .upgrade()
+            .and_then(|task| {
+                // 加入时钟队列
+                let tmp = task.whit_itimers(|itimers| {
+                    let cur_time = time_duration();
+                    let real_time = itimers[this.which];
 
-                if cur_time >= this.next_expire {
-                    if !((this.callback)()) {
-                        return Poll::Ready(());
+                    if cur_time >= this.next_expire {
+                        if !((this.callback)()) {
+                            return Poll::Ready(());
+                        }
                     }
-                }
-                let new_timer = TimerTranc::new(this.next_expire, cx.waker().clone());
-                TIMER_QUEUE.add(new_timer);
-                this.next_expire = (Duration::from(real_time.it_interval) + time_duration());
-                Poll::Pending
-            });
-            Some(tmp)
-        }).unwrap();
+                    let new_timer = TimerTranc::new(this.next_expire, cx.waker().clone());
+                    TIMER_QUEUE.add(new_timer);
+                    this.next_expire = (Duration::from(real_time.it_interval) + time_duration());
+                    Poll::Pending
+                });
+                Some(tmp)
+            })
+            .unwrap();
         res
     }
 }

@@ -1,27 +1,38 @@
-use alloc::{string::String, sync::Arc, vec::{self, Vec}};
-use async_trait::async_trait;
+use crate::{
+    fs::{
+        dirent::build_dirents, ffi::MEMINFO, open, AbsPath, Dirent, FileClass, InodeTrait,
+        InodeType, Kstat, OpenFlags,
+    },
+    sync::{SpinNoIrqLock, TimeStamp},
+    utils::SysResult,
+};
 use alloc::boxed::Box;
+use alloc::{
+    string::String,
+    sync::Arc,
+    vec::{self, Vec},
+};
+use async_trait::async_trait;
 use log::error;
 use lwext4_rust::bindings::O_RDONLY;
-use crate::{fs::{dirent::build_dirents, ffi::MEMINFO, open, AbsPath, Dirent, FileClass, InodeTrait, InodeType, Kstat, OpenFlags}, sync::{SpinNoIrqLock, TimeStamp}, utils::SysResult};
 
 /// ProcFsInodeInner 是一个枚举类型, 代表proc文件系统中的inode的类型
-/// 
+///
 /// 它有四种类型:
-/// 
+///
 /// - root: 代表proc文件系统的根目录
-/// 
+///
 /// - _self: 代表当前进程的内容, 应当是一个文件夹
-/// 
+///
 /// - exe: 代表当前执行的文件
-/// 
+///
 /// - meminfo: 代表内存使用信息
 pub enum ProcFsInodeInner {
     /// 根目录
     root,
     /// 当前进程的内容, 应当是一个文件夹
     _self,
-    /// 当前执行的文件 
+    /// 当前执行的文件
     exe,
     /// 内存使用信息
     meminfo,
@@ -30,19 +41,19 @@ pub enum ProcFsInodeInner {
 }
 
 /// ProcFsInode is a struct that represents an inode in the proc filesystem.
-/// 
+///
 /// ProcFsInode 是一个表示proc文件系统中的inode的结构体
-/// 
+///
 /// inner: 代表类型, 有root, _self, exe, meminfo四种类型
-/// 
+///
 /// ptah: 代表路径, 例如"/proc/self", "/proc/meminfo"等
-/// 
+///
 /// 讲道理是要为ProcFsInodeInner中的所有类型都实现一个ProcFsInode的
-/// 
+///
 /// 但是就这几个就用模式匹配了
-/// 
+///
 /// 也可以用继承的方式
-/// 
+///
 pub struct ProcFsInode {
     inner: ProcFsInodeInner,
     path: String,
@@ -62,18 +73,22 @@ impl ProcFsInode {
 
 #[async_trait]
 impl InodeTrait for ProcFsInode {
-    fn get_page_cache(&self) -> Option<alloc::sync::Arc<crate::fs::page_cache::PageCache> > {
+    fn get_page_cache(&self) -> Option<alloc::sync::Arc<crate::fs::page_cache::PageCache>> {
         // 这里不需要page_cache
         None
     }
     fn get_size(&self) -> usize {
         4000
     }
-    fn set_size(&self,new_size:usize) -> crate::utils::SysResult {
+    fn set_size(&self, new_size: usize) -> crate::utils::SysResult {
         // 疑似被弃用
         Ok(())
     }
-    fn do_create(&self,_path: &str,_ty:crate::fs::InodeType) -> Option<alloc::sync::Arc<dyn InodeTrait> > {
+    fn do_create(
+        &self,
+        _path: &str,
+        _ty: crate::fs::InodeType,
+    ) -> Option<alloc::sync::Arc<dyn InodeTrait>> {
         // 这里不需要创建
         // 应当返回SysResult会更好,因为这个文件系统下就是不给创建文件
         None
@@ -120,7 +135,7 @@ impl InodeTrait for ProcFsInode {
         // 疑似被弃用
         0
     }
-    
+
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         // 非常重要
         // 这里不能write_at
@@ -181,7 +196,6 @@ impl InodeTrait for ProcFsInode {
                 }
             }
             _ => None,
-            
         }
     }
     fn fstat(&self) -> Kstat {
@@ -247,11 +261,7 @@ impl InodeTrait for ProcFsInode {
                 Some(build_dirents(entries))
             }
             ProcFsInodeInner::_self => {
-                let mut entries = alloc::vec![
-                    (".", 2, 4),
-                    ("..", 1, 4),
-                    ("exe", 4, 8),
-                ];
+                let mut entries = alloc::vec![(".", 2, 4), ("..", 1, 4), ("exe", 4, 8),];
                 Some(build_dirents(entries))
             }
             _ => None,

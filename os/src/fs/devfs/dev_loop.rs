@@ -1,9 +1,25 @@
-use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
+use crate::{
+    fs::{
+        ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFBLK,
+        S_IFCHR,
+    },
+    mm::{
+        page::Page,
+        user_ptr::{user_ref_mut, user_slice_mut},
+        UserBuffer,
+    },
+    sync::{SpinNoIrqLock, TimeStamp},
+    utils::{Errno, SysResult},
+};
+use alloc::boxed::Box;
+use alloc::{
+    string::{String, ToString},
+    sync::Arc,
+    vec::Vec,
+};
+use async_trait::async_trait;
 use log::{error, info};
 use spin::Spin;
-use crate::{fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFBLK, S_IFCHR}, mm::{page::Page, user_ptr::{user_ref_mut, user_slice_mut}, UserBuffer}, sync::{SpinNoIrqLock, TimeStamp}, utils::{Errno, SysResult}};
-use async_trait::async_trait;
-use alloc::boxed::Box;
 
 lazy_static! {
     pub static ref DEVLOOP: Arc<DevLoop> = DevLoop::new();
@@ -16,7 +32,7 @@ pub struct DevLoop {
 impl DevLoop {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
-            inode: Arc::new(DevLoopInode::new())
+            inode: Arc::new(DevLoopInode::new()),
         })
     }
 }
@@ -46,11 +62,11 @@ impl FileTrait for DevLoop {
         user_buf.fill(0);
         Ok(len)
     }
-    async fn write(&self, user_buf: & [u8]) -> SysResult<usize> {
+    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
         // do nothing
         Ok(user_buf.len())
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("/dev/loop0".to_string())
     }
@@ -78,8 +94,8 @@ impl FileTrait for DevLoop {
 }
 
 struct DevLoopInode {
-    timestamp: SpinNoIrqLock<TimeStamp> ,
-    meta: SpinNoIrqLock<DevLoopInodeMeta>
+    timestamp: SpinNoIrqLock<TimeStamp>,
+    meta: SpinNoIrqLock<DevLoopInodeMeta>,
 }
 
 impl DevLoopInode {
@@ -106,7 +122,6 @@ impl DevLoopInodeMeta {
         }
     }
 }
-
 
 #[async_trait]
 impl InodeTrait for DevLoopInode {
@@ -200,12 +215,14 @@ impl InodeTrait for DevLoopInode {
             cmd if cmd.bits() == LoopIoctl::LOOP_GET_STATUS.bits() => {
                 // Handle LOOP_GET_STATUS
                 info!("[DevLoopInode_ioctl]LOOP_GET_STATUS ");
-                {*user_ptr = self.meta.lock().info;}
+                {
+                    *user_ptr = self.meta.lock().info;
+                }
                 info!("[DevLoopInode_ioctl] return\n {:?}", user_ptr);
                 if self.meta.lock().fd.is_none() {
-                    return Err(Errno::ENXIO)
+                    return Err(Errno::ENXIO);
                 } else {
-                    return Ok(0)
+                    return Ok(0);
                 }
             }
             cmd if cmd.bits() == LoopIoctl::LOOP_SET_STATUS.bits() => {
@@ -361,4 +378,3 @@ impl LoopInfo {
         size_of::<Self>()
     }
 }
-

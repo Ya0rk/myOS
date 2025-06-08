@@ -4,7 +4,8 @@
 #![no_main]
 #![feature(cfg_match)]
 #![feature(stmt_expr_attributes)]
-#![feature(sync_unsafe_cell)] // for mod up's SyncUnsafeCell
+#![feature(sync_unsafe_cell)]
+// for mod up's SyncUnsafeCell
 // #![feature(panic_info_message)]
 // #![feature(riscv_ext_intrinsics)]
 #![feature(alloc_error_handler)]
@@ -18,7 +19,6 @@
 #![feature(map_try_insert)]
 #![feature(naked_functions)]
 #![feature(let_chains)]
-
 #![allow(unused)]
 extern crate alloc;
 
@@ -32,32 +32,37 @@ mod board;
 mod console;
 // TODO: 实际上src/config不能直接遗弃
 // mod config;
+pub mod drivers;
+pub mod fs;
 mod lang_items;
 pub mod mm;
-pub mod fs;
-pub mod task;
-pub mod sync;
-pub mod utils;
-pub mod syscall;
-pub mod drivers;
 pub mod net;
+pub mod sync;
+pub mod syscall;
+pub mod task;
+pub mod utils;
 // pub mod arch;
-pub mod signal;
 pub mod hal;
 pub mod ipc;
+pub mod signal;
 
-
-use core::{arch::global_asm, sync::atomic::{AtomicBool, AtomicUsize, Ordering}};
 use alloc::vec::{self, Vec};
+use core::{
+    arch::global_asm,
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+};
 #[cfg(target_arch = "loongarch64")]
-use hal::mem::{mmu_init, tlb::{self, tlb_fill}, tlb_init};
+use hal::mem::{
+    mmu_init,
+    tlb::{self, tlb_fill},
+    tlb_init,
+};
 #[cfg(target_arch = "riscv64")]
 use hal::mem::{mmu_init, tlb_init};
 use log::{error, info};
 use mm::memory_space::test_la_memory_space;
 use sync::{block_on, time_init, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
-
 
 #[macro_use]
 extern crate lazy_static;
@@ -69,11 +74,11 @@ static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 #[no_mangle]
 pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // 启动顺序：
-    // clear_bss 
-    // logo 
+    // clear_bss
+    // logo
     // logger_init
     // mm::init
-    // trap_init 
+    // trap_init
     // init_processors
     // probe
     // fs::init
@@ -92,7 +97,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
 
     if FIRST_HART
         .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
-        .is_ok() 
+        .is_ok()
     {
         hal::entry::boot::clear_bss();
         hal::entry::boot::logo();
@@ -111,16 +116,12 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         hal::trap::init();
 
-
-        
         crate::drivers::init();
 
         // fs::init();
-        block_on(async {fs::init().await});
+        block_on(async { fs::init().await });
         net::init_net_dev();
         // 此时完成初始化工作，准备载入进程开始执行
-
-        
 
         // 测试代码应当放在这里
         #[cfg(feature = "test")]
@@ -140,18 +141,16 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         }
 
         task::init_processors();
-        spawn_kernel_task(async move {
-            task::add_initproc().await
-        });
-        
+        spawn_kernel_task(async move { task::add_initproc().await });
+
         INIT_FINISHED.store(true, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]
         hal::entry::boot::boot_all_harts(hart_id);
     } else {
         hal::trap::init();
-        mm::init(false);        
+        mm::init(false);
     }
-    
+
     unsafe { sync::enable_timer_interrupt() };
     timer::set_next_trigger();
     executor::run();

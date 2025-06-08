@@ -1,10 +1,13 @@
-use core::{fmt::{Display, Formatter}, time::Duration};
-use crate::sync::time_duration;
 use super::TimeVal;
+use crate::sync::time_duration;
+use core::{
+    fmt::{Display, Formatter},
+    time::Duration,
+};
 
 ///
-/// it_value ────────▶ (触发信号) 
-///                  it_interval ────▶ (再次触发) 
+/// it_value ────────▶ (触发信号)
+///                  it_interval ────▶ (再次触发)
 ///                                  it_interval ───▶ ..
 
 #[derive(Clone, Copy, Default)]
@@ -28,8 +31,7 @@ impl Display for ITimerVal {
         write!(
             f,
             "ITimerVal {{ it_interval: {}, it_value: {} }}",
-            self.it_interval,
-            self.it_value
+            self.it_interval, self.it_value
         )
     }
 }

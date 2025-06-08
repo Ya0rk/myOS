@@ -1,19 +1,23 @@
 mod blk;
-pub mod probe;
 mod pci;
+pub mod probe;
 
 pub use blk::*;
+use core::ptr::NonNull;
 use log::info;
 use lwext4_rust::bindings::printf;
 use spin::Mutex;
 use virtio_drivers::{BufferDirection, Hal, PhysAddr, PAGE_SIZE};
-use core::ptr::NonNull;
 
 use crate::{
-    drivers::DevError, hal::config::KERNEL_ADDR_OFFSET, mm::{
-        frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PageTable, PhysPageNum,
-        StepByOne, VirtAddr,
-    }, sync::SpinNoIrqLock, task::current_user_token
+    drivers::DevError,
+    hal::config::KERNEL_ADDR_OFFSET,
+    mm::{
+        frame_alloc, frame_dealloc, FrameTracker, KernelAddr, PageTable, PhysPageNum, StepByOne,
+        VirtAddr,
+    },
+    sync::SpinNoIrqLock,
+    task::current_user_token,
 };
 use alloc::{sync::Arc, vec::Vec};
 use lazy_static::*;
@@ -47,7 +51,7 @@ unsafe impl Hal for VirtIoHalImpl {
         (pa.0, vaddr)
     }
 
-    unsafe fn dma_dealloc(pa: PhysAddr, va: NonNull<u8>,pages: usize) -> i32 {
+    unsafe fn dma_dealloc(pa: PhysAddr, va: NonNull<u8>, pages: usize) -> i32 {
         let pa = crate::mm::address::PhysAddr::from(pa);
         let mut ppn_base: PhysPageNum = pa.into();
         for _ in 0..pages {
@@ -88,7 +92,7 @@ unsafe impl Hal for VirtIoHalImpl {
         //     }
         // }
         // Nothing to do, as the host already has access to all memory.
-        
+
         vaddr - KERNEL_ADDR_OFFSET
         // 注意到现在采取直接映射模式,在entry中有设置
         // vaddr

@@ -1,5 +1,5 @@
-use zerocopy::{Immutable, IntoBytes};
 use crate::{sync::timer::get_time_ms, task::current_task};
+use zerocopy::{Immutable, IntoBytes};
 
 #[allow(non_camel_case_types)]
 type clock_t = isize;

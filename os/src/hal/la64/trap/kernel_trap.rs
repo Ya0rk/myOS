@@ -1,9 +1,9 @@
 //！ `hal/la/trap/kernel_trap.rs`
 
 use log::info;
-use loongarch64::register::*;
 use loongarch64::register::ecfg::LineBasedInterrupt;
 use loongarch64::register::estat::{Exception, Interrupt, Trap};
+use loongarch64::register::*;
 
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, TIMER_QUEUE};
@@ -31,45 +31,62 @@ pub fn kernel_trap_handler() {
             // 中断0 --- 外部中断处理
             unimplemented!("loongarch64 Trap::Interrupt(Interrupt::HWI0)");
         }
-        Trap::Exception(e) => {
-            match e {
-                Exception::LoadPageFault |
-                Exception::StorePageFault |
-                Exception::FetchPageFault |
-                Exception::PageModifyFault |
-                Exception::PageNonReadableFault |
-                Exception::PageNonExecutableFault => {
-                    let va = badv::read().vaddr();  
-                    info!("[kernel_trap_handler] meet a pagefault {:?} at {:#x}", e, va);
-                    let access_type = match e {
-                        Exception::LoadPageFault | Exception::PageNonReadableFault => {
-                            PageFaultAccessType::RO
-                        }
-                        Exception::StorePageFault | Exception::PageModifyFault => {
-                            PageFaultAccessType::RW
-                        }
-                        Exception::FetchPageFault | Exception::PageNonExecutableFault => {
-                            PageFaultAccessType::RX
-                        }
-                        _=> {
-                            unreachable!()
-                        }
-                    };
-                    
-                    current_task().unwrap().with_mut_memory_space(|m| {
-                        m.handle_page_fault(va.into(), access_type)
-                    }).unwrap_or_else(|e| {
-                        panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+        Trap::Exception(e) => match e {
+            Exception::LoadPageFault
+            | Exception::StorePageFault
+            | Exception::FetchPageFault
+            | Exception::PageModifyFault
+            | Exception::PageNonReadableFault
+            | Exception::PageNonExecutableFault => {
+                let va = badv::read().vaddr();
+                info!(
+                    "[kernel_trap_handler] meet a pagefault {:?} at {:#x}",
+                    e, va
+                );
+                let access_type = match e {
+                    Exception::LoadPageFault | Exception::PageNonReadableFault => {
+                        PageFaultAccessType::RO
+                    }
+                    Exception::StorePageFault | Exception::PageModifyFault => {
+                        PageFaultAccessType::RW
+                    }
+                    Exception::FetchPageFault | Exception::PageNonExecutableFault => {
+                        PageFaultAccessType::RX
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                current_task()
+                    .unwrap()
+                    .with_mut_memory_space(|m| m.handle_page_fault(va.into(), access_type))
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "{:?} pc: {:#x} BADV: {:#x}",
+                            estat.cause(),
+                            era.pc(),
+                            badv::read().vaddr()
+                        );
                     });
-                }
-        
-                _ => {
-                    panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
-                }
             }
-        }
+
+            _ => {
+                panic!(
+                    "{:?} pc: {:#x} BADV: {:#x}",
+                    estat.cause(),
+                    era.pc(),
+                    badv::read().vaddr()
+                );
+            }
+        },
         _ => {
-            panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+            panic!(
+                "{:?} pc: {:#x} BADV: {:#x}",
+                estat.cause(),
+                era.pc(),
+                badv::read().vaddr()
+            );
         }
     }
     era::set_pc(era.pc());
