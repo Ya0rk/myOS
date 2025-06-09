@@ -110,6 +110,9 @@ pub async fn sys_ppoll(
 /// control device
 pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
     info!("[sys_ioctl] start fd: {}, op: {:#x}, arg: {:#x}", fd, op, arg);
+    if unlikely(arg == 0) {
+        return Err(Errno::EFAULT);
+    }
     let task = current_task().unwrap();
     if unlikely(fd > task.fd_table_len()) { return Err(Errno::EBADF); }
     // Ok(0)

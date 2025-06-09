@@ -521,9 +521,12 @@ pub const SOL_TCP: u8 = 6;
 pub const SO_KEEPALIVE: u32 = 9;// 设置是否保持连接
 pub const SO_SNDBUF: u32 = 7;   // 设置发送缓冲区大小
 pub const SO_RCVBUF: u32 = 8;   // 设置接收缓冲区大小
+pub const SO_OOBINLINE: u32 = 10; // 用于处理TCP紧急数据的一个设置
 pub const MAXSEGMENT: u32 = 2;  // 限制TCP 最大段大小 MSS
 pub const CONGESTION: u32 = 13; // 拥塞控制算法
 pub const NODELAY: u32 = 1;     // 关闭Nagle算法
+pub const IPPROTO_IP: u8 = 0;
+pub const IPPROTO_TCP: u8 = 6;
 
 /// 主要用于ppoll系统调用
 #[repr(C)]

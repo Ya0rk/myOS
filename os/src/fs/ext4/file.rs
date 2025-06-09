@@ -176,9 +176,6 @@ impl FileTrait for NormalFile {
     }
 
     fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {
-        if offset < 0 || whence > 2 {
-            return Err(Errno::EINVAL);
-        }
         let offset: usize = offset as usize;
         let old_offset = self.metadata.offset();
         let res = match whence {

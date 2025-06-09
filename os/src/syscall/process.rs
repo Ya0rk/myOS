@@ -42,10 +42,12 @@ pub fn sys_exit(exit_code: i32) -> SysResult<usize> {
 
 pub async fn sys_nanosleep(req: usize, _rem: usize) -> SysResult<usize> {
     info!("[sys_nanosleep] start");
+    if unlikely(req == 0) {
+        info!("[sys_nanosleep] req is null");
+        return Ok(0);
+    }
     let req: TimeSpec = *user_ref(req.into())?.unwrap();
-    // let req = *translated_ref(current_user_token(), req as *const TimeSpec);
     if !req.check_valid() {
-        // info!("req = {}", req);
         return Err(Errno::EINVAL);
     }
 
@@ -884,7 +886,7 @@ pub async fn sys_clock_nanosleep(clockid: usize, flags: usize, t: usize, remain:
             }
             return Ok(0);
         }
-        _ => unimplemented!()
+        _ => {}
     }
     Ok(0)
 }

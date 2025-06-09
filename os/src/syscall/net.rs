@@ -93,6 +93,10 @@ pub fn sys_shutdown(sockfd: usize, how: u8) -> SysResult<usize> {
 /// addr.
 pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
     info!("[sys_connect] start, sockfd = {}, addr = {}, addrlen = {}", sockfd, addr, addrlen);
+    if unlikely(addr == 0 || addr > USER_SPACE_TOP) {
+        info!("[sys_connect] invalid sockaddr");
+        return Err(Errno::EINVAL);
+    }
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;

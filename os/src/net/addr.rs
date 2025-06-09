@@ -200,7 +200,7 @@ impl TryFrom<SockAddr> for IpEndpoint {
                 let port = addr.port;
                 Ok(IpEndpoint::new(ip.into(), port))
             }
-            SockAddr::Unix(addr) => todo!(),
+            SockAddr::Unix(addr) => Err(Errno::EAFNOSUPPORT),
             _ => return Err(Errno::EINVAL),
         }
     }

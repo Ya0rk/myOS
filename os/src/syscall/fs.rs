@@ -467,14 +467,12 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 ///
 /// Success: 返回当前工作目录的长度;  Fail: 返回-1
 pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
-    info!("[sys_getcwd] start");
-    println!("[sys_getcwd] buf = {}, size = {}", buf, size);
+    info!("[sys_getcwd] start, buf = {}, size = {}", buf, size);
     if unlikely(buf > USER_SPACE_TOP || size > PATH_MAX) {
         return Err(Errno::EFAULT);
     }
 
     let task =  current_task().unwrap();
-    // let task_inner = task.inner_lock();
     let token = task.get_user_token();
     let cwd = task.get_current_path();
     let length: usize = cwd.len() + 1;
@@ -484,7 +482,6 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     if unlikely(length > PATH_MAX) {
         return Err(Errno::ENAMETOOLONG);
     }
-    println!("[sys_getcwd] size = {}, len = {}", size, length);
     if unlikely(length > size) {
         return Err(Errno::ERANGE);
     }
@@ -583,6 +580,9 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).unwrap();
+        if unlikely(!inode.is_dir()) {
+            return Err(Errno::ENOTDIR);
+        }
         let other_cwd = inode.get_name()?;
         resolve_path(other_cwd, path)
     };
@@ -626,6 +626,10 @@ pub fn sys_umount2(target: usize, flags: u32) -> SysResult<usize> {
 /// Success: 0; Fail: 返回-1
 pub fn sys_mount(source: usize, target: usize, fstype: usize, flags: u32, data: usize) -> SysResult<usize> {
     info!("[sys_mount] start");
+    println!("[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = {}", source, target, fstype, flags, data);
+    if unlikely(source == 0 || target == 0 || fstype == 0) {
+        return Err(Errno::EFAULT);
+    }
     let token = current_user_token();
     let source = user_cstr(source.into())?.unwrap();
     let target  = user_cstr(target.into())?.unwrap();
@@ -679,7 +683,6 @@ pub fn sys_chdir(path: usize) -> SysResult<usize> {
 
 
 pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
-    // info!("[sys_unlinkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = user_cstr(path.into())?.unwrap();
@@ -692,7 +695,6 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     match open(target_path.clone(), OpenFlags::O_RDWR) {
         Ok(file_class) => {
             let file = file_class.file()?;
-            // info!("[unlink] file path = {}", file.path);
             let is_dir = file.is_dir();
             if is_dir && flags != AT_REMOVEDIR {
                 return Err(Errno::EISDIR);
@@ -703,20 +705,6 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
             file.get_inode().unlink(&target_path.get());
         }
         Err(e) => {
-            // info!("[sys_unlinkat] open file failed: {:?}", e);
-            // if e == Errno::ENOENT {
-            //     // 如果文件不存在，且flags为AT_REMOVEDIR，则返回成功
-            //     if flags == AT_REMOVEDIR {
-            //         return Ok(0);
-            //     }
-            //     return Err(Errno::ENOENT);
-            // } else if e == Errno::EISDIR && flags != AT_REMOVEDIR {
-            //     return Err(Errno::EISDIR);
-            // } else if e == Errno::ENOTDIR && flags == AT_REMOVEDIR {
-            //     return Err(Errno::ENOTDIR);
-            // } else {
-            //     return Err(e);
-            // }
             return Err(e);
         }
     }
@@ -944,12 +932,16 @@ pub fn sys_faccessat(
 /// according to the directive whence as follows
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     info!("[sys_lseek] start");
+    // println!("[sys_lseek] start, fd = {}, offset = {}, whence = {}", fd, offset, whence);
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
-    file.lseek(offset, whence)
+    let res = file.lseek(offset, whence)?;
+    // println!("[sys_lseek] lseek finished, res = {}", res);
+
+    Ok(res)
 }
 
 /// TODO(YJJ): 有待完善
