@@ -55,10 +55,10 @@ pub fn kernel_trap_handler() {
                     .unwrap_or_else(|e| {
                         use log::error;
 
-                    task.set_zombie();
-                    error!("kernel trap:{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
-                });;
-            },
+                        task.set_zombie();
+                        error!("kernel trap:{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
+                    });
+            }
             _ => {
                 panic!("a trap {:?} from kernel!", scause::read().cause());
             }

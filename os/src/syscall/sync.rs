@@ -1,10 +1,20 @@
-use core::{intrinsics::{atomic_load_acquire, atomic_load_relaxed, unlikely}, time::Duration};
 use alloc::task;
+use core::{
+    intrinsics::{atomic_load_acquire, atomic_load_relaxed, unlikely},
+    time::Duration,
+};
 
 use log::info;
 use num_enum::TryFromPrimitive;
 
-use crate::{sync::{yield_now, TimeSpec, TimeoutFuture}, task::{current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE}, utils::{Errno, SysResult}};
+use crate::{
+    sync::{yield_now, TimeSpec, TimeoutFuture},
+    task::{
+        current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, FUTEX_BITSET_MATCH_ANY,
+        ROBUST_LIST_HEAD_SIZE,
+    },
+    utils::{Errno, SysResult},
+};
 
 /// fast user-space locking
 /// uaddr就是用户态下共享内存的地址，里面存放的是一个对齐的整型计数器。
@@ -24,7 +34,9 @@ pub async fn sys_futex(
 ) -> SysResult<usize> {
     let mut op = FutexOp::from_bits(futex_op).ok_or(Errno::EINVAL)?;
     info!("[sys_futex] start, futex_op = {:?}", op);
-    if unlikely(uaddr == 0) { return Err(Errno::EACCES); }
+    if unlikely(uaddr == 0) {
+        return Err(Errno::EACCES);
+    }
     let key = FutexHashKey::get_futex_key(uaddr, op);
     // 按照linux做一些判断
     if op.contains(FutexOp::FUTEX_CLOCK_REALTIME) {
@@ -123,7 +135,13 @@ pub async fn sys_futex(
 /// 否则执行下一步，即调用futex_wait_queue_me。
 /// 后者主要做了几件事：1、将当前的task插入等待队列；2、启动定时任务；3、触发重新调度。
 /// 接下来当task能够继续执行时会判断自己是如何被唤醒的，并释放hrtimer退出。
-async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key: FutexHashKey) -> SysResult<usize> {
+async fn do_futex_wait(
+    uaddr: usize,
+    val: u32,
+    timeout: usize,
+    bitset: u32,
+    key: FutexHashKey,
+) -> SysResult<usize> {
     if unlikely(bitset == 0) {
         return Err(Errno::EINVAL);
     }

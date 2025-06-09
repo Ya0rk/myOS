@@ -1,5 +1,3 @@
-
-
 use core::intrinsics::unlikely;
 
 use log::{error, info, warn};
@@ -153,7 +151,7 @@ pub fn sys_shmget(key: isize, size: usize, shmflg: i32) -> SysResult<usize> {
         if unlikely(size > shmobj.size()) {
             return Err(Errno::EINVAL);
         }
-        // not used 
+        // not used
         if unlikely(!shmobj.shmid_ds.shm_perm.check_perm(IPCPermMode::empty())) {
             return Err(Errno::EPERM);
         }

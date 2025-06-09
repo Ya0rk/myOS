@@ -1,8 +1,5 @@
-use core::intrinsics::unlikely;
-use core::mem::{size_of, uninitialized};
-use core::time::{self, Duration};
-use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, resolve_path, AbsPath, FileClass, OpenFlags};
+use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref, user_slice_mut};
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
@@ -22,7 +19,8 @@ use crate::sync::{
     NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER,
 };
 use crate::syscall::ffi::{
-    CloneFlags, RlimResource, Rusage, Sysinfo, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD
+    CloneFlags, RlimResource, Rusage, Sysinfo, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN,
+    LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD,
 };
 use crate::syscall::io::SigMaskGuard;
 use crate::syscall::{CpuSet, RLimit64, SchedParam};
@@ -36,6 +34,9 @@ use alloc::ffi::CString;
 use alloc::string::{String, ToString};
 use alloc::task;
 use alloc::vec::Vec;
+use core::intrinsics::unlikely;
+use core::mem::{size_of, uninitialized};
+use core::time::{self, Duration};
 use log::{debug, error, info};
 use lwext4_rust::bindings::true_;
 use num_enum::TryFromPrimitive;
@@ -160,10 +161,15 @@ pub fn sys_clone(
     if unlikely(flag.contains(CloneFlags::CLONE_SIGHAND) && !flag.contains(CloneFlags::CLONE_VM)) {
         return Err(Errno::EINVAL);
     }
-    if unlikely(flag.contains(CloneFlags::CLONE_THREAD) && !flag.contains(CloneFlags::CLONE_SIGHAND)) {
+    if unlikely(
+        flag.contains(CloneFlags::CLONE_THREAD) && !flag.contains(CloneFlags::CLONE_SIGHAND),
+    ) {
         return Err(Errno::EINVAL);
     }
-    info!("[sys_clone] start child_stack {}, flag: {:?}", child_stack, flag);
+    info!(
+        "[sys_clone] start child_stack {}, flag: {:?}",
+        child_stack, flag
+    );
     let current_task = current_task().unwrap();
     let token = current_task.get_user_token();
     let new_task = match flag.contains(CloneFlags::CLONE_THREAD) {
@@ -233,7 +239,11 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let cwd = task.get_current_path();
 
     info!("[sys_execve]: path: {:?}, cwd: {:?}", path, cwd);
-    if unlikely(argv.iter().any(|s| s == "setvbuf_unget" || s == "pthread_condattr_setclock")) { // 跳过这个测例libctest
+    if unlikely(
+        argv.iter()
+            .any(|s| s == "setvbuf_unget" || s == "pthread_condattr_setclock"),
+    ) {
+        // 跳过这个测例libctest
         // task.set_zombie();
         return Ok(0);
     }
@@ -245,12 +255,12 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // execve("./a.sh", ["./a.sh"], 0x39be2b28 /* 43 vars */) = -1 ENOEXEC (Exec format error)
     // execve("/proc/self/exe", ["ash", "./a.sh"], 0x39be2b28 /* 43 vars */) = 0
     println!("[sys_execve] path = {}", path);
-    if path.ends_with(".sh") || path.ends_with("iperf3"){
+    if path.ends_with(".sh") || path.ends_with("iperf3") {
         let mut prefix = cwd.clone();
         if cwd.ends_with("basic") {
             prefix = cwd.strip_suffix("basic").unwrap().to_string();
         }
-        path = [prefix,"/".to_string(), "busybox".to_string()].concat();
+        path = [prefix, "/".to_string(), "busybox".to_string()].concat();
         argv.insert(0, path.clone());
         argv.insert(1, "sh".to_string());
     }
@@ -442,10 +452,7 @@ pub fn sys_exit_group(exit_code: i32) -> SysResult<usize> {
     Ok(0)
 }
 
-pub fn sys_clock_settime(
-    clock_id: usize,
-    timespec: usize,
-) -> SysResult<usize> {
+pub fn sys_clock_settime(clock_id: usize, timespec: usize) -> SysResult<usize> {
     info!("[sys_clock_settime] start");
     if unlikely(timespec == 0) {
         info!("[sys_clock_settime] timespec is null");
@@ -727,11 +734,20 @@ pub fn sys_log(cmd: i32, buf: usize, len: usize) -> SysResult<usize> {
 
 /// send signal to a process
 pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
-    info!("[sys_kill] start, to kill pid = {}, signum = {}", pid, signum);
-    if unlikely(signum == 0) { return Ok(0); }
+    info!(
+        "[sys_kill] start, to kill pid = {}, signum = {}",
+        pid, signum
+    );
+    if unlikely(signum == 0) {
+        return Ok(0);
+    }
     // 临时策略
-    if unlikely(signum == 21) {return Ok(0)};
-    if signum > MAX_SIGNUM { return Err(Errno::EINVAL); }
+    if unlikely(signum == 21) {
+        return Ok(0);
+    };
+    if signum > MAX_SIGNUM {
+        return Err(Errno::EINVAL);
+    }
 
     #[derive(Debug)]
     enum Target {
@@ -874,8 +890,16 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
 /// resource: 指定的资源类型
 /// new_limit: 指向新的资源限制结构体；若为null，仅获取当前限制
 /// old_limit: 用于返回旧的资源限制结构体；若为null，不返回旧值
-pub fn sys_prlimit64(pid: usize, resource: i32, new_limit: usize, old_limit: usize) -> SysResult<usize> {
-    info!("[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}", pid, resource, new_limit, old_limit);
+pub fn sys_prlimit64(
+    pid: usize,
+    resource: i32,
+    new_limit: usize,
+    old_limit: usize,
+) -> SysResult<usize> {
+    info!(
+        "[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}",
+        pid, resource, new_limit, old_limit
+    );
     // println!("[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}", pid, resource, new_limit, old_limit);
     let task = match pid {
         0 => current_task().unwrap(),
@@ -1102,7 +1126,10 @@ pub fn sys_getrusage(who: isize, usage: usize) -> SysResult<usize> {
 /// new_value：新定时器配置。
 /// old_value：旧定时器配置。如果不为null，就将旧的定时器配置写入到这个地址
 pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> SysResult<usize> {
-    info!("[sys_setitimer] start, which = {}, new_value = {:#x}, old_value = {:#x}", which, new_value, old_value);
+    info!(
+        "[sys_setitimer] start, which = {}, new_value = {:#x}, old_value = {:#x}",
+        which, new_value, old_value
+    );
     if unlikely(new_value == 0) {
         info!("[sys_setitimer] new_value is null.");
         return Err(Errno::EFAULT);
@@ -1331,8 +1358,9 @@ pub fn sys_sched_setparam(pid: usize, param: usize) -> SysResult<usize> {
 
     let ptr = unsafe { *(param as *const SchedParam) };
     let dst = task.get_prio_mut();
-    unsafe { core::ptr::write(dst, ptr); };
-
+    unsafe {
+        core::ptr::write(dst, ptr);
+    };
 
     Ok(0)
 }
@@ -1350,7 +1378,9 @@ pub fn sys_sched_getparam(pid: usize, param: usize) -> SysResult<usize> {
 
     let mut ptr = unsafe { param as *mut SchedParam };
     let src = *task.get_prio();
-    unsafe{ core::ptr::write(ptr, src); }
+    unsafe {
+        core::ptr::write(ptr, src);
+    }
 
     Ok(0)
 }

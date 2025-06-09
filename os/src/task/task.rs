@@ -72,13 +72,13 @@ pub struct TaskControlBlock {
     pub handler: Shared<SigStruct>, // 表示信号相应的处理方法,一共64个信号
     pub sig_stack: SyncUnsafeCell<Option<SignalStack>>, // 信号栈，保存信号栈信息
 
-    pub waker:          SyncUnsafeCell<Option<Waker>>,
-    pub trap_cx:        SyncUnsafeCell<TrapContext>,
-    pub time_data:      SyncUnsafeCell<TimeData>,
-    pub clear_child_tid:SyncUnsafeCell<Option<usize>>,
-    pub set_child_tid:  SyncUnsafeCell<Option<usize>>,
-    pub cpuset:         SyncUnsafeCell<CpuSet>,
-    pub prio:           SyncUnsafeCell<SchedParam>,
+    pub waker: SyncUnsafeCell<Option<Waker>>,
+    pub trap_cx: SyncUnsafeCell<TrapContext>,
+    pub time_data: SyncUnsafeCell<TimeData>,
+    pub clear_child_tid: SyncUnsafeCell<Option<usize>>,
+    pub set_child_tid: SyncUnsafeCell<Option<usize>>,
+    pub cpuset: SyncUnsafeCell<CpuSet>,
+    pub prio: SyncUnsafeCell<SchedParam>,
 
     pub exit_code: AtomicI32,
 }
@@ -673,7 +673,7 @@ impl TaskControlBlock {
     pub fn get_time_data_mut(&self) -> &mut TimeData {
         unsafe { &mut *self.time_data.get() }
     }
-    
+
     pub fn get_prio(&self) -> &SchedParam {
         unsafe { &*self.prio.get() }
     }

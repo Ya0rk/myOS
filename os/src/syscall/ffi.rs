@@ -2,7 +2,10 @@ use core::fmt::{self, Display};
 use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
-use crate::{hal::config::{BLOCK_SIZE, PATH_MAX}, sync::{timer::get_time_s, TimeSpec, TimeVal}};
+use crate::{
+    hal::config::{BLOCK_SIZE, PATH_MAX},
+    sync::{timer::get_time_s, TimeSpec, TimeVal},
+};
 
 #[derive(IntoBytes, Immutable)]
 #[allow(unused)]
@@ -98,7 +101,7 @@ pub enum SysCode {
     SYSCALL_CLOCK_SETTIME = 112,
     SYSCALL_CLOCK_GETTIME = 113,
     SYSCALL_CLOCK_NANOSLEEP = 115,
-    SYSCALL_SYSLOG    = 116,
+    SYSCALL_SYSLOG = 116,
     SYSCALL_SCHED_SETPARAM = 118,
     SYSCALL_SCHED_GETPARAM = 121,
     SYSCALL_SCHED_SETAFFINITY = 122,
@@ -112,14 +115,14 @@ pub enum SysCode {
     SYSCALL_SIGPROCMASK = 135,
     SYSCALL_SIGTIMEDWAIT = 137,
     SYSCALL_SIGRETURN = 139,
-    SYSCALL_SETGID    = 144,
-    SYSCALL_SETUID    = 146,
+    SYSCALL_SETGID = 144,
+    SYSCALL_SETUID = 146,
     SYSCALL_SETRESUID = 147,
-    SYSCALL_TIMES     = 153,
-    SYSCALL_SETPGID   = 154,
-    SYSCALL_GETPGID   = 155,
-    SYSCALL_SETSID    = 157,
-    SYSCALL_UNAME     = 160,
+    SYSCALL_TIMES = 153,
+    SYSCALL_SETPGID = 154,
+    SYSCALL_GETPGID = 155,
+    SYSCALL_SETSID = 157,
+    SYSCALL_UNAME = 160,
     SYSCALL_GETRUSAGE = 165,
     SYSCALL_UMASK = 166,
     SYSCALL_GETTIMEOFDAY = 169,
@@ -517,13 +520,13 @@ pub const SOL_TCP: u8 = 6;
 
 /// 如果协议是TCP，并且当前的套接字状态不是侦听(listen)或关闭(close)，
 /// 那么，当option_value不是零时，启用TCP保活定时 器，否则关闭保活定时器。
-pub const SO_KEEPALIVE: u32 = 9;// 设置是否保持连接
-pub const SO_SNDBUF: u32 = 7;   // 设置发送缓冲区大小
-pub const SO_RCVBUF: u32 = 8;   // 设置接收缓冲区大小
+pub const SO_KEEPALIVE: u32 = 9; // 设置是否保持连接
+pub const SO_SNDBUF: u32 = 7; // 设置发送缓冲区大小
+pub const SO_RCVBUF: u32 = 8; // 设置接收缓冲区大小
 pub const SO_OOBINLINE: u32 = 10; // 用于处理TCP紧急数据的一个设置
-pub const MAXSEGMENT: u32 = 2;  // 限制TCP 最大段大小 MSS
+pub const MAXSEGMENT: u32 = 2; // 限制TCP 最大段大小 MSS
 pub const CONGESTION: u32 = 13; // 拥塞控制算法
-pub const NODELAY: u32 = 1;     // 关闭Nagle算法
+pub const NODELAY: u32 = 1; // 关闭Nagle算法
 pub const IPPROTO_IP: u8 = 0;
 pub const IPPROTO_TCP: u8 = 6;
 

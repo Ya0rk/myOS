@@ -204,13 +204,19 @@ pub async fn user_trap_handler() {
                     // if (va == 0) {
                     //     panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
                     // }
-                    current_task().unwrap().with_mut_memory_space(|m| {
-                        m.handle_page_fault(va.into(), access_type)
-                    }).unwrap_or_else(|e| {
-                        use log::error;
-                        task.set_zombie();
-                        error!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
-                    });
+                    current_task()
+                        .unwrap()
+                        .with_mut_memory_space(|m| m.handle_page_fault(va.into(), access_type))
+                        .unwrap_or_else(|e| {
+                            use log::error;
+                            task.set_zombie();
+                            error!(
+                                "{:?} pc: {:#x} BADV: {:#x}",
+                                estat.cause(),
+                                era.pc(),
+                                badv::read().vaddr()
+                            );
+                        });
                 }
                 Exception::InstructionNotExist => {
                     error!(

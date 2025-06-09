@@ -1,16 +1,3 @@
-use core::cell::SyncUnsafeCell;
-use core::cmp::{max, min};
-use core::error;
-use core::intrinsics::unlikely;
-use core::ops::Add;
-use alloc::boxed::Box;
-use alloc::ffi::CString;
-use alloc::string::{String, ToString};
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-use alloc::vec;
-use log::{debug, info, warn};
-use lwext4_rust::file;
 use crate::fs::ext4::NormalFile;
 use crate::fs::procfs::inode;
 use crate::fs::{
@@ -26,6 +13,19 @@ use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
 use crate::syscall::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, IoVec, StatFs, AT_REMOVEDIR};
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{backtrace, Errno, SysResult};
+use alloc::boxed::Box;
+use alloc::ffi::CString;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
+use core::cell::SyncUnsafeCell;
+use core::cmp::{max, min};
+use core::error;
+use core::intrinsics::unlikely;
+use core::ops::Add;
+use log::{debug, info, warn};
+use lwext4_rust::file;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
@@ -182,7 +182,9 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize) {
+        if unlikely(
+            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize,
+        ) {
             return Err(Errno::EBADF);
         }
         let inode = match task.get_file_by_fd(dirfd as usize) {
@@ -386,7 +388,11 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
                     unreachable!()
                 }
             };
-            info!("[sys_openat] taskid = {}, alloc fd finished, new fd = {}",task.get_pid(), fd);
+            info!(
+                "[sys_openat] taskid = {}, alloc fd finished, new fd = {}",
+                task.get_pid(),
+                fd
+            );
             if unlikely(fd > RLIMIT_NOFILE) {
                 return Err(Errno::EMFILE);
             } else {
@@ -402,7 +408,11 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
 
 pub fn sys_close(fd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
-    info!("[sys_close] start, pid = {}, closed fd = {}", task.get_pid(), fd);
+    info!(
+        "[sys_close] start, pid = {}, closed fd = {}",
+        task.get_pid(),
+        fd
+    );
     if unlikely(fd >= task.fd_table_len()) {
         return Err(Errno::EMFILE);
     }
@@ -495,7 +505,7 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
         return Err(Errno::EFAULT);
     }
 
-    let task =  current_task().unwrap();
+    let task = current_task().unwrap();
     let token = task.get_user_token();
     let cwd = task.get_current_path();
     let length: usize = cwd.len() + 1;
@@ -508,7 +518,7 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     if unlikely(length > size) {
         return Err(Errno::ERANGE);
     }
-    
+
     let ptr = buf as *mut u8;
     if unlikely(buf != 0 && size == 0) {
         return Err(Errno::EINVAL);
@@ -604,7 +614,9 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize) {
+        if unlikely(
+            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize,
+        ) {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).unwrap();
@@ -660,7 +672,10 @@ pub fn sys_mount(
     data: usize,
 ) -> SysResult<usize> {
     info!("[sys_mount] start");
-    println!("[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = {}", source, target, fstype, flags, data);
+    println!(
+        "[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = {}",
+        source, target, fstype, flags, data
+    );
     if unlikely(source == 0 || target == 0 || fstype == 0) {
         return Err(Errno::EFAULT);
     }
@@ -997,7 +1012,10 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
-    info!("[sys_fcntl] start, fd = {}, cmd = {:?}, arg = {}", fd, cmd, arg);
+    info!(
+        "[sys_fcntl] start, fd = {}, cmd = {:?}, arg = {}",
+        fd, cmd, arg
+    );
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }

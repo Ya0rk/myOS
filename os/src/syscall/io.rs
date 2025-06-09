@@ -1,10 +1,19 @@
 // this file is used for ppoll and pselect6
-use core::{intrinsics::unlikely, ptr::NonNull, time::Duration};
 use alloc::{sync::Arc, vec::Vec};
+use core::{intrinsics::unlikely, ptr::NonNull, time::Duration};
 use hashbrown::{HashMap, HashSet};
 use log::info;
 
-use crate::{signal::SigMask, sync::{TimeSpec, TimeoutFuture}, syscall::{ffi::{PollEvents, PollFd}, io_async::{FdSet, IoFutrue, FD_PER_BITS, FD_SET_SIZE}}, task::{current_task, TaskControlBlock}, utils::{Errno, SysResult}};
+use crate::{
+    signal::SigMask,
+    sync::{TimeSpec, TimeoutFuture},
+    syscall::{
+        ffi::{PollEvents, PollFd},
+        io_async::{FdSet, IoFutrue, FD_PER_BITS, FD_SET_SIZE},
+    },
+    task::{current_task, TaskControlBlock},
+    utils::{Errno, SysResult},
+};
 
 use super::io_async::UptrFmt;
 
@@ -103,12 +112,17 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, tmo_p: usize, sigmask: usize) ->
 
 /// control device
 pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
-    info!("[sys_ioctl] start fd: {}, op: {:#x}, arg: {:#x}", fd, op, arg);
+    info!(
+        "[sys_ioctl] start fd: {}, op: {:#x}, arg: {:#x}",
+        fd, op, arg
+    );
     if unlikely(arg == 0) {
         return Err(Errno::EFAULT);
     }
     let task = current_task().unwrap();
-    if unlikely(fd > task.fd_table_len()) { return Err(Errno::EBADF); }
+    if unlikely(fd > task.fd_table_len()) {
+        return Err(Errno::EBADF);
+    }
     // Ok(0)
     if let Some(file) = task.get_file_by_fd(fd) {
         if file.is_deivce() {

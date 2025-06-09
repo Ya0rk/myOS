@@ -12,6 +12,7 @@ use crate::utils::SysResult;
 pub use ffi::CloneFlags;
 pub use ffi::CpuSet;
 pub use ffi::RLimit64;
+pub use ffi::SchedParam;
 pub use ffi::ShutHow;
 pub use ffi::StatFs;
 use ffi::SysCode;
@@ -23,8 +24,6 @@ use mm::{sys_membarrier, sys_mprotect, sys_mremap, sys_shmat, sys_shmctl, sys_sh
 use net::*;
 use process::*;
 use sync::*;
-pub use ffi::SchedParam;
-
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
@@ -251,8 +250,21 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_EXIT_GROUP => sys_exit_group(args[0] as i32),
         SysCode::SYSCALL_CLOCK_GETTIME => sys_clock_gettime(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_CLOCK_SETTIME => sys_clock_settime(args[0] as usize, args[1] as usize),
-        SysCode::SYSCALL_SENDFILE => sys_sendfile(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize).await,
-        SysCode::SYSCALL_FACCESSAT => sys_faccessat(args[0] as isize, args[1] as usize, args[2] as u32, args[3] as u32),
+        SysCode::SYSCALL_SENDFILE => {
+            sys_sendfile(
+                args[0] as usize,
+                args[1] as usize,
+                args[2] as usize,
+                args[3] as usize,
+            )
+            .await
+        }
+        SysCode::SYSCALL_FACCESSAT => sys_faccessat(
+            args[0] as isize,
+            args[1] as usize,
+            args[2] as u32,
+            args[3] as u32,
+        ),
         SysCode::SYSCALL_LSEEK => sys_lseek(args[0] as usize, args[1] as isize, args[2] as usize),
         SysCode::SYSCALL_SETSID => sys_setsid(),
         SysCode::SYSCALL_SETPGID => sys_setpgid(args[0] as usize, args[1] as usize),
@@ -354,10 +366,10 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_SHMGET => sys_shmget(args[0] as isize, args[1] as usize, args[2] as i32),
         SysCode::SYSCALL_SHMAT => sys_shmat(args[0] as isize, args[1] as *const u8, args[2] as i32),
         SysCode::SYSCALL_SHMDT => sys_shmdt(args[0] as *const u8),
-        SysCode::SYSCALL_SHMCTL => sys_shmctl(args[0] as isize, args[1] as isize, args[2] as *const u8),
-        
-        
-        
+        SysCode::SYSCALL_SHMCTL => {
+            sys_shmctl(args[0] as isize, args[1] as isize, args[2] as *const u8)
+        }
+
         _ => {
             log::error!("Unsupported syscall_id: {}", syscall_id);
             Ok(0)
