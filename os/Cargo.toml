@@ -49,7 +49,7 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 board_qemu = []
-default = ["error", "test", "qemu_riscv", "mbshell"]
+default = ["error", "test", "qemu_riscv", "autorun"]
 error = []
 warn = []
 autorun = []
