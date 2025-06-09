@@ -3,7 +3,6 @@ use core::mem::{size_of, uninitialized};
 use core::time::{self, Duration};
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::fs::{open, resolve_path, AbsPath, FileClass, OpenFlags};
-use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref, user_slice_mut};
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
@@ -23,8 +22,7 @@ use crate::sync::{
     NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER,
 };
 use crate::syscall::ffi::{
-    CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO,
-    RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD,
+    CloneFlags, RlimResource, Rusage, Sysinfo, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD
 };
 use crate::syscall::io::SigMaskGuard;
 use crate::syscall::{CpuSet, RLimit64, SchedParam};
@@ -38,8 +36,6 @@ use alloc::ffi::CString;
 use alloc::string::{String, ToString};
 use alloc::task;
 use alloc::vec::Vec;
-use core::mem::{size_of, uninitialized};
-use core::time::{self, Duration};
 use log::{debug, error, info};
 use lwext4_rust::bindings::true_;
 use num_enum::TryFromPrimitive;

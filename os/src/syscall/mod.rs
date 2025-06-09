@@ -23,15 +23,8 @@ use mm::{sys_membarrier, sys_mprotect, sys_mremap, sys_shmat, sys_shmctl, sys_sh
 use net::*;
 use process::*;
 use sync::*;
-use ffi::SysCode;
-pub use ffi::CloneFlags;
-pub use ffi::ShutHow;
-pub use ffi::RLimit64;
-pub use ffi::StatFs;
-pub use ffi::CpuSet;
 pub use ffi::SchedParam;
-use crate::sync::TimeSpec;
-use crate::utils::SysResult;
+
 
 /// handle syscall exception with `syscall_id` and other arguments
 pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
