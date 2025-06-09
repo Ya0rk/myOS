@@ -254,7 +254,7 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // 此处应当使用/proc/self/exe去调用,在shell应用在直接执行这个文件失败后一般而言会转而使用/proc/self/exe去执行,例如
     // execve("./a.sh", ["./a.sh"], 0x39be2b28 /* 43 vars */) = -1 ENOEXEC (Exec format error)
     // execve("/proc/self/exe", ["ash", "./a.sh"], 0x39be2b28 /* 43 vars */) = 0
-    println!("[sys_execve] path = {}", path);
+    // println!("[sys_execve] path = {}", path);
     if path.ends_with(".sh") || path.ends_with("iperf3") {
         let mut prefix = cwd.clone();
         if cwd.ends_with("basic") {
@@ -859,7 +859,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
         }
         Target::ProcessGroup(p) => {
             let target_group = get_target_proc_group(p).ok_or(Errno::ESRCH)?;
-            println!("[sys_kill] target_group = {:?},", target_group);
+            // println!("[sys_kill] target_group = {:?},", target_group);
             let cur_task = current_task().unwrap();
             let sender_pid = cur_task.get_pgid();
             let siginfo = SigInfo::new(
@@ -926,7 +926,7 @@ pub fn sys_prlimit64(
     // 修改当前限制
     if new_limit != 0 {
         let new_limit = unsafe { *(new_limit as *const RLimit64) };
-        println!("new limit = {:?}", new_limit);
+        // println!("new limit = {:?}", new_limit);
         match rs {
             RlimResource::Nofile => {
                 task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;
@@ -1283,7 +1283,7 @@ pub fn sys_getgid() -> SysResult<usize> {
 
 pub fn sys_setgid(gid: usize) -> SysResult<usize> {
     info!("[sys_setgid] start, gid = {}", gid);
-    println!("[sys_setgid] start, gid = {}", gid);
+    // println!("[sys_setgid] start, gid = {}", gid);
     Ok(0)
 }
 

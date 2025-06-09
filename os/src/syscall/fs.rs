@@ -672,10 +672,10 @@ pub fn sys_mount(
     data: usize,
 ) -> SysResult<usize> {
     info!("[sys_mount] start");
-    println!(
-        "[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = {}",
-        source, target, fstype, flags, data
-    );
+    // println!(
+    //     "[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = {}",
+    //     source, target, fstype, flags, data
+    // );
     if unlikely(source == 0 || target == 0 || fstype == 0) {
         return Err(Errno::EFAULT);
     }
