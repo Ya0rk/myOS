@@ -212,8 +212,13 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // 此处应当使用/proc/self/exe去调用,在shell应用在直接执行这个文件失败后一般而言会转而使用/proc/self/exe去执行,例如
     // execve("./a.sh", ["./a.sh"], 0x39be2b28 /* 43 vars */) = -1 ENOEXEC (Exec format error)
     // execve("/proc/self/exe", ["ash", "./a.sh"], 0x39be2b28 /* 43 vars */) = 0
+    println!("[sys_execve] path = {}", path);
     if path.ends_with(".sh") || path.ends_with("iperf3"){
-        path = [cwd.clone(),"/".to_string(), "busybox".to_string()].concat();
+        let mut prefix = cwd.clone();
+        if cwd.ends_with("basic") {
+            prefix = cwd.strip_suffix("basic").unwrap().to_string();
+        }
+        path = [prefix,"/".to_string(), "busybox".to_string()].concat();
         argv.insert(0, path.clone());
         argv.insert(1, "sh".to_string());
     }
