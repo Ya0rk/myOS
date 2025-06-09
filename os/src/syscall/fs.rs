@@ -467,8 +467,9 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 ///
 /// Success: 返回当前工作目录的长度;  Fail: 返回-1
 pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
-    info!("[sys_getcwd] start, buf = {}, size = {}", buf, size);
-    if unlikely(buf > USER_SPACE_TOP || size > PATH_MAX) {
+    info!("[sys_getcwd] start");
+    info!("[sys_getcwd] buf = {:#x}, size = {}", buf, size);
+    if buf == 0 || buf > USER_SPACE_TOP || size > PATH_MAX {
         return Err(Errno::EFAULT);
     }
 
