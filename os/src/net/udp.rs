@@ -103,7 +103,7 @@ impl UdpSocket {
 impl Socket for UdpSocket {
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
         info!("[Udp::bind] start, addr = {:?}", addr);
-        let mut endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        let mut endpoint = IpEndpoint::try_from(addr.clone())?;
         let mut sockmeta = self.sockmeta.lock();
         if sockmeta.port.is_some() {
             return Err(Errno::EADDRINUSE);
@@ -137,12 +137,12 @@ impl Socket for UdpSocket {
         Err(Errno::EOPNOTSUPP)
     }
     async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
-        unimplemented!()
+        Err(Errno::EOPNOTSUPP)
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {
         info!("[Udp::connect] start, addr = {:?}", addr);
         /// 与TCP不同，UDP的connect函数不会引发三次握手，而是将目标IP和端口记录下来
-        let remote_endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        let remote_endpoint = IpEndpoint::try_from(addr.clone())?;
         self.check_addr(remote_endpoint);
         self.sockmeta.lock().remote_end = Some(remote_endpoint);
         Ok(())

@@ -239,7 +239,7 @@ impl TcpSocket {
 impl Socket for TcpSocket {
     fn bind(&self, addr: &SockAddr) -> SysResult<()> {
         info!("[TcpSocket::bind]");
-        let mut local_point = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        let mut local_point = IpEndpoint::try_from(addr.clone())?;
         let mut sockmeta = self.sockmeta.lock();
         if sockmeta.local_end.is_some() {
             info!("[bind] The socket is already bound to an address.");
@@ -300,7 +300,7 @@ impl Socket for TcpSocket {
     }
     async fn connect(&self, addr: &SockAddr) -> SysResult<()> {
         info!("[Tcp::connect] start, remoteaddr = {:?}", addr);
-        let mut remote_endpoint = IpEndpoint::try_from(addr.clone()).map_err(|_| Errno::EINVAL)?;
+        let mut remote_endpoint = IpEndpoint::try_from(addr.clone())?;
         self.check_addr(remote_endpoint)?;
         yield_now().await;
 

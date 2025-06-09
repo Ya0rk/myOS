@@ -1,12 +1,4 @@
-use crate::{
-    mm::VirtAddr,
-    sync::{get_waker, suspend_now, yield_now, TimeSpec, TimeoutFuture},
-    task::{
-        current_task, get_task_by_pid, FutexFuture, FutexHashKey, FutexOp, Pid,
-        FUTEX_BITSET_MATCH_ANY, ROBUST_LIST_HEAD_SIZE,
-    },
-    utils::{Errno, SysResult},
-};
+use core::{intrinsics::{atomic_load_acquire, atomic_load_relaxed, unlikely}, time::Duration};
 use alloc::task;
 use core::{
     intrinsics::{atomic_load_acquire, atomic_load_relaxed},
@@ -33,9 +25,7 @@ pub async fn sys_futex(
 ) -> SysResult<usize> {
     let mut op = FutexOp::from_bits(futex_op).ok_or(Errno::EINVAL)?;
     info!("[sys_futex] start, futex_op = {:?}", op);
-    if uaddr == 0 {
-        return Err(Errno::EACCES);
-    }
+    if unlikely(uaddr == 0) { return Err(Errno::EACCES); }
     let key = FutexHashKey::get_futex_key(uaddr, op);
     // 按照linux做一些判断
     if op.contains(FutexOp::FUTEX_CLOCK_REALTIME) {
@@ -134,14 +124,8 @@ pub async fn sys_futex(
 /// 否则执行下一步，即调用futex_wait_queue_me。
 /// 后者主要做了几件事：1、将当前的task插入等待队列；2、启动定时任务；3、触发重新调度。
 /// 接下来当task能够继续执行时会判断自己是如何被唤醒的，并释放hrtimer退出。
-async fn do_futex_wait(
-    uaddr: usize,
-    val: u32,
-    timeout: usize,
-    bitset: u32,
-    key: FutexHashKey,
-) -> SysResult<usize> {
-    if bitset == 0 {
+async fn do_futex_wait(uaddr: usize, val: u32, timeout: usize, bitset: u32, key: FutexHashKey) -> SysResult<usize> {
+    if unlikely(bitset == 0) {
         return Err(Errno::EINVAL);
     }
     let task = current_task().unwrap();
@@ -181,7 +165,7 @@ async fn do_futex_wait(
 }
 
 fn do_futex_wake(uaddr: usize, wake_n: u32, bitset: u32, key: FutexHashKey) -> SysResult<usize> {
-    if bitset == 0 {
+    if unlikely(bitset == 0) {
         return Err(Errno::EINVAL);
     }
 
@@ -195,7 +179,7 @@ fn do_futex_wake(uaddr: usize, wake_n: u32, bitset: u32, key: FutexHashKey) -> S
 /// 程的信息。在线程被中断时，系统会将线程的相关信息保存在robust列表中，等线程重新启动时再从列表中读取信息，以便继续执行。
 pub fn sys_set_robust_list(head: usize, len: usize) -> SysResult<usize> {
     info!("[sys_set_robust_list] start");
-    if len != ROBUST_LIST_HEAD_SIZE {
+    if unlikely(len != ROBUST_LIST_HEAD_SIZE) {
         info!("robust list len invalid");
         return Err(Errno::EINVAL);
     }

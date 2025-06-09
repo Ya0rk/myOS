@@ -7,7 +7,7 @@ use crate::{
 use core::{fmt::Display, time::Duration};
 use zerocopy::IntoBytes;
 
-#[derive(Copy, Clone, IntoBytes, Debug)]
+#[derive(Copy, Clone, IntoBytes, Debug, Default)]
 #[repr(C)]
 pub struct TimeSpec {
     /// 秒

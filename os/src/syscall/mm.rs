@@ -1,3 +1,7 @@
+
+
+use core::intrinsics::unlikely;
+
 use log::{error, info, warn};
 use lwext4_rust::bindings::EINVAL;
 
@@ -37,7 +41,7 @@ pub fn sys_mmap(
     offset: usize,
 ) -> SysResult<usize> {
     let addr = addr as usize;
-    if length == 0 || (addr & PAGE_MASK != 0) || (offset & PAGE_MASK != 0) {
+    if unlikely(length == 0 || (addr & PAGE_MASK != 0) || (offset & PAGE_MASK != 0)) {
         info!("aaaaa");
         return Err(Errno::EINVAL);
     }
@@ -97,7 +101,7 @@ pub fn sys_mmap(
 
 pub fn sys_munmap(addr: *const u8, length: usize) -> SysResult<usize> {
     let addr = addr as usize;
-    if (!is_aligned_to_page(addr)) {
+    if unlikely(!is_aligned_to_page(addr)) {
         return Err(Errno::EINVAL);
     }
     let task = current_task().unwrap();
@@ -108,7 +112,7 @@ pub fn sys_munmap(addr: *const u8, length: usize) -> SysResult<usize> {
 
 pub fn sys_mprotect(addr: *const u8, length: usize, prot: i32) -> SysResult<usize> {
     let addr = addr as usize;
-    if (!is_aligned_to_page(addr)) {
+    if unlikely(!is_aligned_to_page(addr)) {
         return Err(Errno::EINVAL);
     }
     let task = current_task().unwrap();
@@ -143,24 +147,24 @@ pub fn sys_shmget(key: isize, size: usize, shmflg: i32) -> SysResult<usize> {
     let size = align_up_by_page(size);
     let task = current_task().unwrap();
     if let Some(shmobj) = SHARED_MEMORY_MANAGER.read().get(&key32) {
-        if shmflag.contains(ShmGetFlags::IPC_EXCL) {
+        if unlikely(shmflag.contains(ShmGetFlags::IPC_EXCL)) {
             return Err(Errno::EEXIST);
         }
-        if size > shmobj.size() {
+        if unlikely(size > shmobj.size()) {
             return Err(Errno::EINVAL);
         }
-        // not used
-        if !shmobj.shmid_ds.shm_perm.check_perm(IPCPermMode::empty()) {
+        // not used 
+        if unlikely(!shmobj.shmid_ds.shm_perm.check_perm(IPCPermMode::empty())) {
             return Err(Errno::EPERM);
         }
         /// todo: check perm
         info!("[sys_shmget] existed, ret = {}", key32);
         return Ok(key32 as usize);
     }
-    if !shmflag.contains(ShmGetFlags::IPC_CREAT) {
+    if unlikely(!shmflag.contains(ShmGetFlags::IPC_CREAT)) {
         return Err(Errno::ENOENT);
     }
-    if size == 0 {
+    if unlikely(size == 0) {
         return Err(Errno::EINVAL);
     }
     let mode = IPCPermMode::from_bits_truncate(shmflg as u32 & 0o777);
