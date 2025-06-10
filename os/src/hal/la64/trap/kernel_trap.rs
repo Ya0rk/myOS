@@ -56,7 +56,8 @@ pub fn kernel_trap_handler() {
                         }
                     };
                     
-                    current_task().unwrap().with_mut_memory_space(|m| {
+                    let task = current_task().unwrap();
+                    task.with_mut_memory_space(|m| {
                         m.handle_page_fault(va.into(), access_type)
                     }).unwrap_or_else(|e| {
                         use log::error;
