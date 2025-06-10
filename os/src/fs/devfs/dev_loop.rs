@@ -137,10 +137,6 @@ impl InodeTrait for DevLoopInode {
         Ok(())
     }
 
-    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
-        None
-    }
-
     fn node_type(&self) -> InodeType {
         InodeType::BlockDevice
     }
@@ -176,14 +172,6 @@ impl InodeTrait for DevLoopInode {
         let mut stat = Kstat::new();
         stat.st_mode = S_IFCHR;
         stat
-    }
-
-    fn unlink(&self, _child_abs_path: &str) -> SysResult<usize> {
-        Ok(0)
-    }
-
-    fn link(&self, _new_path: &str) -> SysResult<usize> {
-        Err(Errno::EACCES)
     }
 
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {

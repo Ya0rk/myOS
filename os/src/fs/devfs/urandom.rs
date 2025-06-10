@@ -76,10 +76,6 @@ impl InodeTrait for DevRandom {
         Ok(())
     }
 
-    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
-        None
-    }
-
     fn node_type(&self) -> InodeType {
         InodeType::CharDevice
     }
@@ -116,14 +112,6 @@ impl InodeTrait for DevRandom {
         stat
     }
 
-    fn unlink(&self, _child_abs_path: &str) -> SysResult<usize> {
-        Ok(0)
-    }
-
-    fn link(&self, _new_path: &str) -> SysResult<usize> {
-        Err(crate::utils::Errno::EACCES)
-    }
-
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         unimplemented!("DevRandom does not have a timestamp")
     }
@@ -142,4 +130,3 @@ impl InodeTrait for DevRandom {
         0
     }
 }
-

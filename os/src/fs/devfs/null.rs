@@ -115,9 +115,6 @@ impl InodeTrait for DevNullInode {
         stat
     }
 
-    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
-        None // /dev/null 不支持创建子文件或目录
-    }
 
     fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None // /dev/null 不支持路径解析
@@ -147,13 +144,6 @@ impl InodeTrait for DevNullInode {
         // /dev/null 不需要同步操作
     }
 
-    fn unlink(&self, _child_name: &str) -> SysResult<usize> {
-        Err(Errno::EINVAL) // /dev/null 不支持删除操作
-    }
-
-    fn link(&self, _new_path: &str) -> SysResult<usize> {
-        Err(Errno::EINVAL) // /dev/null 不支持链接操作
-    }
 
     async fn read_all(&self) -> SysResult<Vec<u8>> {
         Ok(Vec::new()) // /dev/null 的读取始终返回空内容

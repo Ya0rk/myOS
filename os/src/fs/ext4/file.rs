@@ -196,30 +196,30 @@ impl FileTrait for NormalFile {
     }
 
     fn rename(&mut self, new_path: String, flags: RenameFlags) -> SysResult<usize> {
-        if flags.contains(RenameFlags::RENAME_EXCHANGE)
-            && (flags.contains(RenameFlags::RENAME_NOREPLACE)
-                || flags.contains(RenameFlags::RENAME_WHITEOUT))
-        {
-            return Err(Errno::EINVAL);
-        }
-
-        let newpath_exist = self.is_child(&new_path);
-        if newpath_exist && flags.contains(RenameFlags::RENAME_NOREPLACE) {
-            return Err(Errno::EEXIST);
-        }
-        if flags.contains(RenameFlags::RENAME_EXCHANGE) && !newpath_exist {
-            return Err(Errno::ENOENT);
-        }
-
-        let old_path = self.path.clone();
-        if new_path.len() > PATH_MAX || old_path.len() > PATH_MAX {
-            return Err(Errno::ENAMETOOLONG);
-        }
-
-        self.metadata.inode.rename(&old_path, &new_path);
-        self.path = new_path;
-
-        Ok(0)
+        // if flags.contains(RenameFlags::RENAME_EXCHANGE)
+        //     && (flaes.contains(RenameFlags::RENAME_NOREPLACE)
+        //         || flags.contains(RenameFlags::RENAME_WHITEOUT))
+        // {
+        //     return Err(Errno::EINVAL);
+        // }
+        //
+        // let newpath_exist = self.is_child(&new_path);
+        // if newpath_exist && flags.contains(RenameFlags::RENAME_NOREPLACE) {
+        //     return Err(Errno::EEXIST);
+        // }
+        // if flags.contains(RenameFlags::RENAME_EXCHANGE) && !newpath_exist {
+        //     return Err(Errno::ENOENT);
+        // }
+        //
+        // let old_path = self.path.clone();
+        // if new_path.len() > PATH_MAX || old_path.len() > PATH_MAX {
+        //     return Err(Errno::ENAMETOOLONG);
+        // }
+        //
+        // self.metadata.inode.rename(&old_path, &new_path);
+        // self.path = new_path;
+        //
+        Err(Errno::EIO)
     }
 
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
@@ -301,4 +301,3 @@ impl FileTrait for NormalFile {
             .await
     }
 }
-

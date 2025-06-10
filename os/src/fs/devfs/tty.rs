@@ -89,10 +89,6 @@ impl InodeTrait for DevTty {
         Ok(())
     }
 
-    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
-        None
-    }
-
     fn node_type(&self) -> InodeType {
         InodeType::CharDevice
     }
@@ -129,14 +125,6 @@ impl InodeTrait for DevTty {
         stat
     }
 
-    fn unlink(&self, _child_abs_path: &str) -> SysResult<usize> {
-        Ok(0)
-    }
-
-    fn link(&self, _new_path: &str) -> SysResult<usize> {
-        Err(crate::utils::Errno::EACCES)
-    }
-
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         unimplemented!("DevTty does not have a timestamp")
     }
@@ -155,4 +143,3 @@ impl InodeTrait for DevTty {
         0
     }
 }
-

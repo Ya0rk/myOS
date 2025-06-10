@@ -85,15 +85,7 @@ impl InodeTrait for ProcFsInode {
         // 疑似被弃用
         Ok(())
     }
-    fn do_create(
-        &self,
-        _path: &str,
-        _ty: crate::fs::InodeType,
-    ) -> Option<alloc::sync::Arc<dyn InodeTrait>> {
-        // 这里不需要创建
-        // 应当返回SysResult会更好,因为这个文件系统下就是不给创建文件
-        None
-    }
+
     fn node_type(&self) -> crate::fs::InodeType {
         match self.inner {
             ProcFsInodeInner::root => crate::fs::InodeType::Dir,
@@ -226,14 +218,6 @@ impl InodeTrait for ProcFsInode {
             }
         }
     }
-    fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
-        // 这里不需要unlink
-        Ok(0)
-    }
-    fn link(&self, new_path: &str) -> SysResult<usize> {
-        // 这里不需要link
-        Err(crate::utils::Errno::EACCES)
-    }
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         &self.timestamp
     }
@@ -269,4 +253,3 @@ impl InodeTrait for ProcFsInode {
         }
     }
 }
-
