@@ -48,13 +48,6 @@ pub fn sys_mmap(
         info!("aaaaa");
         return Err(Errno::EINVAL);
     }
-<<<<<<< HEAD
-    let flags = MmapFlags::from_bits_truncate(flags);
-    let prot = MmapProt::from_bits_truncate(prot);
-    info!("[sys_mmap] addr:{addr:#x}, length:{length:#x}, prot:{prot:?}, flags:{flags:?}, fd:{fd}, offset:{offset:#x}");
-    let perm = MapPerm::from(prot);
-=======
->>>>>>> origin/glibc
 
     // 将length对齐PAGESIZE
     let padding = match (PAGE_SIZE - length % PAGE_SIZE) {
