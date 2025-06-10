@@ -31,6 +31,7 @@ pub fn kernel_trap_handler() {
             // 中断0 --- 外部中断处理
             unimplemented!("loongarch64 Trap::Interrupt(Interrupt::HWI0)");
         }
+<<<<<<< HEAD
         Trap::Exception(e) => match e {
             Exception::LoadPageFault
             | Exception::StorePageFault
@@ -68,6 +69,40 @@ pub fn kernel_trap_handler() {
                             era.pc(),
                             badv::read().vaddr()
                         );
+=======
+        Trap::Exception(e) => {
+            match e {
+                Exception::LoadPageFault |
+                Exception::StorePageFault |
+                Exception::FetchPageFault |
+                Exception::PageModifyFault |
+                Exception::PageNonReadableFault |
+                Exception::PageNonExecutableFault => {
+                    let va = badv::read().vaddr();  
+                    info!("[kernel_trap_handler] meet a pagefault {:?} at {:#x}", e, va);
+                    let access_type = match e {
+                        Exception::LoadPageFault | Exception::PageNonReadableFault => {
+                            PageFaultAccessType::RO
+                        }
+                        Exception::StorePageFault | Exception::PageModifyFault => {
+                            PageFaultAccessType::RW
+                        }
+                        Exception::FetchPageFault | Exception::PageNonExecutableFault => {
+                            PageFaultAccessType::RX
+                        }
+                        _=> {
+                            unreachable!()
+                        }
+                    };
+                    
+                    let task = current_task().unwrap();
+                    task.with_mut_memory_space(|m| {
+                        m.handle_page_fault(va.into(), access_type)
+                    }).unwrap_or_else(|e| {
+                        use log::error;
+                        task.set_zombie();
+                        error!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+>>>>>>> origin/glibc
                     });
             }
 

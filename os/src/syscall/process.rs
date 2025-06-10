@@ -1,4 +1,5 @@
 use crate::fs::{open, resolve_path, AbsPath, FileClass, OpenFlags};
+<<<<<<< HEAD
 use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref, user_slice_mut};
 use crate::mm::{
@@ -22,6 +23,14 @@ use crate::syscall::ffi::{
     CloneFlags, RlimResource, Rusage, Sysinfo, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN,
     LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD,
 };
+=======
+use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref, user_ref_mut, user_slice_mut};
+use crate::mm::{translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer};
+use crate::signal::{KSigAction, SigAction, SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom, UContext, WhichQueue, MAX_SIGNUM, SIGBLOCK, SIGSETMASK, SIGUNBLOCK, SIG_DFL, SIG_IGN};
+use crate::sync::time::{ITimerVal, CLOCK_BOOTTIME, CLOCK_MONOTONIC, CLOCK_PROCESS_CPUTIME_ID, CLOCK_REALTIME, CLOCK_REALTIME_COARSE, CLOCK_THREAD_CPUTIME_ID, ITIMER_PROF, ITIMER_REAL, ITIMER_VIRTUAL, TIMER_ABSTIME};
+use crate::sync::{get_waker, itimer_callback, sleep_for, suspend_now, time_duration, yield_now, ItimerFuture, NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER};
+use crate::syscall::ffi::{CloneFlags, RlimResource, Rusage, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD};
+>>>>>>> origin/glibc
 use crate::syscall::io::SigMaskGuard;
 use crate::syscall::{CpuSet, RLimit64, SchedParam};
 use crate::task::{
@@ -177,10 +186,14 @@ pub fn sys_clone(
         false => current_task.process_fork(flag),
     };
     drop(current_task);
+<<<<<<< HEAD
     info!(
         "[sys_clone] start, flags: {:?}, ptid: {}, tls: {}, ctid: {:#x}",
         flag, ptid, tls, ctid
     );
+=======
+    info!("[sys_clone] start, flags: {:?}, ptid: {}, tls: {:#x}, ctid: {:#x}", flag, ptid, tls, ctid);
+>>>>>>> origin/glibc
     let new_pid = new_task.get_pid();
     let child_trap_cx = new_task.get_trap_cx_mut();
     // 因为我们已经在trap_handler中增加了sepc，所以这里不需要再次增加
@@ -204,9 +217,19 @@ pub fn sys_clone(
     // set_child_tid 会被设置为传递给 clone() 的 ctid 参数的值。
     // 新线程启动时，会将其线程 ID 写入该地址
     if flag.contains(CloneFlags::CLONE_CHILD_SETTID) {
+<<<<<<< HEAD
         unsafe {
             core::ptr::write(ctid as *mut usize, new_pid as usize);
         }
+=======
+        // TODO: 临时只判断是否为0
+        if ctid == 0 {
+            return Err(Errno::EINVAL);
+        }
+        // unsafe { core::ptr::write(ctid as *mut usize, new_pid as usize); }
+        let ctid_ptr = user_ref_mut::<usize>(ctid.into())?.unwrap();
+        *ctid_ptr = new_pid as usize;
+>>>>>>> origin/glibc
         new_task.set_child_settid(ctid);
     }
     // 检查是否需要设置child_cleartid,在线程退出时会将指向的地址清零
@@ -430,8 +453,8 @@ pub fn sys_getrandom(buf: *const u8, buflen: usize, _flags: usize) -> SysResult<
 
 /// set pointer to thread ID
 pub fn sys_set_tid_address(tidptr: usize) -> SysResult<usize> {
-    info!("[sys_set_tid_address] start");
-    let task = current_task().unwrap();
+    info!("[sys_set_tid_address] tidptr = {:#x}", tidptr);
+    let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
     task.set_child_cleartid(tidptr);
     Ok(task.get_pid())
 }

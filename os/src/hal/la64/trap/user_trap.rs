@@ -149,14 +149,32 @@ pub async fn user_trap_handler() {
                     let mut cx = current_trap_cx();
                     cx.sepc += 4;
                     let syscall_id = cx.user_gp.a7;
+<<<<<<< HEAD
                     let args = [
                         cx.user_gp.a0,
+=======
+                    let args  = if syscall_id == 220 {
+                        [cx.user_gp.a0,
+                        cx.user_gp.a1,
+                        cx.user_gp.a2,
+                        cx.user_gp.a4,
+                        cx.user_gp.a3,
+                        cx.user_gp.a5]
+                    } else {
+                        [cx.user_gp.a0,
+>>>>>>> origin/glibc
                         cx.user_gp.a1,
                         cx.user_gp.a2,
                         cx.user_gp.a3,
                         cx.user_gp.a4,
+<<<<<<< HEAD
                         cx.user_gp.a5,
                     ];
+=======
+                        cx.user_gp.a5]
+                    }
+                    ;
+>>>>>>> origin/glibc
                     // info!("[user_trap_handler] syscall id:{}, args:{:?}", syscall_id, args);
                     let result = syscall(syscall_id, args).await;
 
