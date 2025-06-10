@@ -1,4 +1,4 @@
-use super::alloc_ino;
+use super::{alloc_ino, Dentry};
 use crate::{
     fs::{
         ext4::NormalFile, ffi::InodeType, page_cache::PageCache, AbsPath, Dirent, FileClass,
@@ -96,8 +96,8 @@ pub trait InodeTrait: Send + Sync {
     ///
     /// Some(Arc<dyn Inode>) if creation succeeds, None otherwise.
     /// 这里只是创建一个inode，打开文件还需要使用file结构体包裹inode，然后返回file
-    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
-        todo!()
+    fn do_create(&self, bare_dentry: Arc<Dentry>, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
+        None
     }
     /// 确实应当剥夺walk去创造Inode的权利
     fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
@@ -165,12 +165,16 @@ pub trait InodeTrait: Send + Sync {
     /// # Returns
     ///
     /// Ok(0) on success, or an error code.
-    fn unlink(&self, _child_name: &str) -> SysResult<usize> {
-        todo!();
+    /// unlink 一个路径，将 inode 和这个路径解耦
+    /// 注意到，应当传入一个有效的 dentry
+    fn unlink(&self, valid_dentry: Arc<Dentry>) -> SysResult<usize> {
+        Err(Errno::EINVAL)
     }
 
-    fn link(&self, _new_path: &str) -> SysResult<usize> {
-        todo!();
+    /// link 一个路径，将 inode 和这个路径绑定
+    /// 注意到，应当传入一个无效的（也就是没有被使用的）dentry
+    fn link(&self, bare_dentry: Arc<Dentry>) -> SysResult<usize> {
+        Err(Errno::EINVAL)
     }
 
     /// Reads the entire contents of the file.
@@ -194,8 +198,8 @@ pub trait InodeTrait: Send + Sync {
     fn get_page_cache(&self) -> Option<Arc<PageCache>>;
 
     /// 更改名字
-    fn rename(&self, old_path: &String, new_path: &String) -> SysResult<usize> {
-        Err(Errno::EBADCALL)
+    fn rename(&self, old_path: Arc<Dentry>, new_path: Arc<Dentry>) -> SysResult<usize> {
+        Err(Errno::EACCES)
     }
 
     /// 获得目录项
@@ -213,4 +217,3 @@ impl dyn InodeTrait {
         Ok(0)
     }
 }
-
