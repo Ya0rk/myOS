@@ -140,10 +140,8 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         }
 
         task::init_processors();
-        spawn_kernel_task(async move { dentry_test().await });
-        // spawn_kernel_task(async move {
-        //     task::add_initproc().await
-        // });
+        // spawn_kernel_task(async move { dentry_test().await });
+        spawn_kernel_task(async move { task::add_initproc().await });
 
         INIT_FINISHED.store(true, Ordering::SeqCst);
         #[cfg(feature = "mul_hart")]
