@@ -119,6 +119,7 @@ impl Dentry {
             status: DentryStatus::new(),
         };
         let result = Arc::new(res);
+        self.children.write().insert(name.to_string(), result.clone());
         result
     }
     /// 创建一个儿子节点
@@ -142,13 +143,13 @@ impl Dentry {
         res
     }
     /// 查看是否是有效的 dentry
-    fn is_valid(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         let status = *self.status.read();
-        status == DentryStatus::Valid || status == DentryStatus::Unint
+        status == DentryStatus::Valid
     }
 
     /// 查看是否是无效的 dentry
-    fn is_negtive(&self) -> bool {
+    pub fn is_negtive(&self) -> bool {
         *self.status.read() == DentryStatus::Negtive
     }
 
@@ -169,7 +170,7 @@ impl Dentry {
         Some(parent)
     }
 
-    fn get_abs_path(&self) -> String {
+    pub fn get_abs_path(&self) -> String {
         let name = self.name.read();
         {
             let read = self.path.read();
@@ -193,8 +194,9 @@ impl Dentry {
     }
 
     /// pattern为文件名字
-    fn get_child(self: &Arc<Self>, pattern: &str) -> Option<Arc<Self>> {
-        info!("{} visit {}", self.get_abs_path(), pattern);
+    /// 当且仅当pattern 这个文件名有效的时候会返回
+    pub fn get_child(self: Arc<Self>, pattern: &str) -> Option<Arc<Self>> {
+        // info!("[get_child] {} visit {}", self.get_abs_path(), pattern);
         let status = { self.get_status() };
         match status {
             DentryStatus::Valid => {}
@@ -207,7 +209,7 @@ impl Dentry {
             info!("return parent");
             return self.parent();
         } else if pattern.ends_with("/") || pattern.ends_with(".") || pattern == "" {
-            info!("return name is {}", self.name.read());
+            // info!("return name is {}", self.name.read());
             return Some(self.clone());
         }
         // 直接检索当前的文件夹
@@ -219,50 +221,29 @@ impl Dentry {
         }
         None
     }
-
-    /// name为相对路径
-    ///
-    /// 增加孩子, 只要父母是合法的, 那就一定会返回Dentry
-    /// 即当Inode不存在的时候就会创建Inode
-    pub fn add_child(self: Arc<Self>, name: &str, flag: OpenFlags) -> Option<Arc<dyn InodeTrait>> {
-        // 如果是无效的 dentry 就直接返回
-        if self.is_negtive() {
-            return None;
-        }
-        // concat path for creating
-        let self_name = self.get_abs_path();
-        let target_name = if self_name.ends_with("/") {
-            format!("{}{}", self_name, name)
-        } else {
-            format!("{}/{}", self_name, name)
+    /// 当且仅当 pattern 这个文件无效或者不存在的时候会返回
+    pub fn bare_child(self: Arc<Self>, pattern: &str) -> Option<Arc<Self>> {
+        info!(
+            "[get_bare_child] {} try to create {}",
+            self.get_abs_path(),
+            pattern
+        );
+        match self.get_status() {
+            DentryStatus::Valid => {}
+            DentryStatus::Unint => {
+                self.init();
+            }
+            DentryStatus::Negtive => return None,
         };
-        info!("[Dentry::add_child] add {} in {}", name, self_name);
-        // get inode
-        if let Some(parent_inode) = self.get_inode() {
-            if parent_inode.node_type() != InodeType::Dir {
-                warn!(
-                    "[Dentry::add_child] {}: should add child in a dir",
-                    self.name.read()
-                );
-                return None;
-            }
-
-            if let Some(child_dentry) = self.clone().get_child(&target_name) {
-                // 如果存在这个节点就直接返回获得的Inode
-                return child_dentry.get_inode();
-            } else {
-                //如果不存在就创建,使用Inode的do_create方法
-                if let Some(inode) = parent_inode.do_create(&target_name, flag.node_type().into()) {
-                    self.new(&target_name, inode.clone());
-                    return Some(inode.clone());
-                } else {
-                    // 创建不成功
-                    return None;
+        {
+            if let Some(res) = self.children.read().get(pattern) {
+                match res.is_negtive() {
+                    true => return Some(res.clone()),
+                    false => return None,
                 }
-            }
+            };
         }
-
-        None
+        Some(self.new_bare(pattern))
     }
 
     //
@@ -275,7 +256,7 @@ impl Dentry {
     }
 
     /// 将一个dentry和inode绑定,如果inode是一个文件夹,就把为他的儿子创建一个新的dentry
-    fn bind(self: &Arc<Self>, inode: Arc<dyn InodeTrait>) {
+    pub fn bind(self: &Arc<Self>, inode: Arc<dyn InodeTrait>) {
         //将inodepush进inode栈,然后flush,注意到这里需要用大括号包裹,不然会死锁
         info!("dentry bind {}", self.get_abs_path());
         {
@@ -284,16 +265,6 @@ impl Dentry {
         self.set_status(DentryStatus::Unint);
         self.init();
         info!("finished bind");
-    }
-
-    // FIXME: 可能存在错误， 并没有实现逻辑
-    pub fn unbind(self: &Arc<Self>) {
-        {
-            self.inode.write().pop();
-        }
-        self.set_status(DentryStatus::Unint);
-        self.init();
-        info!("finished unbind");
     }
 
     fn init(self: &Arc<Self>) -> SysResult<()> {
@@ -350,7 +321,7 @@ impl Dentry {
     /// 本应该属于 filesystem 的 alloc_inode
     ///
     /// 的功能二合一了
-    fn get_inode(self: &Arc<Self>) -> Option<Arc<dyn InodeTrait>> {
+    pub fn get_inode(self: &Arc<Self>) -> Option<Arc<dyn InodeTrait>> {
         // {
         //     info!(
         //         "[get_inode] {:?}, inode vec len is {}",
@@ -384,8 +355,7 @@ impl Dentry {
 
     /// 根据绝对路径获取对应的inode
     pub fn get_inode_from_path(path: &str) -> SysResult<Arc<dyn InodeTrait>> {
-        info!("get inode from path {}", path);
-        info!("    [get_inode_from_path] {}", path);
+        info!("[get_inode_from_path] {}", path);
         if !path.starts_with('/') {
             panic!("path should start with /");
         }
@@ -414,12 +384,15 @@ impl Dentry {
                 }
                 None => {
                     info!(
-                        "[get_inode_from_path] no such file or directory: {}",
-                        path_now
+                        "[get_inode_from_path] no such file or directory: {}/{}",
+                        path_now, name
                     );
                     return Err(Errno::ENOENT);
                 }
             }
+        }
+        if dentry_now.is_negtive() {
+            return Err(Errno::ENOENT);
         }
         if let Some(inode) = dentry_now.get_inode() {
             if inode.is_valid() {
@@ -435,8 +408,9 @@ impl Dentry {
     /// 根据绝对路径找到dentry
     /// path： 绝对路径
     pub fn get_dentry_from_path(path: &str) -> SysResult<Arc<Self>> {
+        info!("[get_dentry_from_path] {}", path);
         if !path.starts_with('/') {
-            panic!("path {} should start with /", path);
+            panic!("path should start with /");
         }
         let mut dentry_now = DENTRY_ROOT.clone();
         if path == "/" {
@@ -447,7 +421,7 @@ impl Dentry {
         let path_split = path.split('/').enumerate();
         let size_of_path = path_split.clone().count();
         for (i, name) in path_split {
-            match dentry_now.get_child(&path_now) {
+            match dentry_now.get_child(name) {
                 Some(child) => {
                     dentry_now = child;
                     match dentry_now.get_inode() {
@@ -463,14 +437,26 @@ impl Dentry {
                 }
                 None => {
                     info!(
-                        "[get_inode_from_path] no such file or directory: {}",
-                        path_now
+                        "[get_dentry_from_path] no such file or directory: {}/{}",
+                        path_now, name
                     );
                     return Err(Errno::ENOENT);
                 }
             }
         }
-        Ok(dentry_now)
+        if dentry_now.is_negtive() {
+            return Err(Errno::ENOENT);
+        }
+
+        if let Some(inode) = dentry_now.get_inode() {
+            if inode.is_valid() {
+                Ok(dentry_now)
+            } else {
+                Err(Errno::ENOENT)
+            }
+        } else {
+            Err(Errno::ENOENT)
+        }
     }
 }
 
@@ -499,5 +485,9 @@ pub async fn dentry_test() {
     test_inode!("/musl/basic/brk");
     test_inode!("/glibc/basic/mnt/invalid");
     test_inode!("//././././..///././musl/../glibc/basic");
+    test_inode!("/");
+    test_inode!("/bin");
+    test_inode!("/////.///////..//bin");
+    
     panic!();
 }

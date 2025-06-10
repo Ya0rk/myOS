@@ -19,14 +19,14 @@ pub use dirent::Dirent;
 use ext4::{file, Ext4Inode};
 pub use ext4::{ls, root_inode};
 pub use ffi::*;
-use lwext4_rust::bindings::{self, O_CREAT, O_RDWR, O_TRUNC};
+use lwext4_rust::bindings::{self, true_, O_CREAT, O_RDWR, O_TRUNC};
 use lwext4_rust::{Ext4File, InodeTypes};
 use page_cache::PageCache;
 pub use path::{path_test, resolve_path, AbsPath};
 // pub use inode_cache::*;
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
-use procfs::PROCFS_SUPER_BLOCK;
+use procfs::{inode, PROCFS_SUPER_BLOCK};
 use riscv::register;
 // use sbi_rt::NonRetentive;
 pub use crate::mm::page::Page;
@@ -82,14 +82,6 @@ pub fn init() {
 }
 
 pub fn create_init_files() -> SysResult {
-    // mkdir("/sys".into(), 0);
-    // mkdir("/sys/devices".into(), 0);
-    // mkdir("/sys/devices/system".into(), 0);
-    // mkdir("/sys/devices/system/node".into(), 0);
-    // mkdir("/sys/devices/system/node/node0".into(), 0);
-    // open("/sys/devices/system/node/node0/meminfo".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
-    // mkdir("/sys/devices/system/node/node1".into(), 0);
-    // open("/sys/devices/system/node/node1/meminfo".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     mkdir("/usr".into(), 0);
     mkdir("/tmp".into(), 0);
     //创建/dev文件夹
@@ -146,12 +138,15 @@ pub fn create_init_files() -> SysResult {
     Ok(())
 }
 
-fn dl_link(src: &str, target: &str) {
-    if let Ok(inode) = Dentry::get_inode_from_path(src) {
-        inode.link(&target.to_string());
-    } else {
-        panic!("no such dir: {}", src);
-    }
+fn dl_link(src: &str, target: &str) -> SysResult<usize> {
+    let inode = Dentry::get_inode_from_path(src)?;
+    let path: AbsPath = target.into();
+    let parent = Dentry::get_dentry_from_path(&path.get_parent_abs())?;
+    let new_path = parent
+        .bare_child(&path.get_filename())
+        .ok_or(Errno::EEXIST)?;
+    info!("[dl_link]{} => {}", src, target);
+    inode.link(new_path)
 }
 
 /// 创建一个打开的文件
@@ -168,6 +163,8 @@ fn create_open_file(
         "    [create_open_file] flags={:?}, abs_path={}, parent_path={}",
         flags, target_abs_path, parent_path
     );
+    let path = AbsPath::new(String::from(target_abs_path));
+    let file_name = path.get_filename();
 
     // 逻辑为获得一个Option<Arc InodeTrait>如果返回None直接返回None,因为代表父母节点都没有
     // 如果父母节点存在, 那么当父母节点是Dir的时候获得inode,如果父母节点不是Dir页直接返回None
@@ -175,6 +172,7 @@ fn create_open_file(
         return Err(Errno::ENOTDIR);
     };
     let parent_dir = { Dentry::get_inode_from_path(parent_path)? };
+    debug_point!("");
     if parent_dir.node_type() != InodeType::Dir {
         info!(
             "    [create_open_file] parent_path {} is not a directory",
@@ -182,30 +180,35 @@ fn create_open_file(
         );
         return Err(Errno::ENOTDIR);
     }
-    let parent_dentry = Dentry::get_dentry_from_path(parent_path).unwrap();
-    // info!("[create_file] got parent inode");
-    // 通过Dentry直接返回target_inode,如果节点存在就直接返回
-    // 如果节点不存在就检查创建的标志位,
-    // 如果需要创建就创建一个,使用InodeTrait::do_create方法
-    // 如果不需要创建就直接返回None
-    let target_inode = {
-        if let Ok(inode) = Dentry::get_inode_from_path(target_abs_path) {
-            inode
-        } else {
-            if flags.contains(OpenFlags::O_CREAT) {
-                // need to create
-                let path: AbsPath = target_abs_path.into();
-                parent_dentry
-                    .add_child(&path.get_filename(), flags)
-                    .unwrap()
+    let parent_dentry = Dentry::get_dentry_from_path(parent_path)?;
+    debug_point!("");
+    let target_inode = match flags.contains(OpenFlags::O_CREAT) {
+        false => Dentry::get_inode_from_path(target_abs_path)?,
+        true => {
+            if let Ok(inode) = Dentry::get_inode_from_path(target_abs_path) {
+                inode
             } else {
-                // no need to create
-                debug!(
-                    "[create_open_file] path = {} no need to creat",
-                    target_abs_path
-                );
-                error!("no create file = {}", target_abs_path);
-                return Err(Errno::ENOENT);
+                debug_point!("");
+                let bare_dentry = parent_dentry.bare_child(&file_name).unwrap();
+                // 进行 do_create
+                let res = {
+                    if flags.contains(OpenFlags::O_DIRECTORY) {
+                        parent_dir.do_create(bare_dentry, InodeType::Dir)
+                    } else {
+                        parent_dir.do_create(bare_dentry, InodeType::File)
+                    }
+                };
+                // 判断 do_create 结果
+                match res {
+                    Some(inode) => {
+                        debug_point!("");
+                        inode
+                    }
+                    None => {
+                        debug_point!("");
+                        return Err(Errno::EIO);
+                    }
+                }
             }
         }
     };
@@ -303,4 +306,3 @@ pub fn chdir(target: AbsPath) -> SysResult<()> {
     }
     return Err(Errno::ENOTDIR);
 }
-
