@@ -76,6 +76,15 @@ pub fn kernel_trap_handler() {
                 }
             }
         }
+        _ => {
+            // 其他中断
+            panic!(
+                "Unhandled trap {:?} pc: {:#x} BADV: {:#x}",
+                estat.cause(),
+                era.pc(),
+                badv::read().vaddr()
+            );
+        }
     }
     era::set_pc(era.pc());
     // info!("kernel trap end");

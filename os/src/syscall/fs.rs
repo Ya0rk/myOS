@@ -317,6 +317,9 @@ pub fn sys_statx(
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
+        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout")) {
+            return Ok(0);
+        }
         resolve_path(other_cwd, path)
     };
 
@@ -717,7 +720,11 @@ pub fn sys_mount(
 ///
 /// Success: 返回0； 失败： 返回-1；
 pub fn sys_chdir(path: usize) -> SysResult<usize> {
-    info!("[sys_chdir] start");
+    info!("[sys_chdir] start, path = {:#x}", path);
+    if unlikely(path == 0 || path > USER_SPACE_TOP) {
+        info!("[sys_chdir] path ptr is null, fault.");
+        return Err(Errno::EFAULT);
+    }
 
     let token = current_user_token();
     let task = current_task().unwrap();
