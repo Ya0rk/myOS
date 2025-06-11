@@ -61,7 +61,7 @@ impl SigStruct {
 
     /// 自定义设置信号处理动作
     pub fn set_action(&mut self, signo: usize, kaction: KSigAction) {
-        self.actions[signo-1] = kaction;
+        self.actions[signo - 1] = kaction;
     }
 }
 

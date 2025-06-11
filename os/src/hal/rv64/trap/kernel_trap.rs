@@ -1,13 +1,15 @@
 use crate::{
-    mm::memory_space::PageFaultAccessType, 
-    sync::set_next_trigger, 
-    task::{current_task, current_trap_cx}, 
-    utils::backtrace
+    mm::memory_space::PageFaultAccessType,
+    sync::set_next_trigger,
+    task::{current_task, current_trap_cx},
+    utils::backtrace,
 };
 
 #[cfg(target_arch = "riscv64")]
-use riscv::register::{scause::{self, Exception, Interrupt, Trap}, stval, sepc};
-
+use riscv::register::{
+    scause::{self, Exception, Interrupt, Trap},
+    sepc, stval,
+};
 
 #[cfg(target_arch = "riscv64")]
 #[no_mangle]
@@ -16,18 +18,19 @@ use riscv::register::{scause::{self, Exception, Interrupt, Trap}, stval, sepc};
 pub fn kernel_trap_handler() {
     use log::info;
 
-    use crate::{sync::TIMER_QUEUE, task::{get_current_cpu}};
+    use crate::{sync::TIMER_QUEUE, task::get_current_cpu};
     let scause = scause::read();
     let stval = stval::read();
     let sepc = sepc::read();
     let cause = scause.cause();
     match cause {
-        Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
+        Trap::Interrupt(Interrupt::SupervisorTimer) => {
+            // 5
             // info!("[kernel_trap_handler] kernel timer interrupt");
             TIMER_QUEUE.handle_expired();
             get_current_cpu().timer_irq_inc();
             set_next_trigger();
-        },
+        }
         Trap::Exception(e) => match e {
             Exception::StorePageFault
             | Exception::InstructionPageFault
@@ -44,16 +47,21 @@ pub fn kernel_trap_handler() {
 
                 let task = current_task().unwrap();
                 // task.switch_pgtable();
-                let result = task.with_mut_memory_space(|m| {
-                    // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
-                    m.handle_page_fault(stval.into(), access_type)
-                }).unwrap_or_else(|e| {
-                    panic!("{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
-                });;
-            },
+                let result = task
+                    .with_mut_memory_space(|m| {
+                        // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
+                        m.handle_page_fault(stval.into(), access_type)
+                    })
+                    .unwrap_or_else(|e| {
+                        use log::error;
+
+                        task.set_zombie();
+                        error!("kernel trap:{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
+                    });
+            }
             _ => {
                 panic!("a trap {:?} from kernel!", scause::read().cause());
-            },
+            }
         },
         _ => {
             panic!("a trap {:?} from kernel!", scause::read().cause());

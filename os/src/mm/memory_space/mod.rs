@@ -5,37 +5,41 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use log::info;
 use core::{
     cell::SyncUnsafeCell,
     cmp,
     ops::{Range, RangeBounds},
 };
+use log::info;
 
 // use core::arch::riscv64::sfence_vma_vaddr; 关于core::arch::riscv64::中的内容会在crate::hal::arch中统一引入
-use crate::{fs::{open, resolve_path, OpenFlags}, hal::arch::sfence_vma_vaddr, task::{aux, current_task}};
+use crate::{
+    fs::{open, resolve_path, OpenFlags},
+    hal::arch::sfence_vma_vaddr,
+    task::{aux, current_task},
+};
 // use riscv::register::scause; 将从riscv库引入scause替换为从hal::arch引入。在hal::arch中会间接引入riscv::register::scause
 // use crate::hal::arch::scause;
 // use async_utils::block_on;
 use crate::{
+    fs::{FileClass, FileTrait},
     hal::config::{
-        align_down_by_page, is_aligned_to_page, DL_INTERP_OFFSET, MMAP_PRE_ALLOC_PAGES, PAGE_SIZE, USER_ELF_PRE_ALLOC_PAGE_CNT, 
-        USER_STACK_PRE_ALLOC_SIZE, USER_STACK_SIZE, U_SEG_FILE_BEG, 
-        U_SEG_FILE_END, U_SEG_HEAP_BEG, U_SEG_HEAP_END, U_SEG_SHARE_BEG, U_SEG_SHARE_END, 
-        U_SEG_STACK_BEG, U_SEG_STACK_END
-    }, 
-    fs::{FileTrait, FileClass}, sync::block_on
+        align_down_by_page, is_aligned_to_page, DL_INTERP_OFFSET, MMAP_PRE_ALLOC_PAGES, PAGE_SIZE,
+        USER_ELF_PRE_ALLOC_PAGE_CNT, USER_STACK_PRE_ALLOC_SIZE, USER_STACK_SIZE, U_SEG_FILE_BEG,
+        U_SEG_FILE_END, U_SEG_HEAP_BEG, U_SEG_HEAP_END, U_SEG_SHARE_BEG, U_SEG_SHARE_END,
+        U_SEG_STACK_BEG, U_SEG_STACK_END,
+    },
+    sync::block_on,
 };
 
 // use memory::{pte::PTEFlags, PageTable, PhysAddr, VirtAddr, VirtPageNum};
-use super::{page_table::{PageTable}};
-use crate::hal::mem::page_table::PTEFlags;
-use super::address::{VirtAddr, VirtPageNum, PhysAddr};
+use self::vm_area::VmArea;
+use super::address::{PhysAddr, VirtAddr, VirtPageNum};
 use super::page::Page;
+use super::page_table::PageTable;
+use crate::hal::mem::page_table::PTEFlags;
 use crate::utils::container::range_map::RangeMap;
 use crate::utils::{Errno, SysResult};
-use xmas_elf::ElfFile;
-use self::vm_area::VmArea;
 use crate::{
     mm::memory_space::vm_area::{MapPerm, VmAreaType},
     task::{
@@ -43,7 +47,7 @@ use crate::{
         TaskControlBlock,
     },
 };
-
+use xmas_elf::ElfFile;
 
 extern "C" {
     fn stext();
@@ -192,21 +196,33 @@ impl MemorySpace {
         self.page_table().token()
     }
 
-
-    pub async fn new_user_from_elf(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
-        let elf_data = elf_file.get_inode().read_all().await.expect("[new_user_from_elf] read elf file failed");
-        let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
+    pub async fn new_user_from_elf(
+        elf_file: Arc<dyn FileTrait>,
+    ) -> (Self, usize, usize, Vec<AuxHeader>) {
+        let elf_data = elf_file
+            .get_inode()
+            .read_all()
+            .await
+            .expect("[new_user_from_elf] read elf file failed");
+        let (mut memory_space, entry_point, auxv) =
+            MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
         let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
         memory_space.alloc_heap();
         (memory_space, entry_point, sp_init, auxv)
     }
-    pub async fn new_user_from_elf_lazily(elf_file: Arc<dyn FileTrait>) -> (Self, usize, usize, Vec<AuxHeader>) {
-        let elf_data  = elf_file.get_inode().read_all().await.expect("[new_user_from_elf_lazily] read elf file failed");
-        let (mut memory_space, entry_point, auxv) = MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data);
+    pub async fn new_user_from_elf_lazily(
+        elf_file: Arc<dyn FileTrait>,
+    ) -> (Self, usize, usize, Vec<AuxHeader>) {
+        let elf_data = elf_file
+            .get_inode()
+            .read_all()
+            .await
+            .expect("[new_user_from_elf_lazily] read elf file failed");
+        let (mut memory_space, entry_point, auxv) =
+            MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data);
         let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
         memory_space.alloc_heap_lazily();
         (memory_space, entry_point, sp_init, auxv)
-
     }
     /// Include sections in elf and TrapContext and user stack,
     /// also returns user_sp and entry point.
@@ -243,7 +259,10 @@ impl MemorySpace {
         let mut max_end_vpn = offset.floor();
         let mut header_va = 0;
         let mut has_found_header_va = false;
-        log::info!("[map_elf_data]: entry point {:#x}", elf.header.pt2.entry_point());
+        log::info!(
+            "[map_elf_data]: entry point {:#x}",
+            elf.header.pt2.entry_point()
+        );
 
         for i in 0..ph_count {
             let ph = elf.program_header(i).unwrap();
@@ -357,8 +376,9 @@ impl MemorySpace {
                     let offset = start_offset + (vpn - vm_area.start_vpn()) * PAGE_SIZE;
                     let offset_aligned = align_down_by_page(offset);
                     // if let Ok(page) = block_on(async { elf_file.get_page_at(offset_aligned).await })
-                    if let Some(page) = block_on(async { elf_file.get_page_at(offset_aligned).await })
-                        // 
+                    if let Some(page) =
+                        block_on(async { elf_file.get_page_at(offset_aligned).await })
+                    //
                     {
                         if pre_alloc_page_cnt < USER_ELF_PRE_ALLOC_PAGE_CNT {
                             let new_page = Page::new();
@@ -423,11 +443,9 @@ impl MemorySpace {
         if let Some(interp_entry) = self.load_dl_interp_if_needed(&elf).unwrap_or(None) {
             auxv.push(AuxHeader::new(AT_BASE, DL_INTERP_OFFSET));
             entry = interp_entry;
-        }
-        else {
+        } else {
             auxv.push(AuxHeader::new(AT_BASE, 0));
         }
-
 
         let (_max_end_vpn, header_va) = self.map_elf(elf_file, &elf, 0.into());
 
@@ -438,7 +456,6 @@ impl MemorySpace {
 
         (self, entry, auxv)
     }
-
 
     pub fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> SysResult<Option<usize>> {
         let elf_header = elf.header;
@@ -480,22 +497,18 @@ impl MemorySpace {
                 let interp_elf_data = block_on(async { interp_file.get_inode().read_all().await })?;
                 let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
                 self.map_elf(interp_file, &interp_elf, DL_INTERP_OFFSET.into());
-                Ok(Some(interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET))
-            }
-            else {
+                Ok(Some(
+                    interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET,
+                ))
+            } else {
                 Err(Errno::ENOENT)
             }
-
-            
-
-            
         } else {
             // no dynamic link
             log::debug!("[load_dl] encounter a static elf");
             Ok(None)
         }
     }
-
 
     /// Attach given `pages` to the MemorySpace. If pages is not given, it will
     /// create pages according to the `size` and map them to the MemorySpace.
@@ -511,6 +524,10 @@ impl MemorySpace {
         map_perm: MapPerm,
         pages: &mut Vec<Weak<Page>>,
     ) -> VirtAddr {
+        info!(
+            "[attach_shm] shmaddr: {:#x}, size: {:#x}, map_perm: {:?}, pages: {:?}",
+            shmaddr.0, size, map_perm, pages
+        );
         let mut ret_addr = shmaddr;
         let mut vm_area = if shmaddr == 0.into() {
             let shared_range: Range<VirtAddr> =
@@ -529,7 +546,8 @@ impl MemorySpace {
         if pages.is_empty() {
             for vpn in vm_area.range_vpn() {
                 let page = Page::new();
-                self.page_table_mut().map_leaf(vpn, page.ppn(), map_perm.into());
+                self.page_table_mut()
+                    .map_leaf(vpn, page.ppn(), map_perm.into());
                 pages.push(Arc::downgrade(&page));
                 vm_area.pages.insert(vpn, page);
             }
@@ -538,7 +556,8 @@ impl MemorySpace {
             let mut pages = pages.iter();
             for vpn in vm_area.range_vpn() {
                 let page = pages.next().unwrap().upgrade().unwrap();
-                self.page_table_mut().map_leaf(vpn, page.ppn(), map_perm.into());
+                self.page_table_mut()
+                    .map_leaf(vpn, page.ppn(), map_perm.into());
                 vm_area.pages.insert(vpn, page.clone());
             }
         }
@@ -948,7 +967,7 @@ impl MemorySpace {
     ) -> SysResult<()> {
         log::trace!("[MemorySpace::handle_page_fault] {va:?}");
         let vm_area = self.areas_mut().get_mut(va.align_down()).ok_or_else(|| {
-            log::warn!("[handle_page_fault] no area containing {va:?}");
+            log::error!("[handle_page_fault] no area containing {va:?}");
             Errno::EFAULT
         })?;
         vm_area.handle_page_fault(self.page_table_mut(), va.floor(), access_type)?;
@@ -1081,20 +1100,21 @@ pub fn init_stack(
     let argc = args.len();
     push_usize(&mut sp, argc);
 
-    
     // info!("[init_stack] out");
     // 返回值
     (sp, argc, arg_ptr_ptr, env_ptr_ptr)
 }
 
-
-
 pub fn test_la_memory_space() {
     info!("[test_la_memory_space] in");
     let mut memory_space = MemorySpace::new_user();
     let sp = memory_space.alloc_stack(USER_STACK_SIZE);
-    unsafe {memory_space.switch_page_table();}
+    unsafe {
+        memory_space.switch_page_table();
+    }
     let mut x: usize;
-    unsafe {x = *((sp.0 - 0x1000) as *const usize);}
+    unsafe {
+        x = *((sp.0 - 0x1000) as *const usize);
+    }
     info!("[test_la_memory_space] read x: {x:#x}");
 }

@@ -43,6 +43,7 @@ pub mod task;
 pub mod utils;
 // pub mod arch;
 pub mod hal;
+pub mod ipc;
 pub mod signal;
 
 use alloc::vec::{self, Vec};
@@ -118,7 +119,8 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
 
         crate::drivers::init();
 
-        fs::init();
+        // fs::init();
+        block_on(async { fs::init().await });
         net::init_net_dev();
         // 此时完成初始化工作，准备载入进程开始执行
 
@@ -140,7 +142,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         }
 
         task::init_processors();
-        // spawn_kernel_task(async move { dentry_test().await });
         spawn_kernel_task(async move { task::add_initproc().await });
 
         INIT_FINISHED.store(true, Ordering::SeqCst);

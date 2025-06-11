@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
-use log::info;
 use core::ops::{Range, RangeBounds};
+use log::info;
 
 // use core::arch::riscv64::sfence_vma_vaddr; //这个core::arch::riscv64包会在hal::arch中统一引入
 use crate::hal::arch::sfence_vma_vaddr;
@@ -8,15 +8,15 @@ use crate::hal::arch::sfence_vma_vaddr;
 use crate::hal::config::{align_down_by_page, PAGE_SIZE};
 use crate::hal::mem::page_table::{PTEFlags, PageTableEntry};
 // use memory::{pte::PTEFlags, VirtAddr, VirtPageNum};
-use crate::mm::page_table::{PageTable};
+use crate::mm::page_table::PageTable;
 // use PTEFlags
+use super::{MmapFlags, PageFaultAccessType};
+use crate::fs::{FileClass, FileTrait};
 use crate::mm::address::{VirtAddr, VirtPageNum};
 use crate::mm::page::Page;
 use crate::sync::block_on;
 use crate::task::current_task;
 use crate::utils::{backtrace, Errno, SysResult};
-use crate::fs::{FileClass, FileTrait};
-use super::{PageFaultAccessType, MmapFlags};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VmAreaType {
@@ -53,7 +53,9 @@ bitflags! {
         const WX = Self::W.bits() | Self::X.bits();
         const RWX = Self::R.bits() | Self::W.bits() | Self::X.bits();
 
+        const UR = Self::U.bits() | Self::R.bits();
         const UW = Self::U.bits() | Self::W.bits();
+        const UX = Self::U.bits() | Self::X.bits();
         const URW = Self::U.bits() | Self::RW.bits();
         const URX = Self::U.bits() | Self::RX.bits();
         const UWX = Self::U.bits() | Self::WX.bits();
@@ -79,8 +81,6 @@ impl From<PTEFlags> for MapPerm {
         ret
     }
 }
-
-
 
 /// A contiguous virtual memory area.
 /// ADDITION: only in user space
@@ -216,7 +216,6 @@ impl VmArea {
             page.fill_zero()
         }
     }
-
 
     // [LA_MMU] only user page table
     pub fn set_perm_and_flush(&mut self, page_table: &mut PageTable, perm: MapPerm) {
@@ -380,11 +379,11 @@ impl VmArea {
             // info!("type = {:?}", access_type);
             // info!("perm = {:?}", self.perm());
             backtrace();
-            log::warn!(
+            log::error!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
-            panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
+            // panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
             return Err(Errno::EFAULT);
         }
 
@@ -439,14 +438,14 @@ impl VmArea {
                         let offset = self.offset + (vpn - self.start_vpn()) * PAGE_SIZE;
                         let offset_aligned = align_down_by_page(offset);
                         if self.mmap_flags.contains(MmapFlags::MAP_SHARED) {
-                            let page = block_on(async { file.get_page_at(offset_aligned).await }).unwrap()
-                                ;
+                            let page =
+                                block_on(async { file.get_page_at(offset_aligned).await }).unwrap();
                             page_table.map_leaf(vpn, page.ppn(), self.map_perm.into());
                             self.pages.insert(vpn, page);
                             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
                         } else {
-                            let page = block_on(async { file.get_page_at(offset_aligned).await }).unwrap()
-                                ;
+                            let page =
+                                block_on(async { file.get_page_at(offset_aligned).await }).unwrap();
                             if access_type.contains(PageFaultAccessType::WRITE) {
                                 let new_page = Page::new();
                                 new_page.copy_from_slice(page.get_bytes_array());

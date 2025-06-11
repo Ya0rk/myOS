@@ -116,7 +116,7 @@ impl InodeTrait for DevZero {
         Ok(Vec::new())
     }
 
-    fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None
     }
 
@@ -147,4 +147,3 @@ impl InodeTrait for DevZero {
         buf.len()
     }
 }
-

@@ -38,7 +38,6 @@ impl Sstatus {
     #[inline]
     pub fn uie(&self) -> bool {
         unimplemented!()
-
     }
 
     /// Supervisor Interrupt Enable
@@ -108,8 +107,7 @@ impl Sstatus {
         // unimplemented!()
         if val {
             self.bits |= 1 << 2;
-        }
-        else {
+        } else {
             self.bits &= !(1 << 2);
         }
     }
@@ -119,8 +117,7 @@ impl Sstatus {
         // unimplemented!()
         if val == SPP::Supervisor {
             self.bits &= !0b11;
-        }
-        else {
+        } else {
             self.bits |= 0b11;
         }
     }
@@ -128,10 +125,12 @@ impl Sstatus {
 
 pub fn read() -> Sstatus {
     // unimplemented!()
-    Sstatus { bits: unsafe {
-        let bits: usize;
-        core::arch::asm!("csrrd {},0x1", out(reg) bits);
-        bits
-    } }
+    Sstatus {
+        bits: unsafe {
+            let bits: usize;
+            core::arch::asm!("csrrd {},0x1", out(reg) bits);
+            bits
+        },
+    }
     // Sstatus {bits:prmd::read()}
 }

@@ -1,15 +1,20 @@
-use alloc::{string::String, sync::Arc};
-use log::info;
-use smoltcp::{iface::SocketHandle, wire::IpEndpoint};
-use crate::{
-    fs::{FileMeta, InodeTrait, Kstat, OpenFlags, Page, Pipe, RenameFlags}, 
-    sync::SpinNoIrqLock, syscall::ShutHow, utils::SysResult
+use super::{
+    addr::{IpType, Sock, SockAddr},
+    SockMeta, Socket,
 };
-use super::{addr::{IpType, Sock, SockAddr}, SockMeta, Socket};
-use alloc::boxed::Box;
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
+use crate::{
+    fs::{FileMeta, InodeTrait, Kstat, OpenFlags, Page, Pipe, RenameFlags},
+    sync::SpinNoIrqLock,
+    syscall::ShutHow,
+    utils::SysResult,
+};
+use alloc::boxed::Box;
+use alloc::{string::String, sync::Arc};
 use async_trait::async_trait;
+use log::info;
+use smoltcp::{iface::SocketHandle, wire::IpEndpoint};
 
 /// UnixSocket 是一种本地通信的字节流套接字
 /// 使用管道来本地通信
@@ -17,7 +22,7 @@ pub struct UnixSocket {
     pub filemeta: FileMeta,
     pub sockmeta: SpinNoIrqLock<SockMeta>,
     pub read_end: Arc<Pipe>,
-    pub write_end: Arc<Pipe>
+    pub write_end: Arc<Pipe>,
 }
 
 #[async_trait]

@@ -9,7 +9,7 @@
 
 *.img
 *.diff
-*.a
+
 *.log
 
 os/src/link_app.S
@@ -61,3 +61,6 @@ lwext4_rust/c_old/lwext4/include/generated/ext4_config.h
 *.txt
 *.json
 test/*
+
+kernel-rv
+kernel-la

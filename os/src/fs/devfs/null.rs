@@ -116,7 +116,7 @@ impl InodeTrait for DevNullInode {
     }
 
 
-    fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None // /dev/null 不支持路径解析
     }
 
@@ -169,4 +169,3 @@ impl InodeTrait for DevNullInode {
         None // /dev/null 不支持目录项读取
     }
 }
-

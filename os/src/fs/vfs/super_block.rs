@@ -1,14 +1,12 @@
-use alloc::sync::Arc;
-use sbi_rt::Sta;
 use crate::{fs::Kstat, syscall::StatFs};
+use alloc::sync::Arc;
 
 use super::InodeTrait;
 
-
 /// SuperBlockTrait trait defines the interface for a superblock in a file system.
-/// 
+///
 /// 超级块Trait 是文件系统的接口
-/// 
+///
 /// 一个超级块类型代表一种文件系统实现
 pub trait SuperBlockTrait: Send + Sync {
     /// 获取根节点

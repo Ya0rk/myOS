@@ -9,7 +9,14 @@ pub struct MountTable {
 }
 
 impl MountTable {
-    pub fn mount(&mut self, special: String, dir: String, fstype: String, _flags: u32, _data: String) -> isize {
+    pub fn mount(
+        &mut self,
+        special: String,
+        dir: String,
+        fstype: String,
+        _flags: u32,
+        _data: String,
+    ) -> isize {
         if self.mnt_list.len() == MNT_MAXLEN {
             return -1;
         }
@@ -43,7 +50,9 @@ impl MountTable {
 
 lazy_static! {
     pub static ref MNT_TABLE: Arc<Mutex<MountTable>> = {
-        let mnt_table = MountTable { mnt_list: Vec::new() };
+        let mnt_table = MountTable {
+            mnt_list: Vec::new(),
+        };
         Arc::new(Mutex::new(mnt_table))
     };
 }

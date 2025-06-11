@@ -1,4 +1,3 @@
-
 pub const MAX_SIGNUM: usize = 64;
 
 #[allow(non_camel_case_types)]
@@ -48,7 +47,7 @@ impl From<i32> for SigCode {
             -4 => SigCode::AsyncIO,
             -5 => SigCode::SigIO,
             -6 => SigCode::TKILL,
-            _  => todo!()
+            _ => todo!(),
         }
     }
 }
@@ -174,43 +173,42 @@ bitflags! {
 pub enum SigNom {
     // 标准信号常量定义（基于 Linux/x86 架构）
     // 注：信号编号可能因操作系统或架构略有不同，此处以 Linux 常规值为准
-    NOSIG  = 0,       // 没有信号
-    SIGHUP = 1,       // 终端挂起/控制进程终止
-    SIGINT = 2,       // 键盘中断 (Ctrl+C)
-    SIGQUIT = 3,      // 键盘退出 (Ctrl+\), 产生核心转储
-    SIGILL = 4,       // 非法指令
-    SIGTRAP = 5,      // 跟踪/断点陷阱（调试用）
-    SIGABRT = 6,      // 进程调用 abort() 终止
-    SIGBUS = 7,       // 总线错误（内存访问对齐错误等）
-    SIGFPE = 8,       // 算术异常（除零、溢出等）
-    SIGKILL = 9,      // 强制终止信号（不可捕获或忽略）
-    SIGUSR1 = 10,     // 用户自定义信号 1
-    SIGSEGV = 11,     // 段错误（无效内存访问）
-    SIGUSR2 = 12,     // 用户自定义信号 2
-    SIGPIPE = 13,     // 管道破裂（写入无读端的管道）
-    SIGALRM = 14,     // alarm() 定时器超时
-    SIGTERM = 15,     // 终止信号（可捕获的优雅退出）
-    SIGSTKFLT = 16,   // 协处理器栈错误（历史遗留，现代系统未使用）
-    SIGCHLD = 17,     // 子进程状态改变（终止/暂停/恢复）
-    SIGCONT = 18,     // 恢复已暂停的进程
-    SIGSTOP = 19,     // 暂停进程（不可捕获或忽略）
-    SIGTSTP = 20,     // 终端暂停 (Ctrl+Z)
-    SIGTTIN = 21,     // 后台进程尝试读取终端
-    SIGTTOU = 22,     // 后台进程尝试写入终端
-    SIGURG = 23,      // 套接字紧急数据到达
-    SIGXCPU = 24,     // 超出 CPU 时间限制
-    SIGXFSZ = 25,     // 超出文件大小限制
-    SIGVTALRM = 26,   // 虚拟定时器超时
-    SIGPROF = 27,     // 性能分析定时器超时
-    SIGWINCH = 28,    // 终端窗口大小改变
-    SIGIO = 29,       // 异步 I/O 事件（文件描述符就绪）
-    SIGPWR = 30,      // 电源故障（UPS 电池低电量）
-    SIGSYS = 31,      // 无效系统调用
-    SIGTIMER = 32,    // 定时器信号（某些系统如 Solaris 使用）
-    SIGCANCEL = 33,  // 取消信号（某些系统如 Solaris 使用）
-    SIGRTMAX = 64,    // 最大实时信号编号（实际可用信号可能更少）
+    NOSIG = 0,      // 没有信号
+    SIGHUP = 1,     // 终端挂起/控制进程终止
+    SIGINT = 2,     // 键盘中断 (Ctrl+C)
+    SIGQUIT = 3,    // 键盘退出 (Ctrl+\), 产生核心转储
+    SIGILL = 4,     // 非法指令
+    SIGTRAP = 5,    // 跟踪/断点陷阱（调试用）
+    SIGABRT = 6,    // 进程调用 abort() 终止
+    SIGBUS = 7,     // 总线错误（内存访问对齐错误等）
+    SIGFPE = 8,     // 算术异常（除零、溢出等）
+    SIGKILL = 9,    // 强制终止信号（不可捕获或忽略）
+    SIGUSR1 = 10,   // 用户自定义信号 1
+    SIGSEGV = 11,   // 段错误（无效内存访问）
+    SIGUSR2 = 12,   // 用户自定义信号 2
+    SIGPIPE = 13,   // 管道破裂（写入无读端的管道）
+    SIGALRM = 14,   // alarm() 定时器超时
+    SIGTERM = 15,   // 终止信号（可捕获的优雅退出）
+    SIGSTKFLT = 16, // 协处理器栈错误（历史遗留，现代系统未使用）
+    SIGCHLD = 17,   // 子进程状态改变（终止/暂停/恢复）
+    SIGCONT = 18,   // 恢复已暂停的进程
+    SIGSTOP = 19,   // 暂停进程（不可捕获或忽略）
+    SIGTSTP = 20,   // 终端暂停 (Ctrl+Z)
+    SIGTTIN = 21,   // 后台进程尝试读取终端
+    SIGTTOU = 22,   // 后台进程尝试写入终端
+    SIGURG = 23,    // 套接字紧急数据到达
+    SIGXCPU = 24,   // 超出 CPU 时间限制
+    SIGXFSZ = 25,   // 超出文件大小限制
+    SIGVTALRM = 26, // 虚拟定时器超时
+    SIGPROF = 27,   // 性能分析定时器超时
+    SIGWINCH = 28,  // 终端窗口大小改变
+    SIGIO = 29,     // 异步 I/O 事件（文件描述符就绪）
+    SIGPWR = 30,    // 电源故障（UPS 电池低电量）
+    SIGSYS = 31,    // 无效系统调用
+    SIGTIMER = 32,  // 定时器信号（某些系统如 Solaris 使用）
+    SIGCANCEL = 33, // 取消信号（某些系统如 Solaris 使用）
+    SIGRTMAX = 64,  // 最大实时信号编号（实际可用信号可能更少）
 }
-
 
 impl SigMask {
     pub fn insert_sig(&mut self, sig_num: usize) {
@@ -226,8 +224,8 @@ impl SigMask {
     }
 }
 
-pub const SIG_DFL:usize = 0;
-pub const SIG_IGN:usize = 1;
+pub const SIG_DFL: usize = 0;
+pub const SIG_IGN: usize = 1;
 
 #[allow(non_camel_case_types)]
 #[repr(usize)]

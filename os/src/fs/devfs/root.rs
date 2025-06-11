@@ -64,7 +64,7 @@ impl InodeTrait for DevFsInode {
         Err(Errno::EISDIR)
     }
 
-    fn loop_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         // 暂时不实现
         None
     }
@@ -94,4 +94,3 @@ impl InodeTrait for DevFsInode {
         Some(build_dirents(entries))
     }
 }
-

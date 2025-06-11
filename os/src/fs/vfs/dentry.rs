@@ -348,7 +348,7 @@ impl Dentry {
             let parent_dentry = self.parent.upgrade()?;
             // 获取父节点的 inode 并执行 walk
             let parent_inode = parent_dentry.get_inode()?;
-            let this_inode = parent_inode.loop_up(&self.get_abs_path())?;
+            let this_inode = parent_inode.look_up(&self.get_abs_path())?;
             // 存储 inode 到栈
             self.inode.write().push(this_inode.clone());
             Some(this_inode)

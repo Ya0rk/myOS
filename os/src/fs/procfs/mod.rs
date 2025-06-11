@@ -1,8 +1,8 @@
 use alloc::sync::Arc;
 use super_block::ProcFsSuperBlock;
 
-pub mod super_block;
 pub mod inode;
+pub mod super_block;
 
 lazy_static! {
     /// procfs的超级块

@@ -75,13 +75,14 @@ impl FileClass {
     }
 }
 
-pub fn init() {
+pub async fn init() {
     // 应当初始化Dentry
+    println!("[Del0n1x] init fs start ...");
     Dentry::init_dentry_sys();
-    create_init_files();
+    create_init_files().await;
 }
 
-pub fn create_init_files() -> SysResult {
+pub async fn create_init_files() -> SysResult {
     mkdir("/usr".into(), 0);
     mkdir("/tmp".into(), 0);
     //创建/dev文件夹
@@ -96,8 +97,8 @@ pub fn create_init_files() -> SysResult {
     if let Ok(FileClass::File(file)) =
         open("/etc/passwd".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR)
     {
-        let buf = [0; 10];
-        file.write(&buf);
+        let buf = "nobody:x:0:0:nobody:/nonexistent:/usr/sbin/nologin\0".as_bytes(); // 这里是提前往里面写数据
+        file.write(&buf).await;
     };
 
     //注册设备/dev/rtc和/dev/rtc0
@@ -127,14 +128,21 @@ pub fn create_init_files() -> SysResult {
     );
 
     // 拷贝动态库
-    dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64-sf.so.1");
-    dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64.so.1");
-    dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
-    dl_link(
-        "/musl/lib/tls_get_new-dtv_dso.so",
-        "/lib/tls_get_new-dtv_dso.so",
-    );
-
+    {
+        // musl
+        dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64-sf.so.1");
+        dl_link("/musl/lib/libc.so", "/lib/ld-musl-riscv64.so.1");
+        dl_link("/musl/lib/dlopen_dso.so", "/musl/dlopen_dso.so");
+        dl_link(
+            "/musl/lib/tls_get_new-dtv_dso.so",
+            "/lib/tls_get_new-dtv_dso.so",
+        );
+    }
+    {
+        // glibc
+        dl_link("/musl/lib/libc.so", "/lib/ld-linux-riscv64-lp64d.so.1"); // 这里两行需要改为/glibc目录，由于目前会报错，所以暂时用musl目录，bug修正后改回
+        dl_link("/musl/lib/libc.so", "/ld-linux-riscv64-lp64d.so.1");
+    }
     Ok(())
 }
 
@@ -172,7 +180,6 @@ fn create_open_file(
         return Err(Errno::ENOTDIR);
     };
     let parent_dir = { Dentry::get_inode_from_path(parent_path)? };
-    debug_point!("");
     if parent_dir.node_type() != InodeType::Dir {
         info!(
             "    [create_open_file] parent_path {} is not a directory",
@@ -228,7 +235,7 @@ fn create_open_file(
         );
         return Err(Errno::ENOTDIR);
     }
-    // info!("[create_file] got target inode");
+    info!("[create_file] got target inode, flags = {:?}", flags);
 
     let res = {
         let osinode = NormalFile::new(

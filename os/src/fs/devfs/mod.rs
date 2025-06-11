@@ -1,28 +1,30 @@
-mod tty;
-mod zero;
-mod null;
-mod rtc;
-mod urandom;
-mod root;
 mod dev_loop;
+mod null;
+mod root;
+mod rtc;
+mod tty;
+mod urandom;
+mod zero;
 
 use dev_loop::{DevLoop, DEVLOOP};
 use log::info;
-pub use tty::*;
-pub use zero::*;
 pub use null::*;
 pub use rtc::*;
+pub use tty::*;
 pub use urandom::*;
+pub use zero::*;
 
-
-use spin::Mutex;
 use crate::sync::SpinNoIrqLock;
+use spin::Mutex;
 
 use super::FileTrait;
-use alloc::{collections::btree_set::BTreeSet, string::{String, ToString}, sync::Arc};
+use alloc::{
+    collections::btree_set::BTreeSet,
+    string::{String, ToString},
+    sync::Arc,
+};
 
-
-lazy_static!{
+lazy_static! {
     pub static ref DEVICES: SpinNoIrqLock<BTreeSet<String>> = SpinNoIrqLock::new(BTreeSet::new());
 }
 

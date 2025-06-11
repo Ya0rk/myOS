@@ -1,4 +1,9 @@
-use core::{cell::UnsafeCell, marker::PhantomData, ops::{Deref, DerefMut}, sync::atomic::{AtomicBool, Ordering}};
+use core::{
+    cell::UnsafeCell,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use super::{ffi::SendWrapper, MutexOperations};
 
@@ -11,7 +16,7 @@ pub struct MutexGuard<'a, T: ?Sized, S: MutexOperations> {
 impl<'a, T: ?Sized, S: MutexOperations> !Sync for MutexGuard<'a, T, S> {}
 impl<'a, T: ?Sized, S: MutexOperations> !Send for MutexGuard<'a, T, S> {}
 
-pub struct SpinMutex<T: ?Sized, L:MutexOperations> {
+pub struct SpinMutex<T: ?Sized, L: MutexOperations> {
     _marker: core::marker::PhantomData<L>,
     lock: AtomicBool,
     data: UnsafeCell<T>,
@@ -66,7 +71,6 @@ impl<T, S: MutexOperations> SpinMutex<T, S> {
     pub unsafe fn sent_lock(&self) -> impl DerefMut<Target = T> + '_ {
         SendWrapper::new(self.lock())
     }
-
 }
 
 impl<'a, T: ?Sized, S: MutexOperations> Deref for MutexGuard<'a, T, S> {

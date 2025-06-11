@@ -1,8 +1,7 @@
 use core::ops::{Deref, DerefMut};
 
-use crate::hal::arch::interrupt::InterruptGuard;
 use super::MutexOperations;
-
+use crate::hal::arch::interrupt::InterruptGuard;
 
 pub struct NoopLock;
 

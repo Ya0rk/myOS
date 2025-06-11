@@ -1,9 +1,9 @@
-use alloc::collections::VecDeque;
-use crate::task::TaskStatus;
 use super::ffi::{SigCode, SigErr, SigMask, SigNom};
+use crate::task::TaskStatus;
+use alloc::collections::VecDeque;
 
 /// 使用优先队列和普通队列
-/// 
+///
 /// https://segmentfault.com/a/1190000044899251
 pub struct SigPending {
     /// 检测哪些sig已经在队列中,避免重复加入队列
@@ -20,9 +20,9 @@ pub struct SigPending {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct SigInfo {
-    pub signo:   SigNom,  // 信号编号
-    pub sigcode: SigCode, // 信号来源码
-    pub sigerr:  SigErr,  // 错误码
+    pub signo: SigNom,        // 信号编号
+    pub sigcode: SigCode,     // 信号来源码
+    pub sigerr: SigErr,       // 错误码
     pub sifields: SigDetails, // 附加信息
 }
 
@@ -40,13 +40,13 @@ pub enum SigDetails {
         exit_code: i32,     // 退出码
     },
 
-    None
+    None,
 }
 
 pub enum WhichQueue {
     Fifo,
     Prio,
-    None
+    None,
 }
 
 lazy_static! {
@@ -90,12 +90,12 @@ impl SigPending {
                 let siginfo = match q {
                     WhichQueue::Fifo => self.fifo.remove(i as usize),
                     WhichQueue::Prio => self.prio.remove(i as usize),
-                    WhichQueue::None => unimplemented!()
+                    WhichQueue::None => unimplemented!(),
                 };
                 self.mask.unset_sig(siginfo.unwrap().signo as usize);
                 return siginfo;
-            },
-            (false, _, _) => return None
+            }
+            (false, _, _) => return None,
         }
     }
 
@@ -106,11 +106,11 @@ impl SigPending {
                 let siginfo = match q {
                     WhichQueue::Fifo => self.fifo.get(i as usize),
                     WhichQueue::Prio => self.prio.get(i as usize),
-                    WhichQueue::None => unimplemented!()
+                    WhichQueue::None => unimplemented!(),
                 };
                 return siginfo.cloned();
-            },
-            (false, _, _) => return None
+            }
+            (false, _, _) => return None,
         }
     }
 
@@ -142,7 +142,7 @@ impl SigPending {
         if !self.mask.have(signo) {
             self.mask.insert_sig(signo);
             match PRIO_SIG.have(signo) {
-                true  => self.prio.push_back(siginfo),
+                true => self.prio.push_back(siginfo),
                 false => self.fifo.push_back(siginfo),
             }
         }
@@ -158,17 +158,12 @@ impl SigPending {
 }
 
 impl SigInfo {
-    pub fn new(
-        si_signo: SigNom, 
-        si_code: SigCode, 
-        si_err: SigErr, 
-        fields: SigDetails
-    ) -> Self {
+    pub fn new(si_signo: SigNom, si_code: SigCode, si_err: SigErr, fields: SigDetails) -> Self {
         Self {
             signo: si_signo,
             sigcode: si_code,
             sigerr: si_err,
-            sifields: fields
+            sifields: fields,
         }
     }
 }

@@ -1,7 +1,7 @@
-use core::{cmp::Ordering, task::Waker, time::Duration};
-use crate::{hal::arch::set_timer, hal::config::CLOCK_FREQ};
 use super::{time::TimeSpec, yield_now, SpinNoIrqLock};
+use crate::{hal::arch::set_timer, hal::config::CLOCK_FREQ};
 use alloc::collections::binary_heap::BinaryHeap;
+use core::{cmp::Ordering, task::Waker, time::Duration};
 use spin::Lazy;
 
 const TICKS_PER_SEC: usize = 100; // 设置每秒中断次数，可以计算出每次中断的时间间隔
@@ -49,7 +49,8 @@ pub fn set_next_trigger() {
 pub async fn sleep_for(ts: TimeSpec) {
     let start = get_time_ms();
     let span = ts.tv_sec * 1_000 + ts.tv_nsec / 1_000_000;
-    while get_time_ms() - start < span { // 这之前单位有点问题
+    while get_time_ms() - start < span {
+        // 这之前单位有点问题
         yield_now().await;
     }
 }
@@ -73,7 +74,7 @@ impl TimerTranc {
 impl Ord for TimerTranc {
     fn cmp(&self, other: &Self) -> Ordering {
         self.expire_ns.cmp(&other.expire_ns).reverse() // 反向实现最小堆
-        // self.expire_ns.cmp(&other.expire_ns)
+                                                       // self.expire_ns.cmp(&other.expire_ns)
     }
 }
 

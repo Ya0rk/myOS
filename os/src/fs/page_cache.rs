@@ -1,17 +1,26 @@
 use core::cmp::min;
 
-use alloc::{collections::btree_map::BTreeMap, sync::{Arc, Weak}};
+use super::InodeTrait;
+use crate::mm::page::*;
+use crate::{
+    hal::config::{BLOCK_SIZE, PAGE_SIZE},
+    mm::{frame_alloc, FrameTracker},
+    sync::{yield_now, SleepLock},
+    task::get_current_cpu,
+    utils::{Errno, SysResult},
+};
+use alloc::{
+    collections::btree_map::BTreeMap,
+    sync::{Arc, Weak},
+};
 use hashbrown::HashSet;
 use log::info;
 use spin::RwLock;
-use crate::{hal::config::{BLOCK_SIZE, PAGE_SIZE}, mm::{frame_alloc, FrameTracker}, sync::{yield_now, SleepLock}, task::get_current_cpu, utils::{Errno, SysResult}};
-use super::InodeTrait;
-use crate::mm::page::*;
 
 /// 使用对齐的地址作为key
 pub struct PageCache {
     pub pages: RwLock<BTreeMap<usize, Arc<Page>>>,
-    inode: RwLock<Option<Weak<dyn InodeTrait>>>
+    inode: RwLock<Option<Weak<dyn InodeTrait>>>,
 }
 
 impl PageCache {
@@ -25,7 +34,7 @@ impl PageCache {
     pub fn new_bare() -> Arc<Self> {
         Arc::new(Self {
             pages: RwLock::new(BTreeMap::new()),
-            inode: RwLock::new(None)
+            inode: RwLock::new(None),
         })
     }
 
@@ -34,17 +43,12 @@ impl PageCache {
     }
 
     /// 在page cache中寻找目标页
-    pub async fn get_page(
-        &self,
-        offset: usize,
-    ) -> Option<Arc<Page>> {
+    pub async fn get_page(&self, offset: usize) -> Option<Arc<Page>> {
         let offset_aligned = offset & !(PAGE_SIZE - 1);
         // 从cache中寻找
         let page = self.pages.read().get(&offset_aligned).cloned();
         match page {
-            Some(_) => {
-                page
-            }
+            Some(_) => page,
             None => {
                 let new_page = self.insert_page(offset_aligned);
                 let buf = new_page.frame.ppn.get_bytes_array();
@@ -59,15 +63,11 @@ impl PageCache {
                 // info!("[get_page] read page {:?}", buf);
                 Some(new_page)
             }
-            
         }
     }
 
     /// 将page插入cache
-    pub fn insert_page(
-        &self,
-        offset: usize
-    ) -> Arc<Page> {
+    pub fn insert_page(&self, offset: usize) -> Arc<Page> {
         let offset_aligned = offset & !(PAGE_SIZE - 1);
         let page = Page::new_file();
         self.pages.write().insert(offset_aligned, page.clone());
@@ -75,17 +75,23 @@ impl PageCache {
     }
 
     /// 清空page cache，需要判断是否dirty
-    pub async fn flush(
-        &self,
-    ) -> SysResult<usize> {
+    pub async fn flush(&self) -> SysResult<usize> {
         for (page_addr_aligned, page) in self.pages.read().iter() {
-            let inode = self.inode.read().as_ref().ok_or(Errno::EBADF)?.upgrade().unwrap();
+            let inode = self
+                .inode
+                .read()
+                .as_ref()
+                .ok_or(Errno::EBADF)?
+                .upgrade()
+                .unwrap();
             let mut dirty_blocks = page.dirty_set().unwrap().lock().await;
             if !dirty_blocks.is_empty() {
                 for idx in dirty_blocks.iter() {
                     let start_offset = idx * BLOCK_SIZE;
                     let start = page_addr_aligned + start_offset;
-                    let buf = &page.frame.ppn.get_bytes_array()[start_offset..start_offset + BLOCK_SIZE].to_vec();
+                    let buf = &page.frame.ppn.get_bytes_array()
+                        [start_offset..start_offset + BLOCK_SIZE]
+                        .to_vec();
                     inode.clone().write_directly(start, buf).await;
                 }
                 dirty_blocks.clear();
@@ -95,16 +101,11 @@ impl PageCache {
     }
 
     /// 利用cache中的page进行read
-    pub async fn read(
-        &self,
-        buf: &mut [u8],
-        offset: usize
-    ) -> usize{
+    pub async fn read(&self, buf: &mut [u8], offset: usize) -> usize {
         let ppn_start = offset / PAGE_SIZE;
         let ppn_end = (offset + buf.len()).div_ceil(PAGE_SIZE);
         let mut page_offset = offset % PAGE_SIZE;
         let mut buf_cur = 0;
-        
 
         for ppn in ppn_start..ppn_end {
             let page = self.get_page(ppn * PAGE_SIZE).await.unwrap();
@@ -121,11 +122,7 @@ impl PageCache {
         buf_cur
     }
 
-    pub async fn write(
-        &self,
-        buf: &[u8],
-        offset: usize
-    ) -> usize {
+    pub async fn write(&self, buf: &[u8], offset: usize) -> usize {
         let ppn_start = offset / PAGE_SIZE;
         let ppn_end = (offset + buf.len()).div_ceil(PAGE_SIZE);
         let mut page_offset = offset % PAGE_SIZE;
@@ -136,7 +133,7 @@ impl PageCache {
 
             let page_buf = page.frame.ppn.get_bytes_array();
             let len = min(buf.len() - buf_cur, PAGE_SIZE - page_offset);
-            for off in (page_offset..page_offset+len).step_by(BLOCK_SIZE) {
+            for off in (page_offset..page_offset + len).step_by(BLOCK_SIZE) {
                 page.set_dirty(off).await;
             }
             page_buf[page_offset..page_offset + len].copy_from_slice(&buf[buf_cur..buf_cur + len]);
@@ -151,5 +148,4 @@ impl PageCache {
 
         buf_cur
     }
-
 }

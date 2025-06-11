@@ -1,11 +1,11 @@
-use core::cell::UnsafeCell;
 use super::TaskControlBlock;
 use crate::hal::config::HART_NUM;
 use crate::mm::page_table::enable_kernel_pgtable;
+use core::cell::UnsafeCell;
 // use crate::mm::switch_to_kernel_pgtable;
+use crate::hal::trap::TrapContext;
 use crate::sync::disable_interrupt;
 use crate::sync::enable_interrupt;
-use crate::hal::trap::TrapContext;
 use crate::utils::backtrace;
 use alloc::sync::Arc;
 
@@ -90,7 +90,6 @@ unsafe impl Sync for SyncProcessors {}
 const PROCESSOR: CPU = CPU::new();
 pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSOR; HART_NUM]));
 
-
 ///Init PROCESSORS
 pub fn init_processors() {
     unsafe {
@@ -147,7 +146,5 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
     if current_task().is_none() {
         backtrace();
     }
-    current_task()
-        .unwrap()
-        .get_trap_cx_mut()
+    current_task().unwrap().get_trap_cx_mut()
 }

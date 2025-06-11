@@ -1,16 +1,21 @@
-use alloc::{collections::vec_deque::VecDeque};
+use super::{addr::Sock, PORT_RANGE};
+use crate::{
+    sync::SpinNoIrqLock,
+    utils::{Errno, SysResult, RNG},
+};
+use alloc::collections::vec_deque::VecDeque;
 use alloc::vec;
 use bitvec_rs::BitVec;
 use hashbrown::HashSet;
 use log::info;
 use smoltcp::iface::{SocketHandle, SocketSet};
 use smoltcp::wire::IpEndpoint;
-use crate::{sync::SpinNoIrqLock, utils::{Errno, SysResult, RNG}};
-use super::{addr::Sock, PORT_RANGE};
 
 lazy_static! {
-    pub static ref PORT_MANAGER: SpinNoIrqLock<PortManager> = SpinNoIrqLock::new(PortManager::new());
-    pub static ref SOCKET_SET: SpinNoIrqLock<SocketSet<'static>> = SpinNoIrqLock::new(SocketSet::new(vec![]));
+    pub static ref PORT_MANAGER: SpinNoIrqLock<PortManager> =
+        SpinNoIrqLock::new(PortManager::new());
+    pub static ref SOCKET_SET: SpinNoIrqLock<SocketSet<'static>> =
+        SpinNoIrqLock::new(SocketSet::new(vec![]));
 }
 
 pub struct PortManager {
@@ -55,14 +60,18 @@ impl PortManager {
     }
     fn dealloc(&mut self, domain: Sock, port: u16) {
         info!("[port dealloc] port: {}", port);
-        assert!(port >= self.start && port <= self.end, "port {} is out of range", port);
+        assert!(
+            port >= self.start && port <= self.end,
+            "port {} is out of range",
+            port
+        );
         self.recycled.push_back(port);
         match domain {
             Sock::Tcp => {
                 self.tcp_used_ports.set(port as usize, false);
             }
             Sock::Udp => {
-                self.udp_used_ports.set(port  as usize, false);
+                self.udp_used_ports.set(port as usize, false);
             }
             _ => {}
         }

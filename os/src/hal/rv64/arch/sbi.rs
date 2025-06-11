@@ -32,7 +32,8 @@ pub fn set_timer(timer: usize) {
 
 /// use sbi call to start the specific core
 pub fn hart_start(hartid: usize, start_addr: usize) -> bool {
-    sbi_call!((ARG_HART_START.0, ARG_HART_START.1): (usize, usize), hartid, start_addr, 0) == RET_SUCCESS
+    sbi_call!((ARG_HART_START.0, ARG_HART_START.1): (usize, usize), hartid, start_addr, 0)
+        == RET_SUCCESS
 }
 
 /// use sbi call to putchar in console (qemu uart handler)

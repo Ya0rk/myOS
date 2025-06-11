@@ -1,9 +1,9 @@
 //！ `hal/la/trap/kernel_trap.rs`
 
 use log::info;
-use loongarch64::register::*;
 use loongarch64::register::ecfg::LineBasedInterrupt;
 use loongarch64::register::estat::{Exception, Interrupt, Trap};
+use loongarch64::register::*;
 
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, TIMER_QUEUE};
@@ -56,20 +56,25 @@ pub fn kernel_trap_handler() {
                         }
                     };
                     
-                    current_task().unwrap().with_mut_memory_space(|m| {
+                    let task = current_task().unwrap();
+                    task.with_mut_memory_space(|m| {
                         m.handle_page_fault(va.into(), access_type)
                     }).unwrap_or_else(|e| {
-                        panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                        use log::error;
+                        task.set_zombie();
+                        error!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
                     });
                 }
-        
+
                 _ => {
-                    panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                    panic!(
+                        "{:?} pc: {:#x} BADV: {:#x}",
+                        estat.cause(),
+                        era.pc(),
+                        badv::read().vaddr()
+                    );
                 }
             }
-        }
-        _ => {
-            panic!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
         }
     }
     era::set_pc(era.pc());

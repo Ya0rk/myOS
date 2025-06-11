@@ -39,6 +39,13 @@ bitflags! {
         const O_NOATIME     = 0o1000000;
         const O_PATH        = 0o10000000;
         const O_TMPFILE     = 0o20200000;
+        const FCNTL_MASK = Self::O_RDONLY.bits()
+                          | Self::O_WRONLY.bits()
+                          | Self::O_RDWR.bits()
+                          | Self::O_CREAT.bits()
+                          | Self::O_EXCL.bits()
+                          | Self::O_NOCTTY.bits()
+                          | Self::O_TRUNC.bits();
     }
 
     pub struct UmountFlags: u32 {
@@ -129,7 +136,6 @@ impl OpenFlags {
     }
 }
 
-
 //
 pub const MOUNTS: &str = " ext4 / ext4 rw 0 0\n";
 pub const MEMINFO: &str = r"
@@ -179,7 +185,6 @@ Hugetlb:               0 kB
 pub const ADJTIME: &str = "0.000000 0.000000 UTC\n";
 pub const LOCALTIME: &str =
     "lrwxrwxrwx 1 root root 33 11月 18  2023 /etc/localtime -> /usr/share/zoneinfo/Asia/Shanghai\n";
-
 
 #[repr(u8)]
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -300,4 +305,3 @@ impl From<InodeType> for InodeTypes {
 pub const S_IFCHR: u32 = 0o0020000;
 pub const S_IFDIR: u32 = 0o0040000;
 pub const S_IFBLK: u32 = 0o0060000;
-

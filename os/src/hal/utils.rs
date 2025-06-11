@@ -1,5 +1,3 @@
-
-
 use paste::paste;
 
 /// impl a is_XX func for flag XX, returning a bool value
@@ -7,15 +5,15 @@ use paste::paste;
 macro_rules! impl_flag_checker {
     ($($vis:vis $flag:ident),+) => {
         paste::paste!{
-            $(  
-                #[allow(unused)] 
-                // #[inline(always)] 
+            $(
+                #[allow(unused)]
+                // #[inline(always)]
                 $vis fn [<is_ $flag>](&self) -> bool {
                     self.contains(Self::$flag)
                 }
             )+
         }
-        
+
     };
 }
 
@@ -23,24 +21,23 @@ macro_rules! impl_flag_checker {
 #[macro_export]
 macro_rules! impl_flag_setter {
     ($($vis:vis $flag:ident),+) => {
-        paste::paste!{  
+        paste::paste!{
             $(
                 #[allow(unused)]
-                // #[inline(always)] 
+                // #[inline(always)]
                 $vis fn [<set_ $flag>](&mut self, val: bool) -> &mut Self {
                     self.set(Self::$flag, val);
                     self
                 }
-            )+    
+            )+
         }
     };
 }
 
-
 // macro_rules! generate_GPRs_64 {
 //     { $($tt:tt);+  $(;)?} => {
 //         __generate_GPRs_64_inner!{0, $($tt;)+}
-        
+
 //     };
 // }
 // macro_rules! __generate_GPRs_64_inner {
@@ -59,7 +56,7 @@ macro_rules! impl_flag_setter {
 
 // macro_rules! __generate_GPR_64_step {
 //     ( $ordinal:expr, ($name:ident, $doc:expr)) => {
-        
+
 //     };
 // }
 
@@ -85,17 +82,16 @@ macro_rules! impl_flag_setter {
 //     ($name:ident, $doc:expr, $ordinal:expr, $dup:expr) => {
 //         paste::paste!{
 //             __generate_GP_register_64_with_dup!($name, $doc, $ordinal, $dup - 1)
-//             __generate_GP_register_64_no_dup!([<$name, $dup>], $doc, $ordinal + $dup)            
+//             __generate_GP_register_64_no_dup!([<$name, $dup>], $doc, $ordinal + $dup)
 //         }
 //     }
 // }
 
 // struct GP{
-    
+
 // }
 // generate_GPRs_64!{
 //     (zero, "zero bits");
 //     (reg, "annotation");
 //     (s dup 9, "static registers");
 // }
-

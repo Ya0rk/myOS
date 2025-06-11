@@ -1,9 +1,12 @@
-use core::{future::Future, pin::Pin, task::Poll};
-use alloc::{sync::Arc, vec::Vec};
-use log::info;
-use crate::{fs::FileTrait, task::current_task, utils::{Errno, SysResult}};
 use super::ffi::{PollEvents, PollFd};
-
+use crate::{
+    fs::FileTrait,
+    task::current_task,
+    utils::{Errno, SysResult},
+};
+use alloc::{sync::Arc, vec::Vec};
+use core::{future::Future, pin::Pin, task::Poll};
+use log::info;
 
 pub struct IoFutrue {
     pub file_event: Vec<PollFd>,
@@ -14,7 +17,7 @@ impl IoFutrue {
     pub fn new(file_event: Vec<PollFd>, user_fds_ptr: UptrFmt) -> Self {
         Self {
             file_event,
-            user_fds_ptr
+            user_fds_ptr,
         }
     }
 }
@@ -22,12 +25,18 @@ impl IoFutrue {
 impl Future for IoFutrue {
     type Output = SysResult<usize>;
 
-    fn poll(self: core::pin::Pin<&mut Self>, cx: &mut core::task::Context<'_>) -> core::task::Poll<Self::Output> {
-        let this = unsafe{ self.get_unchecked_mut() };
+    fn poll(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Self::Output> {
+        let this = unsafe { self.get_unchecked_mut() };
         let mut res_vec = Vec::new();
         for pollfd in this.file_event.iter_mut() {
             pollfd.revents = PollEvents::empty();
-            let file = current_task().unwrap().get_file_by_fd(pollfd.fd as usize).ok_or(Errno::EBADF)?;
+            let file = current_task()
+                .unwrap()
+                .get_file_by_fd(pollfd.fd as usize)
+                .ok_or(Errno::EBADF)?;
             if pollfd.events.contains(PollEvents::POLLIN) {
                 // info!("[PpollFuture] pollin");
                 let res = file.pollin(cx.waker().clone());
@@ -39,19 +48,19 @@ impl Future for IoFutrue {
                         // else { revent |= PollEvents::POLLERR; }
                         pollfd.revents |= revent;
                         res_vec.push(revent);
-                    },
+                    }
                     Err(_) => {
                         let mut revent = PollEvents::POLLERR;
                         // if a { revent |= PollEvents::POLLIN;  }
                         // else { revent |= PollEvents::POLLERR; }
                         pollfd.revents |= revent;
                         res_vec.push(revent);
-                    },
+                    }
                 }
             }
             if pollfd.events.contains(PollEvents::POLLOUT) {
                 // info!("[PpollFuture] pollout");
-                let res= file.pollout(cx.waker().clone());
+                let res = file.pollout(cx.waker().clone());
                 match res {
                     Ok(a) => {
                         let mut revent = PollEvents::POLLOUT;
@@ -59,14 +68,14 @@ impl Future for IoFutrue {
                         // else { revent |= PollEvents::POLLERR; }
                         pollfd.revents |= revent;
                         res_vec.push(revent);
-                    },
+                    }
                     Err(_) => {
                         let mut revent = PollEvents::POLLERR;
                         // if a { revent |= PollEvents::POLLOUT; }
                         // else { revent |= PollEvents::POLLERR; }
                         pollfd.revents |= revent;
                         res_vec.push(revent);
-                    },
+                    }
                 }
             }
         }
@@ -85,7 +94,7 @@ impl Future for IoFutrue {
 /// 所以需要UptrFmt进行统一
 pub enum UptrFmt {
     PollFds(usize),
-    Pselect([usize; 3])
+    Pselect([usize; 3]),
 }
 
 impl UptrFmt {
@@ -94,15 +103,19 @@ impl UptrFmt {
     pub fn update(&self, now_fds: &Vec<PollFd>) -> SysResult<()> {
         match self {
             Self::PollFds(user_fds_ptr) => {
-                let user_fds = unsafe{ core::slice::from_raw_parts_mut((*user_fds_ptr) as *mut PollFd, now_fds.len()) }; 
+                let user_fds = unsafe {
+                    core::slice::from_raw_parts_mut((*user_fds_ptr) as *mut PollFd, now_fds.len())
+                };
                 user_fds.copy_from_slice(&now_fds);
                 Ok(())
             }
             Self::Pselect([readfds, writefds, exceptfds]) => {
                 for pollfd in now_fds {
                     let flash = |ptr: usize, event: PollEvents| {
-                        if ptr == 0 { return Ok(()); }
-                        let fdset = unsafe{ &mut *(ptr as *mut FdSet) };
+                        if ptr == 0 {
+                            return Ok(());
+                        }
+                        let fdset = unsafe { &mut *(ptr as *mut FdSet) };
                         if pollfd.revents.contains(event) {
                             fdset.setfd(pollfd.fd as usize);
                         }
@@ -117,7 +130,6 @@ impl UptrFmt {
         }
     }
 }
-
 
 pub const FD_SET_SIZE: usize = 1024;
 pub const FD_PER_BITS: usize = 8 * size_of::<usize>();

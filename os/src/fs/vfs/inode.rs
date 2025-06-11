@@ -1,8 +1,7 @@
-use super::{alloc_ino, Dentry};
+use core::sync::atomic::AtomicUsize;
 use crate::{
     fs::{
-        ext4::NormalFile, ffi::InodeType, page_cache::PageCache, AbsPath, Dirent, FileClass,
-        FileTrait, Kstat, OpenFlags, SEEK_END,
+        ext4::NormalFile, ffi::InodeType, page_cache::PageCache, vfs::alloc_ino, AbsPath, Dentry, Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END
     },
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult},
@@ -14,7 +13,6 @@ use alloc::{
     vec::Vec,
 };
 use async_trait::async_trait;
-use core::sync::atomic::AtomicUsize;
 use lwext4_rust::{Ext4File, InodeTypes};
 use spin::Mutex;
 
@@ -100,7 +98,7 @@ pub trait InodeTrait: Send + Sync {
         None
     }
     /// 确实应当剥夺walk去创造Inode的权利
-    fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, _path: &str) ->  Option<Arc<dyn InodeTrait>>{
         todo!()
     }
 

@@ -1,30 +1,38 @@
 // this file is used for ppoll and pselect6
-use core::{ptr::NonNull, time::Duration};
 use alloc::{sync::Arc, vec::Vec};
+use core::{intrinsics::unlikely, ptr::NonNull, time::Duration};
 use hashbrown::{HashMap, HashSet};
 use log::info;
+
 use crate::{
-    fs::FileTrait, signal::SigMask, 
-    sync::{TimeSpec, TimeoutFuture}, 
-    syscall::{ffi::{PollEvents, PollFd}, io_async::{FdSet, IoFutrue, FD_PER_BITS, FD_SET_LEN, FD_SET_SIZE}}, 
-    task::{current_task, TaskControlBlock}, utils::{Errno, SysResult}
+    signal::SigMask,
+    sync::{TimeSpec, TimeoutFuture},
+    syscall::{
+        ffi::{PollEvents, PollFd},
+        io_async::{FdSet, IoFutrue, FD_PER_BITS, FD_SET_SIZE},
+    },
+    task::{current_task, TaskControlBlock},
+    utils::{Errno, SysResult},
 };
 
 use super::io_async::UptrFmt;
 
 // 新增 Guard 结构体, 在函数返回时自动回复Sigmask为original
-struct SigMaskGuard {
-    task: Arc<TaskControlBlock>,
-    original_mask: Option<SigMask>,
+pub struct SigMaskGuard {
+    pub task: Arc<TaskControlBlock>,
+    pub original_mask: Option<SigMask>,
 }
 
 impl SigMaskGuard {
-    fn new(task: Arc<TaskControlBlock>, new_mask: Option<SigMask>) -> Self {
+    pub fn new(task: Arc<TaskControlBlock>, new_mask: Option<SigMask>) -> Self {
         let original_mask = task.get_blocked().clone();
         if let Some(mask) = new_mask {
             task.set_blocked(mask | original_mask);
         }
-        Self { task, original_mask: Some(original_mask) }
+        Self {
+            task,
+            original_mask: Some(original_mask),
+        }
     }
 }
 
@@ -45,21 +53,18 @@ impl Drop for SigMaskGuard {
 /// nfds：指明fds指向的数组元素个数
 /// tmo_p：该参数指定ppoll阻塞等待文件描述符就绪的时间
 /// sigmask: 临时替换进程的信号掩码（阻塞的信号集合），系统调用完成后恢复原掩码
-/// 
+///
 /// 若在 tmo_p 指定的时间内无事件发生，定时器触发唤醒进程，返回 0
 /// 否则返回就绪的文件描述符数量
-/// 
+///
 /// The field fd contains a file descriptor for an open file.  If this
 /// field is negative, then the corresponding events field is ignored
 /// and the revents field returns zero.
-pub async fn sys_ppoll(
-    fds: usize,
-    nfds: usize,
-    tmo_p: usize,
-    sigmask: usize,
-) -> SysResult<usize> {
+pub async fn sys_ppoll(fds: usize, nfds: usize, tmo_p: usize, sigmask: usize) -> SysResult<usize> {
     // info!("[sys_ppoll] start fds: {}, nfds: {}, tmo_p: {}, sigmask: {}", fds, nfds, tmo_p, sigmask);
-    if fds == 0 { return Err(Errno::EFAULT); }
+    if fds == 0 {
+        return Err(Errno::EFAULT);
+    }
     let task = current_task().unwrap();
     // 使用 Guard 管理信号掩码, 函数结束时自动回复sigmask
     let sigmask_guard = {
@@ -73,14 +78,14 @@ pub async fn sys_ppoll(
     };
 
     let time_out = match tmo_p {
-        0 => None, 
+        0 => None,
         _ => {
-            let timespec = unsafe{ *(tmo_p as *const TimeSpec) };
+            let timespec = unsafe { *(tmo_p as *const TimeSpec) };
             Some(Duration::from(timespec))
         }
     };
 
-    let myfds = unsafe{ core::slice::from_raw_parts(fds as *const PollFd, nfds) };
+    let myfds = unsafe { core::slice::from_raw_parts(fds as *const PollFd, nfds) };
     let mut file_events = myfds.to_vec();
 
     // 生成异步等待任务，检测文件状态是否可读或可写，根据PollEvents决定用户希望的状态
@@ -92,9 +97,7 @@ pub async fn sys_ppoll(
         Some(timeout) => {
             let timelimit_task = TimeoutFuture::new(ppoll, timeout);
             match timelimit_task.await {
-                Ok(res) => {
-                    res
-                }
+                Ok(res) => res,
                 Err(_) => {
                     // 代表任务超时
                     info!("[sys_ppoll] task time out");
@@ -109,15 +112,23 @@ pub async fn sys_ppoll(
 
 /// control device
 pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
-    info!("[sys_ioctl] start fd: {}, op: {:#x}, arg: {:#x}", fd, op, arg);
+    info!(
+        "[sys_ioctl] start fd: {}, op: {:#x}, arg: {:#x}",
+        fd, op, arg
+    );
+    if unlikely(arg == 0) {
+        return Err(Errno::EFAULT);
+    }
     let task = current_task().unwrap();
-    if fd > task.fd_table_len() { return Err(Errno::EBADF); }
+    if unlikely(fd > task.fd_table_len()) {
+        return Err(Errno::EBADF);
+    }
     // Ok(0)
     if let Some(file) = task.get_file_by_fd(fd) {
         if file.is_deivce() {
             file.get_inode().ioctl(op, arg)
         } else {
-            return Ok(0)
+            return Ok(0);
         }
     } else {
         Err(Errno::EBADF)
@@ -130,19 +141,26 @@ pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
 /// 分别用于监视读、 写和异常条件。 timeout：
 /// 指向TimeSpec结构的指针，用于指定等待的超时时间。 sigmask：
 /// 指向信号掩码的指针，用于在pselect调用期间阻止特定的信号。
-pub async fn sys_pselect(nfds: usize, readfds_ptr: usize, writefds_ptr: usize, exceptfds_ptr: usize, timeout: usize, sigmask: usize) -> SysResult<usize> {
+pub async fn sys_pselect(
+    nfds: usize,
+    readfds_ptr: usize,
+    writefds_ptr: usize,
+    exceptfds_ptr: usize,
+    timeout: usize,
+    sigmask: usize,
+) -> SysResult<usize> {
     info!("[sys_pselect] start.");
     let mut readfds = match readfds_ptr {
         0 => None,
-        _ => Some(unsafe { &mut *(readfds_ptr as *mut FdSet) })
+        _ => Some(unsafe { &mut *(readfds_ptr as *mut FdSet) }),
     };
     let mut writefds = match writefds_ptr {
         0 => None,
-        _ => Some(unsafe { &mut *(writefds_ptr as *mut FdSet) })
+        _ => Some(unsafe { &mut *(writefds_ptr as *mut FdSet) }),
     };
     let mut exceptfds = match exceptfds_ptr {
         0 => None,
-        _ => Some(unsafe { &mut *(exceptfds_ptr as *mut FdSet) })
+        _ => Some(unsafe { &mut *(exceptfds_ptr as *mut FdSet) }),
     };
     let timeout = match timeout {
         0 => None,
@@ -164,11 +182,13 @@ pub async fn sys_pselect(nfds: usize, readfds_ptr: usize, writefds_ptr: usize, e
             break;
         }
         let fd_slot = fd / FD_PER_BITS;
-        let offset  = fd % FD_PER_BITS;
+        let offset = fd % FD_PER_BITS;
         // println!("fd = {}, fd_slot = {}, offset = {}, (1<<offset) = {}", fd, fd_slot, offset, (1<<offset));
         let mut find_and_push = |set: &FdSet, event: PollEvents| {
             if set.isset(fd_slot, offset) {
-                if let Some(pollfd) = file_events.last_mut() && pollfd.fd as usize == fd {
+                if let Some(pollfd) = file_events.last_mut()
+                    && pollfd.fd as usize == fd
+                {
                     pollfd.events |= event;
                 } else {
                     task.fd_table.lock().get_file_by_fd(fd)?;
@@ -212,7 +232,10 @@ pub async fn sys_pselect(nfds: usize, readfds_ptr: usize, writefds_ptr: usize, e
         SigMaskGuard::new(task.clone(), new_sigmask)
     };
 
-    let iofuture = IoFutrue::new(file_events, UptrFmt::Pselect([readfds_ptr, writefds_ptr, exceptfds_ptr]));
+    let iofuture = IoFutrue::new(
+        file_events,
+        UptrFmt::Pselect([readfds_ptr, writefds_ptr, exceptfds_ptr]),
+    );
 
     match timeout {
         None => return iofuture.await,
@@ -220,7 +243,7 @@ pub async fn sys_pselect(nfds: usize, readfds_ptr: usize, writefds_ptr: usize, e
             let timeoutFuture = TimeoutFuture::new(iofuture, span);
             match timeoutFuture.await {
                 Ok(res) => return res,
-                Err(_) => return Ok(0)
+                Err(_) => return Ok(0),
             }
         }
     }

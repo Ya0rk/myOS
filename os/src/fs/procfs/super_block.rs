@@ -1,7 +1,10 @@
 use alloc::sync::Arc;
 use log::info;
 
-use crate::fs::{procfs::inode::{ProcFsInode, ProcFsInodeInner}, InodeTrait, SuperBlockTrait};
+use crate::fs::{
+    procfs::inode::{ProcFsInode, ProcFsInodeInner},
+    InodeTrait, SuperBlockTrait,
+};
 
 pub struct ProcFsSuperBlock {
     root: Arc<ProcFsInode>,

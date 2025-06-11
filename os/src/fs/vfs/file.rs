@@ -1,8 +1,16 @@
-use core::{sync::atomic::{AtomicUsize, Ordering}, task::Waker};
-use crate::{fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags}, mm::{page::Page, UserBuffer}, net::Socket, utils::{Errno, SysResult}};
+use crate::{
+    fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags},
+    mm::{page::Page, UserBuffer},
+    net::Socket,
+    utils::{Errno, SysResult},
+};
+use alloc::boxed::Box;
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
-use alloc::boxed::Box;
+use core::{
+    sync::atomic::{AtomicUsize, Ordering},
+    task::Waker,
+};
 use log::info;
 use spin::RwLock;
 
@@ -22,7 +30,7 @@ impl FileMeta {
         Self {
             offset: AtomicUsize::new(0),
             flags: RwLock::new(flags),
-            inode
+            inode,
         }
     }
 
@@ -49,7 +57,7 @@ pub trait FileTrait: Send + Sync {
     /// 临时机制, 为了在ioctl中判断
     fn is_deivce(&self) -> bool {
         false
-    } 
+    }
 
     /// 从文件中读取数据到用户缓冲区
     ///
@@ -99,19 +107,7 @@ pub trait FileTrait: Send + Sync {
     /// ppoll处理
     // fn poll(&self, events: PollEvents) -> PollEvents;
 
-    /// 设置文件的当前偏移量
-    ///
-    /// 根据指定的偏移量和起始位置调整文件的当前读写位置。
-    /// 并非所有文件类型都支持此操作。
-    ///
-    /// # 参数
-    ///
-    /// * `_offset` - 偏移量，可以是正数或负数
-    /// * `_whence` - 起始位置，通常为 SEEK_SET(0)、SEEK_CUR(1) 或 SEEK_END(2)
-    ///
-    /// # 返回
-    ///
-    /// 设置后的新偏移量位置
+    /// 获取文件路径，这里是绝对路径
     fn get_name(&self) -> SysResult<String>;
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize>;
     fn fstat(&self, stat: &mut Kstat) -> SysResult;
@@ -127,7 +123,7 @@ pub trait FileTrait: Send + Sync {
     fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
         Err(Errno::ENOTSOCK)
     }
-    fn set_flags(&self, flags: OpenFlags){
+    fn set_flags(&self, flags: OpenFlags) {
         // unimplemented!("not support!");
     }
     fn get_flags(&self) -> OpenFlags {
@@ -136,7 +132,7 @@ pub trait FileTrait: Send + Sync {
         OpenFlags::O_RDWR
     }
     /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
-    async fn pread(&self, mut buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize>{
+    async fn pread(&self, mut buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
         unimplemented!("not support!");
     }
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
@@ -162,5 +158,3 @@ pub trait FileTrait: Send + Sync {
         Ok(true)
     }
 }
-
-

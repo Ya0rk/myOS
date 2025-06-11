@@ -1,5 +1,5 @@
-use core::time::Duration;
 use crate::sync::timer::{time_duration, TIME_SLICE_DUATION};
+use core::time::Duration;
 
 #[allow(unused)]
 pub struct TimeData {
@@ -10,7 +10,7 @@ pub struct TimeData {
     user_time: Duration,
     /// 内核态花费时间
     system_time: Duration,
-    
+
     /// 在内核中调度进入processor开始执行的时间
     sched_in_time: Duration,
     /// 在内核中调度进程退出processor的时间

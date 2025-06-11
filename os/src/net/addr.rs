@@ -1,9 +1,8 @@
+use super::{AF_INET, AF_INET6, AF_UNIX};
+use crate::utils::{Errno, SysResult};
 use core::{intrinsics::unlikely, ptr::copy_nonoverlapping};
 use log::info;
 use smoltcp::wire::{IpAddress, IpEndpoint};
-use crate::utils::{Errno, SysResult};
-use super::{AF_INET, AF_INET6, AF_UNIX};
-
 
 /// 协议簇类型
 #[derive(Debug, Clone, Copy)]
@@ -29,8 +28,8 @@ impl SockAddr {
                         core::mem::size_of::<Ipv4>(),
                     );
                 }
-               return Ok(());
-            },
+                return Ok(());
+            }
             SockAddr::Inet6(addr) => {
                 if len < core::mem::size_of::<Ipv6>() {
                     return Err(Errno::EINVAL);
@@ -43,13 +42,12 @@ impl SockAddr {
                         core::mem::size_of::<Ipv6>(),
                     );
                 }
-               return Ok(());
-            },
+                return Ok(());
+            }
             _ => return Err(Errno::EAFNOSUPPORT),
         }
     }
 }
-
 
 #[derive(Clone, Copy)]
 pub enum Sock {
@@ -109,7 +107,7 @@ impl Ipv6 {
         Self {
             family: AF_INET6,
             port,
-            flowinfo: 0, 
+            flowinfo: 0,
             addr,
             scope_id: 0,
         }
@@ -128,7 +126,10 @@ pub struct SockUnix {
 impl SockAddr {
     pub fn from(addr: usize, addrlen: usize) -> Self {
         if unlikely(addr == 0 || addrlen < core::mem::size_of::<u16>()) {
-            info!("[sockaddr from] transfer error, addr: {}, addrlen: {}", addr, addrlen);
+            info!(
+                "[sockaddr from] transfer error, addr: {}, addrlen: {}",
+                addr, addrlen
+            );
             return SockAddr::Unspec;
         }
 
@@ -137,7 +138,7 @@ impl SockAddr {
             AF_UNIX => Self::parse_unix(addr, addrlen),
             AF_INET => Self::parse_ipv4(addr, addrlen),
             AF_INET6 => Self::parse_ipv6(addr, addrlen),
-            _ => SockAddr::Unspec
+            _ => SockAddr::Unspec,
         }
     }
 
@@ -200,12 +201,11 @@ impl TryFrom<SockAddr> for IpEndpoint {
                 let port = addr.port;
                 Ok(IpEndpoint::new(ip.into(), port))
             }
-            SockAddr::Unix(addr) => todo!(),
+            SockAddr::Unix(addr) => Err(Errno::EAFNOSUPPORT),
             _ => return Err(Errno::EINVAL),
         }
     }
 }
-
 
 pub fn do_addr127(endpoitn: &mut IpEndpoint) {
     if endpoitn.addr.is_unspecified() {

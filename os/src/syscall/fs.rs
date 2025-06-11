@@ -1,4 +1,3 @@
-use super::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, AT_REMOVEDIR};
 use crate::fs::ext4::NormalFile;
 use crate::fs::procfs::inode;
 use crate::fs::{
@@ -6,12 +5,12 @@ use crate::fs::{
     Kstat, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, Stdout, StxMask, UmountFlags,
     MNT_TABLE, SEEK_CUR,
 };
-use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE};
+use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
 use crate::mm::user_ptr::{user_cstr, user_ref_mut, user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
-use crate::syscall::ffi::{IoVec, StatFs};
+use crate::syscall::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, IoVec, StatFs, AT_REMOVEDIR};
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{backtrace, Errno, SysResult};
 use alloc::boxed::Box;
@@ -23,23 +22,29 @@ use alloc::vec::Vec;
 use core::cell::SyncUnsafeCell;
 use core::cmp::{max, min};
 use core::error;
+use core::intrinsics::unlikely;
 use core::ops::Add;
-use log::{debug, info};
+use log::{debug, info, warn};
 use lwext4_rust::file;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() {
+    if unlikely(fd >= task.fd_table_len()) {
         return Err(Errno::EBADF);
     }
     match task.get_file_by_fd(fd) {
         Some(file) => {
-            if !file.writable() {
+            if unlikely(!file.writable()) {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
-            let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, len) };
+            let mut size = len;
+            if unlikely(task.fsz_limit.lock().is_some()) {
+                size = task.fsz_limit.lock().unwrap().rlim_max;
+            }
+
+            let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, size) };
             Ok(file.write(buf).await? as usize)
         }
         _ => Err(Errno::EBADF),
@@ -48,14 +53,14 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() {
+    if unlikely(fd >= task.fd_table_len()) {
         // info!("[sys_read] task pid = {}", task.get_pid());
         // info!("[sys_read] fd = {}, but fd len is {}", fd, task.fd_table_len());
         return Err(Errno::EBADF);
     }
     match task.get_file_by_fd(fd) {
         Some(file) => {
-            if !file.readable() {
+            if unlikely(!file.readable()) {
                 return Err(Errno::EPERM);
             }
             // let file = file.clone();
@@ -177,7 +182,9 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
+        if unlikely(
+            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize,
+        ) {
             return Err(Errno::EBADF);
         }
         let inode = match task.get_file_by_fd(dirfd as usize) {
@@ -186,7 +193,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         };
         // let other_cwd = cwd.clone();
         let other_cwd = inode.get_name()?;
-        if other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") {
+        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout")) {
             return Ok(0);
         }
         resolve_path(other_cwd, path)
@@ -198,7 +205,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
     // 检查路径是否有效并打开文件
     match open(target_path, OpenFlags::O_RDONLY) {
         Ok(FileClass::File(file)) => {
-            if !file.metadata.inode.is_valid() {
+            if unlikely(!file.metadata.inode.is_valid()) {
                 return Err(Errno::ENOENT);
             }
             file.fstat(&mut tempstat)?;
@@ -230,12 +237,12 @@ pub fn sys_fstat(fd: usize, kst: usize) -> SysResult<usize> {
     info!("[sys_fstat] start");
     let task = current_task().unwrap();
     // let inner = task.inner_lock();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
 
     let ptr = kst as *mut Kstat;
-    if ptr.is_null() {
+    if unlikely(ptr.is_null()) {
         return Err(Errno::EFAULT);
     }
 
@@ -278,6 +285,11 @@ pub fn sys_statx(
     statxbuf: usize,
 ) -> SysResult<usize> {
     info!("[sys_statx] start");
+    println!("[sys_statx] start, dirfd = {}, pathname = {}, statxbuf = {}, maks = {}, flags = {}", dirfd, pathname, statxbuf, mask, flags);
+    if unlikely(statxbuf == 0 || pathname == 0 || pathname > USER_SPACE_TOP || statxbuf > USER_SPACE_TOP) {
+        info!("[sys_statx] pathname or statxbuf is null, fault.");
+        return Err(Errno::EFAULT);
+    }
     let dirfd = dirfd as isize;
     let task = current_task().unwrap();
     let token = task.get_user_token();
@@ -303,9 +315,7 @@ pub fn sys_statx(
         if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
             return Err(Errno::EBADF);
         }
-        let inode = task
-            .get_file_by_fd(dirfd as usize)
-            .expect("[sys_statx] not found fd");
+        let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
         resolve_path(other_cwd, path)
     };
@@ -344,7 +354,7 @@ pub fn sys_statx(
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult<usize> {
     info!("[sys_openat] start");
-    if path == 0 {
+    if unlikely(path == 0) {
         info!("[sys_openat] path ptr is null, fault.");
         return Err(Errno::EFAULT);
     }
@@ -360,10 +370,14 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
-        if fd < 0 || fd as usize > RLIMIT_NOFILE {
+        if unlikely(fd < 0 || fd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
-        let inode = task.get_file_by_fd(fd as usize).unwrap();
+        let inode = task.get_file_by_fd(fd as usize).ok_or(Errno::EBADF)?;
+        if unlikely(!inode.is_dir()) {
+            log::error!("[sys_openat] fd = {} is not a dir.", fd);
+            return Err(Errno::ENOTDIR);
+        }
         let other_cwd = inode.get_name()?;
         info!("[sys_openat] other cwd = {}", other_cwd);
         resolve_path(other_cwd, path)
@@ -384,7 +398,7 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
                 task.get_pid(),
                 fd
             );
-            if fd > RLIMIT_NOFILE {
+            if unlikely(fd > RLIMIT_NOFILE) {
                 return Err(Errno::EMFILE);
             } else {
                 return Ok(fd);
@@ -404,7 +418,7 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
         task.get_pid(),
         fd
     );
-    if fd >= task.fd_table_len() {
+    if unlikely(fd >= task.fd_table_len()) {
         return Err(Errno::EMFILE);
     }
 
@@ -468,13 +482,13 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     info!("[sys_getdents64] start fd: {}, len: {}", fd, len);
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         log::error!("[sys_getdents64] fd {} invalid", fd);
         return Err(Errno::EBADF);
     }
 
-    let buf = buf as *mut u8;
-    if buf.is_null() {
+    let ptr = buf as *mut u8;
+    if unlikely(buf == 0) {
         log::error!("[sys_getdents64] buf is null");
         return Err(Errno::EFAULT);
     }
@@ -482,7 +496,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 
     let token = task.get_user_token();
     let file = task.get_file_by_fd(fd).unwrap();
-    let res = file.read_dents(buf as usize, len);
+    let res = file.read_dents(ptr as usize, len);
     info!("[sys_getdents64] return = {}", res);
     Ok(res)
 }
@@ -492,24 +506,28 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 /// Success: 返回当前工作目录的长度;  Fail: 返回-1
 pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     info!("[sys_getcwd] start");
-    let ptr = buf as *mut u8;
-    if ptr.is_null() || size == 0 {
-        return Err(Errno::EINVAL);
+    info!("[sys_getcwd] buf = {:#x}, size = {}", buf, size);
+    if buf == 0 || buf > USER_SPACE_TOP || size > PATH_MAX {
+        return Err(Errno::EFAULT);
     }
 
     let task = current_task().unwrap();
-    // let task_inner = task.inner_lock();
     let token = task.get_user_token();
     let cwd = task.get_current_path();
     let length: usize = cwd.len() + 1;
     info!("[sys_getcwd] cwd is {}", cwd);
     let cs_cwd: CString = CString::new(cwd).expect("can translate to cstring");
 
-    if length > PATH_MAX {
+    if unlikely(length > PATH_MAX) {
         return Err(Errno::ENAMETOOLONG);
     }
-    if length > size {
+    if unlikely(length > size) {
         return Err(Errno::ERANGE);
+    }
+
+    let ptr = buf as *mut u8;
+    if unlikely(buf != 0 && size == 0) {
+        return Err(Errno::EINVAL);
     }
 
     // drop(task_inner);
@@ -602,10 +620,15 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
+        if unlikely(
+            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize,
+        ) {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).unwrap();
+        if unlikely(!inode.is_dir()) {
+            return Err(Errno::ENOTDIR);
+        }
         let other_cwd = inode.get_name()?;
         resolve_path(other_cwd, path)
     };
@@ -655,6 +678,13 @@ pub fn sys_mount(
     data: usize,
 ) -> SysResult<usize> {
     info!("[sys_mount] start");
+    // println!(
+    //     "[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = {}",
+    //     source, target, fstype, flags, data
+    // );
+    if unlikely(source == 0 || target == 0 || fstype == 0) {
+        return Err(Errno::EFAULT);
+    }
     let token = current_user_token();
     let source = user_cstr(source.into())?.unwrap();
     let target = user_cstr(target.into())?.unwrap();
@@ -707,7 +737,6 @@ pub fn sys_chdir(path: usize) -> SysResult<usize> {
 }
 
 pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
-    // info!("[sys_unlinkat] start");
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = user_cstr(path.into())?.unwrap();
@@ -723,7 +752,6 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     match open(target_path.clone(), OpenFlags::O_RDWR) {
         Ok(file_class) => {
             let file = file_class.file()?;
-            // info!("[unlink] file path = {}", file.path);
             let is_dir = file.is_dir();
             if is_dir && flags != AT_REMOVEDIR {
                 return Err(Errno::EISDIR);
@@ -735,20 +763,6 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
             file.get_inode().unlink(target_dentry)?;
         }
         Err(e) => {
-            // info!("[sys_unlinkat] open file failed: {:?}", e);
-            // if e == Errno::ENOENT {
-            //     // 如果文件不存在，且flags为AT_REMOVEDIR，则返回成功
-            //     if flags == AT_REMOVEDIR {
-            //         return Ok(0);
-            //     }
-            //     return Err(Errno::ENOENT);
-            // } else if e == Errno::EISDIR && flags != AT_REMOVEDIR {
-            //     return Err(Errno::EISDIR);
-            // } else if e == Errno::ENOTDIR && flags == AT_REMOVEDIR {
-            //     return Err(Errno::ENOTDIR);
-            // } else {
-            //     return Err(e);
-            // }
             return Err(e);
         }
     }
@@ -955,7 +969,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 fd 对应的目录为起点
-        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE {
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
         let inode = current_task()
@@ -992,12 +1006,16 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
 /// according to the directive whence as follows
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     info!("[sys_lseek] start");
+    // println!("[sys_lseek] start, fd = {}, offset = {}, whence = {}", fd, offset, whence);
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
-    file.lseek(offset, whence)
+    let res = file.lseek(offset, whence)?;
+    // println!("[sys_lseek] lseek finished, res = {}", res);
+
+    Ok(res)
 }
 
 /// TODO(YJJ): 有待完善
@@ -1006,8 +1024,11 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
 pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
-    info!("[sys_fcntl] start, fd = {}, cmd = {:?}", fd, cmd);
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    info!(
+        "[sys_fcntl] start, fd = {}, cmd = {:?}, arg = {}",
+        fd, cmd, arg
+    );
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
 
@@ -1015,7 +1036,18 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
         // F_SETFL：设置文件状态标志。它首先从参数arg中获取标志，然后设置文件描述符的标志。
         FcntlFlags::F_SETFL => {
             if let Some(file) = task.get_file_by_fd(fd) {
-                file.set_flags(OpenFlags::from_bits(arg as i32).ok_or(Errno::EINVAL)?);
+                // 1. 获取当前文件标志
+                let current_flags = file.get_flags();
+                // 2. 提取需要保留的标志位（FCNTL_MASK中的位）
+                let preserved_flags = current_flags & OpenFlags::FCNTL_MASK;
+                // 3. 获取用户传入的新标志，并过滤掉不允许修改的标志位
+                let user_flags = OpenFlags::from_bits(arg as i32).ok_or(Errno::EINVAL)?;
+                let filtered_user_flags = user_flags & !OpenFlags::FCNTL_MASK;
+                // 4. 合并保留的标志位和用户设置的新标志位
+                let new_flags = preserved_flags | filtered_user_flags;
+
+                // println!("Updating flags: current={:?}, new={:?}", current_flags, new_flags);
+                file.set_flags(new_flags);
             }
             return Ok(0);
         }
@@ -1023,24 +1055,38 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
         // todo  Ok(file.available() as isize);
         // F_GETFD和F_GETFL：获取文件描述符的标志。它首先从文件描述符表中获取文件描述符的信息，
         // 然后返回文件描述符的标志。
-        FcntlFlags::F_GETFD | FcntlFlags::F_GETFL => {
-            // Return (as the function result) the file descriptor flags; arg is ignored.
+        FcntlFlags::F_GETFD => {
+            let fd_info = task.get_fd(fd)?;
+            let flag = fd_info.flags;
+            let mut res = 0;
+            if flag.contains(OpenFlags::O_CLOEXEC) {
+                res = FcntlArgFlags::FD_CLOEXEC.bits() as usize;
+            }
+            // println!("ok res = {:?}", res);
+            return Ok(res);
+        }
+        FcntlFlags::F_GETFL => {
             if let Some(file) = task.get_file_by_fd(fd) {
                 let flags = file.get_flags();
-                if flags.contains(OpenFlags::O_CLOEXEC) && cmd.contains(FcntlFlags::F_GETFD) {
-                    return Ok(FcntlArgFlags::bits(&FcntlArgFlags::FD_CLOEXEC) as usize);
-                } else {
-                    return Ok(OpenFlags::bits(&flags) as usize);
-                }
+                // println!("get flags = {:?}", flags);
+                // let res = OpenFlags::bits(&flags) as usize;
+                let res = flags.bits() as usize;
+                // println!("this is res = {:?}", res);
+                return Ok(res);
             }
             return Err(Errno::EBADF);
         }
         // F_SETFD：设置文件描述符的标志。它首先从参数arg中获取标志，然后设置文件描述符的标志。
         FcntlFlags::F_SETFD => {
             // Set the file descriptor flags to the value specified by arg.
-            if let Some(file) = task.get_file_by_fd(fd) {
-                let new_flags = FcntlArgFlags::from_bits(arg as u32).ok_or(Errno::EINVAL)?;
+            let mut table = task.fd_table.lock();
+            let mut fd_info = table.get_mut_fd(fd)?;
+            if arg == 1 {
+                fd_info.flags = OpenFlags::O_CLOEXEC;
+            } else {
+                fd_info.flags = OpenFlags::empty();
             }
+            drop(table);
             return Ok(0);
         }
         // F_DUPFD：复制文件描述符。它首先从文件描述符表中获取文件，然后分配一个新的文件描述符，
@@ -1075,7 +1121,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
 pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
     info!("[sys_ftruncate64] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
@@ -1094,11 +1140,11 @@ pub fn sys_fchmodat() -> SysResult<usize> {
 pub async fn sys_pread64(fd: usize, buf: usize, count: usize, offset: usize) -> SysResult<usize> {
     info!("[sys_pread64] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
-    if !file.readable() {
+    if unlikely(!file.readable()) {
         return Err(Errno::EPERM);
     }
     let buffer = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, count) };
@@ -1110,11 +1156,11 @@ pub async fn sys_pread64(fd: usize, buf: usize, count: usize, offset: usize) -> 
 pub async fn sys_pwrite64(fd: usize, buf: usize, count: usize, offset: usize) -> SysResult<usize> {
     info!("[sys_pwrite64] start");
     let task = current_task().unwrap();
-    if fd >= task.fd_table_len() || fd > RLIMIT_NOFILE {
+    if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).unwrap();
-    if !file.writable() {
+    if unlikely(!file.writable()) {
         return Err(Errno::EPERM);
     }
     let buffer = unsafe { core::slice::from_raw_parts(buf as *const u8, count) };
@@ -1294,3 +1340,42 @@ pub fn sys_umask() -> SysResult<usize> {
     Ok(0)
 }
 
+/// 一个 POSIX 系统调用，用于将进程的当前工作目录更改为指定文件描述符对应的目录
+pub fn sys_fchdir(fd: usize) -> SysResult<usize> {
+    info!("[sys_fchdir] start, fd = {}", fd);
+    let task = current_task().unwrap();
+    if unlikely(fd > task.fd_table_len()) {
+        warn!("[sys_fchdir] fd out of bounds");
+        return Err(Errno::EBADF);
+    }
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    if unlikely(!file.is_dir()) {
+        warn!("[sys_fchdir] fd's file is not dir");
+        return Err(Errno::ENOTDIR);
+    }
+
+    let path = file.get_name()?;
+    let abs = AbsPath::new(path.clone());
+    chdir(abs)?;
+    task.set_current_path(path);
+
+    Ok(0)
+}
+
+/// splice data to/from a pipe
+/// splice() moves data between two file descriptors without copying
+/// between kernel address space and user address space.  It transfers
+/// up to size bytes of data from the file descriptor fd_in to the
+/// file descriptor fd_out, where one of the file descriptors must
+/// refer to a pipe.
+pub fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usize, size: usize, _flags: u32) -> SysResult<usize> {
+    info!("[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}", fd_in, off_in, fd_out, off_out, size);
+    println!("[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}", fd_in, off_in, fd_out, off_out, size);
+    
+    // TODO: 实现splice功能
+
+
+
+
+    Ok(0)
+}

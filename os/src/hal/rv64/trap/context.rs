@@ -1,7 +1,7 @@
 use core::arch::asm;
 // use riscv::register::sstatus::FS;
 
-use super::super::arch::sstatus::{self, Sstatus, SPP, FS};
+use super::super::arch::sstatus::{self, Sstatus, FS, SPP};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -16,7 +16,7 @@ pub struct UserFloatRegs {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct TrapContext {
-    /* 0-31 */ pub user_gp: GPRegs, 
+    /* 0-31 */ pub user_gp: GPRegs,
     /*  32  */ pub sstatus: Sstatus,
     /*  33  */ pub sepc: usize,
     /*  34  */ pub kernel_sp: usize,
@@ -25,43 +25,44 @@ pub struct TrapContext {
     /*  48  */ pub kernel_fp: usize,
     /*  49  */ pub kernel_tp: usize,
     /*  50  */ pub float_regs: UserFloatRegs,
+    /*  51  */ pub last_a0: usize,
 }
 /// 通用寄存器
 #[derive(Clone, Copy, Debug, Default)]
 #[repr(C)]
 pub struct GPRegs {
-    pub zero:   usize,
-    pub ra:     usize,
-    pub sp:     usize,
-    pub gp:     usize,
-    pub tp:     usize,
-    pub t0:     usize,
-    pub t1:     usize,
-    pub t2:     usize,
-    pub s0:     usize,
-    pub s1:     usize,
-    pub a0:     usize,
-    pub a1:     usize,
-    pub a2:     usize,
-    pub a3:     usize,
-    pub a4:     usize,
-    pub a5:     usize,
-    pub a6:     usize,
-    pub a7:     usize,
-    pub s2:     usize,
-    pub s3:     usize,
-    pub s4:     usize,
-    pub s5:     usize,
-    pub s6:     usize,
-    pub s7:     usize,
-    pub s8:     usize,
-    pub s9:     usize,
-    pub s10:    usize,
-    pub s11:    usize,
-    pub t3:     usize,
-    pub t4:     usize,
-    pub t5:     usize,
-    pub t6:     usize,
+    pub zero: usize,
+    pub ra: usize,
+    pub sp: usize,
+    pub gp: usize,
+    pub tp: usize,
+    pub t0: usize,
+    pub t1: usize,
+    pub t2: usize,
+    pub s0: usize,
+    pub s1: usize,
+    pub a0: usize,
+    pub a1: usize,
+    pub a2: usize,
+    pub a3: usize,
+    pub a4: usize,
+    pub a5: usize,
+    pub a6: usize,
+    pub a7: usize,
+    pub s2: usize,
+    pub s3: usize,
+    pub s4: usize,
+    pub s5: usize,
+    pub s6: usize,
+    pub s7: usize,
+    pub s8: usize,
+    pub s9: usize,
+    pub s10: usize,
+    pub s11: usize,
+    pub t3: usize,
+    pub t4: usize,
+    pub t5: usize,
+    pub t6: usize,
 }
 
 impl GPRegs {
@@ -69,8 +70,6 @@ impl GPRegs {
         Self::default()
     }
 }
-
-
 
 impl TrapContext {
     ///init app context
@@ -91,6 +90,7 @@ impl TrapContext {
             kernel_fp: 0,
             kernel_tp: 0,
             float_regs: UserFloatRegs::new(),
+            last_a0: 0,
         };
         cx.set_sp(sp);
         cx
@@ -123,20 +123,33 @@ impl TrapContext {
     }
     /// 在do_signal信号处理中,重新设置trap context
     /// 返回到用户自定义函数
-    /// 
+    ///
     /// handler: 信号处理 函数addr
-    /// 
+    ///
     /// new_sp: 信号处理栈的sp
-    /// 
+    ///
     /// sigret: 信号处理完后返回到sigreturn系统调用
-    pub fn flash(&mut self, user_func: usize, sp: usize, sigret: usize, signo: usize, gp: usize, tp: usize) {
-        self.sepc = user_func;      // 返回到用户自定义函数
-        self.set_sp(sp);            // x2:信号处理栈的sp
-        self.user_gp.ra = sigret;   // ra:返回到sigreturn系统调用
-        self.user_gp.gp = gp;       // gp:保存gp指针
-        self.user_gp.tp = tp;       // tp:保存tp指针
-        self.user_gp.a0 = signo;    // a0:信号编号
-
+    pub fn flash(
+        &mut self,
+        user_func: usize,
+        sp: usize,
+        sigret: usize,
+        signo: usize,
+        gp: usize,
+        tp: usize,
+    ) {
+        self.sepc = user_func; // 返回到用户自定义函数
+        self.set_sp(sp); // x2:信号处理栈的sp
+        self.user_gp.ra = sigret; // ra:返回到sigreturn系统调用
+        self.user_gp.gp = gp; // gp:保存gp指针
+        self.user_gp.tp = tp; // tp:保存tp指针
+        self.user_gp.a0 = signo; // a0:信号编号
+    }
+    pub fn save_last_a0(&mut self) {
+        self.last_a0 = self.user_gp.a0;
+    }
+    pub fn restore_last_a0(&mut self) {
+        self.user_gp.a0 = self.last_a0;
     }
 }
 
@@ -161,7 +174,6 @@ impl UserFloatRegs {
     /// 在内核态切换到任务时，恢复浮点寄存器的内容
     pub fn trap_out_do_with_freg(&mut self) {
         self.restore();
-
     }
 
     /// 在任务调度时，将浮点寄存器的内容保存到内存中
@@ -222,9 +234,7 @@ impl UserFloatRegs {
         };
     }
     #[cfg(target_arch = "loongarch64")]
-    pub fn save(&mut self) {
-
-    }
+    pub fn save(&mut self) {}
 
     /// Restore mem -> reg
     #[cfg(target_arch = "riscv64")]

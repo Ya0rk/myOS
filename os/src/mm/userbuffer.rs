@@ -1,5 +1,5 @@
-use core::ops::{Index, IndexMut};
 use alloc::vec::Vec;
+use core::ops::{Index, IndexMut};
 /// u8数组切片，使内核可以访问用户空间
 pub struct UserBuffer {
     ///U8 vec
@@ -49,35 +49,35 @@ impl UserBuffer {
         if offset + len > self.len() {
             return -1; // 返回错误码
         }
-    
+
         let mut head = 0; // offset of slice in UBuffer
         let mut current = 0; // current offset of buff
-    
+
         for sub_buff in self.buffers.iter_mut() {
             let sblen = sub_buff.len();
             if head + sblen <= offset {
                 head += sblen;
                 continue;
             }
-    
+
             let start = if head < offset { offset - head } else { 0 };
             let end = (start + len - current).min(sblen);
-    
+
             if start >= sblen {
                 head += sblen;
                 continue;
             }
-    
+
             sub_buff[start..end].copy_from_slice(&buff[current..current + (end - start)]);
             current += end - start;
-    
+
             if current == len {
                 return len as isize;
             }
-    
+
             head += sblen;
         }
-    
+
         0
     }
 }
@@ -117,7 +117,6 @@ impl Iterator for UserBufferIterator {
         }
     }
 }
-
 
 // 实现 Index trait，允许不可变索引访问
 impl Index<usize> for UserBuffer {

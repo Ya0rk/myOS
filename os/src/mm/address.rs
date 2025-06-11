@@ -4,8 +4,10 @@ use core::ops::Range;
 use sbi_spec::pmu::hardware_event::STALLED_CYCLES_FRONTEND;
 
 // use super::PageTableEntry;
-use crate::hal::mem::page_table::{PageTableEntry};
-use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PAGE_MASK, PAGE_SIZE, PAGE_SIZE_BITS};
+use crate::hal::config::{
+    KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET, PAGE_MASK, PAGE_SIZE, PAGE_SIZE_BITS,
+};
+use crate::hal::mem::page_table::PageTableEntry;
 use core::fmt::{self, Debug, Formatter};
 // use core::iter::Step;
 /// physical address
@@ -14,7 +16,6 @@ const PA_WIDTH_SV39: usize = 56;
 const VA_WIDTH_SV39: usize = 39;
 const PPN_WIDTH_SV39: usize = PA_WIDTH_SV39 - PAGE_SIZE_BITS;
 const VPN_WIDTH_SV39: usize = VA_WIDTH_SV39 - PAGE_SIZE_BITS;
-
 
 macro_rules! impl_step {
     ($t:ty) => {
@@ -164,7 +165,7 @@ impl From<VirtAddr> for KernelAddr {
     }
 }
 /// todo 需要在loongarch中重建
-/// 
+///
 fn check_addr_valid(addr: usize, offset: usize) {
     let tmp: isize = (addr as isize >> offset) as isize;
     assert!(tmp == 0 || tmp == -1, "invalid addr: {:#x}", addr);
@@ -257,7 +258,6 @@ impl VirtAddr {
     pub fn to_usize(&self) -> usize {
         self.0
     }
-
 }
 impl From<VirtAddr> for VirtPageNum {
     fn from(v: VirtAddr) -> Self {
@@ -291,7 +291,6 @@ impl PhysAddr {
     pub fn aligned(&self) -> bool {
         self.page_offset() == 0
     }
-
 }
 impl From<PhysAddr> for PhysPageNum {
     fn from(v: PhysAddr) -> Self {
@@ -378,7 +377,6 @@ impl PhysPageNum {
         let mut vaddr: VirtAddr = (self.to_paddr().0 + KERNEL_ADDR_OFFSET).into();
         vaddr += range.start;
         unsafe { core::slice::from_raw_parts_mut(vaddr.to_usize() as *mut u8, range.len()) }
-
     }
 }
 
@@ -469,7 +467,6 @@ pub type VPNRange = SimpleRange<VirtPageNum>;
 //     (va.0 - KERNEL_ADDR_OFFSET).into()
 // }
 
-
 // // TODO: should not use on la
 // /// translate kernel virtual page number into physical page number
 // pub fn kpn_v2p(vpn: VirtPageNum) -> PhysPageNum {
@@ -480,7 +477,6 @@ pub type VPNRange = SimpleRange<VirtPageNum>;
 // pub fn kaddr_p2v(pa: PhysAddr) -> VirtAddr {
 //     (pa.0 + KERNEL_ADDR_OFFSET).into()
 // }
-
 
 // // TODO: should not use on la
 // /// translate physical page number into kernel virtual page number

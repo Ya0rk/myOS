@@ -185,7 +185,7 @@ impl InodeTrait for DevRtc {
         Ok(str.as_bytes().to_vec())
     }
 
-    fn loop_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None
     }
 

@@ -1,8 +1,8 @@
+use super::TaskControlBlock;
 use alloc::{
     collections::BTreeMap,
     sync::{Arc, Weak},
 };
-use super::TaskControlBlock;
 
 pub struct ThreadGroup {
     pub tasks: BTreeMap<usize, Weak<TaskControlBlock>>,

@@ -1,6 +1,6 @@
-use log::*;
 use crate::{hal::arch::shutdown, task::get_current_hart_id, utils::backtrace};
 use core::panic::PanicInfo;
+use log::*;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -13,7 +13,8 @@ fn panic(info: &PanicInfo) -> ! {
             info.message()
         );
     } else {
-        error!("[kernel] Hart {}, Panicked: {}",
+        error!(
+            "[kernel] Hart {}, Panicked: {}",
             get_current_hart_id(),
             info.message()
         );

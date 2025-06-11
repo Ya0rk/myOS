@@ -4,16 +4,16 @@ use super::InodeTrait;
 use super::Kstat;
 use super::OpenFlags;
 use crate::hal::arch::console_getchar;
+use crate::mm::{page::Page, UserBuffer};
 use crate::task::get_current_hart_id;
 use crate::utils::Errno;
 use crate::utils::SysResult;
-use crate::mm::{UserBuffer, page::Page};
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use async_trait::async_trait;
-use alloc::boxed::Box;
 use lazy_static::lazy_static;
 use spin::Mutex;
 
@@ -44,7 +44,9 @@ impl FileTrait for Stdin {
         let mut count: usize = 0;
         while count < user_buf.len() {
             c = console_getchar();
-            if c > 255 { break; }
+            if c > 255 {
+                break;
+            }
             user_buf[count] = c as u8;
             count += 1;
         }
@@ -54,7 +56,7 @@ impl FileTrait for Stdin {
         Err(Errno::EINVAL)
         // panic!("Cannot write to stdin!");
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("Stdin".to_string())
     }
@@ -70,7 +72,7 @@ impl FileTrait for Stdin {
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
     }
-    
+
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         todo!()
     }
@@ -97,10 +99,10 @@ impl FileTrait for Stdout {
         self.write(buf).await
     }
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        print!("{}",core::str::from_utf8(user_buf).unwrap());
+        print!("{}", core::str::from_utf8(user_buf).unwrap());
         Ok(user_buf.len())
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("Stdout".to_string())
     }

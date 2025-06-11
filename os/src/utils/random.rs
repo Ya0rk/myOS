@@ -19,7 +19,10 @@ impl LcgRng {
 
     // 生成下一个随机数
     pub fn next(&mut self) -> u32 {
-        self.state = self.state.wrapping_mul(LCG_MULTIPLIER).wrapping_add(LCG_INCREMENT);
+        self.state = self
+            .state
+            .wrapping_mul(LCG_MULTIPLIER)
+            .wrapping_add(LCG_INCREMENT);
         (self.state >> 32) as u32
     }
 
@@ -31,7 +34,7 @@ impl LcgRng {
             let rand = self.next();
             let rand_bytes = rand.to_le_bytes();
             let chunk_size = (buf.len() - offset).min(4);
-            buf[offset..chunk_size+offset].copy_from_slice(&rand_bytes[..chunk_size]);
+            buf[offset..chunk_size + offset].copy_from_slice(&rand_bytes[..chunk_size]);
             offset += chunk_size;
         }
         buf.len()

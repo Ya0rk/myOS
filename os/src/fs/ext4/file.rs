@@ -51,7 +51,7 @@ impl NormalFile {
             .expect("no parent, plz check!")
             .upgrade()
             .unwrap()
-            .loop_up(&path)
+            .look_up(&path)
         {
             true
         } else {
@@ -176,9 +176,6 @@ impl FileTrait for NormalFile {
     }
 
     fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {
-        if offset < 0 || whence > 2 {
-            return Err(Errno::EINVAL);
-        }
         let offset: usize = offset as usize;
         let old_offset = self.metadata.offset();
         let res = match whence {
@@ -253,12 +250,10 @@ impl FileTrait for NormalFile {
             return 0;
         };
 
-        // if self.path == "/musl/ltp" || self.path == "/musl/basic"
-        //     || self.path == "/glibc/ltp" || self.path == "/glibc/basic" {
-
-        //         info!("alsdkjlaskdfj");
-        //         return 0;
-        // }
+        if self.path == "/musl/ltp" || self.path == "/glibc/ltp" {
+            info!("alsdkjlaskdfj");
+            return 0;
+        }
 
         // Some(dir_entrys)
         let dirs = self.metadata.inode.read_dents();

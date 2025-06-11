@@ -1,6 +1,5 @@
-
 use crate::mm::memory_space::vm_area::MapPerm;
-use crate::mm::{PhysPageNum, VirtAddr, VirtPageNum, PhysAddr, PageTable};
+use crate::mm::{PageTable, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
 
 use crate::hal::config::{KERNEL_ADDR_OFFSET, KERNEL_PGNUM_OFFSET};
 // use paste::paste;
@@ -13,16 +12,14 @@ TODO:
 - tlb refill
 - compatibility check
 - asid
-- 
+-
 
 
 
 
 */
 
-
-
-bitflags!{
+bitflags! {
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub struct PTEFlags: usize {
         /// valid
@@ -31,7 +28,7 @@ bitflags!{
         /// dirty
         const D = 1 << 1;
 
-        /// privilege 
+        /// privilege
         const PLV_USER = 0b11 << 2;
         /// should never be used
         const PLV_KERN = 0b00 << 2;
@@ -73,9 +70,7 @@ bitflags!{
     }
 }
 
-
 impl PTEFlags {
-
     impl_flag_checker!(
         PLV_USER,
         pub V,
@@ -127,7 +122,6 @@ impl PTEFlags {
         self.set_NX(!val)
     }
 
-
     /// Must clear bits before set
     pub fn clear_MAT(&mut self) -> &mut Self {
         self.remove(Self::MAT_P);
@@ -159,19 +153,17 @@ impl PTEFlags {
 // impl_flag_check!(PTEFlags, GH);
 // impl_flag_check!(PTEFlags, COW);
 
-
 impl From<MapPerm> for PTEFlags {
     fn from(perm: MapPerm) -> Self {
         *Self::new_valid()
-            .set_U( perm.contains(MapPerm::U) )
-            .set_G(!perm.contains(MapPerm::U) )
-            .set_R( perm.contains(MapPerm::R) )
-            .set_W( perm.contains(MapPerm::W) )
-            .set_D( perm.contains(MapPerm::W) )
-            .set_X( perm.contains(MapPerm::X) )
-            .set_P( true )
-            .set_RPLV( false )
-        
+            .set_U(perm.contains(MapPerm::U))
+            .set_G(!perm.contains(MapPerm::U))
+            .set_R(perm.contains(MapPerm::R))
+            .set_W(perm.contains(MapPerm::W))
+            .set_D(perm.contains(MapPerm::W))
+            .set_X(perm.contains(MapPerm::X))
+            .set_P(true)
+            .set_RPLV(false)
 
         // ret |= PTEFlags::V;
         // if perm.contains(MapPerm::U) {
@@ -293,7 +285,7 @@ impl PageTable {
             (sigret as usize).into()..(esigret as usize).into(),
             MapPerm::R | MapPerm::X | MapPerm::U,
         );
-        
+
         println!("mapping .text section left");
         kernel_page_table.map_kernel_range(
             (esigret as usize).into()..(etext as usize).into(),
@@ -364,7 +356,6 @@ impl PageTable {
         // ffff_ffc0_8020_0000
         // ffff_ffc0_8800_0000
 
-
         // println!("mapping devices");
         // NOTE: LA架构不使用巨页，甚至不使用页表实现直接映射，而是使用0x8000_0000_0000_0000的直接映射窗口，其为强序非缓存的。
         // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
@@ -400,7 +391,6 @@ impl PageTable {
         println!("kernel memory set initialized");
         kernel_page_table
     }
-
 
     // NOTE: user pagetable should be initialized as a bare one
     pub fn new_user() -> Self {

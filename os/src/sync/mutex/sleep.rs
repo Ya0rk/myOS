@@ -1,3 +1,5 @@
+use super::{spin::SpinMutex, MutexOperations};
+use crate::sync::get_waker;
 use alloc::{collections::VecDeque, sync::Arc};
 use core::{
     cell::{SyncUnsafeCell, UnsafeCell},
@@ -7,8 +9,6 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll, Waker},
 };
-use crate::sync::get_waker;
-use super::{spin::SpinMutex, MutexOperations};
 
 /// SleepMutex can step over `await`
 pub struct SleepMutex<T: ?Sized, S: MutexOperations> {

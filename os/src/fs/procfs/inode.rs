@@ -85,7 +85,6 @@ impl InodeTrait for ProcFsInode {
         // 疑似被弃用
         Ok(())
     }
-
     fn node_type(&self) -> crate::fs::InodeType {
         match self.inner {
             ProcFsInodeInner::root => crate::fs::InodeType::Dir,
@@ -167,7 +166,7 @@ impl InodeTrait for ProcFsInode {
             }
         }
     }
-    fn loop_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let pattern = AbsPath::new(String::from(path)).get_filename();
         match self.inner {
             ProcFsInodeInner::root => {

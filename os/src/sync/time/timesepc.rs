@@ -1,8 +1,13 @@
+use crate::{
+    sync::timer::{
+        get_time_ms, get_time_ns, get_time_s, time_duration, MSEC_PER_SEC, NSEC_PER_SEC,
+    },
+    task::current_task,
+};
 use core::{fmt::Display, time::Duration};
 use zerocopy::IntoBytes;
-use crate::{sync::timer::{get_time_ms, get_time_ns, get_time_s, time_duration, MSEC_PER_SEC, NSEC_PER_SEC}, task::current_task};
 
-#[derive(Copy, Clone, IntoBytes, Debug)]
+#[derive(Copy, Clone, IntoBytes, Debug, Default)]
 #[repr(C)]
 pub struct TimeSpec {
     /// 秒
@@ -29,7 +34,11 @@ impl TimeSpec {
     pub fn process_cputime_now() -> Self {
         let task = current_task().unwrap();
         let time = task.process_cputime();
-        println!("[process_cputime_now] sec = {}, nsec = {}", time.as_secs() as usize, time.subsec_nanos() as usize);
+        println!(
+            "[process_cputime_now] sec = {}, nsec = {}",
+            time.as_secs() as usize,
+            time.subsec_nanos() as usize
+        );
         TimeSpec {
             tv_sec: time.as_secs() as usize,
             tv_nsec: time.subsec_nanos() as usize,
@@ -56,13 +65,13 @@ impl TimeSpec {
             tv_nsec: time.subsec_nanos() as usize,
         }
     }
-    
+
     /// 获取较为粗糙的时间，这里使用秒
     pub fn get_coarse_time() -> Self {
         let ts = get_time_s();
         TimeSpec {
-            tv_sec: ts, 
-            tv_nsec: 0 
+            tv_sec: ts,
+            tv_nsec: 0,
         }
     }
 }
@@ -77,7 +86,7 @@ impl From<Duration> for TimeSpec {
     fn from(value: Duration) -> Self {
         Self {
             tv_sec: value.as_secs() as usize,
-            tv_nsec: value.subsec_nanos() as usize
+            tv_nsec: value.subsec_nanos() as usize,
         }
     }
 }

@@ -1,11 +1,10 @@
+pub mod address;
 pub mod page_table;
 pub mod tlb;
-pub mod address;
-
 
 use loongarch64::register::estat::{self, Exception, Trap};
 use loongarch64::register::{
-    badv, ecfg, eentry, euen, prmd, pwch, pwcl, stlbps, ticlr, tlbidx, tlbrehi, tlbrentry
+    badv, ecfg, eentry, euen, prmd, pwch, pwcl, stlbps, ticlr, tlbidx, tlbrehi, tlbrentry,
 };
 
 pub const PS_4K: usize = 0x0c;
@@ -14,7 +13,6 @@ pub const _PS_2M: usize = 0x15;
 pub const _PS_1G: usize = 0x1e;
 
 pub const PAGE_SIZE_SHIFT: usize = 12;
-
 
 pub fn mmu_init() {
     // pg
@@ -30,10 +28,7 @@ pub fn mmu_init() {
 
     // tmp
     euen::set_fpe(true);
-
-
 }
-
 
 pub fn tlb_init(tlbrentry: usize) {
     // // setup PWCTL
