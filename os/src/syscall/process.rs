@@ -1,5 +1,5 @@
 use crate::fs::{open, resolve_path, AbsPath, FileClass, OpenFlags};
-use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_STACK_SIZE};
+use crate::hal::config::{INITPROC_PID, KERNEL_HEAP_SIZE, USER_SPACE_TOP, USER_STACK_SIZE};
 use crate::mm::user_ptr::{user_cstr, user_cstr_array, user_ref, user_ref_mut, user_slice_mut};
 use crate::mm::{
     translated_byte_buffer, translated_ref, translated_refmut, translated_str, UserBuffer,
@@ -571,7 +571,7 @@ pub fn sys_sigreturn() -> SysResult<usize> {
 pub fn sys_sysinfo(sysinfo: usize) -> SysResult<usize> {
     info!("[sys_sysinfo] start");
     let ptr = sysinfo as *mut Sysinfo;
-    if unlikely(sysinfo == 0) {
+    if unlikely(sysinfo == 0 || sysinfo > USER_SPACE_TOP) {
         return Err(Errno::EFAULT);
     }
     let proc_num = get_proc_num();

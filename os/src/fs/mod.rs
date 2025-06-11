@@ -194,7 +194,6 @@ fn create_open_file(
             if flags.contains(OpenFlags::O_CREAT) {
                 // need to create
                 let path: AbsPath = target_abs_path.into();
-                println!("path = {}", path.get());
                 parent_dentry
                     .add_child(&path.get_filename(), flags)
                     .unwrap()

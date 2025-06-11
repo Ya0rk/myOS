@@ -83,6 +83,7 @@ pub enum SysCode {
     SYSCALL_SENDFILE = 71,
     SYSCALL_PSELECT = 72,
     SYSCALL_PPOLL = 73,
+    SYSCALL_SPLICE = 76,
     SYSCALL_READLINKAT = 78,
     SYSCALL_FSTATAT = 79,
     SYSCALL_FSTAT = 80,
@@ -182,6 +183,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str {
         match self {
+            Self::SYSCALL_SPLICE => "splice",
             Self::SYSCALL_SCHED_GETPARAM => "sched_getparam",
             Self::SYSCALL_SCHED_SETPARAM => "sched_setparam",
             Self::SYSCALL_SETRESUID => "setresuid",

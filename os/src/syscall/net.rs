@@ -236,10 +236,10 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         "[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}",
         sockfd, addr, addrlen
     );
-    println!(
-        "[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}",
-        sockfd, addr, addrlen
-    );
+    // println!(
+    //     "[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}",
+    //     sockfd, addr, addrlen
+    // );
     if unlikely(addrlen == 0 || addrlen == 1) {
         return Err(Errno::EFAULT);
     }
@@ -275,7 +275,7 @@ pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         "[sys_sockpeername] start, sockfd = {}, addr = {}, addrlen = {}",
         sockfd, addr, addrlen
     );
-    println!("addr = {}, addrlen = {}", addr, addrlen);
+    // println!("addr = {}, addrlen = {}", addr, addrlen);
     if unlikely(addr > USER_SPACE_TOP || addrlen == 0) {
         return Err(Errno::EFAULT);
     }

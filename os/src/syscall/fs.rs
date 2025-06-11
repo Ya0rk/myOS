@@ -285,6 +285,11 @@ pub fn sys_statx(
     statxbuf: usize,
 ) -> SysResult<usize> {
     info!("[sys_statx] start");
+    println!("[sys_statx] start, dirfd = {}, pathname = {}, statxbuf = {}, maks = {}, flags = {}", dirfd, pathname, statxbuf, mask, flags);
+    if unlikely(statxbuf == 0 || pathname == 0 || pathname > USER_SPACE_TOP || statxbuf > USER_SPACE_TOP) {
+        info!("[sys_statx] pathname or statxbuf is null, fault.");
+        return Err(Errno::EFAULT);
+    }
     let dirfd = dirfd as isize;
     let task = current_task().unwrap();
     let token = task.get_user_token();
@@ -1347,6 +1352,24 @@ pub fn sys_fchdir(fd: usize) -> SysResult<usize> {
     let abs = AbsPath::new(path.clone());
     chdir(abs)?;
     task.set_current_path(path);
+
+    Ok(0)
+}
+
+/// splice data to/from a pipe
+/// splice() moves data between two file descriptors without copying
+/// between kernel address space and user address space.  It transfers
+/// up to size bytes of data from the file descriptor fd_in to the
+/// file descriptor fd_out, where one of the file descriptors must
+/// refer to a pipe.
+pub fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usize, size: usize, _flags: u32) -> SysResult<usize> {
+    info!("[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}", fd_in, off_in, fd_out, off_out, size);
+    println!("[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}", fd_in, off_in, fd_out, off_out, size);
+    
+    // TODO: 实现splice功能
+
+
+
 
     Ok(0)
 }
