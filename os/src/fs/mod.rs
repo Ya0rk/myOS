@@ -27,7 +27,6 @@ pub use path::{path_test, resolve_path, AbsPath};
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
 use procfs::{inode, PROCFS_SUPER_BLOCK};
-use riscv::register;
 // use sbi_rt::NonRetentive;
 pub use crate::mm::page::Page;
 use crate::mm::page::PageType;

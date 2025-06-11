@@ -15,7 +15,6 @@ use alloc::{
 use async_trait::async_trait;
 use log::error;
 use lwext4_rust::bindings::O_RDONLY;
-use riscv::register::hcounteren::read;
 
 /// ProcFsInodeInner 是一个枚举类型, 代表proc文件系统中的inode的类型
 ///
