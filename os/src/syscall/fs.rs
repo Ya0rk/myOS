@@ -759,7 +759,8 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
             if flags == AT_REMOVEDIR && !is_dir {
                 return Err(Errno::ENOTDIR);
             }
-            file.get_inode().unlink(&target_path.get());
+            let target_dentry = Dentry::get_dentry_from_path(&target_path.get())?;
+            file.get_inode().unlink(target_dentry)?;
         }
         Err(e) => {
             return Err(e);
@@ -819,7 +820,17 @@ pub fn sys_renameat2(
 
     if let Ok(file) = open(old_path.clone(), OpenFlags::O_RDWR) {
         let old_inode = file.file()?.get_inode();
-        if let Ok(_) = old_inode.rename(&old_path.get(), &new_path.get()) {
+        let old_dentry = Dentry::get_dentry_from_path(&old_path.get())?;
+        let parent_of_new_denrty = Dentry::get_dentry_from_path(&new_path.get_parent_abs())?;
+        let new_dentry =
+            if let Some(dentry) = parent_of_new_denrty.bare_child(&new_path.get_filename()) {
+                dentry
+            } else {
+                // FIX:
+                // 可能不是这个返回值
+                return Err(Errno::EEXIST);
+            };
+        if let Ok(_) = old_inode.rename(old_dentry, new_dentry) {
             // 如果重命名成功，返回0
             // debug_point!("[sys_renameat2] return Ok(0)");
             return Ok(0);
@@ -883,18 +894,13 @@ pub fn sys_linkat(
     if olddirfd == AT_FDCWD {
         if let Ok(file_class) = open(old_path, OpenFlags::O_RDWR) {
             let file = file_class.file()?;
-            let has_same = file.is_child(&new_path.get());
-            if has_same {
-                return Err(Errno::EEXIST);
-            }
-            file.get_inode().link(&new_path.get());
+            let parent_dentry = Dentry::get_dentry_from_path(&new_path.get_parent_abs())?;
+            let new_dentry = parent_dentry
+                .bare_child(&new_path.get_filename())
+                .ok_or(Errno::EEXIST)?;
+
+            file.get_inode().link(new_dentry)?;
         }
-        // if let      (Ok(inode), Ok(dentry)) =
-        //             (Dentry::get_inode_from_path(&old_path.get()), Dentry::get_dentry_from_path(&old_path.get())) {
-        //     if let Ok(new_inode) = Dentry::get_inode_from_path(&new_path.get()) {
-        //         if new_inode.is_valid() {return Err(Errno::EEXIST);}
-        //     }
-        // }
     }
     Ok(0)
 }

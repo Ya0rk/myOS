@@ -15,6 +15,7 @@ use alloc::{
 use async_trait::async_trait;
 use log::error;
 use lwext4_rust::bindings::O_RDONLY;
+use riscv::register::hcounteren::read;
 
 /// ProcFsInodeInner 是一个枚举类型, 代表proc文件系统中的inode的类型
 ///
@@ -83,15 +84,6 @@ impl InodeTrait for ProcFsInode {
     fn set_size(&self, new_size: usize) -> crate::utils::SysResult {
         // 疑似被弃用
         Ok(())
-    }
-    fn do_create(
-        &self,
-        _path: &str,
-        _ty: crate::fs::InodeType,
-    ) -> Option<alloc::sync::Arc<dyn InodeTrait>> {
-        // 这里不需要创建
-        // 应当返回SysResult会更好,因为这个文件系统下就是不给创建文件
-        None
     }
     fn node_type(&self) -> crate::fs::InodeType {
         match self.inner {
@@ -174,7 +166,7 @@ impl InodeTrait for ProcFsInode {
             }
         }
     }
-    fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let pattern = AbsPath::new(String::from(path)).get_filename();
         match self.inner {
             ProcFsInodeInner::root => {
@@ -224,14 +216,6 @@ impl InodeTrait for ProcFsInode {
                 res
             }
         }
-    }
-    fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
-        // 这里不需要unlink
-        Ok(0)
-    }
-    fn link(&self, new_path: &str) -> SysResult<usize> {
-        // 这里不需要link
-        Err(crate::utils::Errno::EACCES)
     }
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         &self.timestamp

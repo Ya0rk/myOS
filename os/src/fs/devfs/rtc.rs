@@ -144,9 +144,6 @@ impl InodeTrait for DevRtc {
         Ok(())
     }
 
-    fn do_create(&self, _path: &str, _ty: crate::fs::InodeType) -> Option<Arc<dyn InodeTrait>> {
-        None
-    }
 
     fn node_type(&self) -> crate::fs::InodeType {
         crate::fs::InodeType::CharDevice
@@ -188,7 +185,7 @@ impl InodeTrait for DevRtc {
         Ok(str.as_bytes().to_vec())
     }
 
-    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None
     }
 
@@ -200,13 +197,6 @@ impl InodeTrait for DevRtc {
         stat
     }
 
-    fn unlink(&self, _child_abs_path: &str) -> SysResult<usize> {
-        Ok(0)
-    }
-
-    fn link(&self, _new_path: &str) -> SysResult<usize> {
-        Err(crate::utils::Errno::EACCES)
-    }
 
     fn get_timestamp(&self) -> &crate::sync::SpinNoIrqLock<crate::sync::TimeStamp> {
         // 如果需要返回一个实际值，需要给 DevRtc 加 timestamp 字段

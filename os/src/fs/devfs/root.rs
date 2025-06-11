@@ -33,13 +33,6 @@ impl InodeTrait for DevFsInode {
     fn set_size(&self, new_size: usize) -> crate::utils::SysResult {
         Ok(())
     }
-    fn do_create(
-        &self,
-        _path: &str,
-        _ty: crate::fs::InodeType,
-    ) -> Option<alloc::sync::Arc<dyn InodeTrait>> {
-        None
-    }
     fn node_type(&self) -> crate::fs::InodeType {
         crate::fs::InodeType::Dir
     }
@@ -71,7 +64,7 @@ impl InodeTrait for DevFsInode {
         Err(Errno::EISDIR)
     }
 
-    fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         // 暂时不实现
         None
     }
@@ -80,14 +73,6 @@ impl InodeTrait for DevFsInode {
         res.st_mode = 16877;
         res.st_nlink = 1;
         res
-    }
-    fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
-        // 这里不需要unlink
-        Ok(0)
-    }
-    fn link(&self, new_path: &str) -> SysResult<usize> {
-        // 这里不需要link
-        Err(crate::utils::Errno::EACCES)
     }
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         &self.timestamp

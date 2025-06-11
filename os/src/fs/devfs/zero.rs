@@ -88,9 +88,6 @@ impl InodeTrait for DevZero {
         Ok(())
     }
 
-    fn do_create(&self, _path: &str, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
-        None
-    }
 
     fn node_type(&self) -> InodeType {
         InodeType::CharDevice
@@ -119,7 +116,7 @@ impl InodeTrait for DevZero {
         Ok(Vec::new())
     }
 
-    fn walk(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None
     }
 
@@ -129,13 +126,6 @@ impl InodeTrait for DevZero {
         stat
     }
 
-    fn unlink(&self, _child_abs_path: &str) -> SysResult<usize> {
-        Ok(0)
-    }
-
-    fn link(&self, _new_path: &str) -> SysResult<usize> {
-        Err(Errno::EACCES)
-    }
 
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         // 你可以给 DevZero 加一个 timestamp 字段并返回它

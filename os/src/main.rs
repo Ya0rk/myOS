@@ -51,6 +51,7 @@ use core::{
     arch::global_asm,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
+use fs::{dentry_test, Dentry};
 #[cfg(target_arch = "loongarch64")]
 use hal::mem::{
     mmu_init,

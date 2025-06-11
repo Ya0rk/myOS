@@ -94,7 +94,7 @@ impl InodeTrait for Ext4Inode {
         let c_path = file.get_path();
         let c_path = c_path.to_str().unwrap();
         let res = file.check_inode_exist(c_path, types);
-        info!("[check inode is valid] path: {}, res: {}", c_path, res);
+        // info!("[check inode is valid] path: {}, res: {}", c_path, res);
         res
     }
 
@@ -111,12 +111,16 @@ impl InodeTrait for Ext4Inode {
 
     fn set_size(&self, new_size: usize) -> SysResult {
         self.metadata.size.store(new_size, Ordering::Relaxed);
-        info!("    [set_size] {}", new_size);
+        // info!("    [set_size] {}", new_size);
         Ok(())
     }
 
     /// 创建文件或者目录,self是父目录,path是子文件的绝对路径,这里是要创建一个Inode
-    fn do_create(&self, path: &str, types: InodeType) -> Option<Arc<dyn InodeTrait>> {
+    fn do_create(&self, bare_dentry: Arc<Dentry>, types: InodeType) -> Option<Arc<dyn InodeTrait>> {
+        if bare_dentry.is_valid() {
+            return None;
+        }
+        let path = &bare_dentry.get_abs_path();
         info!("[do_create] start {}", path);
         // let page_cache = match types.into() {
         //     InodeTypes::EXT4_DE_REG_FILE => Some(PageCache::new_bare()),
@@ -150,8 +154,12 @@ impl InodeTrait for Ext4Inode {
         }
 
         let nf = Ext4Inode::new(path, types.clone().into(), page_cache.clone());
-        // nf.file.lock().file_open(path, O_RDWR).expect("[do_create] create file failed!");
-        info!("[do_create] succe {}", path);
+        bare_dentry.bind(nf.clone());
+        if nf.is_valid() {
+            info!("[do_create] succe {}", path);
+        } else {
+            info!("[do_create] faild {}", path);
+        }
 
         Some(nf)
     }
@@ -200,11 +208,11 @@ impl InodeTrait for Ext4Inode {
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         let write_size = match &self.page_cache {
             None => {
-                info!("    [write_at] no cache");
+                // info!("    [write_at] no cache");
                 self.write_directly(offset, buf).await
             }
             Some(cache) => {
-                info!("    [write_at] has cache");
+                // info!("    [write_at] has cache");
                 cache.write(buf, offset).await
             }
         };
@@ -212,7 +220,7 @@ impl InodeTrait for Ext4Inode {
         if self.get_size() < offset + write_size {
             self.set_size(offset + write_size);
         }
-        info!("    [write_at] return {}", write_size);
+        // info!("    [write_at] return {}", write_size);
         write_size
     }
 
@@ -271,7 +279,7 @@ impl InodeTrait for Ext4Inode {
     /// 返回一个InodeTrait
     ///
     /// 应当剥夺walk创造inode的权力todo
-    fn walk(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
+    fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
             // let page_cache = None;
@@ -316,19 +324,12 @@ impl InodeTrait for Ext4Inode {
         }
     }
     /// 删除文件
-    fn unlink(&self, child_abs_path: &str) -> SysResult<usize> {
+    fn unlink(&self, valid_dentry: Arc<Dentry>) -> SysResult<usize> {
         // mayby bug? 这个用的parent cnt
         let mut lock_file = self.file.lock();
         info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
-        // INODE_CACHE.remove(child_abs_path);
-        // match lock_file.links_cnt() {
-        //     Ok(cnt) if cnt <= 1 => {
-        //         // info!("[unlink] unlink file {}", child_abs_path);
-        //         if child_abs_path.contains("/tmp") { return Ok(0); } // TODO(YJJ):这里是为了通过libctest测试用例fscanf，有待修改
-        //         lock_file.file_remove(child_abs_path);
-        //     }
-        //     _ => { return Ok(0); }
-        //
+        // 获得要去 unlink 的路径
+        let child_abs_path = &valid_dentry.get_abs_path();
         let res = if self.metadata.file_type.is_dir() {
             // info!("[unlink] unlink dir {}", child_abs_path);
             debug_point!("");
@@ -340,6 +341,7 @@ impl InodeTrait for Ext4Inode {
         match res {
             Ok(_) => {
                 info!("[unlink] unlink success {}", child_abs_path);
+                valid_dentry.release_self();
                 Ok(0)
             }
             Err(e) => {
@@ -349,15 +351,33 @@ impl InodeTrait for Ext4Inode {
         }
     }
 
-    fn link(&self, new_path: &str) -> SysResult<usize> {
+    fn link(&self, bare_dentry: Arc<Dentry>) -> SysResult<usize> {
+        let types = {
+            self.node_type().into()
+        };
         let mut file = self.file.lock();
+        if bare_dentry.is_valid() {
+            return Err(Errno::EEXIST);
+        }
+        let new_path = &bare_dentry.get_abs_path();
         info!(
             "    [ext4_link] {} to {}",
             file.file_path.to_str().unwrap(),
             new_path
         );
-        file.link(new_path);
-        Ok(0)
+        
+        match file.link(new_path) {
+            Ok(_) => {
+                debug_point!("[ext4_link]");
+                let inode =
+                    Ext4Inode::new(&new_path, types, self.get_page_cache());
+                debug_point!("[ext4_link]");
+                bare_dentry.bind(inode);
+                debug_point!("[ext4_link]");
+                Ok(0)
+            }
+            Err(_) => Err(Errno::EIO),
+        }
     }
 
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
@@ -367,12 +387,32 @@ impl InodeTrait for Ext4Inode {
         self.metadata.file_type.is_dir()
     }
 
-    fn rename(&self, old_path: &String, new_path: &String) -> SysResult<usize> {
+    fn rename(&self, old_dentry: Arc<Dentry>, new_dentry: Arc<Dentry>) -> SysResult<usize> {
+        // 注意到这里并没有，check old_dentry 是否是 self， 其实 self 这个参数是没有用的
+        let old_inode = if let Some(inode) = old_dentry.get_inode() {
+            inode
+        } else {
+            return Err(Errno::ENOENT);
+        };
         let mut ext4file = self.file.lock();
-        ext4file
-            .file_rename(&old_path, &new_path)
-            .map_err(|_| Errno::EIO)
-            .map(|_| 0)
+        if new_dentry.is_valid() {
+            return Err(Errno::EEXIST);
+        };
+        let new_path = new_dentry.get_abs_path();
+        let old_path = old_dentry.get_abs_path();
+        match ext4file.file_rename(&old_path, &new_path) {
+            Ok(_) => {
+                let new_inode = Ext4Inode::new(
+                    &new_path,
+                    old_inode.node_type().into(),
+                    old_inode.get_page_cache(),
+                );
+                new_dentry.bind(new_inode);
+                old_dentry.release_self();
+                Ok(0)
+            }
+            Err(_) => Err(Errno::EIO),
+        }
     }
 
     fn read_dents(&self) -> Option<Vec<Dirent>> {
