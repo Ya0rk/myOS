@@ -88,10 +88,10 @@ impl Dentry {
                 .iter()
                 .for_each(|x| println!("{}", x.0));
         };
-        // info!("mount ProcFs");
-        // mkdir("/proc".into(), 0);
-        // let procFs = Self::get_dentry_from_path("/proc").unwrap();
-        // procFs.mount(PROCFS_SUPER_BLOCK.clone());
+        info!("mount ProcFs");
+        mkdir("/proc".into(), 0);
+        let procFs = Self::get_dentry_from_path("/proc").unwrap();
+        procFs.mount(PROCFS_SUPER_BLOCK.clone());
     }
     /// 创建一个根节点dentry
     fn new_root() -> Arc<Self> {
@@ -119,7 +119,9 @@ impl Dentry {
             status: DentryStatus::new(),
         };
         let result = Arc::new(res);
-        self.children.write().insert(name.to_string(), result.clone());
+        self.children
+            .write()
+            .insert(name.to_string(), result.clone());
         result
     }
     /// 创建一个儿子节点
@@ -488,6 +490,6 @@ pub async fn dentry_test() {
     test_inode!("/");
     test_inode!("/bin");
     test_inode!("/////.///////..//bin");
-    
+
     panic!();
 }
