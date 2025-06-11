@@ -114,7 +114,7 @@ pub async fn create_init_files() -> SysResult {
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
 
-    // open("/dev/null".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open("/bin/ls".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建/etc/adjtime记录时间偏差
     open(
         "/etc/adjtime".into(),
@@ -139,8 +139,8 @@ pub async fn create_init_files() -> SysResult {
     }
     {
         // glibc
-        dl_link("/musl/lib/libc.so", "/lib/ld-linux-riscv64-lp64d.so.1"); // 这里两行需要改为/glibc目录，由于目前会报错，所以暂时用musl目录，bug修正后改回
-        dl_link("/musl/lib/libc.so", "/ld-linux-riscv64-lp64d.so.1");
+        dl_link("/glibc/lib/libc.so", "/lib/ld-linux-riscv64-lp64d.so.1"); // 这里两行需要改为/glibc目录，由于目前会报错，所以暂时用musl目录，bug修正后改回
+        dl_link("/glibc/lib/libc.so", "/ld-linux-riscv64-lp64d.so.1");
     }
     Ok(())
 }
