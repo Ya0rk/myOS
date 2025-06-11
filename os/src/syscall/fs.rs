@@ -1375,14 +1375,78 @@ pub fn sys_fchdir(fd: usize) -> SysResult<usize> {
 /// up to size bytes of data from the file descriptor fd_in to the
 /// file descriptor fd_out, where one of the file descriptors must
 /// refer to a pipe.
-pub fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usize, size: usize, _flags: u32) -> SysResult<usize> {
+pub async fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usize, size: usize, _flags: u32) -> SysResult<usize> {
     info!("[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}", fd_in, off_in, fd_out, off_out, size);
-    println!("[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}", fd_in, off_in, fd_out, off_out, size);
-    
-    // TODO: 实现splice功能
 
+    if unlikely(fd_in == fd_out) {
+        info!("[sys_splice] fd_in and fd_out are the same, return EINVAL");
+        return Err(Errno::EINVAL);
+    }
 
+    let task = current_task().unwrap();
+    let file_in = task.get_file_by_fd(fd_in).ok_or(Errno::EBADF)?;
+    if file_in.get_flags().contains(OpenFlags::O_WRONLY) {
+        info!("[sys_splice] file_in is not readable, return EBADF");
+        return Err(Errno::EBADF);
+    }
+    let file_out = task.get_file_by_fd(fd_out).ok_or(Errno::EBADF)?;
+    if unlikely(!file_out.writable()) {
+        info!("[sys_splice] file_out is not writable, return EBADF");
+        return Err(Errno::EBADF);
+    }
 
+    if unlikely(file_out.get_flags().contains(OpenFlags::O_APPEND)) {
+        info!("[sys_splice] file_out is O_APPEND, return EINVAL");
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(file_in.is_pipe() && off_in != 0) {
+        return Err(Errno::ESPIPE);
+    }
+    if unlikely(file_out.is_pipe() && off_out != 0) {
+        return Err(Errno::ESPIPE);
+    }
+    if unlikely(!file_in.is_pipe() && !file_out.is_pipe()) {
+        return Err(Errno::EINVAL);
+    }
+
+    let in_offset = match off_in {
+        0 => 0,
+        _ => unsafe { *(off_in as *const usize) },
+    };
+    let out_offet = match off_out {
+        0 => 0,
+        _ => unsafe { *(off_out as *const usize) },
+    };
+
+    // 开辟一个内核缓冲区承载数据
+    let mut buffer = vec![0u8; size];
+    let read_size = match file_in.is_pipe() {
+        true  => file_in.read(&mut buffer).await?,
+        false => file_in.read_at(in_offset, &mut buffer).await?,
+    };
+    if unlikely(read_size == 0) {
+        info!("[sys_splice] read_size is 0, return 0");
+        return Ok(0);
+    }
+
+    let write_size = match file_out.is_pipe() {
+        true  => file_out.write(&buffer).await?,
+        false => file_out.write_at(out_offet, &buffer).await?,
+    };
+    if unlikely(write_size == 0) {
+        info!("[sys_splice] write_size is 0, return 0");
+        return Ok(0);
+    }
+
+    match off_in {
+        0 => {},
+        _ => unsafe{ core::ptr::write(off_in as *mut usize, in_offset + read_size) },
+    }
+
+    match off_out {
+        0 => {},
+        _ => unsafe{ core::ptr::write(off_out as *mut usize, out_offet + write_size) },
+    }
 
     Ok(0)
 }
