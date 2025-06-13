@@ -165,7 +165,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 获取文件类型
     fn node_type(&self) -> InodeType {
-        as_inode_type(self.file.lock().file_type_get())
+        as_inode_type(self.metadata.file_type.into())
     }
     /// 读取文件
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {

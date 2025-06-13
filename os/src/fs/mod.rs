@@ -115,7 +115,7 @@ pub async fn create_init_files() -> SysResult {
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
 
-    // open("/dev/null".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_DIRECTORY);
+    open("/bin/ls".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
     //创建/etc/adjtime记录时间偏差
     open(
         "/etc/adjtime".into(),
