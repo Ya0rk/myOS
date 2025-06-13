@@ -285,7 +285,7 @@ pub fn sys_statx(
     statxbuf: usize,
 ) -> SysResult<usize> {
     info!("[sys_statx] start");
-    println!("[sys_statx] start, dirfd = {}, pathname = {}, statxbuf = {}, maks = {}, flags = {}", dirfd, pathname, statxbuf, mask, flags);
+    // println!("[sys_statx] start, dirfd = {}, pathname = {}, statxbuf = {}, maks = {}, flags = {}", dirfd, pathname, statxbuf, mask, flags);
     if unlikely(statxbuf == 0 || pathname == 0 || pathname > USER_SPACE_TOP || statxbuf > USER_SPACE_TOP) {
         info!("[sys_statx] pathname or statxbuf is null, fault.");
         return Err(Errno::EFAULT);

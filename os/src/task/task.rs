@@ -185,6 +185,7 @@ impl TaskControlBlock {
         self.fd_table.lock().close_on_exec();
         // 重置自定义的信号处理
         self.handler.lock().flash_signal_handlers();
+        debug_point!("");
 
         debug!("task.exec.pid={}", self.pid.0);
     }
@@ -420,7 +421,13 @@ impl TaskControlBlock {
         if let Some(tidaddress) = self.get_child_cleartid() {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
             unsafe {
-                core::ptr::write(tidaddress as *mut usize, 0);
+                let tid_va: VirtAddr = tidaddress.into();
+                let bind = self.memory_space.lock();
+                if let Some(vm_area) = bind.areas_mut().get_mut(tid_va.align_down()) {
+                    drop(bind);
+                    core::ptr::write(tidaddress as *mut usize, 0);
+                }
+                // core::ptr::write(tidaddress as *mut usize, 0);
             }
             let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
             let mut binding = self.futex_list.lock();

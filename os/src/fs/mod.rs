@@ -91,6 +91,7 @@ pub async fn create_init_files() -> SysResult {
     // libctest中的pthread_cancel_points测试用例需要
     mkdir("/dev/shm".into(), 0);
     mkdir("/lib".into(), 0);
+    mkdir("/lib64".into(), 0);
     mkdir("/bin".into(), 0);
     mkdir("/etc".into(), 0);
     if let Ok(FileClass::File(file)) =
@@ -138,9 +139,20 @@ pub async fn create_init_files() -> SysResult {
         );
     }
     {
-        // glibc
-        dl_link("/musl/lib/libc.so", "/lib/ld-linux-riscv64-lp64d.so.1"); // 这里两行需要改为/glibc目录，由于目前会报错，所以暂时用musl目录，bug修正后改回
-        dl_link("/musl/lib/libc.so", "/ld-linux-riscv64-lp64d.so.1");
+        // // glibc
+        dl_link("/glibc/lib/libc.so", "/lib/ld-linux-riscv64-lp64d.so.1"); // 这里两行需要改为/glibc目录，由于目前会报错，所以暂时用musl目录，bug修正后改回
+        dl_link("/glibc/lib/libc.so", "/ld-linux-riscv64-lp64d.so.1");
+    } 
+
+    {
+        // musl
+
+        dl_link("/musl/lib/libc.so", "/lib64/ld-musl-loongarch-lp64d.so.1");
+
+    }
+
+    {
+        dl_link("/glibc/lib/libc.so.6", "/lib64/ld-linux-loongarch.lp64d.so.1");
     }
     Ok(())
 }
