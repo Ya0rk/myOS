@@ -114,7 +114,9 @@ pub async fn create_init_files() -> SysResult {
     //注册设备/dev/misc/rtc
     register_device("/dev/misc/rtc");
 
-    open("/bin/ls".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    if cfg!(feature = "autorun") {
+        open("/bin/ls".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
+    }
     //创建/etc/adjtime记录时间偏差
     open(
         "/etc/adjtime".into(),
@@ -219,13 +221,13 @@ fn create_open_file(
         }
     };
 
-    if !target_inode.is_valid() {
-        info!(
-            "    [create_open_file] last check inode is no valid path: {}",
-            target_abs_path
-        );
-        return Err(Errno::ENOENT);
-    }
+    // if !target_inode.is_valid() {
+    //     info!(
+    //         "    [create_open_file] last check inode is no valid path: {}",
+    //         target_abs_path
+    //     );
+    //     return Err(Errno::ENOENT);
+    // }
 
     if flags.contains(OpenFlags::O_DIRECTORY) && target_inode.node_type() != InodeType::Dir {
         debug!(

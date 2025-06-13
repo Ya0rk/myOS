@@ -31,53 +31,46 @@ impl Future for IoFutrue {
     ) -> core::task::Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
         let mut res_vec = Vec::new();
+        let task = current_task().unwrap();
         for pollfd in this.file_event.iter_mut() {
             pollfd.revents = PollEvents::empty();
-            let file = current_task()
-                .unwrap()
-                .get_file_by_fd(pollfd.fd as usize)
-                .ok_or(Errno::EBADF)?;
-            if pollfd.events.contains(PollEvents::POLLIN) {
-                // info!("[PpollFuture] pollin");
-                let res = file.pollin(cx.waker().clone());
+            let file = match task.get_file_by_fd(pollfd.fd as usize) {
+                Some(f) => f,
+                None => {
+                    println!("[PpollFuture] fd {} not found", pollfd.fd);
+                    continue;
+                }
+            };
+
+            let mut poll_func = |event: PollEvents| {
+                let res = if pollfd.events.contains(PollEvents::POLLIN) {
+                    file.pollin(cx.waker().clone())
+                } else if pollfd.events.contains(PollEvents::POLLOUT) {
+                    file.pollout(cx.waker().clone())
+                } else {
+                    Err(Errno::EINVAL)
+                };
 
                 match res {
-                    Ok(_) => {
-                        let mut revent = PollEvents::POLLIN;
-                        // if a { revent |= PollEvents::POLLIN;  }
-                        // else { revent |= PollEvents::POLLERR; }
-                        pollfd.revents |= revent;
-                        res_vec.push(revent);
+                    Ok(ok) => {
+                        if ok {
+                            let mut revent = event;
+                            pollfd.revents |= revent;
+                            res_vec.push(revent);
+                        }
+                        Ok(())
                     }
                     Err(_) => {
                         let mut revent = PollEvents::POLLERR;
-                        // if a { revent |= PollEvents::POLLIN;  }
-                        // else { revent |= PollEvents::POLLERR; }
                         pollfd.revents |= revent;
                         res_vec.push(revent);
+                        Ok(())
                     }
                 }
-            }
-            if pollfd.events.contains(PollEvents::POLLOUT) {
-                // info!("[PpollFuture] pollout");
-                let res = file.pollout(cx.waker().clone());
-                match res {
-                    Ok(a) => {
-                        let mut revent = PollEvents::POLLOUT;
-                        // if a { revent |= PollEvents::POLLOUT; }
-                        // else { revent |= PollEvents::POLLERR; }
-                        pollfd.revents |= revent;
-                        res_vec.push(revent);
-                    }
-                    Err(_) => {
-                        let mut revent = PollEvents::POLLERR;
-                        // if a { revent |= PollEvents::POLLOUT; }
-                        // else { revent |= PollEvents::POLLERR; }
-                        pollfd.revents |= revent;
-                        res_vec.push(revent);
-                    }
-                }
-            }
+            };
+
+            poll_func(PollEvents::POLLIN)?;
+            poll_func(PollEvents::POLLOUT)?;
         }
 
         if res_vec.len() > 0 {
@@ -85,7 +78,6 @@ impl Future for IoFutrue {
             this.user_fds_ptr.update(&this.file_event)?;
             return Poll::Ready(Ok(len));
         }
-
         return Poll::Pending;
     }
 }
@@ -106,7 +98,7 @@ impl UptrFmt {
                 let user_fds = unsafe {
                     core::slice::from_raw_parts_mut((*user_fds_ptr) as *mut PollFd, now_fds.len())
                 };
-                user_fds.copy_from_slice(&now_fds);
+                user_fds.copy_from_slice(now_fds);
                 Ok(())
             }
             Self::Pselect([readfds, writefds, exceptfds]) => {

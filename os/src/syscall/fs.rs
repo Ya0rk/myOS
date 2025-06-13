@@ -89,27 +89,24 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
-    match task.get_file_by_fd(fd) {
-        Some(file) => {
-            if !file.readable() {
-                return Err(Errno::EPERM);
-            }
-            // 将iov中的结构体一个个取出，转化为UserBuffer
-            for i in 0..iovcnt {
-                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
-                let len = (unsafe { *iov_st }).iov_len;
-                if len == 0 {
-                    continue;
-                }
-                let base = (unsafe { *iov_st }).iov_base;
-                let buffer = unsafe { core::slice::from_raw_parts_mut(base as *mut u8, len) };
-                let read_len = file.read(buffer).await?;
-                res += read_len;
-            }
-            Ok(res)
-        }
-        _ => Err(Errno::EBADF),
+
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    if unlikely(!file.readable()) {
+        return Err(Errno::EPERM);
     }
+    // 将iov中的结构体一个个取出，转化为UserBuffer
+    for i in 0..iovcnt {
+        let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
+        let len = (unsafe { *iov_st }).iov_len;
+        if len == 0 {
+            continue;
+        }
+        let base = (unsafe { *iov_st }).iov_base;
+        let buffer = unsafe { core::slice::from_raw_parts_mut(base as *mut u8, len) };
+        let read_len = file.read(buffer).await?;
+        res += read_len;
+    }
+    Ok(res)
 }
 
 /// 和sys_readv相反，将数据从iov中写入到文件中
@@ -125,33 +122,28 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
     if fd >= task.fd_table_len() {
         return Err(Errno::EBADF);
     }
-    match task.get_file_by_fd(fd) {
-        Some(file) => {
-            if !file.writable() {
-                info!("no writeable");
-                return Err(Errno::EPERM);
-            }
-            // 将iov中的结构体一个个取出，转化为UserBuffer
-            for i in 0..iovcnt {
-                let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *const IoVec;
-                let len = (unsafe { &*iov_st }).iov_len;
-                if len == 0 {
-                    continue;
-                }
-                if fd != 1 {
-                    info!("    [sys_writev] len = {}", len);
-                }
-                let base = (unsafe { &*iov_st }).iov_base;
-                let buffer = unsafe { core::slice::from_raw_parts(base as *const u8, len) };
-                // info!("aaaaaaaaaaaa");
-                let write_len = file.write(buffer).await?;
-                res += write_len;
-            }
-            // info!("nnnnnnnnnnnn");
-            Ok(res)
-        }
-        _ => Err(Errno::EBADF),
+
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    if unlikely(!file.writable()) {
+        info!("no writeable");
+        return Err(Errno::EPERM);
     }
+    // 将iov中的结构体一个个取出，转化为UserBuffer
+    for i in 0..iovcnt {
+        let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *const IoVec;
+        let len = (unsafe { &*iov_st }).iov_len;
+        if len == 0 {
+            continue;
+        }
+        if fd != 1 {
+            info!("    [sys_writev] len = {}", len);
+        }
+        let base = (unsafe { &*iov_st }).iov_base;
+        let buffer = unsafe { core::slice::from_raw_parts(base as *const u8, len) };
+        let write_len = file.write(buffer).await?;
+        res += write_len;
+    }
+    Ok(res)
 }
 
 /// dirfd：目录文件描述符，指定相对路径的基准目录
@@ -168,7 +160,6 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
 /// ```
 pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let token = task.get_user_token();
     let path = user_cstr(pathname.into())?.unwrap();
     debug!("[sys_fsstatat] pathname {},", path);
     let cwd = task.get_current_path();
@@ -183,15 +174,15 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
         if unlikely(
-            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize,
+            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE
         ) {
             return Err(Errno::EBADF);
         }
-        let inode = match task.get_file_by_fd(dirfd as usize) {
-            Some(i) => i,
-            _ => return Ok(0),
-        };
-        // let other_cwd = cwd.clone();
+        let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
+        if unlikely(!inode.is_dir()) {
+            log::error!("[sys_fstatat] dirfd = {} is not a dir.", dirfd);
+            return Err(Errno::ENOTDIR);
+        }
         let other_cwd = inode.get_name()?;
         if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout")) {
             return Ok(0);
@@ -247,19 +238,13 @@ pub fn sys_fstat(fd: usize, kst: usize) -> SysResult<usize> {
     }
 
     let mut stat = Kstat::new();
-    match task.get_file_by_fd(fd) {
-        Some(file) => {
-            file.fstat(&mut stat)?;
-            info!("fstat finished fd: {}, stat: {:?}", fd, stat);
-            unsafe {
-                core::ptr::write(ptr, stat);
-            }
-            return Ok(0);
-        }
-        _ => {
-            return Err(Errno::EBADF);
-        }
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    file.fstat(&mut stat)?;
+    info!("fstat finished fd: {}, stat: {:?}", fd, stat);
+    unsafe {
+        core::ptr::write(ptr, stat);
     }
+    return Ok(0);
 }
 
 /// 291号系统调用
@@ -312,7 +297,7 @@ pub fn sys_statx(
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize {
+        if dirfd < 0 || dirfd as usize > RLIMIT_NOFILE {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -497,8 +482,11 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     }
     // TODO: 有待修改
 
-    let token = task.get_user_token();
-    let file = task.get_file_by_fd(fd).unwrap();
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    if unlikely(!file.is_dir()) {
+        log::error!("[sys_getdents64] fd {} is not a dir", fd);
+        return Err(Errno::ENOTDIR);
+    }
     let res = file.read_dents(ptr as usize, len);
     info!("[sys_getdents64] return = {}", res);
     Ok(res)
@@ -624,11 +612,11 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
         if unlikely(
-            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE || dirfd >= task.fd_table_len() as isize,
+            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE
         ) {
             return Err(Errno::EBADF);
         }
-        let inode = task.get_file_by_fd(dirfd as usize).unwrap();
+        let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         if unlikely(!inode.is_dir()) {
             return Err(Errno::ENOTDIR);
         }
@@ -965,7 +953,6 @@ pub async fn sys_sendfile(
 /// If pathname is a symbolic link, it is dereferenced.
 pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let token = task.get_user_token();
     let mut path = user_cstr(pathname.into())?.unwrap();
     info!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
@@ -979,10 +966,13 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
-        let inode = current_task()
-            .unwrap()
+        let inode = task
             .get_file_by_fd(dirfd as usize)
-            .expect("[sys_faccessat] get file by fd failed");
+            .ok_or(Errno::EBADF)?;
+        if unlikely(!inode.is_dir()) {
+            log::error!("[sys_faccessat] dirfd = {} is not a dir.", dirfd);
+            return Err(Errno::ENOTDIR);
+        }
         let other_cwd = inode.get_name()?;
         resolve_path(other_cwd, path)
     };
@@ -1018,7 +1008,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
-    let file = task.get_file_by_fd(fd).unwrap();
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
     let res = file.lseek(offset, whence)?;
     // println!("[sys_lseek] lseek finished, res = {}", res);
 
@@ -1131,7 +1121,7 @@ pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
-    let file = task.get_file_by_fd(fd).unwrap();
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
     file.get_inode().truncate(length);
     Ok(0)
 }
@@ -1150,7 +1140,7 @@ pub async fn sys_pread64(fd: usize, buf: usize, count: usize, offset: usize) -> 
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
-    let file = task.get_file_by_fd(fd).unwrap();
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
     if unlikely(!file.readable()) {
         return Err(Errno::EPERM);
     }
@@ -1166,7 +1156,7 @@ pub async fn sys_pwrite64(fd: usize, buf: usize, count: usize, offset: usize) ->
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
-    let file = task.get_file_by_fd(fd).unwrap();
+    let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
     if unlikely(!file.writable()) {
         return Err(Errno::EPERM);
     }

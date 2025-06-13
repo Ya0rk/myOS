@@ -492,7 +492,15 @@ pub fn sys_clock_gettime(clock_id: usize, timespec: usize) -> SysResult<usize> {
     }
     let time = match clock_id {
         CLOCK_REALTIME | CLOCK_MONOTONIC => {
-            TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration())
+            let ma = CLOCK_MANAGER.lock();
+            let t = *(ma.get(clock_id).unwrap());
+            let res = TimeSpec::from(t + time_duration());
+            // println!(
+            //     "[sys_clock_gettime] clock_id = {}, time = {:?}",
+            //     clock_id, res
+            // );
+            res
+            // TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration())
         }
         CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
         CLOCK_THREAD_CPUTIME_ID => TimeSpec::thread_cputime_now(),

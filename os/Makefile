@@ -1,6 +1,7 @@
 # Building
 # 如果未指定 ARCH 参数，默认使用 riscv64
 ARCH ?= riscv64
+export ARCH
 
 # 验证 ARCH 参数是否有效
 ifeq (,$(filter $(ARCH),riscv64 loongarch64))
@@ -30,7 +31,7 @@ endif
 
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
-OVERWRITE := false
+OVERWRITE ?= false
 
 # fs image
 FS = lwext4_rust
