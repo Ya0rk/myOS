@@ -169,6 +169,7 @@ pub enum SysCode {
     GETRANDOM = 278,
     MEMEBARRIER = 283,
     SYS_STATX = 291,
+    SYSCALL_CLONE3 = 435,
     #[num_enum(default)]
     SYSCALL_UNKNOWN,
 }
@@ -183,6 +184,7 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str {
         match self {
+            Self::SYSCALL_CLONE3 => "clone3",
             Self::SYSCALL_SPLICE => "splice",
             Self::SYSCALL_SCHED_GETPARAM => "sched_getparam",
             Self::SYSCALL_SCHED_SETPARAM => "sched_setparam",
@@ -864,4 +866,48 @@ pub struct SchedParam {
     pub sched_ss_repl_period: TimeSpec,
     pub sched_ss_init_budget: TimeSpec,
     pub sched_ss_max_repl: i32,
+}
+
+/// 对应 Linux 的 clone3 系统调用参数结构体
+/// 文档参考：https://man7.org/linux/man-pages/man2/clone3.2.html
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct CloneArgs {
+    /// 控制克隆行为的标志位掩码 (CLONE_* 常量组合)
+    pub flags: usize,
+
+    /// 存储 PID 文件描述符的用户空间指针 (int *)
+    /// 用于 pidfd_send_signal() 等操作
+    pub pidfd: u64,
+
+    /// 在子进程内存中存储子线程 TID 的位置 (pid_t *)
+    /// 需配合 CLONE_CHILD_SETTID 标志使用
+    pub child_tid: usize,
+
+    /// 在父进程内存中存储子线程 TID 的位置 (pid_t *)
+    /// 需配合 CLONE_PARENT_SETTID 标志使用
+    pub parent_tid: usize,
+
+    /// 子进程终止时发送给父进程的信号编号
+    /// 必须是非实时信号且不能是 SIGKILL/SIGSTOP
+    pub exit_signal: u64,
+
+    /// 子进程用户栈的起始地址（指向栈最低字节）
+    pub stack: usize,
+
+    /// 用户栈的大小（字节数）
+    pub stack_size: usize,
+
+    /// 新线程的 TLS (Thread Local Storage) 地址
+    pub tls: usize,
+
+    /// 指向 pid_t 数组的指针（Linux 5.5+）
+    /// 用于设置子进程的 PID 命名空间层级
+    pub set_tid: u64,
+
+    /// set_tid 数组的元素数量（Linux 5.5+）
+    pub set_tid_size: u64,
+
+    /// 目标 cgroup 的文件描述符（Linux 5.7+）
+    pub cgroup: u64,
 }

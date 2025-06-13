@@ -19,8 +19,7 @@ use crate::sync::{
     NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER,
 };
 use crate::syscall::ffi::{
-    CloneFlags, RlimResource, Rusage, Sysinfo, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN,
-    LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD,
+    CloneArgs, CloneFlags, RlimResource, Rusage, Sysinfo, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD
 };
 use crate::syscall::io::SigMaskGuard;
 use crate::syscall::{CpuSet, RLimit64, SchedParam};
@@ -147,6 +146,34 @@ pub fn sys_getpid() -> SysResult<usize> {
 pub fn sys_getppid() -> SysResult<usize> {
     info!("[sys_getppid] start");
     Ok(current_task().unwrap().get_ppid() as usize)
+}
+
+/// 注意clone3目前只有在龙芯的测试用例中会用到
+/// Unlike the older clone() interface, where arguments are passed
+/// individually, in the newer clone3() interface the arguments are
+/// packaged into the clone_args structure shown above.  This
+/// structure allows for a superset of the information passed via the
+/// clone() arguments.
+
+/// The size argument that is supplied to clone3() should be
+/// initialized to the size of this structure.
+pub fn sys_clone3(cl_args: usize, size: usize) -> SysResult<usize> {
+    info!("[sys_clone3] start");
+    const CLONE_ARGS_SIZE: usize = 88;
+    if unlikely(size < CLONE_ARGS_SIZE) {
+        info!("[sys_clone3] size is too small: {}", size);
+        return Err(Errno::EINVAL);
+    }
+
+    let cl_args_ptr: CloneArgs = unsafe { *(cl_args as *const CloneArgs) };
+    let flags = cl_args_ptr.flags;
+    let child_stack = cl_args_ptr.stack;
+    let child_stack_size = cl_args_ptr.stack_size;
+    let ptid = cl_args_ptr.parent_tid;
+    let tls = cl_args_ptr.tls;
+    let ctid = cl_args_ptr.child_tid;
+
+    sys_clone(flags, child_stack + child_stack_size, ptid, tls, ctid)
 }
 
 pub fn sys_clone(
@@ -1389,3 +1416,4 @@ pub fn sys_sched_getparam(pid: usize, param: usize) -> SysResult<usize> {
 
     Ok(0)
 }
+

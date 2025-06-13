@@ -15,7 +15,7 @@ pub use ffi::RLimit64;
 pub use ffi::SchedParam;
 pub use ffi::ShutHow;
 pub use ffi::StatFs;
-use ffi::SysCode;
+pub use ffi::SysCode;
 use fs::*;
 use io::*;
 use log::info;
@@ -224,7 +224,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_GETPPID => sys_getppid(),
         SysCode::SYSCALL_BRK => sys_brk(args[0] as *const u8),
         SysCode::SYSCALL_MUNMAP => sys_munmap(args[0] as *const u8, args[1]),
+        SysCode::SYSCALL_CLONE3 => sys_clone3(args[0] as usize, args[1] as usize),
+        #[cfg(target_arch = "riscv64")]
         SysCode::SYSCALL_CLONE => sys_clone(args[0], args[1], args[2], args[3], args[4]),
+        #[cfg(target_arch = "loongarch64")]
+        SysCode::SYSCALL_CLONE => sys_clone(args[0], args[1], args[2], args[4], args[3]),
         SysCode::SYSCALL_EXECVE => sys_execve(args[0], args[1], args[2]).await,
         SysCode::SYSCALL_MMAP => sys_mmap(
             args[0] as *const u8,

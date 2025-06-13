@@ -421,7 +421,10 @@ impl TaskControlBlock {
         if let Some(tidaddress) = self.get_child_cleartid() {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
             unsafe {
-                let tid_va: VirtAddr = tidaddress.into();
+                // 这里需要检测地址空间是否还有其他使用者，如果存在就需要清零tidaddress
+                // 在pthread中tidaddress会被父线程或者其他线程 通过futex系统调用 轮循监测(poll)
+                // 如果tidaddress被清零了，其他线程会检测到这里的值改变，那么说明有线程退出
+                // 在futex中会执行wake唤醒其他线程
                 if Arc::strong_count(&self.memory_space) > 1 {
                     core::ptr::write(tidaddress as *mut usize, 0);
                     let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
