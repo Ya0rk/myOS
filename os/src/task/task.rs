@@ -422,18 +422,17 @@ impl TaskControlBlock {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
             unsafe {
                 let tid_va: VirtAddr = tidaddress.into();
-                let bind = self.memory_space.lock();
-                if let Some(vm_area) = bind.areas_mut().get_mut(tid_va.align_down()) {
-                    drop(bind);
+                if Arc::strong_count(&self.memory_space) > 1 {
                     core::ptr::write(tidaddress as *mut usize, 0);
+                    let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
+                    let mut binding = self.futex_list.lock();
+                    binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
+                    let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::FUTEX_PRIVATE);
+                    binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
                 }
                 // core::ptr::write(tidaddress as *mut usize, 0);
+                *self.clear_child_tid.get() = None; // 清除清理子线程的地址
             }
-            let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
-            let mut binding = self.futex_list.lock();
-            binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
-            let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::FUTEX_PRIVATE);
-            binding.to_wake(key, FUTEX_BITSET_MATCH_ANY, 1);
         }
 
         if !self.is_leader() {
