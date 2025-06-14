@@ -150,6 +150,9 @@ impl FileTrait for Pipe {
     fn executable(&self) -> bool {
         false
     }
+    fn is_pipe(&self) -> bool {
+        true
+    }
     async fn read(&self, buf: &mut [u8]) -> SysResult<usize> {
         assert!(self.readable());
         if buf.len() == 0 {

@@ -195,7 +195,7 @@ pub fn resolve_path(base: String, path: String) -> AbsPath {
     // 根据当前路径进行拼接
     let trim_base = base.trim_end_matches("/").to_string();
     let target_abs = format!("{}/{}", trim_base, path);
-    let target_abs = parse_path(target_abs);
+    // let target_abs = parse_path(target_abs);
 
     AbsPath::new(target_abs)
 }

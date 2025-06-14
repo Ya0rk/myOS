@@ -27,7 +27,7 @@ impl TimeSpec {
     }
 
     pub fn check_valid(&self) -> bool {
-        self.tv_nsec < NSEC_PER_SEC
+        self.tv_nsec < NSEC_PER_SEC && (self.tv_nsec as isize) >= 0 && (self.tv_sec as isize) >= 0
     }
 
     /// 获取当前进程所有的cpu时间

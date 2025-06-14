@@ -8,8 +8,7 @@ use crate::{
     fs::{FileTrait, OpenFlags, Pipe},
     hal::config::USER_SPACE_TOP,
     net::{
-        addr::{IpType, Ipv4, Ipv6, Sock, SockAddr},
-        Congestion, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS,
+        addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, Congestion, Protocol, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS
     },
     syscall::ffi::{IPPROTO_IP, IPPROTO_TCP, SO_OOBINLINE},
     task::{current_task, sock_map_fd, FdInfo},
@@ -394,15 +393,46 @@ pub fn sys_socketpair(domain: usize, _type: usize, protocol: usize, sv: usize) -
         "[sys_socketpair] start, domain = {}, _type = {}, protocol = {}",
         domain, _type, protocol
     );
+    if unlikely(domain != AF_UNIX.into() && domain != AF_INET.into() && domain != AF_INET6.into()) {
+        return Err(Errno::EAFNOSUPPORT);
+    }
+    if unlikely(sv == 0 || sv > USER_SPACE_TOP || sv == 7) {
+        return Err(Errno::EFAULT);
+    }
     let task = current_task().unwrap();
     let length = core::mem::size_of::<i32>();
     let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut i32, length) };
+    let proto = Protocol::from_bits(protocol as u32)
+        .ok_or(Errno::EPROTONOSUPPORT)?;
+    let _type = SocketType::from_bits(_type as u32)
+        .ok_or(Errno::EINVAL)?;
+    let flags = if _type.contains(SocketType::SOCK_CLOEXEC) {
+        OpenFlags::O_CLOEXEC
+    } else if _type.contains(SocketType::SOCK_NONBLOCK) {
+        OpenFlags::O_NONBLOCK
+    } else if _type.contains(SocketType::SOCK_RAW) {
+        return Err(Errno::EPROTONOSUPPORT);
+    } else {
+        OpenFlags::empty()
+    };
+
+    if (proto.contains(Protocol::IPPROTO_TCP) && _type.contains(SocketType::SOCK_STREAM))
+        || (proto.contains(Protocol::IPPROTO_UDP) && _type.contains(SocketType::SOCK_DGRAM))
+    {
+        return Err(Errno::EOPNOTSUPP);
+    }
+
+    if (_type.contains(SocketType::SOCK_STREAM) && !proto.contains(Protocol::IPPROTO_TCP))
+        || (_type.contains(SocketType::SOCK_DGRAM) && !proto.contains(Protocol::IPPROTO_UDP))
+    {
+        return Err(Errno::EPROTONOSUPPORT);
+    }
 
     let (read_fd, write_fd) = {
         let (read_end, write_end) = Pipe::new();
         (
-            task.alloc_fd(FdInfo::new(read_end, OpenFlags::O_RDONLY))?,
-            task.alloc_fd(FdInfo::new(write_end, OpenFlags::O_WRONLY))?,
+            task.alloc_fd(FdInfo::new(read_end, OpenFlags::O_RDONLY | flags))?,
+            task.alloc_fd(FdInfo::new(write_end, OpenFlags::O_WRONLY | flags))?,
         )
     };
     info!("alloc read_fd = {}, write_fd = {}", read_fd, write_fd);
@@ -504,6 +534,12 @@ pub fn sys_setsockopt(
         "[sys_setsockopt] start, sockfd = {}, level = {}, optname = {}, optlen = {}",
         sockfd, level, optname, optlen
     );
+    if unlikely(optval_ptr == 0) {
+        return Err(Errno::EFAULT);
+    }
+    if unlikely(optlen == 0) {
+        return Err(Errno::EINVAL);
+    }
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
@@ -526,7 +562,7 @@ pub fn sys_setsockopt(
             let action = unsafe { *(optval_ptr as *const u32) };
             socket.enable_nagle(action);
         }
-        _ => {}
+        _ => return Err(Errno::ENOPROTOOPT),
     }
 
     Ok(0)

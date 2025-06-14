@@ -428,7 +428,10 @@ impl MemorySpace {
         const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
         // map program headers of elf, with U flag
-        let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+        let elf = xmas_elf::ElfFile::new(elf_data).unwrap_or_else(|err| {
+            println!("[parse_and_map_elf] file is {:?}", elf_file.get_name());
+            panic!("parse elf failed: {err}");
+        });
         let elf_header = elf.header;
         assert_eq!(elf_header.pt1.magic, ELF_MAGIC, "invalid elf!");
         let mut entry = elf_header.pt2.entry_point() as usize;

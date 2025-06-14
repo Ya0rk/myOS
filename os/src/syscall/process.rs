@@ -493,10 +493,27 @@ pub fn sys_exit_group(exit_code: i32) -> SysResult<usize> {
 
 pub fn sys_clock_settime(clock_id: usize, timespec: usize) -> SysResult<usize> {
     info!("[sys_clock_settime] start");
-    if unlikely(timespec == 0) {
+    if unlikely(timespec == 0 || timespec > USER_SPACE_TOP) {
         info!("[sys_clock_settime] timespec is null");
         return Err(Errno::EFAULT);
     }
+    let ts = unsafe { *(timespec as *const TimeSpec) };
+    if !ts.check_valid() {
+        info!("[sys_clock_settime] timespec is invalid");
+        return Err(Errno::EINVAL);
+    }
+    if Duration::from(ts) < time_duration() {
+        info!("[sys_clock_settime] timespec is in the past");
+        return Err(Errno::EINVAL);
+    }
+
+    match clock_id {
+        CLOCK_REALTIME => {
+            CLOCK_MANAGER.lock()[CLOCK_REALTIME] = Duration::from(ts) - time_duration();
+        }
+        _ => return Err(Errno::EINVAL),
+    }
+
     Ok(0)
 }
 
@@ -509,7 +526,15 @@ pub fn sys_clock_gettime(clock_id: usize, timespec: usize) -> SysResult<usize> {
     }
     let time = match clock_id {
         CLOCK_REALTIME | CLOCK_MONOTONIC => {
-            TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration())
+            let ma = CLOCK_MANAGER.lock();
+            let t = *(ma.get(clock_id).unwrap());
+            let res = TimeSpec::from(t + time_duration());
+            // println!(
+            //     "[sys_clock_gettime] clock_id = {}, time = {:?}",
+            //     clock_id, res
+            // );
+            res
+            // TimeSpec::from(*CLOCK_MANAGER.lock().get(clock_id).unwrap() + time_duration())
         }
         CLOCK_PROCESS_CPUTIME_ID => TimeSpec::process_cputime_now(),
         CLOCK_THREAD_CPUTIME_ID => TimeSpec::thread_cputime_now(),
@@ -966,6 +991,9 @@ pub fn sys_prlimit64(
     if new_limit != 0 {
         let new_limit = unsafe { *(new_limit as *const RLimit64) };
         // println!("new limit = {:?}", new_limit);
+        if unlikely(new_limit.rlim_cur > new_limit.rlim_max) {
+            return Err(Errno::EINVAL);
+        }
         match rs {
             RlimResource::Nofile => {
                 task.fd_table.lock().rlimit.rlim_cur = new_limit.rlim_cur;

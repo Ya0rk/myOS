@@ -232,6 +232,8 @@ pub async fn sys_pselect(
         SigMaskGuard::new(task.clone(), new_sigmask)
     };
 
+    // println!("[sys_pselect] readfds: {:#x}, writefds: {:#x}, exceptfds: {:#x}",
+        // readfds_ptr, writefds_ptr, exceptfds_ptr);
     let iofuture = IoFutrue::new(
         file_events,
         UptrFmt::Pselect([readfds_ptr, writefds_ptr, exceptfds_ptr]),

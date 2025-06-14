@@ -80,7 +80,17 @@ impl UdpSocket {
                     drop(sockmeta);
                     self.bind(&addr);
                 }
-                IpType::Ipv6 => todo!(),
+                IpType::Ipv6 => {
+                    let addr = SockAddr::Inet6(Ipv6 {
+                        family: AF_INET,
+                        port: 0,
+                        flowinfo: 0,
+                        addr: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                        scope_id: 0,
+                    });
+                    drop(sockmeta);
+                    self.bind(&addr);
+                }
             };
         }
 
