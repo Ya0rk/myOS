@@ -17,8 +17,10 @@ use crate::{
     fs::{
         ffi::InodeType, mkdir, open, path, procfs::PROCFS_SUPER_BLOCK, root_inode, AbsPath,
         FileClass, FileTrait, OpenFlags,
-    },
-    utils::{Errno, SysResult},
+    }, sync::{NoIrqLock, SpinNoIrqLock}, utils::{
+        cache::{Cache, CacheStatus},
+        Errno, SysResult,
+    }
 };
 use alloc::sync::{Arc, Weak};
 use core::hash::{Hash, Hasher};
@@ -73,6 +75,15 @@ impl Hash for Dentry {
 /// 根节点dentry
 lazy_static! {
     static ref DENTRY_ROOT: Arc<Dentry> = Dentry::new_root();
+}
+lazy_static! {
+    static ref DENTRY_CACHE: SpinNoIrqLock<Cache<String, Arc<Dentry>>> = SpinNoIrqLock::new(Cache::new(10));
+}
+
+impl CacheStatus for Arc<Dentry> {
+    fn is_valid(&self) -> bool {
+        !self.is_negtive()
+    }
 }
 
 impl Dentry {
@@ -254,6 +265,7 @@ impl Dentry {
         let parent = self.parent()?;
         let mut parent_children = parent.children.write();
         parent_children.remove(&child_name);
+        self.set_status(DentryStatus::Negtive);
         Some(())
     }
 
@@ -358,59 +370,20 @@ impl Dentry {
     /// 根据绝对路径获取对应的inode
     pub fn get_inode_from_path(path: &str) -> SysResult<Arc<dyn InodeTrait>> {
         info!("[get_inode_from_path] {}", path);
-        if !path.starts_with('/') {
-            panic!("path should start with /");
-        }
-        let mut dentry_now = DENTRY_ROOT.clone();
-        if path == "/" {
-            return Ok(dentry_now.get_inode().unwrap());
-        }
-        let mut path_now = String::from("/");
-
-        let path_split = path.split('/').enumerate();
-        let size_of_path = path_split.clone().count();
-        for (i, name) in path_split {
-            match dentry_now.get_child(name) {
-                Some(child) => {
-                    dentry_now = child;
-                    match dentry_now.get_inode() {
-                        Some(mid_inode) => {
-                            if !mid_inode.is_dir() && i < size_of_path - 1 {
-                                return Err(Errno::ENOTDIR);
-                            }
-                        }
-                        None => {
-                            return Err(Errno::ENOENT);
-                        }
-                    };
-                }
-                None => {
-                    info!(
-                        "[get_inode_from_path] no such file or directory: {}/{}",
-                        path_now, name
-                    );
-                    return Err(Errno::ENOENT);
-                }
-            }
-        }
-        if dentry_now.is_negtive() {
-            return Err(Errno::ENOENT);
-        }
-        if let Some(inode) = dentry_now.get_inode() {
-            if inode.is_valid() {
-                Ok(inode)
-            } else {
-                Err(Errno::ENOENT)
-            }
-        } else {
-            Err(Errno::ENOENT)
-        }
+        Dentry::get_dentry_from_path(path)?
+            .get_inode()
+            .ok_or(Errno::ENOENT)
     }
 
     /// 根据绝对路径找到dentry
     /// path： 绝对路径
     pub fn get_dentry_from_path(path: &str) -> SysResult<Arc<Self>> {
         info!("[get_dentry_from_path] {}", path);
+        {
+            if let Some(dentry) = DENTRY_CACHE.lock().get(path) {
+                return Ok(dentry)
+            }
+        }
         if !path.starts_with('/') {
             panic!("path should start with /");
         }
@@ -452,6 +425,7 @@ impl Dentry {
 
         if let Some(inode) = dentry_now.get_inode() {
             if inode.is_valid() {
+                DENTRY_CACHE.lock().insert(&String::from(path), dentry_now.clone());
                 Ok(dentry_now)
             } else {
                 Err(Errno::ENOENT)
