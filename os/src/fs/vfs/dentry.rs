@@ -49,7 +49,7 @@ pub struct Dentry {
     /// 父dentry的弱引用
     parent: Weak<Dentry>,
     /// 孩子dentry的强引用
-    children: RwLock<HashMap<String, Arc<Dentry>>>,
+    children: RwLock<HashMap<String, Arc<Dentry>>>, // 这里的key用的是文件名
     /// 用栈去存储当前的挂载的inode对象
     inode: RwLock<Vec<Arc<dyn InodeTrait>>>,
     /// dentry的状态
@@ -172,7 +172,7 @@ impl Dentry {
         Some(parent)
     }
 
-    pub fn get_abs_path(&self) -> String {
+    pub fn get_abs_path(&self) -> String { // 性能瓶颈有点慢， 可以在new_bare时就传入绝对路径设置好，file_name可以通过绝对路径获得，反过来就很麻烦
         let name = self.name.read();
         {
             let read = self.path.read();
@@ -207,10 +207,10 @@ impl Dentry {
             }
             DentryStatus::Negtive => return None,
         };
-        if pattern.ends_with("..") {
+        if pattern.ends_with("..") { // 有点多于，这里的路径都是系统调用传来的，.. 和 . 已经处理了
             info!("return parent");
             return self.parent();
-        } else if pattern.ends_with("/") || pattern.ends_with(".") || pattern == "" {
+        } else if pattern.ends_with("/") || pattern.ends_with(".") || pattern == "" {  // 多余判断，并且好像pattern不会是/,因为上层是用/分割
             // info!("return name is {}", self.name.read());
             return Some(self.clone());
         }
@@ -254,6 +254,7 @@ impl Dentry {
         let parent = self.parent()?;
         let mut parent_children = parent.children.write();
         parent_children.remove(&child_name);
+        self.set_status(DentryStatus::Negtive);
         Some(())
     }
 
@@ -375,7 +376,7 @@ impl Dentry {
                     dentry_now = child;
                     match dentry_now.get_inode() {
                         Some(mid_inode) => {
-                            if !mid_inode.is_dir() && i < size_of_path - 1 {
+                            if !mid_inode.is_dir() && i < size_of_path - 1 { 
                                 return Err(Errno::ENOTDIR);
                             }
                         }
