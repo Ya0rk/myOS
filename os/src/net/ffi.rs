@@ -26,5 +26,19 @@ bitflags! {
         const SOCK_STREAM = 1;
         /// 数据报套接字，用于Udp
         const SOCK_DGRAM  = 2;
+        const SOCK_RAW    = 3;
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    #[repr(C)]
+    pub struct Protocol: u32 {
+        /// TCP 协议
+        const IPPROTO_TCP = 6;
+        /// UDP 协议
+        const IPPROTO_UDP = 17;
+        /// ICMP 协议
+        const IPPROTO_ICMP = 1;
+        /// IP 协议族
+        const IPPROTO_IP   = 0;
     }
 }

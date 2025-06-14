@@ -54,6 +54,11 @@ pub trait FileTrait: Send + Sync {
     fn writable(&self) -> bool;
     fn executable(&self) -> bool;
 
+    /// 这里是临时机制，主要在splice中使用，后序可以通过inodetype实现判断
+    fn is_pipe(&self) -> bool {
+        false
+    }
+
     /// 临时机制, 为了在ioctl中判断
     fn is_deivce(&self) -> bool {
         false

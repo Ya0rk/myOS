@@ -31,7 +31,7 @@ endif
 
 DISASM_TMP := target/$(TARGET)/$(MODE)/asm
 APPS := ../user/src/bin/*
-OVERWRITE := false
+OVERWRITE ?= false
 
 # fs image
 FS = lwext4_rust

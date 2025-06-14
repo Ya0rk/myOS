@@ -93,16 +93,20 @@ impl<F: Future> Future for TimeoutFuture<F> {
         // 先检查内部Future是否完成
         let this = unsafe { self.get_unchecked_mut() };
         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
+        // println!(
+        //     "timeout future start: polling inner future, deadline = {:?}",
+        //     this.deadline
+        // );
         if let Poll::Ready(v) = inner.poll(cx) {
             return Poll::Ready(Ok(v));
         }
 
         // 检查是否已经超时
         let current = time_duration();
-        info!(
-            "timeout future: checking time, current = {:?}, deadline = {:?}",
-            current, this.deadline
-        );
+        // println!(
+        //     "timeout future: checking time, current = {:?}, deadline = {:?}",
+        //     current, this.deadline
+        // );
         if current >= this.deadline {
             info!("[TimeoutFuture] time use out");
             return Poll::Ready(Err(Errno::ETIMEDOUT));

@@ -97,21 +97,7 @@ impl FileTrait for NormalFile {
             self.metadata.offset()
         );
 
-        // if self.metadata.inode.size() <= self.metadata.offset() || self.metadata.inode.size() == 0 {
-        //     //读取位置超过文件大小，返回结果为EOF
-        //     return Ok(0);
-        // }
-
         let mut new_offset = self.metadata.offset();
-
-        // if self.path.contains("meminfo") {
-        //     let data = MEMINFO.as_bytes();
-        //     let len = min(data.len(), buf.len()-new_offset);
-        //     if len == 0 { return Ok(0); }
-        //     buf[0..len].copy_from_slice(&data[new_offset..len]);
-        //     self.metadata.set_offset(new_offset + len);
-        //     return Ok(len);
-        // }
 
         // 这边要使用 iter_mut()，因为要将数据写入
         let read_size = self.metadata.inode.read_at(new_offset, buf).await;
@@ -142,11 +128,7 @@ impl FileTrait for NormalFile {
         let mut total_write_size = 0usize;
         // 将改变inode大小的逻辑移入inode的write_at方法中
         // 增加代码内聚
-        // let file_size = self.metadata.inode.get_size();
         let offset = self.metadata.offset();
-        // if buf.len() > file_size - offset {
-        //     self.metadata.inode.set_size(buf.len() + offset).expect("[write_at]: set size fail!");
-        // }
 
         let old_offset = self.metadata.offset();
         let write_size = self.metadata.inode.write_at(old_offset, buf).await;
@@ -193,29 +175,6 @@ impl FileTrait for NormalFile {
     }
 
     fn rename(&mut self, new_path: String, flags: RenameFlags) -> SysResult<usize> {
-        // if flags.contains(RenameFlags::RENAME_EXCHANGE)
-        //     && (flaes.contains(RenameFlags::RENAME_NOREPLACE)
-        //         || flags.contains(RenameFlags::RENAME_WHITEOUT))
-        // {
-        //     return Err(Errno::EINVAL);
-        // }
-        //
-        // let newpath_exist = self.is_child(&new_path);
-        // if newpath_exist && flags.contains(RenameFlags::RENAME_NOREPLACE) {
-        //     return Err(Errno::EEXIST);
-        // }
-        // if flags.contains(RenameFlags::RENAME_EXCHANGE) && !newpath_exist {
-        //     return Err(Errno::ENOENT);
-        // }
-        //
-        // let old_path = self.path.clone();
-        // if new_path.len() > PATH_MAX || old_path.len() > PATH_MAX {
-        //     return Err(Errno::ENAMETOOLONG);
-        // }
-        //
-        // self.metadata.inode.rename(&old_path, &new_path);
-        // self.path = new_path;
-        //
         Err(Errno::EIO)
     }
 

@@ -155,7 +155,7 @@ impl InodeTrait for Ext4Inode {
 
         let nf = Ext4Inode::new(path, types.clone().into(), page_cache.clone());
         bare_dentry.bind(nf.clone());
-        if nf.is_valid() {
+        if nf.is_valid() { // 这里的判断没用
             info!("[do_create] succe {}", path);
         } else {
             info!("[do_create] faild {}", path);

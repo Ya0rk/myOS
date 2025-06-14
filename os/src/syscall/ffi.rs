@@ -554,7 +554,7 @@ impl PollFd {
 }
 
 bitflags! {
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug)]
     pub struct PollEvents: i16 {
         /// 普通数据可读（例如 TCP 接收缓冲区有数据）
         /// - 对应 `POLLIN`，表示文件描述符有数据可读取且不会阻塞
