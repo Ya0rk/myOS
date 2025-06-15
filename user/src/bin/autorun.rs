@@ -82,6 +82,7 @@ fn main() -> i32 {
             run_cmd(test, cd);
         }
         
+        run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
         exit(0); 
     } else {
         println!("main parent");

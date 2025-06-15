@@ -118,12 +118,12 @@ impl Dentry {
     }
     /// 创建一个没有绑定Inode的dentry,爹指向self,名字为name
     /// 注意到这个应该为单纯的名字而不是绝对路径
-    fn new_bare(self: &Arc<Self>, name: &str) -> Arc<Self> {
+    fn new_bare(self: &Arc<Self>, path: &AbsPath) -> Arc<Self> {
         // info!("create bare {}", name);
         let mut inode = Vec::new();
         let res = Self {
-            name: RwLock::new(String::from(name)),
-            path: RwLock::new(None),
+            name: RwLock::new(path.get_filename()),
+            path: RwLock::new(Some(path.get())),
             parent: Arc::downgrade(self),
             children: RwLock::new(HashMap::new()),
             inode: RwLock::new(inode),
@@ -132,7 +132,7 @@ impl Dentry {
         let result = Arc::new(res);
         self.children
             .write()
-            .insert(name.to_string(), result.clone());
+            .insert(path.get_filename(), result.clone());
         result
     }
     /// 创建一个儿子节点
@@ -256,7 +256,9 @@ impl Dentry {
                 }
             };
         }
-        Some(self.new_bare(pattern))
+        let parent_path = self.get_abs_path();
+        let real_path = AbsPath::new(format!("{}/{}", parent_path, pattern));
+        Some(self.new_bare(&real_path))
     }
 
     //
@@ -292,13 +294,15 @@ impl Dentry {
                 DentryStatus::Unint => {}
             };
         }
-        let inode = if let Some(inode) = self.get_inode() {
-            inode
-        } else {
-            return Err(Errno::ENOENT);
-        };
+        let inode = self.get_inode().ok_or(Errno::ENOENT)?;
+        // let inode = if let Some(inode) = self.get_inode() {
+        //     inode
+        // } else {
+        //     return Err(Errno::ENOENT);
+        // };
         if inode.node_type() == InodeType::Dir {
             let dents = inode.read_dents().unwrap();
+            let parent_abs = self.get_abs_path();
             for dent in dents {
                 let name_byte = dent.d_name;
                 let end = name_byte
@@ -306,7 +310,8 @@ impl Dentry {
                     .position(|&b| b == 0)
                     .unwrap_or(name_byte.len());
                 let real_name = String::from_utf8_lossy(&name_byte[0..end]);
-                let son = Self::new_bare(&self, &real_name);
+                let real_path: AbsPath = AbsPath::new(format!("{}/{}", parent_abs, real_name));
+                let son = Self::new_bare(&self, &real_path);
                 // info!("insert child dentry {}", &real_name);
                 self.children.write().insert(real_name.to_string(), son);
             }
@@ -397,28 +402,35 @@ impl Dentry {
         let path_split = path.split('/').enumerate();
         let size_of_path = path_split.clone().count();
         for (i, name) in path_split {
-            match dentry_now.get_child(name) {
-                Some(child) => {
-                    dentry_now = child;
-                    match dentry_now.get_inode() {
-                        Some(mid_inode) => {
-                            if !mid_inode.is_dir() && i < size_of_path - 1 {
-                                return Err(Errno::ENOTDIR);
-                            }
-                        }
-                        None => {
-                            return Err(Errno::ENOENT);
-                        }
-                    };
-                }
-                None => {
-                    info!(
-                        "[get_dentry_from_path] no such file or directory: {}/{}",
-                        path_now, name
-                    );
-                    return Err(Errno::ENOENT);
-                }
+            let child = dentry_now.get_child(name).ok_or(Errno::ENOENT)?;
+            dentry_now = child;
+            let mid_inode = dentry_now.get_inode().ok_or(Errno::ENOENT)?;
+            if !mid_inode.is_dir() && i < size_of_path - 1 {
+                return Err(Errno::ENOTDIR);
             }
+
+            // match dentry_now.get_child(name) {
+            //     Some(child) => {
+            //         dentry_now = child;
+            //         match dentry_now.get_inode() {
+            //             Some(mid_inode) => {
+            //                 if !mid_inode.is_dir() && i < size_of_path - 1 {
+            //                     return Err(Errno::ENOTDIR);
+            //                 }
+            //             }
+            //             None => {
+            //                 return Err(Errno::ENOENT);
+            //             }
+            //         };
+            //     }
+            //     None => {
+            //         info!(
+            //             "[get_dentry_from_path] no such file or directory: {}/{}",
+            //             path_now, name
+            //         );
+            //         return Err(Errno::ENOENT);
+            //     }
+            // }
         }
         if dentry_now.is_negtive() {
             return Err(Errno::ENOENT);
