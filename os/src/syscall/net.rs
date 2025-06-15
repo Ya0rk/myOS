@@ -10,7 +10,7 @@ use crate::{
     net::{
         addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, Congestion, Protocol, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS
     },
-    syscall::ffi::{IPPROTO_IP, IPPROTO_TCP, SO_OOBINLINE},
+    syscall::ffi::{IPPROTO_IP, IPPROTO_TCP, SO_OOBINLINE, SO_RCVTIMEO},
     task::{current_task, sock_map_fd, FdInfo},
     utils::{Errno, SysResult},
 };
@@ -561,6 +561,10 @@ pub fn sys_setsockopt(
         (SOL_TCP, NODELAY) => {
             let action = unsafe { *(optval_ptr as *const u32) };
             socket.enable_nagle(action);
+        }
+        (SOL_SOCKET, SO_RCVTIMEO) => {
+            // 设置超时时间暂时未实现
+            return Ok(0);
         }
         _ => return Err(Errno::ENOPROTOOPT),
     }
