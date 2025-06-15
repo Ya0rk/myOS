@@ -17,11 +17,11 @@ const TEST: &[&str] = &[
 const TESTCASES: &[&str] = &[
     // "./time-test\0",
     // "./test-splice.sh\0",
-    "./libctest_testcode.sh\0",
+    // "./libctest_testcode.sh\0"
     // "./lua_testcode.sh\0",
     // "./netperf_testcode.sh\0",
     // "./libcbench_testcode.sh\0",
-    // "./iozone_testcode.sh\0",
+    "./iozone_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
     // "./iperf_testcode.sh\0",
@@ -70,7 +70,7 @@ fn main() -> i32 {
         // 拷贝动态库到指定位置,这里是glibc的动态库
         #[cfg(target_arch = "loongarch64")]
         {
-            run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib64/ld-linux-loongarch.lp64d.so.1\0", "/glibc/");
+            run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib64/ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
         }
         #[cfg(target_arch = "riscv64")]
         {
@@ -81,6 +81,7 @@ fn main() -> i32 {
         for test in TESTCASES {
             run_cmd(test, cd);
         }
+        
         exit(0); 
     } else {
         println!("main parent");
@@ -104,7 +105,7 @@ fn main() -> i32 {
         // 拷贝动态库到指定位置,这里是musl的动态库
         #[cfg(target_arch = "loongarch64")]
         {
-            run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld_musl-loongarch-lp64d.sp.1\0", "/musl/");
+            run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0", "/musl/");
         }
         #[cfg(target_arch = "riscv64")]
         {
@@ -118,7 +119,7 @@ fn main() -> i32 {
             run_cmd(test, cd);
         }
 
-        run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
+        // run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
         // run_cmd("/musl/busybox --install /bin\0", "/musl/");
         
         exit(0);
@@ -126,8 +127,9 @@ fn main() -> i32 {
         println!("main parent");
         loop {
             let mut exit_code: i32 = 0;
-            let pid = wait(&mut exit_code);
-            if pid < 0 {
+            let pid = waitpid(child_pid as usize, &mut exit_code, 0);
+            // let pid = wait(&mut exit_code);
+            if pid == child_pid {
                 break;
             }
         }

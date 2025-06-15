@@ -67,7 +67,7 @@ impl FileTrait for Stdin {
         todo!()
     }
     fn is_dir(&self) -> bool {
-        todo!()
+        false
     }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()
@@ -113,7 +113,7 @@ impl FileTrait for Stdout {
         todo!()
     }
     fn is_dir(&self) -> bool {
-        todo!()
+        false
     }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         todo!()

@@ -179,10 +179,10 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
-        if unlikely(!inode.is_dir()) {
-            log::error!("[sys_fstatat] dirfd = {} is not a dir.", dirfd);
-            return Err(Errno::ENOTDIR);
-        }
+        // if unlikely(!inode.is_dir()) {
+        //     log::error!("[sys_fstatat] dirfd = {} is not a dir.", dirfd);
+        //     return Err(Errno::ENOTDIR);
+        // }
         let other_cwd = inode.get_name()?;
         if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout")) {
             return Ok(0);
