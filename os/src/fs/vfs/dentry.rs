@@ -424,16 +424,10 @@ impl Dentry {
             return Err(Errno::ENOENT);
         }
 
-        if let Some(inode) = dentry_now.get_inode() {
-            if inode.is_valid() {
-                DENTRY_CACHE.insert(&String::from(path), dentry_now.clone());
-                Ok(dentry_now)
-            } else {
-                Err(Errno::ENOENT)
-            }
-        } else {
-            Err(Errno::ENOENT)
-        }
+
+        DENTRY_CACHE.insert(&String::from(path), dentry_now.clone());
+        Ok(dentry_now)
+        
     }
 }
 
