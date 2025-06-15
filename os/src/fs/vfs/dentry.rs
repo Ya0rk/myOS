@@ -77,7 +77,7 @@ lazy_static! {
     static ref DENTRY_ROOT: Arc<Dentry> = Dentry::new_root();
 }
 lazy_static! {
-    static ref DENTRY_CACHE: SpinNoIrqLock<Cache<String, Arc<Dentry>>> = SpinNoIrqLock::new(Cache::new(10));
+    static ref DENTRY_CACHE: Cache<String, Arc<Dentry>> = Cache::new(10);
 }
 
 impl CacheStatus for Arc<Dentry> {
@@ -381,7 +381,7 @@ impl Dentry {
     pub fn get_dentry_from_path(path: &str) -> SysResult<Arc<Self>> {
         info!("[get_dentry_from_path] {}", path);
         {
-            if let Some(dentry) = DENTRY_CACHE.lock().get(path) {
+            if let Some(dentry) = DENTRY_CACHE.get(path) {
                 return Ok(dentry)
             }
         }
@@ -426,7 +426,7 @@ impl Dentry {
 
         if let Some(inode) = dentry_now.get_inode() {
             if inode.is_valid() {
-                DENTRY_CACHE.lock().insert(&String::from(path), dentry_now.clone());
+                DENTRY_CACHE.insert(&String::from(path), dentry_now.clone());
                 Ok(dentry_now)
             } else {
                 Err(Errno::ENOENT)
