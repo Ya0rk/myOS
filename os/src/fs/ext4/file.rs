@@ -209,10 +209,10 @@ impl FileTrait for NormalFile {
             return 0;
         };
 
-        if self.path == "/musl/ltp" || self.path == "/glibc/ltp" {
-            info!("alsdkjlaskdfj");
-            return 0;
-        }
+        // if self.path == "/musl/ltp" || self.path == "/glibc/ltp" {
+        //     info!("alsdkjlaskdfj");
+        //     return 0;
+        // }
 
         // Some(dir_entrys)
         let dirs = self.metadata.inode.read_dents();
