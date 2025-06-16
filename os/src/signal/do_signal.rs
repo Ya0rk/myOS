@@ -32,7 +32,7 @@ pub fn do_signal(task: &Arc<TaskControlBlock>) {
         }
         // 被阻塞的信号需要跳过，注意SIGKILL和SIGSTOP不能被屏蔽
         let signo = siginfo.signo as usize;
-        if old_sigmask.have(signo)
+        if task.get_blocked().have(signo)
             && signo != SigNom::SIGKILL as usize
             && signo != SigNom::SIGSTOP as usize
         {

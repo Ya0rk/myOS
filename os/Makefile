@@ -235,9 +235,9 @@ PHONY += LA
 #     -drive file=disk-la.img,if=none,format=raw,id=x1 -device virtio-blk-p
 
 LAgdbclient:
-	loongarch64-linux-gnu-gdb \
-	ex 'file ./target/loongarch64/debug/os' \
-	ex 'target remote localhost:1234'
+	loongarch64-unknown-linux-gnu-gdb \
+	-ex 'file $(KERNEL_ELF)' \
+	-ex 'target remote localhost:1234'
 PHONY += LAgdbclient
 
 LAgdb:
@@ -248,7 +248,7 @@ LAgdb:
 		-vga none \
 		-nographic \
 		-D qemu.log -d in_asm,int \
-		-drive file=$(FS_IMG),if=none,format=raw,id=mydev \
+		-drive file=$(FS_IMG_BAK),if=none,format=raw,id=mydev \
 		-device virtio-blk-pci,drive=mydev,id=virtio-disk0 \
 		-s -S
 PHONY += LAgdb

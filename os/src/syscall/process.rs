@@ -715,9 +715,10 @@ pub fn sys_sigaction(signum: usize, act: usize, old_act: usize) -> SysResult<usi
         let signo = SigNom::from(signum);
         new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
         info!(
-            "[sys_sigaction] taskid = {}, sa_handler = {:#x}",
+            "[sys_sigaction] taskid = {}, sa_handler = {:#x}, sa_flags = {:?}",
             task.get_pid(),
-            new_act.sa_handler
+            new_act.sa_handler,
+            new_act.sa_flags
         );
         match new_act.sa_handler {
             SIG_DFL => {
