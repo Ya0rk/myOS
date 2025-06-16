@@ -55,6 +55,19 @@ fn main() -> i32 {
     //     "busybox ln -s /lib/glibc/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1 ",
     // );
     run_cmd("/glibc/busybox --install /bin\0");
+    // 拷贝动态库到指定位置,这里是glibc的动态库
+    #[cfg(target_arch = "loongarch64")]
+    {
+        run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /lib64/ld-linux-loongarch-lp64d.so.1\0");
+        run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /ld-linux-loongarch-lp64d.so.1\0");
+    }
+    #[cfg(target_arch = "riscv64")]
+    {
+        run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1\0");
+        run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /ld-linux-riscv64-lp64d.so.1\0");
+        run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0");
+        
+    }
     let cd = "/glibc/";
     chdir(&conert_str2byte(cd));
     if fork() == 0 {
@@ -70,7 +83,7 @@ fn main() -> i32 {
             &[
                 "PATH=/bin:/\0",
                 "HOME=/\0",
-                "LD_LIBRARY_PATH=/\0",
+                "LD_LIBRARY_PATH=/glibc/lib\0",
                 "TERM=screen\0",
             ],
         );

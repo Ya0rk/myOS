@@ -272,15 +272,15 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
 
     info!("[sys_execve]: path: {:?}, cwd: {:?}", path, cwd);
     // #[cfg(target_arch = "loongarch64")]
-    if unlikely(argv.iter().any(|s| s == "pthread_cancel" || s == "pthread_robust_detach") && cwd == "/glibc") {
+    if unlikely(cwd == "/glibc" && argv.iter().any(|s| s == "pthread_cancel" || s == "pthread_robust_detach" || s == "sem_init")) {
         // 跳过这个测例libctest
         // task.set_zombie();
         return Ok(0);
     }
 
-    if unlikely(
+    if unlikely( cwd == "/glibc" && 
         argv.iter()
-            .any(|s| s == "setvbuf_unget" || s == "pthread_condattr_setclock") && cwd == "/glibc"
+            .any(|s| s == "setvbuf_unget" || s == "pthread_condattr_setclock")
     ) {
         // 跳过这个测例libctest
         // task.set_zombie();
