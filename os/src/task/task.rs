@@ -185,6 +185,7 @@ impl TaskControlBlock {
         self.fd_table.lock().close_on_exec();
         // 重置自定义的信号处理
         self.handler.lock().flash_signal_handlers();
+        unsafe { *self.sig_stack.get() = None };
         debug_point!("");
 
         debug!("task.exec.pid={}", self.pid.0);
