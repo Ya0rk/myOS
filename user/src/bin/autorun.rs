@@ -26,6 +26,7 @@ const TESTCASES: &[&str] = &[
     // "./cyclictest_testcode.sh\0",
     // "./iperf_testcode.sh\0",
     // "./lmbench_testcode.sh\0",
+    // "./run-static.sh\0",
 ];
 
 /// 传入str引用转换为C风格字符串，使其可以被用作系统调用
@@ -44,7 +45,7 @@ fn run_cmd(cmd: &str, pwd: &str) {
             &[
                 ["PATH=", "/bin:", pwd.strip_suffix("/").unwrap(), ].concat().as_str(),
                 "HOME=/\0",
-                "LD_LIBRARY_PATH=/lib\0",
+                ["LD_LIBRARY_PATH=", pwd.strip_suffix("/").unwrap(), "/lib\0"].concat().as_str(),
                 "TERM=screen\0",
             ],
         );
@@ -70,12 +71,15 @@ fn main() -> i32 {
         // 拷贝动态库到指定位置,这里是glibc的动态库
         #[cfg(target_arch = "loongarch64")]
         {
-            run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib64/ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
+            run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /lib64/ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
+            run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
         }
         #[cfg(target_arch = "riscv64")]
         {
-            run_cmd("/glibc/busybox cp /glibc/lib/libc.so /lib/ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
-            run_cmd("/glibc/busybox cp /glibc/lib/libc.so /ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
+            run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
+            run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
+            run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0", "/glibc/");
+            
         }
 
         for test in TESTCASES {
@@ -95,46 +99,46 @@ fn main() -> i32 {
         }
     }
 
-    let child_pid = fork();
-    if child_pid == 0 {
-        let cd = "/musl/";
-        chdir(&conert_str2byte(cd));
-        for test in TEST {
-            run_cmd(test, cd);
-        }
+    // let child_pid = fork();
+    // if child_pid == 0 {
+    //     let cd = "/musl/";
+    //     chdir(&conert_str2byte(cd));
+    //     for test in TEST {
+    //         run_cmd(test, cd);
+    //     }
         
-        // 拷贝动态库到指定位置,这里是musl的动态库
-        #[cfg(target_arch = "loongarch64")]
-        {
-            run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0", "/musl/");
-        }
-        #[cfg(target_arch = "riscv64")]
-        {
-            run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0", "/musl/");
-            run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0", "/musl/");
-            run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0", "/musl/");
-            run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0", "/musl/");
-        }
+    //     // 拷贝动态库到指定位置,这里是musl的动态库
+    //     #[cfg(target_arch = "loongarch64")]
+    //     {
+    //         run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0", "/musl/");
+    //     }
+    //     #[cfg(target_arch = "riscv64")]
+    //     {
+    //         run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0", "/musl/");
+    //         run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0", "/musl/");
+    //         run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0", "/musl/");
+    //         run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0", "/musl/");
+    //     }
 
-        for test in TESTCASES {
-            run_cmd(test, cd);
-        }
+    //     for test in TESTCASES {
+    //         run_cmd(test, cd);
+    //     }
 
-        // run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
-        // run_cmd("/musl/busybox --install /bin\0", "/musl/");
+    //     // run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
+    //     // run_cmd("/musl/busybox --install /bin\0", "/musl/");
         
-        exit(0);
-    } else {
-        println!("main parent");
-        loop {
-            let mut exit_code: i32 = 0;
-            let pid = waitpid(child_pid as usize, &mut exit_code, 0);
-            // let pid = wait(&mut exit_code);
-            if pid == child_pid {
-                break;
-            }
-        }
-    } 
+    //     exit(0);
+    // } else {
+        // println!("main parent");
+        // loop {
+        //     let mut exit_code: i32 = 0;
+        //     let pid = waitpid(child_pid as usize, &mut exit_code, 0);
+        //     // let pid = wait(&mut exit_code);
+        //     if pid == child_pid {
+        //         break;
+        //     }
+        // }
+    // } 
 
     0
 }
