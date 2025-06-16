@@ -445,7 +445,11 @@ pub async fn sys_wait4(
                             }
                         }
                     }
-                    None => return Err(Errno::EINTR),
+                    None => {
+                        info!("[sys_wait4] task {} is waiting for child process to exit.", task.get_pid());
+                        // return Err(Errno::EINTR)
+                        continue;
+                    }
                 }
             };
             info!(
@@ -1198,9 +1202,13 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
         "[sys_setitimer] start, which = {}, new_value = {:#x}, old_value = {:#x}",
         which, new_value, old_value
     );
-    if unlikely(new_value == 0) {
+    if unlikely(new_value == 0 || new_value > USER_SPACE_TOP || old_value > USER_SPACE_TOP || old_value == 0) {
         info!("[sys_setitimer] new_value is null.");
         return Err(Errno::EFAULT);
+    }
+    if unlikely((which as isize) < 0) {
+        info!("[sys_setitimer] which is invalid.");
+        return Err(Errno::EINVAL);
     }
 
     let task = current_task().unwrap();
