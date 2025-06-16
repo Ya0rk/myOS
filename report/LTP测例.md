@@ -403,7 +403,7 @@
 - [ ] ./ltp/testcases/bin/setgroups02
 - [ ] ./ltp/testcases/bin/sethostname01
 - [ ] ./ltp/testcases/bin/sethostname02
-- [ ] ./ltp/testcases/bin/setitimer02
+- [x] ./ltp/testcases/bin/setitimer02
 - [x] ./ltp/testcases/bin/setpgid01
 - [x] ./ltp/testcases/bin/setpgid02
 - [x] ./ltp/testcases/bin/setpgrp01
