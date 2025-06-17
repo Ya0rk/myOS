@@ -1,6 +1,7 @@
 use super::TaskControlBlock;
 use crate::hal::config::HART_NUM;
 use crate::mm::page_table::enable_kernel_pgtable;
+use crate::utils::SysResult;
 use core::cell::UnsafeCell;
 // use crate::mm::switch_to_kernel_pgtable;
 use crate::hal::trap::TrapContext;
@@ -20,6 +21,17 @@ pub struct CPU {
     /// 避免该线程一直占用CPU
     timer_irq_cnt: usize,
     hart_id: usize,
+
+
+    // k_int_cnt: usize,
+    // k_int_mask: bool,
+
+    /// return value of kernel trap
+    kernel_trap_ret_value: Option<SysResult<()>>,
+    /// 模拟寄存器传参，改为使用全局变量实现
+    /// 使用参数必须关中断
+    // kernel_trap_arg0: Option<usize>,
+    // kernel_trap_arg1: Option<usize>,
 }
 
 impl CPU {
@@ -28,6 +40,9 @@ impl CPU {
             current: None,
             timer_irq_cnt: 0,
             hart_id: 0,
+            kernel_trap_ret_value: None,
+            // kernel_trap_arg0: None,
+            // kernel_trap_arg1: None,
         }
     }
     ///Get current task in moving semanteme
@@ -55,6 +70,29 @@ impl CPU {
     }
     pub fn timer_irq_reset(&mut self) {
         self.timer_irq_cnt = 0;
+    }
+
+    pub fn take_ktrap_ret(&mut self) -> Option<SysResult<()>> {
+        
+        self.kernel_trap_ret_value.take()
+        
+    }
+
+    pub fn set_ktrap_ret(&mut self, ret: SysResult<()>) {
+        self.kernel_trap_ret_value = Some(ret);
+    }
+
+    // pub fn set_ktrap_arg0(&mut self, arg0: usize) {
+    //     self.kernel_trap_arg0 = Some(arg0);
+    // }
+    // pub fn set_ktrap_arg1(&mut self, arg1: usize) {
+    //     self.kernel_trap_arg1 = Some(arg1);
+    // }
+    // pub fn take_ktrap_arg0(&mut self) -> Option<usize> {
+    //     self.kernel_trap_arg0.take()
+    // }
+    // pub fn take_ktrap_arg1(&mut self) -> Option<usize> {
+    //     self.kernel_trap_arg1.take()
     }
 }
 
@@ -147,4 +185,14 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
         backtrace();
     }
     current_task().unwrap().get_trap_cx_mut()
+}
+
+#[inline(always)]
+pub fn set_ktrap_ret(ret: SysResult<()>) {
+    get_current_cpu().set_ktrap_ret(ret);
+}
+
+#[inline(always)]
+pub fn take_ktrap_ret() -> Option<SysResult<()>> {
+    get_current_cpu().take_ktrap_ret()
 }

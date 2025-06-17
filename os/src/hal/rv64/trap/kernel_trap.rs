@@ -1,7 +1,7 @@
 use crate::{
     mm::memory_space::PageFaultAccessType,
     sync::set_next_trigger,
-    task::{current_task, current_trap_cx},
+    task::{current_task, current_trap_cx, set_ktrap_ret},
     utils::backtrace,
 };
 
@@ -16,13 +16,16 @@ use riscv::register::{
 /// Unimplement: traps/interrupts/exceptions from kernel mode
 /// Todo: Chapter 9: I/O device
 pub fn kernel_trap_handler() {
+    use core::result;
+
     use log::info;
 
-    use crate::{sync::TIMER_QUEUE, task::get_current_cpu};
+    use crate::{sync::TIMER_QUEUE, task::get_current_cpu, utils::SysResult};
     let scause = scause::read();
     let stval = stval::read();
     let sepc = sepc::read();
     let cause = scause.cause();
+    let mut result: SysResult<()> = Ok(()); 
     match cause {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             // 5
@@ -47,26 +50,30 @@ pub fn kernel_trap_handler() {
 
                 let task = current_task().unwrap();
                 // task.switch_pgtable();
-                let result = task
+                result = task
                     .with_mut_memory_space(|m| {
                         // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
                         m.handle_page_fault(stval.into(), access_type)
-                    })
-                    .unwrap_or_else(|e| {
-                        use log::error;
-
-                        task.set_zombie();
-                        error!("kernel trap:{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
                     });
+                    // .unwrap_or_else(|e| {
+                    //     use log::error;
+
+                    //     task.set_zombie();
+                    //     error!("kernel trap:{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
+                    // });
             }
             _ => {
+                result = Err(Errno::EINVAL);
                 panic!("a trap {:?} from kernel!", scause::read().cause());
             }
         },
         _ => {
+            result = Err(Errno::EINVAL);
             panic!("a trap {:?} from kernel!", scause::read().cause());
         }
     }
+    set_ktrap_ret(result);
+    
 }
 
 #[cfg(target_arch = "loongarch64")]

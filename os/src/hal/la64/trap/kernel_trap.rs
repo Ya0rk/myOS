@@ -7,8 +7,7 @@ use loongarch64::register::*;
 
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, TIMER_QUEUE};
-use crate::task::get_current_cpu;
-use crate::task::current_task;
+use crate::task::{current_task, set_ktrap_ret, get_current_cpu};
 
 #[no_mangle]
 pub fn kernel_trap_handler() {
@@ -20,6 +19,7 @@ pub fn kernel_trap_handler() {
         // 只有在内核态才会触发中断
         panic!("{:?}", estat.cause());
     }
+    let mut result: SysResult<()> = Ok(());
     match estat.cause() {
         Trap::Interrupt(Interrupt::Timer) => {
             // 清除时钟专断
@@ -59,13 +59,15 @@ pub fn kernel_trap_handler() {
                     };
                     
                     let task = current_task().unwrap();
-                    task.with_mut_memory_space(|m| {
+                    result = task.with_mut_memory_space(|m| {
                         m.handle_page_fault(va.into(), access_type)
-                    }).unwrap_or_else(|e| {
-                        use log::error;
-                        task.set_zombie();
-                        error!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
                     });
+
+                    // .unwrap_or_else(|e| {
+                    //     use log::error;
+                    //     task.set_zombie();
+                    //     error!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
+                    // });
                 }
 
                 _ => {
@@ -89,5 +91,6 @@ pub fn kernel_trap_handler() {
         }
     }
     era::set_pc(era.pc());
+    set_ktrap_ret(result);
     // info!("kernel trap end");
 }

@@ -25,6 +25,7 @@ pub use processor::CPU;
 pub use processor::{
     current_kernel_token, current_task, current_trap_cx, current_user_token, get_current_cpu,
     get_current_hart_id, init_processors, take_current_task,
+    take_ktrap_ret, set_ktrap_ret
 };
 pub use sched::TaskFuture;
 pub use sched::{spawn_kernel_task, spawn_user_task};

@@ -2,9 +2,12 @@ use alloc::ffi::CString;
 use alloc::slice;
 use alloc::string::String;
 use alloc::vec::Vec;
+use riscv::{addr, asm};
 
-use crate::hal::config::{PAGE_MASK, PAGE_SIZE};
+use crate::hal::config::{align_down_by_page, PAGE_MASK, PAGE_SIZE};
+use crate::task::take_ktrap_ret;
 use crate::utils::{Errno, SysResult};
+use core::arch::asm;
 use core::ffi::CStr;
 use core::mem::transmute;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
@@ -12,10 +15,54 @@ use core::str::FromStr;
 
 use super::VirtAddr;
 
-pub fn check_readable(addr: VirtAddr, len: usize) -> SysResult<()> {
+pub fn try_load_page(addr: VirtAddr) -> SysResult<()> {
+    unsafe fn try_load_page_inner(addr: usize) {
+        asm!(
+            "mv t0, a0",
+            "ld t0, 0(t0)",
+        );
+    } 
+
+    unsafe {
+        try_load_page_inner(addr.0);
+    }
+
+
+    /// if None, which means no page fault is happened, Ok is expected
+    /// if Some(Ok()), which means page fault is handled successfully, Ok is expected
+    /// if Some(Err()), which means page fault failed because of no privilege or even no mapped area, Err is expected
+    take_ktrap_ret().map_or(Ok(()), |ret| ret)
+}
+
+pub fn try_store_page(addr: VirtAddr) -> SysResult<()> {
+    unsafe fn try_store_page_inner(addr: usize) {
+        asm!(
+            "mv t0, a0",
+            "ld t1, 0(t0)",
+            "sd t1, 0(t0)",
+        )
+    }
+
+    unsafe {
+        try_store_page_inner(addr.0);
+    }
+
+    take_ktrap_ret().map_or(Ok(()), |ret| ret)
+}
+
+
+
+
+pub fn check_readable(start_va: VirtAddr, len: usize) -> SysResult<()> {
+    for va_page in (start_va.align_down()..(start_va + len)).step_by(PAGE_SIZE) {
+        try_load_page(va_page)?;
+    }
     Ok(())
 }
-pub fn check_writable(addr: VirtAddr, len: usize) -> SysResult<()> {
+pub fn check_writable(start_va: VirtAddr, len: usize) -> SysResult<()> {
+    for va_page in (start_va.align_down()..(start_va + len)).step_by(PAGE_SIZE) {
+        try_store_page(va_page)?;
+    }
     Ok(())
 }
 
@@ -43,7 +90,8 @@ pub fn user_ref_mut<T: Sized>(addr: VirtAddr) -> SysResult<Option<&'static mut T
     }
 }
 
-unsafe fn _user_ptr<T: Sized>(addr: VirtAddr) -> SysResult<Option<*const T>> {
+
+pub unsafe fn user_ptr<T: Sized>(addr: VirtAddr) -> SysResult<Option<*const T>> {
     if addr.0 == 0 {
         return Ok(None);
     }
@@ -52,7 +100,7 @@ unsafe fn _user_ptr<T: Sized>(addr: VirtAddr) -> SysResult<Option<*const T>> {
     let ptr = addr.as_ptr() as *const T;
     Ok(Some(ptr))
 }
-unsafe fn _user_ptr_mut<T: Sized>(addr: VirtAddr) -> SysResult<Option<*mut T>> {
+pub unsafe fn user_mut_ptr<T: Sized>(addr: VirtAddr) -> SysResult<Option<*mut T>> {
     if addr.0 == 0 {
         return Ok(None);
     }
@@ -117,7 +165,7 @@ pub fn user_cstr_array(addr: VirtAddr) -> SysResult<Option<Vec<String>>> {
         let mut cstr_array = Vec::<String>::new();
         let len = 256;
         // check_readable(addr, len)?;
-        let mut ptr = _user_ptr::<usize>(addr)?.unwrap();
+        let mut ptr = user_ptr::<usize>(addr)?.unwrap();
         loop {
             if let Some(cstr) = user_cstr((*ptr).into())?
                 && !cstr.is_empty()
