@@ -716,7 +716,7 @@ impl MemorySpace {
         info!("[from_user_lazily] enter during process fork");
         let mut memory_space = Self::new_user();
         for (range, area) in user_space.areas().iter() {
-            // log::info!("[MemorySpace::from_user_lazily] cloning {area:?}");
+            log::info!("[MemorySpace::from_user_lazily] cloning {area:?}");
             let mut new_area = area.clone();
             debug_assert_eq!(range, new_area.range_va());
             for vpn in area.range_vpn() {
@@ -730,6 +730,21 @@ impl MemorySpace {
                             // log::info!("[from_user_lazily] clone Shared Memory");
                             new_area.pages.insert(vpn, page.clone());
                             (pte.flags(), page.ppn())
+                        }
+
+                        VmAreaType::Mmap => {
+                            if area.mmap_flags.contains(MmapFlags::MAP_SHARED) {
+                                new_area.pages.insert(vpn, page.clone());
+                                (pte.flags(), page.ppn())
+                            }
+                            else {
+                                // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
+                                let mut new_flags = pte.flags() | PTEFlags::COW;
+                                new_flags.remove(PTEFlags::W);
+                                new_flags.remove(PTEFlags::D);
+                                pte.set_flags(new_flags);
+                                (new_flags, page.ppn())
+                            }
                         }
                         _ => {
                             // copy on write
