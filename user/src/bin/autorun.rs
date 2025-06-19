@@ -224,8 +224,9 @@ fn main() -> i32 {
         println!("main parent");
         loop {
             let mut exit_code: i32 = 0;
-            let pid = wait(&mut exit_code);
-            if pid < 0 {
+            let pid = waitpid(child_pid as usize, &mut exit_code, 0);
+            // let pid = wait(&mut exit_code);
+            if pid == child_pid {
                 break;
             }
         }
