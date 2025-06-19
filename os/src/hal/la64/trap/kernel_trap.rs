@@ -7,6 +7,7 @@ use loongarch64::register::*;
 
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, TIMER_QUEUE};
+use crate::task::get_current_cpu;
 use crate::task::current_task;
 
 #[no_mangle]
@@ -25,6 +26,7 @@ pub fn kernel_trap_handler() {
             // info!("timer interrupt from kernel");
             // ticlr::clear_timer_interrupt();
             TIMER_QUEUE.handle_expired();
+            get_current_cpu().timer_irq_inc();
             set_next_trigger();
         }
         Trap::Interrupt(Interrupt::HWI0) => {

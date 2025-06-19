@@ -408,6 +408,7 @@ impl TaskControlBlock {
 
     pub fn do_exit(&self) {
         info!("[do_exit] Task pid = {} exit;", self.get_pid());
+        // println!("[do_exit] Task pid = {} exit;", self.get_pid());
         let pid = self.get_pid();
 
         // 如果是init进程
@@ -427,6 +428,7 @@ impl TaskControlBlock {
                 // 如果tidaddress被清零了，其他线程会检测到这里的值改变，那么说明有线程退出
                 // 在futex中会执行wake唤醒其他线程
                 if Arc::strong_count(&self.memory_space) > 1 {
+                    // println!("[handle exit] clear child tid {:#x}, task id {}", tidaddress, pid);
                     core::ptr::write(tidaddress as *mut usize, 0);
                     let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
                     let mut binding = self.futex_list.lock();
@@ -485,6 +487,11 @@ impl TaskControlBlock {
                     parent.get_pid(),
                     self.get_exit_code()
                 );
+                // println!(
+                //     "[do_exit] task to info parent pid = {}, exit code = {}",
+                //     parent.get_pid(),
+                //     self.get_exit_code()
+                // );
                 let sig_info = SigInfo::new(
                     SigNom::SIGCHLD,
                     SigCode::CLD_EXITED,

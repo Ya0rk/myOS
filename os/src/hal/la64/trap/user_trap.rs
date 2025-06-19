@@ -23,10 +23,10 @@ pub async fn user_trap_handler() {
     let stval = stval::read();
     let task = current_task().unwrap();
 
-    if task.get_time_data().usedout_timeslice() && executor::has_task() {
-        // log::info!("time slice used up, yield now");
-        yield_now().await;
-    }
+    // if task.get_time_data().usedout_timeslice() && executor::has_task() {
+    //     // log::info!("time slice used up, yield now");
+    //     yield_now().await;
+    // }
 
     match scause.cause() {
         Trap::Exception(Exception::UserEnvCall) => { // 7
@@ -118,7 +118,7 @@ pub async fn user_trap_handler() {
         },
     };
 
-    use crate::{mm::memory_space::PageFaultAccessType, sync::TIMER_QUEUE};
+    use crate::{mm::memory_space::PageFaultAccessType, sync::TIMER_QUEUE, task::get_current_cpu};
     let estat = estat::read();
     let crmd = crmd::read();
     let era = era::read();
@@ -266,6 +266,7 @@ pub async fn user_trap_handler() {
 
 #[no_mangle]
 pub fn user_trap_return() {
+    use crate::task::get_current_cpu;
     // 重新修改stvec设置 user 的trap handler entry
     // set_trap_handler(IndertifyMode::User);
 
@@ -278,6 +279,7 @@ pub fn user_trap_return() {
     // disable_interrupt();
     let task = current_task().unwrap();
 
+    get_current_cpu().timer_irq_reset();
     task.get_time_data_mut().set_trap_out_time();
     // info!("[user_trap_return] entering __return_to_user, cx:{:?}", *trap_cx);
 

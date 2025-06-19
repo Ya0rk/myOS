@@ -4,9 +4,7 @@ use super::{
     SpinNoIrqLock, TimeVal,
 };
 use crate::{
-    signal::{SigCode, SigDetails, SigErr, SigInfo, SigNom},
-    task::{get_task_by_pid, TaskControlBlock},
-    utils::{Errno, SysResult},
+    signal::{SigCode, SigDetails, SigErr, SigInfo, SigNom}, sync::time::ITIMER_REAL, task::{get_task_by_pid, TaskControlBlock}, utils::{Errno, SysResult}
 };
 use alloc::{
     collections::binary_heap::BinaryHeap,
@@ -180,23 +178,23 @@ impl<F: Fn() -> bool> Future for ItimerFuture<F> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = unsafe { self.get_unchecked_mut() };
+        let cur_time = time_duration();
+
+        if cur_time >= this.next_expire {
+            if !((this.callback)()) { // 从闭包下面的中拿出来，避免死锁
+                return Poll::Ready(());
+            }
+        }
         let res = this
             .task
             .upgrade()
             .and_then(|task| {
                 // 加入时钟队列
                 let tmp = task.whit_itimers(|itimers| {
-                    let cur_time = time_duration();
                     let real_time = itimers[this.which];
-
-                    if cur_time >= this.next_expire {
-                        if !((this.callback)()) {
-                            return Poll::Ready(());
-                        }
-                    }
+                    this.next_expire = (Duration::from(real_time.it_interval) + time_duration()).max(this.next_expire);
                     let new_timer = TimerTranc::new(this.next_expire, cx.waker().clone());
                     TIMER_QUEUE.add(new_timer);
-                    this.next_expire = (Duration::from(real_time.it_interval) + time_duration());
                     Poll::Pending
                 });
                 Some(tmp)
@@ -206,11 +204,16 @@ impl<F: Fn() -> bool> Future for ItimerFuture<F> {
     }
 }
 
-pub fn itimer_callback(pid: usize, iterval: TimeVal) -> bool {
+pub fn itimer_callback(pid: usize, iterval: TimeVal, which: usize) -> bool {
     let task = match get_task_by_pid(pid) {
         Some(task) => task,
         _ => return false,
     };
+
+    if task.itimers.lock()[which].it_value.is_zero() {
+        return false;
+    }
+    task.itimers.lock()[which].it_value = (Duration::from(iterval) + time_duration()).into();
 
     let siginfo = SigInfo {
         signo: SigNom::SIGALRM,

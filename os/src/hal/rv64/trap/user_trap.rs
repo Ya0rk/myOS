@@ -28,9 +28,9 @@ pub async fn user_trap_handler() {
     let task = current_task().unwrap();
     // println!("stval = {:#x}", stval);
 
-    if task.get_time_data().usedout_timeslice() && executor::has_task() {
-        yield_now().await;
-    }
+    // if task.get_time_data().usedout_timeslice() && executor::has_task() {
+    //     yield_now().await;
+    // }
 
     match cause {
         Trap::Exception(Exception::UserEnvCall) => { // 7

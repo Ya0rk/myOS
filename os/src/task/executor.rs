@@ -166,7 +166,7 @@
 
 extern crate alloc;
 
-use crate::sync::SpinNoIrqLock;
+use crate::sync::{SpinNoIrqLock, TIMER_QUEUE};
 use alloc::collections::VecDeque;
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use core::future::Future;
@@ -274,6 +274,7 @@ pub fn run_once() -> usize {
     let mut tasks = 0;
     while let Some(task) = TASK_QUEUE.fetch() {
         task.run();
+        TIMER_QUEUE.handle_expired();
         tasks += 1;
     }
     tasks

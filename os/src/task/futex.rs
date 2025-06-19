@@ -216,18 +216,18 @@ impl Future for FutexFuture {
                 info!("[futex_future] now != val");
                 return Poll::Ready(());
             }
-            if this.uaddr == 0x4008004d0 && this.val == 6 {
-                task.set_zombie();
-                return Poll::Ready(());
-            }
-            if this.uaddr == 0x1007ffbe0 && (this.val == 2147483655 || this.val == 2147483654) {
-                task.set_zombie();
-                return Poll::Ready(());
-            }
-            if this.uaddr == 0x1007ffc10 && this.val == 0 {
-                task.set_zombie();
-                return Poll::Ready(());
-            }
+            // if this.uaddr == 0x4008004d0 && this.val == 6 {
+            //     task.set_zombie();
+            //     return Poll::Ready(());
+            // }
+            // if this.uaddr == 0x1007ffbe0 && (this.val == 2147483655 || this.val == 2147483654) {
+            //     task.set_zombie();
+            //     return Poll::Ready(());
+            // }
+            // if this.uaddr == 0x1007ffc10 && this.val == 0 {
+            //     task.set_zombie();
+            //     return Poll::Ready(());
+            // }
 
             // 加入hash 桶
             task.futex_list

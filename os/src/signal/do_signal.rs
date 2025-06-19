@@ -37,6 +37,7 @@ pub fn do_signal(task: &Arc<TaskControlBlock>) {
             && signo != SigNom::SIGSTOP as usize
         {
             // 再将信号重新放回队列
+            // println!("[do_signal] push bask, signo = {}", signo);
             task.sig_pending.lock().add(siginfo);
             continue;
         }
@@ -50,6 +51,13 @@ pub fn do_signal(task: &Arc<TaskControlBlock>) {
             sig_action.sa_handler,
             sig_action.sa_flags
         );
+        // println!(
+        //     "[do_signal] task id = {}, find a signal: {}, handler = {:#x}, flags = {:?}.",
+        //     task.get_pid(),
+        //     signo,
+        //     sig_action.sa_handler,
+        //     sig_action.sa_flags
+        // );
         // if sig_action.sa_flags.contains(SigActionFlag::SA_RESTART) {
         //     info!("[do_signal] restart");
         //     trap_cx.sepc -= 4;
@@ -63,7 +71,15 @@ pub fn do_signal(task: &Arc<TaskControlBlock>) {
             }
             SigHandlerType::Customized { handler } => {
                 // 如果没有SA_NODEFER，在执行当前信号处理函数期间，自动阻塞当前信号
+                // println!(
+                //     "[do_signal] customized handler, handler = {:#x}, signo = {}",
+                //     handler, signo
+                // );
                 if !sig_action.sa_flags.contains(SigActionFlag::SA_NODEFER) {
+                    // println!(
+                    //     "[do_signal] add signo = {} to blocked",
+                    //     siginfo.signo as usize
+                    // );
                     task.get_blocked_mut().insert_sig(signo);
                 }
 
