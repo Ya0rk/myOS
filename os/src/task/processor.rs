@@ -28,8 +28,8 @@ pub struct CPU {
 
     /// return value of kernel trap
     kernel_trap_ret_value: Option<SysResult<()>>,
-    /// 模拟寄存器传参，改为使用全局变量实现
-    /// 使用参数必须关中断
+    // 模拟寄存器传参，改为使用全局变量实现
+    // 使用参数必须关中断
     // kernel_trap_arg0: Option<usize>,
     // kernel_trap_arg1: Option<usize>,
 }
@@ -93,7 +93,7 @@ impl CPU {
     // }
     // pub fn take_ktrap_arg1(&mut self) -> Option<usize> {
     //     self.kernel_trap_arg1.take()
-    }
+    // }
 }
 
 impl CPU {

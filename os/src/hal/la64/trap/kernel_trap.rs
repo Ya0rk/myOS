@@ -8,6 +8,7 @@ use loongarch64::register::*;
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, TIMER_QUEUE};
 use crate::task::{current_task, set_ktrap_ret, get_current_cpu};
+use crate::utils::SysResult;
 
 #[no_mangle]
 pub fn kernel_trap_handler() {
@@ -63,6 +64,12 @@ pub fn kernel_trap_handler() {
                         m.handle_page_fault(va.into(), access_type)
                     });
 
+                    result.is_err().then(|| {
+                        use crate::hal::arch::current_inst_len;
+                        info!("skip inst");
+                        era::set_pc(era.pc() + current_inst_len());
+                    });
+
                     // .unwrap_or_else(|e| {
                     //     use log::error;
                     //     task.set_zombie();
@@ -90,7 +97,7 @@ pub fn kernel_trap_handler() {
             );
         }
     }
-    era::set_pc(era.pc());
+    // era::set_pc(era.pc());
     set_ktrap_ret(result);
     // info!("kernel trap end");
 }

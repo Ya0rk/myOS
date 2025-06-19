@@ -93,6 +93,7 @@ pub struct PhysPageNum(pub usize);
 pub struct VirtPageNum(pub usize);
 
 impl_step!(VirtPageNum);
+impl_step!(VirtAddr);
 impl_arithmetic_with_usize!(VirtPageNum);
 impl_arithmetic_with_usize!(VirtAddr);
 

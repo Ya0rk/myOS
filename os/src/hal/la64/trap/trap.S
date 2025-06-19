@@ -288,8 +288,8 @@ __trap_from_kernel:
     csrrd   $t0, 0x1        #读取prmd
     st.d    $t0, $sp, 32*8
 
-    csrrd   $t1, 0x6        #返回地址
-    st.d    $t1, $sp, 33*8
+    // csrrd   $t1, 0x6        #返回地址
+    // st.d    $t1, $sp, 33*8
 
     # 跳转到kernel_trap_handler
     la.abs  $t0, kernel_trap_handler
@@ -299,8 +299,8 @@ __trap_from_kernel:
     ld.d    $t0, $sp, 32*8
     csrwr   $t0, 0x1
 
-    ld.d    $t1, $sp, 33*8
-    csrwr   $t1, 0x6
+    // ld.d    $t1, $sp, 33*8
+    // csrwr   $t1, 0x6
 
     ld.d    $ra, $sp, 1*8
     ld.d    $tp, $sp, 2*8

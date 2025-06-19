@@ -2,7 +2,7 @@ use crate::{
     mm::memory_space::PageFaultAccessType,
     sync::set_next_trigger,
     task::{current_task, current_trap_cx, set_ktrap_ret},
-    utils::backtrace,
+    utils::{backtrace, Errno, SysResult},
 };
 
 #[cfg(target_arch = "riscv64")]
@@ -55,6 +55,11 @@ pub fn kernel_trap_handler() {
                         // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
                         m.handle_page_fault(stval.into(), access_type)
                     });
+                result.is_err().then(|| {
+                    use crate::hal::arch::current_inst_len;
+
+                    sepc::write(sepc + current_inst_len());
+                });
                     // .unwrap_or_else(|e| {
                     //     use log::error;
 
@@ -68,6 +73,7 @@ pub fn kernel_trap_handler() {
             }
         },
         _ => {
+
             result = Err(Errno::EINVAL);
             panic!("a trap {:?} from kernel!", scause::read().cause());
         }

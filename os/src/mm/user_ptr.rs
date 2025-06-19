@@ -2,7 +2,6 @@ use alloc::ffi::CString;
 use alloc::slice;
 use alloc::string::String;
 use alloc::vec::Vec;
-use riscv::{addr, asm};
 
 use crate::hal::config::{align_down_by_page, PAGE_MASK, PAGE_SIZE};
 use crate::task::take_ktrap_ret;
@@ -16,12 +15,28 @@ use core::str::FromStr;
 use super::VirtAddr;
 
 pub fn try_load_page(addr: VirtAddr) -> SysResult<()> {
+    #[cfg(target_arch = "riscv64")]
     unsafe fn try_load_page_inner(addr: usize) {
+        
+        
         asm!(
             "mv t0, a0",
-            "ld t0, 0(t0)",
+            "lb t0, 0(t0)",
+            in("a0") addr,
+            out("t0") _,
         );
     } 
+
+    #[cfg(target_arch = "loongarch64")]
+    unsafe fn try_load_page_inner(addr: usize) {
+        
+        asm!(
+            "or $t0, $a0, $zero",
+            "ld.b $t0, $t0, 0",
+            in("$a0") addr,
+            out("$t0") _,
+        )
+    }
 
     unsafe {
         try_load_page_inner(addr.0);
@@ -35,11 +50,28 @@ pub fn try_load_page(addr: VirtAddr) -> SysResult<()> {
 }
 
 pub fn try_store_page(addr: VirtAddr) -> SysResult<()> {
+    #[cfg(target_arch = "riscv64")]
     unsafe fn try_store_page_inner(addr: usize) {
+        
         asm!(
             "mv t0, a0",
-            "ld t1, 0(t0)",
-            "sd t1, 0(t0)",
+            "lb t1, 0(t0)",
+            "sb t1, 0(t0)",
+            in("a0") addr,
+            out("t0") _,
+            out("t1") _,
+        )
+    }
+
+    #[cfg(target_arch = "loongarch64")]
+    unsafe fn try_store_page_inner(addr: usize) {
+        asm!(
+            "or $t0, $a0, $zero",
+            "ld.b $t1, $t0, 0",
+            "st.b $t1, $t0, 0",
+            in("$a0") addr,
+            out("$t0") _,
+            out("$t1") _,
         )
     }
 

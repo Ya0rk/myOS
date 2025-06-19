@@ -147,3 +147,7 @@ pub fn set_sum() {
     log::info!("loongarch do not need set_sum");
     // unimplemented!("loongarch64");
 }
+
+pub fn current_inst_len() -> usize {
+    4
+}

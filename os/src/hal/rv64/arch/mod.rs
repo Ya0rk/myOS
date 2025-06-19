@@ -107,3 +107,15 @@ pub fn set_sum() {
         riscv::register::sstatus::set_sum();
     }
 }
+
+pub fn current_inst_len() -> usize {
+    unsafe {
+        let sepc = riscv::register::sepc::read();
+        let inst_low = *(sepc as *const u16);
+        if inst_low & 3 == 3 {
+            4
+        } else {
+            2
+        }
+    }
+}
