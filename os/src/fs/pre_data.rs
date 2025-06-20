@@ -110,3 +110,23 @@ pub async fn initproc() -> Arc<NormalFile> {
         panic!("[flush_preload] open initproc failed");
     }
 }
+
+
+pub async fn test_initproc() -> Arc<NormalFile> {
+    extern "C" {
+        fn test_initproc_start();
+        fn test_initproc_end();
+    }
+
+    // initproc
+    if let Ok(FileClass::File(test_initproc)) = open("/test_initproc".into(), OpenFlags::O_CREAT) {
+        let len = test_initproc_end as usize - test_initproc_start as usize;
+        let data = unsafe {
+            core::slice::from_raw_parts_mut(test_initproc_start as *mut u8, len) as &'static [u8]
+        };
+        test_initproc.write(data).await;
+        return test_initproc;
+    } else {
+        panic!("[flush_preload] open initproc failed");
+    }
+}

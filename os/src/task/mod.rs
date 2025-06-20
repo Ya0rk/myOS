@@ -31,8 +31,9 @@ pub use sched::TaskFuture;
 pub use sched::{spawn_kernel_task, spawn_user_task};
 pub use task::{TaskControlBlock, TaskStatus};
 
-use crate::fs::OpenFlags;
+use crate::fs::{test_initproc, OpenFlags};
 use crate::fs::{autorun, gbshell, initproc, mbshell};
+use crate::test;
 use crate::{fs::FileClass, sync::block_on};
 use async_task::Task;
 use cfg_if::cfg_if;
@@ -49,6 +50,8 @@ pub async fn add_initproc() {
         mbshell().await
     } else if cfg!(feature = "initproc") {
         initproc().await
+    } else if cfg!(feature = "test_initproc") {
+        test_initproc().await
     } else {
         mbshell().await
     };

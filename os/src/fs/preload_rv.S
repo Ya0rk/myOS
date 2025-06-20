@@ -39,3 +39,12 @@ gbshell_end:
 autorun_start:
     .incbin "../user/target/riscv64gc-unknown-none-elf/release/autorun"
 autorun_end:
+
+    .section .data
+    .globl test_initproc_start
+    .globl test_initproc_end
+    .align 3
+test_initproc_start:
+    .incbin "../user/target/riscv64gc-unknown-none-elf/release/test_initproc"
+test_initproc_end:
+

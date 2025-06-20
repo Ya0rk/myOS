@@ -62,6 +62,7 @@ trace = []
 mul_hart = []
 test = []
 qemu_riscv = []
+test_initproc = []
 
 [profile.release]
 debug = true

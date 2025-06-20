@@ -45,6 +45,8 @@ pub mod utils;
 pub mod hal;
 pub mod ipc;
 pub mod signal;
+#[cfg(feature = "test")]
+pub mod test;
 
 use alloc::vec::{self, Vec};
 use core::{

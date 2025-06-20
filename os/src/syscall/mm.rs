@@ -24,6 +24,23 @@ use crate::{
 use super::ffi::ShmOp;
 
 pub fn sys_brk(new_brk: *const u8) -> SysResult<usize> {
+
+    info!("[sys_brk] new_brk: {:#x}", new_brk as usize);
+
+    #[cfg(feature = "test")]
+    {
+        if new_brk as usize == 0x1234_5678 {
+            // do_kernel_test();
+
+            use crate::do_test;
+            do_test!(ucheck_test);
+            return Ok(0);
+        }
+        else {
+            info!("[sys_brk] NO TEST");
+        }
+    }
+    
     let task = current_task().unwrap();
     Ok(task
         .with_mut_memory_space(|m| m.reset_heap_break((new_brk as usize).into()))
@@ -78,6 +95,7 @@ pub fn sys_mmap(
                 }
             })
             .unwrap();
+        info!("[sys_mmap] ret {:#x}", start_va.0);
         return Ok(start_va.0);
     } else {
         let fd = task.get_fd(fd)?;
@@ -93,12 +111,14 @@ pub fn sys_mmap(
                 m.alloc_mmap_area_lazily(addr.into(), length, perm, flags, file, offset)
             })
             .unwrap();
+        info!("[sys_mmap] ret {:#x}", start_va.0);
         return Ok(start_va.0);
     }
     Err(Errno::EBADCALL)
 }
 
 pub fn sys_munmap(addr: *const u8, length: usize) -> SysResult<usize> {
+    info!("[sys_munmap] addr:{:#x}, length:{:#x}", addr as usize, length);
     let addr = addr as usize;
     if unlikely(!is_aligned_to_page(addr)) {
         return Err(Errno::EINVAL);

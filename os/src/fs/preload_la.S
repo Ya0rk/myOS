@@ -39,3 +39,12 @@ gbshell_end:
 autorun_start:
 	.incbin "../user/target/loongarch64-unknown-none/release/autorun"
 autorun_end:
+
+
+    .section .data
+    .globl test_initproc_start
+    .globl test_initproc_end
+    .align 3
+test_initproc_start:
+    .incbin "../user/target/loongarch64-unknown-none/release/test_initproc"
+test_initproc_end:
