@@ -33,7 +33,6 @@ pub use task::{TaskControlBlock, TaskStatus};
 
 use crate::fs::{test_initproc, OpenFlags};
 use crate::fs::{autorun, gbshell, initproc, mbshell};
-use crate::test;
 use crate::{fs::FileClass, sync::block_on};
 use async_task::Task;
 use cfg_if::cfg_if;

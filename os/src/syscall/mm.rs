@@ -27,19 +27,19 @@ pub fn sys_brk(new_brk: *const u8) -> SysResult<usize> {
 
     info!("[sys_brk] new_brk: {:#x}", new_brk as usize);
 
-    #[cfg(feature = "test")]
-    {
-        if new_brk as usize == 0x1234_5678 {
-            // do_kernel_test();
+    // #[cfg(feature = "test")]
+    // {
+    //     if new_brk as usize == 0x1234_5678 {
+    //         // do_kernel_test();
 
-            use crate::do_test;
-            do_test!(ucheck_test);
-            return Ok(0);
-        }
-        else {
-            info!("[sys_brk] NO TEST");
-        }
-    }
+    //         use crate::do_test;
+    //         do_test!(ucheck_test);
+    //         return Ok(0);
+    //     }
+    //     else {
+    //         info!("[sys_brk] NO TEST");
+    //     }
+    // }
     
     let task = current_task().unwrap();
     Ok(task
