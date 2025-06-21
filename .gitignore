@@ -61,6 +61,7 @@ lwext4_rust/c_old/lwext4/include/generated/ext4_config.h
 *.txt
 *.json
 test/*
+py
 
 kernel-rv
 kernel-la
