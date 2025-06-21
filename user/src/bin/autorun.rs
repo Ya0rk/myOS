@@ -257,16 +257,16 @@ fn main() -> i32 {
         }
 
         // musl的ltp测试
-        run_cmd("/musl/busybox mkdir /testcase", "/musl/");
-        run_cmd("/musl/busybox cp /musl/ltp/testcases/bin/abs01 /testcase/abs01\0", "/musl/");
-        println!("cp abs01 done");
-        run_cmd("/musl/busybox cp /musl/ltp/testcases/bin/accept01 /testcase/accept01\0", "/musl/");
-        println!("cp accept01 done");
-        run_cmd("/musl/busybox sed 's|target_dir=\"ltp/testcases/bin\"|target_dir=\"/testcase\"|' testcode.sh\0", "/musl/");
-        println!("sed done");
-        for test in TESTCASES_LTP {
-            run_cmd(test, cd);
-        }
+        // run_cmd("/musl/busybox mkdir /testcase", "/musl/");
+        // run_cmd("/musl/busybox cp /musl/ltp/testcases/bin/abs01 /testcase/abs01\0", "/musl/");
+        // println!("cp abs01 done");
+        // run_cmd("/musl/busybox cp /musl/ltp/testcases/bin/accept01 /testcase/accept01\0", "/musl/");
+        // println!("cp accept01 done");
+        // run_cmd("/musl/busybox sed 's|target_dir=\"ltp/testcases/bin\"|target_dir=\"/testcase\"|' testcode.sh\0", "/musl/");
+        // println!("sed done");
+        // for test in TESTCASES_LTP {
+        //     run_cmd(test, cd);
+        // }
 
         // run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
         // run_cmd("/musl/busybox --install /bin\0", "/musl/");

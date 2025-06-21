@@ -1,5 +1,7 @@
 # Del0n1x
 
+![](./report/iamge/school.jpg)
+
 ## 项目简介
 
 [github仓库链接](https://github.com/Ya0rk/myOS): 欢迎向我们提出issue.

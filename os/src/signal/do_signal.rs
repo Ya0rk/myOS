@@ -58,11 +58,6 @@ pub fn do_signal(task: &Arc<TaskControlBlock>) {
         //     sig_action.sa_handler,
         //     sig_action.sa_flags
         // );
-        // if sig_action.sa_flags.contains(SigActionFlag::SA_RESTART) {
-        //     info!("[do_signal] restart");
-        //     trap_cx.sepc -= 4;
-        //     trap_cx.restore_last_a0();
-        // }
 
         match k_action.sa_type {
             SigHandlerType::IGNORE => {}

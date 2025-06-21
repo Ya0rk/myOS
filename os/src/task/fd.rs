@@ -2,12 +2,7 @@ use core::{cmp::min, fmt::Display, intrinsics::unlikely};
 
 // #![allow(unused)]
 use crate::{
-    fs::{FileTrait, OpenFlags, Stdin, Stdout},
-    hal::config::RLIMIT_NOFILE,
-    mm::memory_space::{MmapFlags, MmapProt},
-    net::Socket,
-    syscall::RLimit64,
-    utils::{Errno, SysResult},
+    fs::{open, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
 };
 use alloc::{collections::binary_heap::BinaryHeap, format, string::String, sync::Arc, vec::Vec};
 use log::info;
@@ -344,4 +339,122 @@ pub fn sock_map_fd(socket: Arc<dyn FileTrait>, cloexec_enable: bool) -> SysResul
     let task = current_task().expect("no current task");
     let fd = task.alloc_fd(new_info)?;
     Ok(fd)
+}
+
+pub fn test_fd_performance() {
+    use alloc::sync::Arc;
+    use core::time::Duration;
+
+    println!("Starting FD table performance tests...");
+    let testfile = open("/aaa".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR).unwrap().file().unwrap();
+
+    // 测试1: 顺序分配性能
+    let test_sequential_allocation = |size: usize| -> (Duration, Duration) {
+        let start = time_duration();
+        let mut table = FdTable::new();
+        table.rlimit.rlim_cur = size + 3; // 标准输入/输出/错误占3个
+        
+        for _ in 0..size {
+            table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap();
+        }
+        
+        (start, time_duration())
+    };
+
+    // 测试2: 随机释放再分配性能
+    let test_random_reuse = |size: usize| -> (Duration, Duration) {
+        let mut table = FdTable::new();
+        table.rlimit.rlim_cur = size + 3;
+        
+        // 先分配所有FD
+        let mut fds: Vec<usize> = (0..size)
+            .map(|_| table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap())
+            .collect();
+        
+        // 随机释放一半FD
+        for i in (0..size).step_by(2) {
+            table.remove(fds[i]).unwrap();
+        }
+        
+        let start = time_duration();
+        // 重新分配释放的FD
+        for _ in 0..size/2 {
+            table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap();
+        }
+        
+        (start, time_duration())
+    };
+
+    // 测试3: 高频周转性能
+    let test_high_turnover = |cycles: usize, batch: usize| -> (Duration, Duration) {
+        let mut table = FdTable::new();
+        table.rlimit.rlim_cur = (batch * 2) + 3;
+        
+        let start = time_duration();
+        for _ in 0..cycles {
+            let mut fds = Vec::with_capacity(batch);
+            // 分配一批FD
+            for _ in 0..batch {
+                fds.push(table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap());
+            }
+            // 立即释放这批FD
+            for fd in fds {
+                table.remove(fd).unwrap();
+            }
+        }
+        
+        (start, time_duration())
+    };
+
+    // 测试4: 分配大于指定值的FD
+    let test_alloc_than = |size: usize| -> (Duration, Duration) {
+        let mut table = FdTable::new();
+        table.rlimit.rlim_cur = size + 20;
+        
+        // 预先分配一些低FD
+        for _ in 0..10 {
+            table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap();
+        }
+        
+        let start = time_duration();
+        for _ in 0..size {
+            table.alloc_fd_than(FdInfo::new(testfile.clone(), OpenFlags::empty()), 11).unwrap();
+        }
+        
+        (start, time_duration())
+    };
+
+    // 运行测试
+    const TEST_SIZE: usize = 10_000;
+    println!("\n[Test 1] Sequential allocation ({} FD)", TEST_SIZE);
+    let (start, end) = test_sequential_allocation(TEST_SIZE);
+    println!("Time: start: {:?}, end: {:?}, usetime = {:?}", start, end, end - start);
+
+    println!("\n[Test 2] Random reuse ({} FD, 50% reuse)", TEST_SIZE);
+    let (start, end) = test_random_reuse(TEST_SIZE);
+    println!("Time: start: {:?}, end: {:?}, usetime = {:?}", start, end, end - start);
+
+    const TURNOVER_CYCLES: usize = 1_000;
+    const BATCH_SIZE: usize = 1000;
+    println!("\n[Test 3] High turnover ({} cycles × {} FD)", TURNOVER_CYCLES, BATCH_SIZE);
+    let (start, end) = test_high_turnover(TURNOVER_CYCLES, BATCH_SIZE);
+    println!("Time: start: {:?}, end: {:?}, usetime = {:?}", start, end, end - start);
+
+    println!("\n[Test 4] Allocate FD > 10 ({} FD)", TEST_SIZE);
+    let (start, end) = test_alloc_than(TEST_SIZE);
+    println!("Time: start: {:?}, end: {:?}, usetime = {:?}", start, end, end - start);
+
+    // 内存使用分析
+    println!("\nMemory usage analysis:");
+    let table = FdTable::new();
+    let base_size = core::mem::size_of::<FdTable>();
+    println!("- Empty FD table: {} bytes", base_size);
+    
+    let mut large_table = FdTable::new();
+    large_table.rlimit.rlim_cur = 10_000;
+    large_table.table.resize(10_000, FdInfo::new_bare());
+    let full_size = core::mem::size_of_val(&large_table);
+    println!("- 10,000 FD table: {} bytes", full_size);
+    
+    println!("\nPerformance tests completed!");
 }

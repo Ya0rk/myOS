@@ -29,6 +29,7 @@ pub use processor::{
 pub use sched::TaskFuture;
 pub use sched::{spawn_kernel_task, spawn_user_task};
 pub use task::{TaskControlBlock, TaskStatus};
+pub use fd::test_fd_performance;
 
 use crate::fs::OpenFlags;
 use crate::fs::{autorun, gbshell, initproc, mbshell};

@@ -29,7 +29,6 @@ pub struct TrapContext {
     /*  54  */ pub kernel_fp: usize,
     /*  55  */ pub kernel_tp: usize,
     /*  56  */ pub float_regs: UserFloatRegs,
-    /*  57  */ pub last_a0: usize,
 }
 
 /// 通用寄存器
@@ -334,108 +333,12 @@ impl UserFloatRegs {
         self.need_restore = 1;
     }
 
-    // TODO: 完善信号处理时 是否需要保存浮点寄存器的内容
-    #[cfg(target_arch = "riscv64")]
-    pub fn save(&mut self) {
-        if self.need_save == 0 {
-            return;
-        }
-        self.need_save = 0;
-        unsafe {
-            let mut _t: usize = 1; // alloc a register but not zero.
-            asm!("
-            fsd  f0,  0*8({0})
-            fsd  f1,  1*8({0})
-            fsd  f2,  2*8({0})
-            fsd  f3,  3*8({0})
-            fsd  f4,  4*8({0})
-            fsd  f5,  5*8({0})
-            fsd  f6,  6*8({0})
-            fsd  f7,  7*8({0})
-            fsd  f8,  8*8({0})
-            fsd  f9,  9*8({0})
-            fsd f10, 10*8({0})
-            fsd f11, 11*8({0})
-            fsd f12, 12*8({0})
-            fsd f13, 13*8({0})
-            fsd f14, 14*8({0})
-            fsd f15, 15*8({0})
-            fsd f16, 16*8({0})
-            fsd f17, 17*8({0})
-            fsd f18, 18*8({0})
-            fsd f19, 19*8({0})
-            fsd f20, 20*8({0})
-            fsd f21, 21*8({0})
-            fsd f22, 22*8({0})
-            fsd f23, 23*8({0})
-            fsd f24, 24*8({0})
-            fsd f25, 25*8({0})
-            fsd f26, 26*8({0})
-            fsd f27, 27*8({0})
-            fsd f28, 28*8({0})
-            fsd f29, 29*8({0})
-            fsd f30, 30*8({0})
-            fsd f31, 31*8({0})
-            csrr {1}, fcsr
-            sw  {1}, 32*8({0})
-        ", in(reg) self,
-                inout(reg) _t
-            );
-        };
-    }
     #[cfg(target_arch = "loongarch64")]
     pub fn save(&mut self) {
         // TODO(YJJ)：后续实现检测dirty然后保存和恢复等操作
         return;
     }
 
-    /// Restore mem -> reg
-    #[cfg(target_arch = "riscv64")]
-    pub fn restore(&mut self) {
-        if self.need_restore == 0 {
-            return;
-        }
-        self.need_restore = 0;
-        unsafe {
-            asm!("
-            fld  f0,  0*8({0})
-            fld  f1,  1*8({0})
-            fld  f2,  2*8({0})
-            fld  f3,  3*8({0})
-            fld  f4,  4*8({0})
-            fld  f5,  5*8({0})
-            fld  f6,  6*8({0})
-            fld  f7,  7*8({0})
-            fld  f8,  8*8({0})
-            fld  f9,  9*8({0})
-            fld f10, 10*8({0})
-            fld f11, 11*8({0})
-            fld f12, 12*8({0})
-            fld f13, 13*8({0})
-            fld f14, 14*8({0})
-            fld f15, 15*8({0})
-            fld f16, 16*8({0})
-            fld f17, 17*8({0})
-            fld f18, 18*8({0})
-            fld f19, 19*8({0})
-            fld f20, 20*8({0})
-            fld f21, 21*8({0})
-            fld f22, 22*8({0})
-            fld f23, 23*8({0})
-            fld f24, 24*8({0})
-            fld f25, 25*8({0})
-            fld f26, 26*8({0})
-            fld f27, 27*8({0})
-            fld f28, 28*8({0})
-            fld f29, 29*8({0})
-            fld f30, 30*8({0})
-            fld f31, 31*8({0})
-            lw  {0}, 32*8({0})
-            csrw fcsr, {0}
-        ", in(reg) self
-            );
-        }
-    }
     #[cfg(target_arch = "loongarch64")]
     pub fn restore(&mut self) {
         // TODO(YJJ)：后续实现检测dirty然后保存和恢复等操作
