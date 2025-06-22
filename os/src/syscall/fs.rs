@@ -5,7 +5,7 @@ use crate::fs::{
     Kstat, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, Stdout, StxMask, UmountFlags,
     MNT_TABLE, SEEK_CUR,
 };
-use crate::hal::config::{AT_FDCWD, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
+use crate::hal::config::{AT_FDCWD, PAGE_SIZE, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
 use crate::mm::user_ptr::{user_cstr, user_ref_mut, user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
@@ -21,10 +21,10 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::SyncUnsafeCell;
 use core::cmp::{max, min};
-use core::error;
+// use core::error;
 use core::intrinsics::unlikely;
 use core::ops::Add;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use lwext4_rust::file;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
@@ -756,6 +756,8 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
             }
             let target_dentry = Dentry::get_dentry_from_path(&target_path.get())?;
             file.get_inode().unlink(target_dentry)?;
+            // drop(target_dentry);
+            // error!("[unlink] path: {}, inode ref count: {}", target_path.get() , Arc::strong_count(&file.get_inode()));
         }
         Err(e) => {
             return Err(e);
@@ -907,13 +909,14 @@ pub async fn sys_sendfile(
     offset: usize,
     count: usize,
 ) -> SysResult<usize> {
-    info!("[sys_sendfile] start");
+    // error!("[sys_sendfile] out_fd: {}, in_fd: {}, offset: {:#x}, count: {:#x}", out_fd, in_fd, offset, count);
     let task = current_task().unwrap();
     let src = task.get_file_by_fd(in_fd).ok_or(Errno::EBADF)?;
     let dest = task.get_file_by_fd(out_fd).ok_or(Errno::EBADF)?;
     if !src.readable() || !dest.writable() {
         return Err(Errno::EPERM);
     }
+    let count = count.min(src.get_inode().get_size() - offset + PAGE_SIZE);
 
     let mut len: usize = 0;
     let mut buf = vec![0u8; count];
