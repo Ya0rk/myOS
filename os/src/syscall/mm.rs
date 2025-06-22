@@ -84,12 +84,13 @@ pub fn sys_mmap(
 
     if flags.contains(MmapFlags::MAP_ANONYMOUS) {
         // 匿名映射
+        // TODO: merge branches
         let start_va = task
             .with_mut_memory_space(|m| match flags.intersection(MmapFlags::MAP_TYPE_MASK) {
                 MmapFlags::MAP_SHARED => {
-                    m.alloc_mmap_shared_anonymous(addr.into(), length, perm, flags)
+                    m.alloc_mmap_anon(addr.into(), length, perm, flags)
                 }
-                MmapFlags::MAP_PRIVATE => m.alloc_mmap_anonymous(addr.into(), length, perm, flags),
+                MmapFlags::MAP_PRIVATE => m.alloc_mmap_anon(addr.into(), length, perm, flags),
                 _ => {
                     unimplemented!()
                 }

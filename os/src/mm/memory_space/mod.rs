@@ -192,6 +192,7 @@ impl MemorySpace {
         unsafe { &mut *self.page_table.get() }
     }
 
+
     pub fn token(&self) -> usize {
         self.page_table().token()
     }
@@ -265,6 +266,9 @@ impl MemorySpace {
         );
 
         for i in 0..ph_count {
+
+            let shared = false;
+
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() != xmas_elf::program::Type::Load {
                 continue;
@@ -286,7 +290,7 @@ impl MemorySpace {
             if ph_flags.is_execute() {
                 map_perm |= MapPerm::X;
             }
-            let mut vm_area = VmArea::new(start_va..end_va, map_perm, VmAreaType::Elf);
+            let mut vm_area = VmArea::new(start_va..end_va, map_perm, VmAreaType::Elf, false);
 
             // log::debug!("[map_elf] [{start_va:#x}, {end_va:#x}], map_perm: {map_perm:?} start...",);
 
@@ -329,6 +333,9 @@ impl MemorySpace {
         // log::info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
 
         for i in 0..ph_count {
+
+            let shared = false;
+
             let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() != xmas_elf::program::Type::Load {
                 continue;
@@ -350,7 +357,7 @@ impl MemorySpace {
             if ph_flags.is_execute() {
                 map_perm |= MapPerm::X;
             }
-            let mut vm_area = VmArea::new(start_va..end_va, map_perm, VmAreaType::Elf);
+            let mut vm_area = VmArea::new(start_va..end_va, map_perm, VmAreaType::Elf, false);
 
             max_end_vpn = vm_area.end_vpn();
 
@@ -527,6 +534,9 @@ impl MemorySpace {
         map_perm: MapPerm,
         pages: &mut Vec<Weak<Page>>,
     ) -> VirtAddr {
+
+        let shared = true;
+
         info!(
             "[attach_shm] shmaddr: {:#x}, size: {:#x}, map_perm: {:?}, pages: {:?}",
             shmaddr.0, size, map_perm, pages
@@ -540,11 +550,11 @@ impl MemorySpace {
                 .find_free_range(shared_range, size)
                 .expect("no free shared area");
             ret_addr = range.start;
-            VmArea::new(range, map_perm, VmAreaType::Shm)
+            VmArea::new(range, map_perm, VmAreaType::Shm, shared)
         } else {
             log::info!("[attach_shm] user defined addr");
             let shm_end = shmaddr + size;
-            VmArea::new(shmaddr..shm_end, map_perm, VmAreaType::Shm)
+            VmArea::new(shmaddr..shm_end, map_perm, VmAreaType::Shm, shared)
         };
         if pages.is_empty() {
             for vpn in vm_area.range_vpn() {
@@ -602,6 +612,9 @@ impl MemorySpace {
     ///
     /// The stack has a range of [sp - size, sp].
     pub fn alloc_stack_lazily(&mut self, size: usize) -> VirtAddr {
+
+        let shared = false;
+
         let stack_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_STACK_BEG..U_SEG_STACK_END);
 
@@ -614,7 +627,7 @@ impl MemorySpace {
         let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
         // log::info!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
 
-        let mut vm_area = VmArea::new(range.clone(), MapPerm::URW, VmAreaType::Stack);
+        let mut vm_area = VmArea::new(range.clone(), MapPerm::URW, VmAreaType::Stack, shared);
         vm_area.map_range(
             self.page_table_mut(),
             range.end - USER_STACK_PRE_ALLOC_SIZE..range.end,
@@ -623,6 +636,9 @@ impl MemorySpace {
         sp_init
     }
     pub fn alloc_stack(&mut self, size: usize) -> VirtAddr {
+
+        let shared = false;
+
         let stack_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_STACK_BEG..U_SEG_STACK_END);
 
@@ -635,30 +651,36 @@ impl MemorySpace {
         let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
         // log::info!("[MemorySpace::alloc_stack] stack: {range:x?}, sp_init: {sp_init:x?}");
 
-        let mut vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Stack);
+        let mut vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Stack, shared);
         self.push_vma(vm_area);
         sp_init
     }
 
     /// Alloc heap lazily.
     pub fn alloc_heap_lazily(&mut self) {
+
+        let shared = false;
+
         let heap_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_END);
 
         const INIT_SIZE: usize = PAGE_SIZE;
         let range = VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_BEG + INIT_SIZE);
 
-        let vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Heap);
+        let vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Heap, shared);
         self.push_vma_lazily(vm_area);
     }
     pub fn alloc_heap(&mut self) {
+        
+        let shared = false;
+
         let heap_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_END);
 
         const INIT_SIZE: usize = PAGE_SIZE;
         let range = VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_BEG + INIT_SIZE);
 
-        let vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Heap);
+        let vm_area = VmArea::new(range, MapPerm::URW, VmAreaType::Heap, shared);
         self.push_vma(vm_area);
     }
 
@@ -788,48 +810,88 @@ impl MemorySpace {
         self.areas_mut().try_insert(vma.range_va(), vma).unwrap();
     }
 
-    pub fn alloc_mmap_shared_anonymous(
-        &mut self,
-        addr: VirtAddr,
-        length: usize,
-        perm: MapPerm,
-        flags: MmapFlags,
-    ) -> SysResult<VirtAddr> {
-        let shared_range: Range<VirtAddr> =
-            VirtAddr::from_usize_range(U_SEG_SHARE_BEG..U_SEG_SHARE_END);
-        let range = if flags.contains(MmapFlags::MAP_FIXED) {
-            addr..addr + length
-        } else {
-            self.areas_mut()
-                .find_free_range(shared_range, length)
-                .expect("shared range is full")
-        };
-        let start = range.start;
-        let vma = VmArea::new(range, perm, VmAreaType::Shm);
-        self.push_vma(vma);
-        Ok(start)
-    }
+    // pub fn alloc_mmap_shared_anonymous(
+    //     &mut self,
+    //     addr: VirtAddr,
+    //     length: usize,
+    //     perm: MapPerm,
+    //     flags: MmapFlags,
+    // ) -> SysResult<VirtAddr> {
+    //     let shared_range: Range<VirtAddr> =
+    //         VirtAddr::from_usize_range(U_SEG_SHARE_BEG..U_SEG_SHARE_END);
+    //     let range = if flags.contains(MmapFlags::MAP_FIXED) {
+    //         addr..addr + length
+    //     } else {
+    //         self.areas_mut()
+    //             .find_free_range(shared_range, length)
+    //             .expect("shared range is full")
+    //     };
+    //     let start = range.start;
+    //     let vma = VmArea::new(range, perm, VmAreaType::Shm);
+    //     self.push_vma(vma);
+    //     Ok(start)
+    // }
 
-    pub fn alloc_mmap_anonymous(
+    // pub fn alloc_mmap_anonymous(
+    //     &mut self,
+    //     addr: VirtAddr,
+    //     length: usize,
+    //     perm: MapPerm,
+    //     flags: MmapFlags,
+    // ) -> SysResult<VirtAddr> {
+    //     let mmap_range: Range<VirtAddr> =
+    //         VirtAddr::from_usize_range(U_SEG_FILE_BEG..U_SEG_FILE_END);
+    //     let range = if flags.contains(MmapFlags::MAP_FIXED) {
+    //         addr..addr + length
+    //     } else {
+    //         self.areas_mut()
+    //             .find_free_range(mmap_range, length)
+    //             .expect("mmap range is full")
+    //     };
+    //     let start = range.start;
+    //     let vma = VmArea::new_mmap(range, perm, flags, None, 0);
+    //     self.push_vma_lazily(vma);
+    //     Ok(start)
+    // }
+
+    pub fn alloc_mmap_anon(
         &mut self,
         addr: VirtAddr,
         length: usize,
         perm: MapPerm,
         flags: MmapFlags,
     ) -> SysResult<VirtAddr> {
-        let mmap_range: Range<VirtAddr> =
-            VirtAddr::from_usize_range(U_SEG_FILE_BEG..U_SEG_FILE_END);
-        let range = if flags.contains(MmapFlags::MAP_FIXED) {
-            addr..addr + length
-        } else {
+
+        /// TODO: what if shared_validate
+        let shared = flags.intersection(MmapFlags::MAP_TYPE_MASK) == MmapFlags::MAP_SHARED;
+
+
+        let mmap_range = VirtAddr::from_usize_range(U_SEG_FILE_BEG..U_SEG_FILE_END);
+
+
+        let range = flags.contains(MmapFlags::MAP_FIXED)
+        .then(|| addr..addr + length)
+        .unwrap_or_else(||{
             self.areas_mut()
                 .find_free_range(mmap_range, length)
                 .expect("mmap range is full")
-        };
-        let start = range.start;
-        let vma = VmArea::new_mmap(range, perm, flags, None, 0);
-        self.push_vma_lazily(vma);
-        Ok(start)
+        });
+
+        let vma = VmArea::new_mmap(range, perm, flags, None, 0, shared);
+
+        let start_va = vma.start_va();
+
+        // TODO(lsz): cannot support lazy allocation of shared anon map now
+        
+        if shared {
+            self.push_vma(vma);
+        }
+        else {
+            self.push_vma_lazily(vma);
+        }
+
+        Ok(start_va)
+
     }
 
     // NOTE: can not alloc all pages from `PageCache`, otherwise lmbench
@@ -845,6 +907,8 @@ impl MemorySpace {
     ) -> SysResult<VirtAddr> {
         debug_assert!(is_aligned_to_page(offset));
 
+        let shared = flags.intersection(MmapFlags::MAP_TYPE_MASK) == MmapFlags::MAP_SHARED;
+
         let mmap_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_FILE_BEG..U_SEG_FILE_END);
 
@@ -859,7 +923,7 @@ impl MemorySpace {
 
         let page_table = self.page_table_mut();
         // let inode = file.inode();
-        let mut vma = VmArea::new_mmap(range, perm, flags, Some(file.clone()), offset);
+        let mut vma = VmArea::new_mmap(range, perm, flags, Some(file.clone()), offset, shared);
         let mut range_vpn = vma.range_vpn();
         let length = cmp::min(length, MMAP_PRE_ALLOC_PAGES * PAGE_SIZE);
         for offset_aligned in (offset..offset + length).step_by(PAGE_SIZE) {
