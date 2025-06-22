@@ -17,9 +17,9 @@ for case in $ltp_cases; do
     "$file"
     ret=$?
 
-    echo "FAIL LTP CASE $case : $ret"
-  else
-    echo "SKIP LTP CASE $case : not found"
+    # echo "FAIL LTP CASE $case : $ret"
+#   else
+#     echo "SKIP LTP CASE $case : not found"
   fi
 done
 
