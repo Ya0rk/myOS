@@ -81,6 +81,7 @@ lazy_static! {
 }
 
 impl CacheStatus for Arc<Dentry> {
+
     fn is_valid(&self) -> bool {
         !self.is_negtive()
     }
@@ -262,14 +263,16 @@ impl Dentry {
     }
 
     //
-    pub fn release_self(self: Arc<Self>) -> Option<()> {
+    pub fn release_self(self: Arc<Self>) -> SysResult<usize> {
         let child_name = self.name.read().clone();
-        let parent = self.parent()?;
+        let parent = self.parent().ok_or(Errno::ENOENT)?;
         let mut parent_children = parent.children.write();
         parent_children.remove(&child_name);
         self.set_status(DentryStatus::Negtive);
         self.set_status(DentryStatus::Negtive);
-        Some(())
+        // DENTRY_CACHE.remove(&self.get_abs_path()).expect("failed to remove dentry from cache");
+        // error!("[release_self] release dentry {}, ref count: {}", self.get_abs_path(), Arc::strong_count(&self));
+        Ok(0)
     }
 
     /// 将一个dentry和inode绑定,如果inode是一个文件夹,就把为他的儿子创建一个新的dentry
