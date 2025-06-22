@@ -5,14 +5,9 @@ use super::ffi::{
     SO_SNDBUF,
 };
 use crate::{
-    fs::{FileTrait, OpenFlags, Pipe},
-    hal::config::USER_SPACE_TOP,
-    net::{
-        addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, Congestion, Protocol, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, TCP_MSS
-    },
-    syscall::ffi::{IPPROTO_IP, IPPROTO_TCP, SO_OOBINLINE, SO_RCVTIMEO},
-    task::{current_task, sock_map_fd, FdInfo},
-    utils::{Errno, SysResult},
+    fs::{FileTrait, OpenFlags, Pipe}, hal::config::USER_SPACE_TOP, mm::user_ptr::check_readable, net::{
+        addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, Congestion, Protocol, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, HOST_NAME, MAX_HOST_NAME, MAX_NIS_LEN, NIS_DOMAIN_NAME, TCP_MSS
+    }, syscall::ffi::{IPPROTO_IP, IPPROTO_TCP, SO_OOBINLINE, SO_RCVTIMEO}, task::{current_task, sock_map_fd, FdInfo}, utils::{Errno, SysResult}
 };
 use log::{info, warn};
 use smoltcp::wire::IpAddress;
@@ -568,6 +563,42 @@ pub fn sys_setsockopt(
         }
         _ => return Err(Errno::ENOPROTOOPT),
     }
+
+    Ok(0)
+}
+
+pub fn sys_setdominname(name: usize, size: usize) -> SysResult<usize> {
+    info!("[sys_setdominname] start, name = {:#x}, size = {:#x}", name, size);
+    if unlikely((size as isize) < 0) || unlikely(size > MAX_NIS_LEN) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(name == 0 || check_readable(name.into(), size).is_err()) {
+        return Err(Errno::EFAULT);
+    }
+
+    let new_name = unsafe {
+        core::slice::from_raw_parts(name as *const u8, size)
+    };
+
+    unsafe { NIS_DOMAIN_NAME [..size].copy_from_slice(new_name);}
+
+    Ok(0)
+}
+
+pub fn sys_sethostname(name: usize, size: usize) -> SysResult<usize> {
+    info!("[sys_sethostname] start, name = {:#x}, size = {:#x}", name, size);
+    if unlikely((size as isize) < 0) || unlikely(size > MAX_HOST_NAME) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(name == 0 || check_readable(name.into(), size).is_err()) {
+        return Err(Errno::EFAULT);
+    }
+
+    let new_name = unsafe {
+        core::slice::from_raw_parts(name as *const u8, size)
+    };
+
+    unsafe { HOST_NAME [..size].copy_from_slice(new_name);}
 
     Ok(0)
 }

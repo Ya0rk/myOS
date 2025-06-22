@@ -3,8 +3,7 @@ use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
 use crate::{
-    hal::config::{BLOCK_SIZE, PATH_MAX},
-    sync::{timer::get_time_s, TimeSpec, TimeVal},
+    hal::config::{BLOCK_SIZE, PATH_MAX}, net::{HOST_NAME, NIS_DOMAIN_NAME}, sync::{timer::get_time_s, TimeSpec, TimeVal}
 };
 
 #[derive(IntoBytes, Immutable)]
@@ -27,13 +26,25 @@ pub struct Utsname {
 
 impl Utsname {
     pub fn new() -> Self {
+        let mut domainname = [0; 65];
+        let mut nodename = [0; 65];
+        if unsafe { HOST_NAME }[0] == 0  {
+            nodename = Self::copy_bytes("Ya0rk");
+        } else {
+            nodename.copy_from_slice(unsafe { &HOST_NAME })
+        }
+        if unsafe { NIS_DOMAIN_NAME }[0] == 0 {
+            domainname = Self::copy_bytes("Ya0rk");
+        } else {
+            domainname.copy_from_slice(unsafe { &NIS_DOMAIN_NAME });
+        }
         Self {
             sysname: Self::copy_bytes("YooOs"),
-            nodename: Self::copy_bytes("Ya0rk"),
+            nodename,
             release: Self::copy_bytes("6.1"),
             version: Self::copy_bytes("6.1"),
             machine: Self::copy_bytes("riscv64"),
-            domainname: Self::copy_bytes("Ya0rk"),
+            domainname,
         }
     }
     fn copy_bytes(s: &str) -> [u8; 65] {
@@ -124,6 +135,8 @@ pub enum SysCode {
     SYSCALL_GETPGID = 155,
     SYSCALL_SETSID = 157,
     SYSCALL_UNAME = 160,
+    SYSCALL_SETHOSTNAME = 161,
+    SYSCALL_SETDOMINNAME = 162,
     SYSCALL_GETRUSAGE = 165,
     SYSCALL_UMASK = 166,
     SYSCALL_GETTIMEOFDAY = 169,
@@ -184,6 +197,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str {
         match self {
+            Self::SYSCALL_SETDOMINNAME => "setdominname",
+            Self::SYSCALL_SETHOSTNAME => "sethostname",
             Self::SYSCALL_CLONE3 => "clone3",
             Self::SYSCALL_SPLICE => "splice",
             Self::SYSCALL_SCHED_GETPARAM => "sched_getparam",

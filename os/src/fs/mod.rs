@@ -38,7 +38,7 @@ use alloc::string::{String, ToString};
 use alloc::{sync::Arc, vec::Vec};
 use devfs::{find_device, open_device_file, register_device, DevNull, DevZero};
 use ext4::file::NormalFile;
-use ffi::{ADJTIME, LOCALTIME, MEMINFO, MOUNTS};
+use ffi::{MEMINFO, MOUNTS};
 use log::{debug, error, info};
 pub use pre_data::*;
 use sbi_spec::pmu::cache_event::NODE;

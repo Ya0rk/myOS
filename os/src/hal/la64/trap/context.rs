@@ -291,7 +291,6 @@ impl TrapContext {
         self.user_gp.a0 = signo;
         self.user_gp.tp = tp;
     }
-    
 }
 
 impl UserFloatRegs {

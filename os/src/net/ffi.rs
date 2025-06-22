@@ -13,6 +13,12 @@ pub const TCP_MSS: u32 = match TCP_MSS_DEFAULT > MAX_BUFFER_SIZE {
     false => TCP_MSS_DEFAULT,
 };
 pub const Congestion: &str = "reno"; // TCP 拥塞控制算法名称
+pub const MAX_HOST_NAME: usize = 64;// 本机domin name长度最大值，不包含0结尾
+pub static mut HOST_NAME: [u8; 65] = [0; 65];
+// the NIS domain name of the host system
+pub static mut NIS_DOMAIN_NAME: [u8; 65] = [0; 65];
+pub const MAX_NIS_LEN: usize = 64;
+
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]

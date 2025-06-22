@@ -51,6 +51,7 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 board_qemu = []
 default = ["error", "test", "qemu_riscv", "autorun"]
 error = []
+timewhell = []
 warn = []
 autorun = []
 gbshell = []
