@@ -102,6 +102,8 @@ pub struct VmArea {
     pub backed_file: Option<Arc<dyn FileTrait>>,
     /// Start offset in the file.
     pub offset: usize,
+
+    pub shared: bool,
 }
 
 impl core::fmt::Debug for VmArea {
@@ -122,7 +124,7 @@ impl Drop for VmArea {
 
 impl VmArea {
     /// Construct a new vma.
-    pub fn new(range_va: Range<VirtAddr>, map_perm: MapPerm, vma_type: VmAreaType) -> Self {
+    pub fn new(range_va: Range<VirtAddr>, map_perm: MapPerm, vma_type: VmAreaType, shared: bool) -> Self {
         let range_va = range_va.start.floor().into()..range_va.end.ceil().into();
         let new = Self {
             range_va,
@@ -132,6 +134,7 @@ impl VmArea {
             backed_file: None,
             mmap_flags: MmapFlags::default(),
             offset: 0,
+            shared,
         };
         log::debug!("[VmArea::new] {new:?}");
         new
@@ -143,6 +146,7 @@ impl VmArea {
         mmap_flags: MmapFlags,
         file: Option<Arc<dyn FileTrait>>,
         offset: usize,
+        shared: bool,
     ) -> Self {
         let range_va = range_va.start.floor().into()..range_va.end.ceil().into();
         let new = Self {
@@ -153,6 +157,7 @@ impl VmArea {
             backed_file: file,
             mmap_flags,
             offset,
+            shared,
         };
         log::debug!("[VmArea::new_mmap] {new:?}");
         new
@@ -168,6 +173,7 @@ impl VmArea {
             backed_file: another.backed_file.clone(),
             mmap_flags: another.mmap_flags,
             offset: another.offset,
+            shared: another.shared,
         }
     }
 
