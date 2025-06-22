@@ -38,23 +38,27 @@ impl Drop for FrameTracker {
     }
 }
 
-trait FrameAllocator {
+pub trait FrameAllocator {
     fn new() -> Self;
     fn alloc(&mut self) -> Option<PhysPageNum>;
     fn dealloc(&mut self, ppn: PhysPageNum);
+    fn frame_total(&self) -> usize;
+    fn frame_free(&self) -> usize;
 }
 /// an implementation for frame allocator
 pub struct StackFrameAllocator {
     current: usize,
     end: usize,
     recycled: Vec<usize>,
+    FRAME_TOTAL: usize,
 }
 
 impl StackFrameAllocator {
     pub fn init(&mut self, l: PhysPageNum, r: PhysPageNum) {
         self.current = l.0;
         self.end = r.0;
-        println!("last {} Physical Frames.", self.end - self.current);
+        self.FRAME_TOTAL = self.end - self.current;
+        println!("last {} Physical Frames.", self.FRAME_TOTAL);
     }
 }
 impl FrameAllocator for StackFrameAllocator {
@@ -63,6 +67,7 @@ impl FrameAllocator for StackFrameAllocator {
             current: 0,
             end: 0,
             recycled: Vec::new(),
+            FRAME_TOTAL: 0,
         }
     }
     fn alloc(&mut self) -> Option<PhysPageNum> {
@@ -84,9 +89,18 @@ impl FrameAllocator for StackFrameAllocator {
         // recycle
         self.recycled.push(ppn);
     }
+
+    fn frame_total(&self) -> usize {
+        self.FRAME_TOTAL
+    }
+
+    fn frame_free(&self) -> usize {
+        self.end - self.current + self.recycled.len()
+    }
+    
 }
 
-type FrameAllocatorImpl = StackFrameAllocator;
+pub type FrameAllocatorImpl = StackFrameAllocator;
 
 lazy_static! {
     /// frame allocator instance through lazy_static!
