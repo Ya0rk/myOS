@@ -235,7 +235,6 @@ impl TrapContext {
             kernel_fp: 0,
             kernel_tp: 0,
             float_regs: UserFloatRegs::new(),
-            last_a0: 0,
         };
         cx.set_sp(sp);
         cx
@@ -292,12 +291,7 @@ impl TrapContext {
         self.user_gp.a0 = signo;
         self.user_gp.tp = tp;
     }
-    pub fn save_last_a0(&mut self) {
-        self.last_a0 = self.user_gp.a0;
-    }
-    pub fn restore_last_a0(&mut self) {
-        self.user_gp.a0 = self.last_a0;
-    }
+    
 }
 
 impl UserFloatRegs {
