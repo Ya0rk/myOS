@@ -16,7 +16,7 @@ use log::info;
 use crate::{
     fs::{open, resolve_path, OpenFlags},
     hal::arch::sfence_vma_vaddr,
-    task::{aux, current_task},
+    task::{aux, current_task}, utils::elf::check_magic,
 };
 // use riscv::register::scause; 将从riscv库引入scause替换为从hal::arch引入。在hal::arch中会间接引入riscv::register::scause
 // use crate::hal::arch::scause;
@@ -47,7 +47,7 @@ use crate::{
         TaskControlBlock,
     },
 };
-use xmas_elf::ElfFile;
+use xmas_elf::{header, ElfFile};
 
 extern "C" {
     fn stext();
@@ -85,6 +85,8 @@ impl PageFaultAccessType {
     //     }
     // }
 
+
+    // TODO: what if writeonly or execonly
     pub fn can_access(self, flag: MapPerm) -> bool {
         if self.contains(Self::WRITE) && !flag.contains(MapPerm::W) {
             return false;
@@ -99,6 +101,7 @@ impl PageFaultAccessType {
 bitflags! {
     // Defined in <bits/mman-linux.h>
     #[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    // TODO: more flags
     pub struct MmapFlags: i32 {
         // Sharing types (must choose one and only one of these).
         /// Share changes.
@@ -149,6 +152,8 @@ impl From<MmapProt> for MapPerm {
     }
 }
 
+
+
 pub struct MemorySpace {
     // NOTE: The reason why `page_table` and `areas` are `SyncUnsafeCell` is because they both
     // represent memory region, it is likely to modify the two both.
@@ -197,106 +202,94 @@ impl MemorySpace {
         self.page_table().token()
     }
 
+
+    // TODO(lsz): do not read whole file, instead, read the header and the sections
     pub async fn new_user_from_elf(
         elf_file: Arc<dyn FileTrait>,
-    ) -> (Self, usize, usize, Vec<AuxHeader>) {
+    ) -> SysResult<(Self, usize, usize, Vec<AuxHeader>)> {
         let elf_data = elf_file
             .get_inode()
             .read_all()
-            .await
-            .expect("[new_user_from_elf] read elf file failed");
+            .await?;
         let (mut memory_space, entry_point, auxv) =
-            MemorySpace::new_user().parse_and_map_elf_data(&elf_data);
+            MemorySpace::new_user().parse_and_map_elf_data(&elf_data)?;
         let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
         memory_space.alloc_heap();
-        (memory_space, entry_point, sp_init, auxv)
+        Ok((memory_space, entry_point, sp_init, auxv))
     }
     pub async fn new_user_from_elf_lazily(
         elf_file: Arc<dyn FileTrait>,
-    ) -> (Self, usize, usize, Vec<AuxHeader>) {
+    ) -> SysResult<(Self, usize, usize, Vec<AuxHeader>)> {
         let elf_data = elf_file
             .get_inode()
             .read_all()
             .await
             .expect("[new_user_from_elf_lazily] read elf file failed");
         let (mut memory_space, entry_point, auxv) =
-            MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data);
+            MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data)?;
         let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
         memory_space.alloc_heap_lazily();
-        (memory_space, entry_point, sp_init, auxv)
+        Ok((memory_space, entry_point, sp_init, auxv))
     }
     /// Include sections in elf and TrapContext and user stack,
     /// also returns user_sp and entry point.
     // PERF: resolve elf file lazily
     // TODO: dynamic interpreter
-    pub fn parse_and_map_elf_data(mut self, elf_data: &[u8]) -> (Self, usize, Vec<AuxHeader>) {
-        const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
+    pub fn parse_and_map_elf_data(mut self, elf_data: &[u8]) -> SysResult<(Self, usize, Vec<AuxHeader>)> {
+        // const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
-        // map program headers of elf, with U flag
-        let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
-        let elf_header = elf.header;
-        assert_eq!(elf_header.pt1.magic, ELF_MAGIC, "invalid elf!");
-        let entry_point = elf_header.pt2.entry_point() as usize;
-        let ph_entry_size = elf_header.pt2.ph_entry_size() as usize;
-        let ph_count = elf_header.pt2.ph_count() as usize;
+        // // map program headers of elf, with U flag
+        // let elf = xmas_elf::ElfFile::new(elf_data).unwrap();
+        // let elf_header = elf.header;
+        // assert_eq!(elf_header.pt1.magic, ELF_MAGIC, "invalid elf!");
+        // NOTE: no more need for check magic
+        let elf = xmas_elf::ElfFile::new(elf_data).map_err(|_| Errno::ENOEXEC)?;
+        // check_magic(&elf)?;
+        let header = elf.header;
+
+        let entry_point = header.pt2.entry_point() as usize;
+        let ph_entry_size = header.pt2.ph_entry_size() as usize;
+        let ph_count = header.pt2.ph_count() as usize;
 
         let mut auxv = generate_early_auxv(ph_entry_size, ph_count, entry_point);
 
         auxv.push(AuxHeader::new(AT_BASE, 0));
 
-        let (max_end_vpn, header_va) = self.map_elf_data(&elf, 0.into());
+        let header_va = self.map_elf_data(&elf, 0.into())?;
 
         let ph_head_addr = header_va.0 + elf.header.pt2.ph_offset() as usize;
-        log::info!("[from_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x} ");
+        // log::info!("[from_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x} ");
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
 
-        (self, entry_point, auxv)
+        Ok((self, entry_point, auxv))
     }
 
-    pub fn map_elf_data(&mut self, elf: &ElfFile, offset: VirtAddr) -> (VirtPageNum, VirtAddr) {
-        let elf_header = elf.header;
-        let ph_count = elf_header.pt2.ph_count();
+    pub fn map_elf_data(&mut self, elf: &ElfFile, offset: VirtAddr) -> SysResult<VirtAddr> {
+        // let elf_header = elf.header;
+        // let ph_count = elf_header.pt2.ph_count();
 
-        let mut max_end_vpn = offset.floor();
-        let mut header_va = 0;
-        let mut has_found_header_va = false;
-        log::info!(
-            "[map_elf_data]: entry point {:#x}",
-            elf.header.pt2.entry_point()
-        );
+        // let mut max_end_vpn = offset.floor();
+        // let mut header_va = 0;
+        // let mut has_found_header_va = false;
+        
+        // log::info!(
+        //     "[map_elf_data]: entry point {:#x}",
+        //     elf.header.pt2.entry_point()
+        // );
 
-        for i in 0..ph_count {
+        let mut header_va: Option<VirtAddr> = None;
 
-            let shared = false;
+        for ph in elf.program_iter() {
 
-            let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() != xmas_elf::program::Type::Load {
                 continue;
             }
             let start_va: VirtAddr = (ph.virtual_addr() as usize + offset.0).into();
             let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize + offset.0).into();
-            if !has_found_header_va {
-                header_va = start_va.0;
-                has_found_header_va = true;
-            }
-            let mut map_perm = MapPerm::U;
-            let ph_flags = ph.flags();
-            if ph_flags.is_read() {
-                map_perm |= MapPerm::R;
-            }
-            if ph_flags.is_write() {
-                map_perm |= MapPerm::W;
-            }
-            if ph_flags.is_execute() {
-                map_perm |= MapPerm::X;
-            }
+            header_va = header_va.or(Some(start_va));
+
+            let map_perm = ph.flags().into();
             let mut vm_area = VmArea::new(start_va..end_va, map_perm, VmAreaType::Elf, false);
-
-            // log::debug!("[map_elf] [{start_va:#x}, {end_va:#x}], map_perm: {map_perm:?} start...",);
-
-            max_end_vpn = vm_area.end_vpn();
-
-            let map_offset = start_va - start_va.align_down();
 
             log::info!(
                 "[map_elf_data] ph offset {:#x}, file size {:#x}, mem size {:#x}",
@@ -307,12 +300,12 @@ impl MemorySpace {
 
             self.push_vma_with_data(
                 vm_area,
-                map_offset,
+                start_va.page_offset(),
                 &elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize],
             );
         }
 
-        (max_end_vpn, header_va.into())
+        header_va.ok_or(Errno::ENOEXEC)
     }
 
     /// Map the sections in the elf.
@@ -323,45 +316,37 @@ impl MemorySpace {
         elf_file: Arc<dyn FileTrait>,
         elf: &ElfFile,
         offset: VirtAddr,
-    ) -> (VirtPageNum, VirtAddr) {
-        let elf_header = elf.header;
-        let ph_count = elf_header.pt2.ph_count();
+    ) -> SysResult<VirtAddr> {
+        // let elf_header = elf.header;
+        // let ph_count = elf_header.pt2.ph_count();
 
-        let mut max_end_vpn = offset.floor();
-        let mut header_va = 0;
-        let mut has_found_header_va = false;
+        // let mut max_end_vpn = offset.floor();
+        // let mut header_va = 0;
+        // let mut has_found_header_va = false;
         // log::info!("[map_elf]: entry point {:#x}", elf.header.pt2.entry_point());
+        let mut header_va: Option<VirtAddr> = None;
 
-        for i in 0..ph_count {
+        for ph in elf.program_iter() {
 
-            let shared = false;
+            // let shared = false;
 
-            let ph = elf.program_header(i).unwrap();
+            // let ph = elf.program_header(i).unwrap();
             if ph.get_type().unwrap() != xmas_elf::program::Type::Load {
                 continue;
             }
             let start_va: VirtAddr = (ph.virtual_addr() as usize + offset.0).into();
             let end_va: VirtAddr = ((ph.virtual_addr() + ph.mem_size()) as usize + offset.0).into();
-            if !has_found_header_va {
-                header_va = start_va.0;
-                has_found_header_va = true;
-            }
-            let mut map_perm = MapPerm::U;
-            let ph_flags = ph.flags();
-            if ph_flags.is_read() {
-                map_perm |= MapPerm::R;
-            }
-            if ph_flags.is_write() {
-                map_perm |= MapPerm::W;
-            }
-            if ph_flags.is_execute() {
-                map_perm |= MapPerm::X;
-            }
+            // if !has_found_header_va {
+            //     header_va = start_va.0;
+            //     has_found_header_va = true;
+            // }
+            header_va = header_va.or(Some(start_va));
+            let mut map_perm = ph.flags().into();
             let mut vm_area = VmArea::new(start_va..end_va, map_perm, VmAreaType::Elf, false);
 
-            max_end_vpn = vm_area.end_vpn();
+            // max_end_vpn = vm_area.end_vpn();
 
-            let map_offset = start_va - start_va.align_down();
+            // let map_offset = start_va - start_va.align_down();
 
             // log::info!(
             //     "[map_elf] ph offset {:#x}, file size {:#x}, mem size {:#x}, flags{}",
@@ -371,79 +356,98 @@ impl MemorySpace {
             //     ph_flags
             // );
 
-            if ph.file_size() == ph.mem_size() && is_aligned_to_page(ph.offset() as usize) {
+
+            let offset = ph.offset() as usize;
+            // full initialization
+            if ph.file_size() == ph.mem_size() && is_aligned_to_page(offset) {
                 // assert!(!map_perm.contains(MapPerm::W));
                 // NOTE: only add cow flag in elf page newly mapped.
                 // FIXME: mprotect is not checked yet
                 // WARN: the underlying elf file page cache may be edited, may cause unknown
                 // behavior
+
+                // TODO: pre_alloc maybe useful
+                // TODO: lazy alloc 
                 let mut pre_alloc_page_cnt = 0;
-                for vpn in vm_area.range_vpn() {
-                    let start_offset = ph.offset() as usize;
-                    let offset = start_offset + (vpn - vm_area.start_vpn()) * PAGE_SIZE;
-                    let offset_aligned = align_down_by_page(offset);
-                    // if let Ok(page) = block_on(async { elf_file.get_page_at(offset_aligned).await })
-                    if let Some(page) =
-                        block_on(async { elf_file.get_page_at(offset_aligned).await })
-                    //
-                    {
-                        if pre_alloc_page_cnt < USER_ELF_PRE_ALLOC_PAGE_CNT {
-                            let new_page = Page::new();
-                            info!("pre alloc");
-                            // WARN: area outer than region may should be set to zero
-                            new_page.copy_from_slice(page.get_bytes_array());
-                            self.page_table_mut()
-                                .map_leaf(vpn, new_page.ppn(), map_perm.into());
-                            vm_area.pages.insert(vpn, new_page);
-                            unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
-                        } else {
-                            let (pte_flags, ppn) = {
-                                let mut new_flags: PTEFlags = map_perm.into();
-                                new_flags |= PTEFlags::COW;
-                                new_flags.remove(PTEFlags::W);
-                                (new_flags, page.ppn())
-                            };
-                            // info!("[map_elf] lazy alloc: vpn: {:#x} offset: {:#x} ppn: {:#x}", vpn.0, offset_aligned, ppn.0 );
-                            self.page_table_mut().map_leaf(vpn, ppn, pte_flags);
-                            vm_area.pages.insert(vpn, page);
-                            unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
-                        }
-                        pre_alloc_page_cnt += 1;
-                    } else {
-                        info!("break");
-                        break;
-                    }
-                }
+                vm_area.range_vpn().try_for_each(|vpn| {
+                    block_on(async {
+                        elf_file.get_page_at(offset + (vpn - vm_area.start_vpn()) * PAGE_SIZE).await
+                    }).map_or(Err(Errno::ENOEXEC), | p | {
+                        // make it COW
+                        let mut pte_flags: PTEFlags = map_perm.into();
+                        pte_flags.set_COW(pte_flags.is_W()).set_W(false).set_D(false);
+
+                        // alloc immediately, not lazy
+                        self.page_table_mut().map_leaf(vpn, p.ppn(), pte_flags);
+                        vm_area.pages.insert(vpn, p);
+                        unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+                        Ok(())
+                    })
+                })?;
+                // for vpn in vm_area.range_vpn() {
+                //     let start_offset = ph.offset() as usize;
+                //     let offset = start_offset + (vpn - vm_area.start_vpn()) * PAGE_SIZE;
+                //     let offset_aligned = align_down_by_page(offset);
+                //     // if let Ok(page) = block_on(async { elf_file.get_page_at(offset_aligned).await })
+                //     if let Some(page) =
+                //         block_on(async { elf_file.get_page_at(offset_aligned).await })
+                //     //
+                //     {
+                //         if pre_alloc_page_cnt < USER_ELF_PRE_ALLOC_PAGE_CNT {
+                //             let new_page = Page::new();
+                //             info!("pre alloc");
+                //             // WARN: area outer than region may should be set to zero
+                //             new_page.copy_from_slice(page.get_bytes_array());
+                //             self.page_table_mut()
+                //                 .map_leaf(vpn, new_page.ppn(), map_perm.into());
+                //             vm_area.pages.insert(vpn, new_page);
+                //             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+                //         } else {
+                //             let (pte_flags, ppn) = {
+                //                 let mut new_flags: PTEFlags = map_perm.into();
+                //                 new_flags |= PTEFlags::COW;
+                //                 new_flags.remove(PTEFlags::W);
+                //                 (new_flags, page.ppn())
+                //             };
+                //             // info!("[map_elf] lazy alloc: vpn: {:#x} offset: {:#x} ppn: {:#x}", vpn.0, offset_aligned, ppn.0 );
+                //             self.page_table_mut().map_leaf(vpn, ppn, pte_flags);
+                //             vm_area.pages.insert(vpn, page);
+                //             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+                //         }
+                //         pre_alloc_page_cnt += 1;
+                //     } else {
+                //         info!("break");
+                //         break;
+                //     }
+                // }
                 self.push_vma_lazily(vm_area);
             } else {
                 self.push_vma_with_data(
                     vm_area,
-                    map_offset,
+                    start_va.page_offset(),
                     &elf.input[ph.offset() as usize..(ph.offset() + ph.file_size()) as usize],
                 );
             }
         }
 
-        (max_end_vpn, header_va.into())
+        header_va.ok_or(Errno::ENOEXEC)
     }
 
     pub fn parse_and_map_elf(
         mut self,
         elf_file: Arc<dyn FileTrait>,
         elf_data: &[u8],
-    ) -> (Self, usize, Vec<AuxHeader>) {
-        const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
+    ) -> SysResult<(Self, usize, Vec<AuxHeader>)> {
+        // const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
         // map program headers of elf, with U flag
-        let elf = xmas_elf::ElfFile::new(elf_data).unwrap_or_else(|err| {
-            println!("[parse_and_map_elf] file is {:?}", elf_file.get_name());
-            panic!("parse elf failed: {err}");
-        });
-        let elf_header = elf.header;
-        assert_eq!(elf_header.pt1.magic, ELF_MAGIC, "invalid elf!");
-        let mut entry = elf_header.pt2.entry_point() as usize;
-        let ph_entry_size = elf_header.pt2.ph_entry_size() as usize;
-        let ph_count = elf_header.pt2.ph_count() as usize;
+        
+        let elf = xmas_elf::ElfFile::new(elf_data).map_err(|_| Errno::ENOEXEC)?;
+        let header = elf.header;
+        // assert_eq!(elf_header.pt1.magic, ELF_MAGIC, "invalid elf!");
+        let mut entry = header.pt2.entry_point() as usize;
+        let ph_entry_size = header.pt2.ph_entry_size() as usize;
+        let ph_count = header.pt2.ph_count() as usize;
 
         let mut auxv = generate_early_auxv(ph_entry_size, ph_count, entry);
 
@@ -457,36 +461,31 @@ impl MemorySpace {
             auxv.push(AuxHeader::new(AT_BASE, 0));
         }
 
-        let (_max_end_vpn, header_va) = self.map_elf(elf_file, &elf, 0.into());
+        let header_va = self.map_elf(elf_file, &elf, 0.into())?;
 
         let ph_head_addr = header_va.0 + elf.header.pt2.ph_offset() as usize;
         auxv.push(AuxHeader::new(AT_RANDOM, ph_head_addr));
         // log::info!("[parse_and_map_elf] AT_PHDR  ph_head_addr is {ph_head_addr:x}",);
         auxv.push(AuxHeader::new(AT_PHDR, ph_head_addr));
 
-        (self, entry, auxv)
+        Ok((self, entry, auxv))
     }
 
     pub fn load_dl_interp_if_needed(&mut self, elf: &ElfFile) -> SysResult<Option<usize>> {
-        let elf_header = elf.header;
-        let ph_count = elf_header.pt2.ph_count();
+        let header = elf.header;
+        // let ph_count = elf_header.pt2.ph_count();
 
-        let mut is_dl = false;
-        for i in 0..ph_count {
-            let ph = elf.program_header(i).unwrap();
-            if ph.get_type().unwrap() == xmas_elf::program::Type::Interp {
-                is_dl = true;
-                break;
-            }
-        }
+        let mut is_dl = elf.program_iter().any(
+            | ph | ph.get_type().unwrap() == xmas_elf::program::Type::Interp
+        );
 
         if is_dl {
             // adapted from phoenix
-            log::info!("[load_dl] encounter a dl elf");
+            log::error!("[load_dl] encounter a dl elf");
             let section = elf.find_section_by_name(".interp").unwrap();
-            let mut interp = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
-            interp = interp.strip_suffix("\0").unwrap_or(&interp).to_string();
-            log::info!("[load_dl] interp {}", interp);
+            let mut interp_path = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
+            interp_path = interp_path.strip_suffix("\0").unwrap_or(&interp_path).to_string();
+            log::error!("[load_dl] interp {}", interp_path);
 
             // let mut interps: Vec<String> = vec![interp.clone()];
 
@@ -502,10 +501,10 @@ impl MemorySpace {
             // let interp_dentry: Arc<dyn Dentry> = interp_dentry.unwrap();
             // let interp_file = interp_dentry.open().ok().unwrap();
             let cwd = current_task().unwrap().get_current_path();
-            let target_path = resolve_path(cwd, interp);
+            let target_path = resolve_path(cwd, interp_path);
             if let Ok(FileClass::File(interp_file)) = open(target_path, OpenFlags::O_RDONLY) {
                 let interp_elf_data = block_on(async { interp_file.get_inode().read_all().await })?;
-                let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).unwrap();
+                let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).map_err(|_| Errno::ENOEXEC)?;
                 self.map_elf(interp_file, &interp_elf, DL_INTERP_OFFSET.into());
                 Ok(Some(
                     interp_elf.header.pt2.entry_point() as usize + DL_INTERP_OFFSET,
@@ -557,22 +556,40 @@ impl MemorySpace {
             VmArea::new(shmaddr..shm_end, map_perm, VmAreaType::Shm, shared)
         };
         if pages.is_empty() {
-            for vpn in vm_area.range_vpn() {
+            // for vpn in vm_area.range_vpn() {
+            //     let page = Page::new();
+            //     self.page_table_mut()
+            //         .map_leaf(vpn, page.ppn(), map_perm.into());
+            //     pages.push(Arc::downgrade(&page));
+            //     vm_area.pages.insert(vpn, page);
+            // }
+
+            // TODO: use try_for_each if there is any exception inside 
+            vm_area.range_vpn().for_each( | vpn | {
                 let page = Page::new();
-                self.page_table_mut()
-                    .map_leaf(vpn, page.ppn(), map_perm.into());
+                self.page_table_mut().map_leaf(vpn, page.ppn(), map_perm.into());
                 pages.push(Arc::downgrade(&page));
-                vm_area.pages.insert(vpn, page);
-            }
+                vm_area.pages.insert(vpn, page);    
+            });
         } else {
-            debug_assert!(pages.len() == vm_area.range_vpn().end - vm_area.range_vpn().start);
-            let mut pages = pages.iter();
-            for vpn in vm_area.range_vpn() {
-                let page = pages.next().unwrap().upgrade().unwrap();
-                self.page_table_mut()
-                    .map_leaf(vpn, page.ppn(), map_perm.into());
-                vm_area.pages.insert(vpn, page.clone());
-            }
+            // debug_assert!(pages.len() == vm_area.range_vpn().end - vm_area.range_vpn().start);
+            // let mut pages = pages.iter();
+            // for vpn in vm_area.range_vpn() {
+            //     let page = pages.next().unwrap().upgrade().unwrap();
+            //     self.page_table_mut()
+            //         .map_leaf(vpn, page.ppn(), map_perm.into());
+            //     vm_area.pages.insert(vpn, page.clone());
+            // }
+            // 
+            vm_area.range_vpn()
+                .zip(pages.iter())
+                .for_each(|(vpn, page)| {
+                    let page = page.upgrade().unwrap();
+                    self.page_table_mut()
+                        .map_leaf(vpn, page.ppn(), map_perm.into());
+                    vm_area.pages.insert(vpn, page.clone());
+                });
+            // int*(id)(int, int)
         }
         self.push_vma_lazily(vm_area);
         return ret_addr;
@@ -588,22 +605,24 @@ impl MemorySpace {
             .iter()
             .find(|(range, _)| range.start == shmaddr)
         {
-            if vm_area.vma_type != VmAreaType::Shm {
-                panic!("[detach_shm] 'vm_area.vma_type != VmAreaType::Shm' this won't happen");
-            }
-            log::info!("[detach_shm] try to remove {:?}", range);
+            // if vm_area.vma_type != VmAreaType::Shm {
+            //     panic!("[detach_shm] 'vm_area.vma_type != VmAreaType::Shm' this won't happen");
+            // }
+            // log::info!("[detach_shm] try to remove {:?}", range);
             range_to_remove = Some(range);
-            for vpn in vm_area.range_vpn() {
-                self.page_table_mut().unmap(vpn);
-            }
+            // for vpn in vm_area.range_vpn() {
+            //     self.page_table_mut().unmap(vpn);
+            // }
+            vm_area.range_vpn().map(| vpn | self.page_table_mut().unmap(vpn));
         } else {
             panic!("[detach_shm] this won't happen");
         }
-        if let Some(range) = range_to_remove {
-            self.areas_mut().force_remove_one(range);
-        } else {
-            panic!("[detach_shm] range_to_remove is None! This should never happen");
-        }
+        // if let Some(range) = range_to_remove {
+        //     self.areas_mut().force_remove_one(range);
+        // } else {
+        //     panic!("[detach_shm] range_to_remove is None! This should never happen");
+        // }
+        range_to_remove.map(| range | self.areas_mut().force_remove_one(range));
     }
 
     /// Alloc stack and map it in the page table.
@@ -912,42 +931,69 @@ impl MemorySpace {
         let mmap_range: Range<VirtAddr> =
             VirtAddr::from_usize_range(U_SEG_FILE_BEG..U_SEG_FILE_END);
 
-        let range = if flags.contains(MmapFlags::MAP_FIXED) {
-            addr..addr + length
-        } else {
-            self.areas_mut()
-                .find_free_range(mmap_range, length)
-                .expect("mmap range is full")
-        };
+        let range = flags.contains(MmapFlags::MAP_FIXED)
+            .then( || addr..addr + length)
+            .unwrap_or_else( || {
+                self.areas_mut()
+                    .find_free_range(mmap_range, length)
+                    .expect("mmap range is full")
+            });
+        // let range = if flags.contains(MmapFlags::MAP_FIXED) {
+        //     addr..addr + length
+        // } else {
+        //     self.areas_mut()
+        //         .find_free_range(mmap_range, length)
+        //         .expect("mmap range is full")
+        // };
         let start = range.start;
 
         let page_table = self.page_table_mut();
         // let inode = file.inode();
         let mut vma = VmArea::new_mmap(range, perm, flags, Some(file.clone()), offset, shared);
-        let mut range_vpn = vma.range_vpn();
-        let length = cmp::min(length, MMAP_PRE_ALLOC_PAGES * PAGE_SIZE);
-        for offset_aligned in (offset..offset + length).step_by(PAGE_SIZE) {
-            if let Some(page) = block_on(async { file.get_page_at(offset_aligned).await }) {
-                let vpn = range_vpn.next().unwrap();
-                if flags.contains(MmapFlags::MAP_PRIVATE) {
-                    let (pte_flags, ppn) = {
-                        let mut new_flags: PTEFlags = perm.into();
-                        new_flags |= PTEFlags::COW;
-                        new_flags.remove(PTEFlags::W);
-                        (new_flags, page.ppn())
-                    };
-                    page_table.map_leaf(vpn, ppn, pte_flags);
+        // let mut range_vpn = vma.range_vpn();
+        let length = length.min(MMAP_PRE_ALLOC_PAGES * PAGE_SIZE);
+        vma.range_vpn()
+            .zip( (offset..offset + length).step_by(PAGE_SIZE) )
+            .try_for_each( | (vpn, offset_aligned) | {
+                block_on( async {
+                    file.get_page_at(offset_aligned).await
+                })
+                .map_or(Err(Errno::EINVAL), | page | {
+                    let pte_flags = flags.contains(MmapFlags::MAP_PRIVATE)
+                        .then( || {
+                            let mut pte_flags: PTEFlags = perm.into();
+                            pte_flags.set_COW(pte_flags.is_W()).set_W(false).set_D(false);
+                            pte_flags
+                        }).unwrap_or( perm.into());
+                    page_table.map_leaf(vpn, page.ppn(), pte_flags);
                     vma.pages.insert(vpn, page);
                     unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
-                } else {
-                    page_table.map_leaf(vpn, page.ppn(), perm.into());
-                    vma.pages.insert(vpn, page);
-                    unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
-                }
-            } else {
-                break;
-            }
-        }
+                    Ok(())
+                })
+                
+            } )?;
+        // for offset_aligned in (offset..offset + length).step_by(PAGE_SIZE) {
+        //     if let Some(page) = block_on(async { file.get_page_at(offset_aligned).await }) {
+        //         let vpn = range_vpn.next().unwrap();
+        //         if flags.contains(MmapFlags::MAP_PRIVATE) {
+        //             let (pte_flags, ppn) = {
+        //                 let mut new_flags: PTEFlags = perm.into();
+        //                 new_flags |= PTEFlags::COW;
+        //                 new_flags.remove(PTEFlags::W);
+        //                 (new_flags, page.ppn())
+        //             };
+        //             page_table.map_leaf(vpn, ppn, pte_flags);
+        //             vma.pages.insert(vpn, page);
+        //             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+        //         } else {
+        //             page_table.map_leaf(vpn, page.ppn(), perm.into());
+        //             vma.pages.insert(vpn, page);
+        //             unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+        //         }
+        //     } else {
+        //         break;
+        //     }
+        // }
         self.push_vma_lazily(vma);
         Ok(start)
     }

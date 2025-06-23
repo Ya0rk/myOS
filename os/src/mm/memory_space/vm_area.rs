@@ -82,6 +82,23 @@ impl From<PTEFlags> for MapPerm {
     }
 }
 
+impl From<xmas_elf::program::Flags> for MapPerm {
+    fn from(flags: xmas_elf::program::Flags) -> Self {
+        let mut ret = Self::U;
+        if flags.is_read() {
+            ret |= MapPerm::R;
+        }
+        if flags.is_write() {
+            ret |= MapPerm::W;
+        }
+        if flags.is_execute() {
+            ret |= MapPerm::X;
+        }
+        ret
+    }
+
+}
+
 /// A contiguous virtual memory area.
 /// ADDITION: only in user space
 #[derive(Clone)]
