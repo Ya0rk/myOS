@@ -3,40 +3,17 @@ use xmas_elf::program::ProgramHeader;
 use xmas_elf::program::Type;
 use xmas_elf::ElfFile;
 use xmas_elf::program::Flags;
+
+use crate::utils::Errno;
+use crate::utils::SysResult;
 // use crate::utils::flags::AccessFlags;
-pub trait ElfCheck {
-    fn check_magic(&self, magic: [u8; 4]) -> bool;
 
-    fn get_ph(&self, index: usize) -> Result<ProgramHeader<'_>, &'static str>;
-
-    fn get_ph_iter(&self) -> impl Iterator<Item = ProgramHeader>;
-}
-
-
-pub trait ProgramHeaderChecker {
-    fn type_is(&self, type_: Type) -> bool;
-    
-}
-
-
-impl ElfCheck for ElfFile<'_> {
-    fn check_magic(&self, magic: [u8; 4]) -> bool {
-        self.header.pt1.magic == magic
-    }
-
-    fn get_ph(&self, index: usize) -> Result<ProgramHeader<'_>, &'static str> {
-        self.program_header(index as u16)
-    }
-
-    fn get_ph_iter(&self) -> impl Iterator<Item = ProgramHeader> {
-        self.program_iter()
+#[inline(always)]
+pub fn check_magic(elf: &ElfFile) -> SysResult<()> {
+    const ELF_MAGIC: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
+    if elf.header.pt1.magic == ELF_MAGIC {
+        Ok(())
+    } else {
+        Err(Errno::ENOEXEC)
     }
 }
-
-
-impl ProgramHeaderChecker for ProgramHeader<'_> {
-    fn type_is(&self, type_: Type) -> bool {
-        self.get_type().unwrap() == type_
-    }
-}
-
