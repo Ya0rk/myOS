@@ -87,7 +87,7 @@ impl TaskControlBlock {
     /// 创建新task,只有initproc会调用
     pub async fn new(elf_file: Arc<dyn FileTrait>) -> Arc<Self> {
         let (mut memory_space, entry_point, sp_init, auxv) =
-            MemorySpace::new_user_from_elf(elf_file).await;
+            MemorySpace::new_user_from_elf(elf_file).await.expect("Failed on mapping initproc");
         info!("entry point: {:#x}", entry_point);
 
         unsafe { memory_space.switch_page_table() };
@@ -155,7 +155,8 @@ impl TaskControlBlock {
         info!("execve start");
         // info!("[execve] argv:{:?}, env:{:?}", argv, env);
         let (mut memory_space, entry_point, sp_init, auxv) =
-            MemorySpace::new_user_from_elf_lazily(elf_file).await;
+            MemorySpace::new_user_from_elf_lazily(elf_file).await
+            .expect("[execve] Failed on mapping elf file");
 
         // info!("execve memory_set created");
 
