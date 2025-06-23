@@ -3,7 +3,7 @@ mod random;
 // pub mod boot;
 pub mod errtype;
 pub mod logger;
-// pub mod elf;
+pub mod elf;
 // pub mod flags;
 pub mod cache;
 pub mod container;
