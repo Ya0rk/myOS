@@ -38,6 +38,7 @@ pub fn try_load_page(addr: VirtAddr) -> SysResult<()> {
         )
     }
 
+    take_ktrap_ret();
     unsafe {
         try_load_page_inner(addr.0);
     }
@@ -75,6 +76,7 @@ pub fn try_store_page(addr: VirtAddr) -> SysResult<()> {
         )
     }
 
+    take_ktrap_ret();
     unsafe {
         try_store_page_inner(addr.0);
     }
