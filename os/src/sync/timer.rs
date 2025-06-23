@@ -55,39 +55,39 @@ pub async fn sleep_for(ts: TimeSpec) {
     }
 }
 
-#[derive(Debug)]
-pub struct TimerTranc {
-    pub expire_ns: Duration,  // 使用纳秒精度
-    pub waker: Option<Waker>, // 非空保证
-}
+// #[derive(Debug)]
+// pub struct TimerTranc {
+//     pub expire_ns: Duration,  // 使用纳秒精度
+//     pub waker: Option<Waker>, // 非空保证
+// }
 
-impl TimerTranc {
-    pub fn new(expire: Duration, waker: Waker) -> Self {
-        Self {
-            expire_ns: expire,
-            waker: Some(waker),
-        }
-    }
-}
+// impl TimerTranc {
+//     pub fn new(expire: Duration, waker: Waker) -> Self {
+//         Self {
+//             expire_ns: expire,
+//             waker: Some(waker),
+//         }
+//     }
+// }
 
-// 实现按过期时间排序（最小堆）
-impl Ord for TimerTranc {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.expire_ns.cmp(&other.expire_ns).reverse() // 反向实现最小堆
-                                                       // self.expire_ns.cmp(&other.expire_ns)
-    }
-}
+// // 实现按过期时间排序（最小堆）
+// impl Ord for TimerTranc {
+//     fn cmp(&self, other: &Self) -> Ordering {
+//         self.expire_ns.cmp(&other.expire_ns).reverse() // 反向实现最小堆
+//                                                        // self.expire_ns.cmp(&other.expire_ns)
+//     }
+// }
 
-impl PartialOrd for TimerTranc {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
+// impl PartialOrd for TimerTranc {
+//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//         Some(self.cmp(other))
+//     }
+// }
 
-impl Eq for TimerTranc {}
+// impl Eq for TimerTranc {}
 
-impl PartialEq for TimerTranc {
-    fn eq(&self, other: &Self) -> bool {
-        self.expire_ns == other.expire_ns
-    }
-}
+// impl PartialEq for TimerTranc {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.expire_ns == other.expire_ns
+//     }
+// }

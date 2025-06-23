@@ -1,6 +1,6 @@
 use super::{
     time::{ITimerVal, ItimerHelp},
-    timer::{self, time_duration, TimerTranc},
+    timer::{self, time_duration},
     SpinNoIrqLock, TimeVal,
 };
 use crate::{
@@ -32,8 +32,18 @@ pub struct TimerHandle(u64);
 // 定时器条目
 struct TimerEntry {
     expire: Duration,    // 到期时间
-    waker: Waker,        // 唤醒器
+    waker: Option<Waker>,        // 唤醒器
     handle: TimerHandle, // 用于取消的句柄
+}
+
+impl TimerEntry {
+    pub fn new(expire: Duration, waker: Waker, handle: TimerHandle) -> Self {
+        Self {
+            expire,
+            waker: Some(waker),
+            handle
+        }
+    }
 }
 
 // 时间轮结构
@@ -45,7 +55,7 @@ struct TimingWheel {
 }
 
 // 定时器队列
-pub struct TimeQueue {
+pub struct TimerQueue {
     #[cfg(feature = "timewhell")]
     wheel: SpinNoIrqLock<TimingWheel>,                // 短期定时器（<600ms）
     long_term: SpinNoIrqLock<BinaryHeap<TimerEntry>>, // 长期定时器（最小堆）
@@ -54,7 +64,7 @@ pub struct TimeQueue {
 
 // 全局定时器实例
 lazy_static! {
-    pub static ref MYTIMER_QUEUE: TimeQueue = TimeQueue::new();
+    pub static ref TIMER_QUEUE: TimerQueue = TimerQueue::new();
 }
 
 // 实现时间轮
@@ -130,7 +140,7 @@ impl TimingWheel {
 }
 
 // 实现定时器队列
-impl TimeQueue {
+impl TimerQueue {
     pub fn new() -> Self {
         let initial_time = time_duration();
         Self {
@@ -205,9 +215,9 @@ impl TimeQueue {
 
     // 处理过期定时器（应在系统时钟中断中调用）
     pub fn handle_expired(&self) {
-        let current_time = time_duration();
         let mut wake_list = Vec::new();
-        
+        let current_time = time_duration();
+
         // 处理时间轮（获取过期定时器）
         #[cfg(feature = "timewhell")]
         wake_list.extend(self.wheel.lock().advance_to(current_time));
@@ -216,10 +226,13 @@ impl TimeQueue {
         {
             let mut long_term = self.long_term.lock();
             
-            while let Some(entry) = long_term.pop() {
-                if entry.expire <= current_time {
-                    // 过期：直接唤醒
-                    wake_list.push(entry.waker);
+            while let Some(entry) = long_term.peek() {
+                if entry.expire >= current_time {
+                    break;
+                }
+                // 过期：直接唤醒
+                if let Some(entry) = long_term.pop() {
+                    wake_list.extend(entry.waker);
                 }
             }
         }
@@ -233,13 +246,13 @@ impl TimeQueue {
 
 /// 超时Future，会在deadline之前反复调用，直到执行完成
 /// 如果超时后没有完成，就返回超时；和下面的定时任务不一样
-pub struct mTimeoutFuture<F: Future> {
+pub struct TimeoutFuture<F: Future> {
     inner: F,
     deadline: Duration,
     timer_handle: Option<TimerHandle>,
 }
 
-impl<F: Future> mTimeoutFuture<F> {
+impl<F: Future> TimeoutFuture<F> {
     pub fn new(inner: F, span: Duration) -> Self {
         Self {
             inner,
@@ -249,7 +262,7 @@ impl<F: Future> mTimeoutFuture<F> {
     }
 }
 
-impl<F: Future> Future for mTimeoutFuture<F> {
+impl<F: Future> Future for TimeoutFuture<F> {
     type Output = Result<F::Output, Errno>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -269,14 +282,9 @@ impl<F: Future> Future for mTimeoutFuture<F> {
 
         // 注册/更新定时器
         if this.timer_handle.is_none() {
-            let handle = MYTIMER_QUEUE.new_handle();
-            MYTIMER_QUEUE.add_timer(
-                TimerEntry {
-                    expire: this.deadline,
-                    waker: cx.waker().clone(),
-                    handle
-                }
-            );
+            let handle = TIMER_QUEUE.new_handle();
+            let timer = TimerEntry::new(this.deadline, cx.waker().clone(), handle);
+            TIMER_QUEUE.add_timer(timer);
             this.timer_handle = Some(handle);
         }
 
@@ -289,7 +297,7 @@ impl<F: Future> Drop for mTimeoutFuture<F> {
     fn drop(&mut self) {
         // 确保定时器被取消
         if let Some(handle) = self.timer_handle.take() {
-            MYTIMER_QUEUE.cancel(handle);
+            TIMER_QUEUE.cancel(handle);
         }
     }
 }
@@ -317,103 +325,103 @@ impl Eq for TimerEntry {}
 
 
 // ======================================
-pub struct TimerQueue {
-    timers: SpinNoIrqLock<BinaryHeap<TimerTranc>>, // 直接使用最小堆
-}
+// pub struct TimerQueue {
+//     timers: SpinNoIrqLock<BinaryHeap<TimerTranc>>, // 直接使用最小堆
+// }
 
-impl TimerQueue {
-    pub fn new() -> Self {
-        Self {
-            timers: SpinNoIrqLock::new(BinaryHeap::new()),
-        }
-    }
+// impl TimerQueue {
+//     pub fn new() -> Self {
+//         Self {
+//             timers: SpinNoIrqLock::new(BinaryHeap::new()),
+//         }
+//     }
 
-    /// 添加定时器（O(log n)）
-    pub fn add(&self, timer: TimerTranc) {
-        let mut heap = self.timers.lock();
-        heap.push(timer);
-    }
+//     /// 添加定时器（O(log n)）
+//     pub fn add(&self, timer: TimerTranc) {
+//         let mut heap = self.timers.lock();
+//         heap.push(timer);
+//     }
 
-    /// 处理过期事件（O(k log n) k为过期事件数）
-    pub fn handle_expired(&self) {
-        let mut wake_list = Vec::new();
-        let current_ns = time_duration();
+//     /// 处理过期事件（O(k log n) k为过期事件数）
+//     pub fn handle_expired(&self) {
+//         let mut wake_list = Vec::new();
+//         let current_ns = time_duration();
 
-        {
-            let mut heap = self.timers.lock();
-            while let Some(timer) = heap.peek() {
-                if timer.expire_ns >= current_ns {
-                    break;
-                }
-                if let Some(timer) = heap.pop() {
-                    wake_list.extend(timer.waker);
-                }
-            }
-        } // 提前释放锁
+//         {
+//             let mut heap = self.timers.lock();
+//             while let Some(timer) = heap.peek() {
+//                 if timer.expire_ns >= current_ns {
+//                     break;
+//                 }
+//                 if let Some(timer) = heap.pop() {
+//                     wake_list.extend(timer.waker);
+//                 }
+//             }
+//         } // 提前释放锁
 
-        for waker in wake_list {
-            info!("[TimerQueue] wake up task");
-            waker.wake(); // 在锁外执行唤醒
-        }
-    }
-}
+//         for waker in wake_list {
+//             info!("[TimerQueue] wake up task");
+//             waker.wake(); // 在锁外执行唤醒
+//         }
+//     }
+// }
 
-pub static TIMER_QUEUE: Lazy<TimerQueue> = Lazy::new(|| TimerQueue::new());
+// pub static TIMER_QUEUE: Lazy<TimerQueue> = Lazy::new(|| TimerQueue::new());
 
-/// 超时Future，会在deadline之前反复调用，直到执行完成
-/// 如果超时后没有完成，就返回超时；和下面的定时任务不一样
-pub struct TimeoutFuture<F: Future> {
-    inner: F,
-    deadline: Duration,
-    timer_registered: bool,
-}
+// /// 超时Future，会在deadline之前反复调用，直到执行完成
+// /// 如果超时后没有完成，就返回超时；和下面的定时任务不一样
+// pub struct TimeoutFuture<F: Future> {
+//     inner: F,
+//     deadline: Duration,
+//     timer_registered: bool,
+// }
 
-impl<F: Future> TimeoutFuture<F> {
-    pub fn new(inner: F, span: Duration) -> Self {
-        Self {
-            inner,
-            deadline: time_duration() + span,
-            timer_registered: false,
-        }
-    }
-}
+// impl<F: Future> TimeoutFuture<F> {
+//     pub fn new(inner: F, span: Duration) -> Self {
+//         Self {
+//             inner,
+//             deadline: time_duration() + span,
+//             timer_registered: false,
+//         }
+//     }
+// }
 
-impl<F: Future> Future for TimeoutFuture<F> {
-    type Output = Result<F::Output, Errno>;
+// impl<F: Future> Future for TimeoutFuture<F> {
+//     type Output = Result<F::Output, Errno>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // 先检查内部Future是否完成
-        let this = unsafe { self.get_unchecked_mut() };
-        let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
-        // println!(
-        //     "timeout future start: polling inner future, deadline = {:?}",
-        //     this.deadline
-        // );
-        if let Poll::Ready(v) = inner.poll(cx) {
-            return Poll::Ready(Ok(v));
-        }
+//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+//         // 先检查内部Future是否完成
+//         let this = unsafe { self.get_unchecked_mut() };
+//         let inner = unsafe { Pin::new_unchecked(&mut this.inner) };
+//         // println!(
+//         //     "timeout future start: polling inner future, deadline = {:?}",
+//         //     this.deadline
+//         // );
+//         if let Poll::Ready(v) = inner.poll(cx) {
+//             return Poll::Ready(Ok(v));
+//         }
 
-        // 检查是否已经超时
-        let current = time_duration();
-        // println!(
-        //     "timeout future: checking time, current = {:?}, deadline = {:?}",
-        //     current, this.deadline
-        // );
-        if current >= this.deadline {
-            info!("[TimeoutFuture] time use out");
-            return Poll::Ready(Err(Errno::ETIMEDOUT));
-        }
+//         // 检查是否已经超时
+//         let current = time_duration();
+//         // println!(
+//         //     "timeout future: checking time, current = {:?}, deadline = {:?}",
+//         //     current, this.deadline
+//         // );
+//         if current >= this.deadline {
+//             info!("[TimeoutFuture] time use out");
+//             return Poll::Ready(Err(Errno::ETIMEDOUT));
+//         }
 
-        // 注册定时器（仅一次）
-        if !this.timer_registered {
-            let deadline = this.deadline;
-            TIMER_QUEUE.add(TimerTranc::new(deadline, cx.waker().clone()));
-            this.timer_registered = true;
-        }
+//         // 注册定时器（仅一次）
+//         if !this.timer_registered {
+//             let deadline = this.deadline;
+//             TIMER_QUEUE.add(TimerTranc::new(deadline, cx.waker().clone()));
+//             this.timer_registered = true;
+//         }
 
-        Poll::Pending
-    }
-}
+//         Poll::Pending
+//     }
+// }
 
 /// 用来空转,如果被信号kill、stop打断，那么返回剩余时间
 pub struct NullFuture {
@@ -487,8 +495,10 @@ impl<F: Fn() -> bool> Future for ItimerFuture<F> {
                 let tmp = task.whit_itimers(|itimers| {
                     let real_time = itimers[this.which];
                     this.next_expire = (Duration::from(real_time.it_interval) + time_duration()).max(this.next_expire);
-                    let new_timer = TimerTranc::new(this.next_expire, cx.waker().clone());
-                    TIMER_QUEUE.add(new_timer);
+                    // let new_timer = TimerTranc::new(this.next_expire, cx.waker().clone());
+                    let new_timer = TimerEntry::new(this.next_expire, cx.waker().clone(), TIMER_QUEUE.new_handle());
+                    // TIMER_QUEUE.add(new_timer);
+                    TIMER_QUEUE.add_timer(new_timer);
                     Poll::Pending
                 });
                 Some(tmp)
