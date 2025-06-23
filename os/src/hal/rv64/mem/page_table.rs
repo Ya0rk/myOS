@@ -65,6 +65,7 @@ impl PTEFlags {
         pub W,
         pub X,
         pub G,
+        pub D,
         pub COW
     );
 
@@ -75,6 +76,7 @@ impl PTEFlags {
         pub W,
         pub X,
         pub G,
+        pub D,
         pub COW
     );
 
