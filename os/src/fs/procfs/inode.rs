@@ -5,8 +5,9 @@ use crate::{
     },
     sync::{SpinNoIrqLock, TimeStamp},
     utils::SysResult,
+    mm::frame_allocator::{FRAME_ALLOCATOR, StackFrameAllocator, FrameAllocator},
 };
-use alloc::boxed::Box;
+use alloc::{boxed::Box, format};
 use alloc::{
     string::String,
     sync::Arc,
@@ -106,7 +107,28 @@ impl InodeTrait for ProcFsInode {
             }
             ProcFsInodeInner::meminfo => {
                 // 这里不能read_at
-                let mut meminfo = Vec::from(MEMINFO);
+                let (mem_total, mem_free, mem_available) = {
+                    let frame_allocator = FRAME_ALLOCATOR.lock();
+                    (
+                        frame_allocator.frame_total() * 4,
+                        frame_allocator.frame_free() * 4,
+                        frame_allocator.frame_free() * 4,
+                    )
+                };
+                
+
+// TODO: 要补充
+                let meminfo = format!(
+r"MemTotal:     {mem_total:>10} kB
+MemFree:      {mem_free:>10} kB
+MemAvailable: {mem_available:>10} kB
+",
+                    mem_total = mem_total,
+                    mem_free = mem_free,
+                    mem_available = mem_available
+                );
+
+                let meminfo = Vec::from(meminfo);
                 let len = meminfo.len();
                 if offset < len {
                     let read_len = core::cmp::min(len - offset, buf.len());
@@ -156,7 +178,28 @@ impl InodeTrait for ProcFsInode {
             }
             ProcFsInodeInner::meminfo => {
                 // 也是随便返回
-                let mut buf = Vec::from(MEMINFO);
+
+                let (mem_total, mem_free, mem_available) = {
+                    let frame_allocator = FRAME_ALLOCATOR.lock();
+                    (
+                        frame_allocator.frame_total() * 4,
+                        frame_allocator.frame_free() * 4,
+                        frame_allocator.frame_free() * 4,
+                    )
+                };
+                
+
+
+                let meminfo = format!(
+r"MemTotal:     {mem_total:>10} kB
+MemFree:      {mem_free:>10} kB
+MemAvailable: {mem_available:>10} kB
+",
+                    mem_total = mem_total,
+                    mem_free = mem_free,
+                    mem_available = mem_available
+                );
+                let mut buf = Vec::from(meminfo);
                 Ok(buf)
             }
             _ => {

@@ -1,5 +1,4 @@
 mod ffi;
-mod frame_allocator;
 mod heap_allocator;
 mod userbuffer;
 // mod map_area;
@@ -8,6 +7,7 @@ pub mod memory_space;
 pub mod page;
 pub mod page_table;
 pub mod user_ptr;
+pub mod frame_allocator;
 
 use alloc::sync::Arc;
 pub use frame_allocator::FrameTracker;
