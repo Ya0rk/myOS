@@ -464,6 +464,10 @@
 - [x] ./ltp/testcases/bin/write01
 - [x] ./ltp/testcases/bin/write02
 
+调用
+ls ./musl/ltp/testcases/bin | grep "pid" | grep -v "\.sh$"
+命令一次获得pid全系列的测试
+
 ./ltp/testcases/bin/dup201
 ./ltp/testcases/bin/dup205
 因为函数put_fd_in 而 panic
@@ -484,3 +488,38 @@ statfs01死在Panicked at src/mm/memory_space/mod.rs:682 called `Option::unwrap(
 434 系统调用pidfd_open01
 
 286 系统调用 preadv
+287 也是 p 系列的 pwrite
+
+rename系列全军覆没
+
+hugeshmget 全军覆没
+
+shmat0x系列全军覆没
+
+shmctl05会死循环：报不支持 234 系统调用
+
+shmt04：
+[ERROR][HARTID0][TASK12][kernel] Hart 0, Panicked at src/mm/memory_space/mod.rs:561 called `Option::unwrap()` on a `None` value
+
+shmt05：
+shmt05      1  TPASS  :  shmget & shmat
+[ERROR][HARTID0][TASK4][range map] try_insert error
+[ERROR][HARTID0][TASK4][kernel] Hart 0, Panicked at src/mm/memory_space/mod.rs:778 called `Result::unwrap()` on an `Err` value: VmArea { range_va: VA:0x600001000..VA:0x600003000, map_perm: MapPerm(R | W | U), vma_type: Shm }
+
+shmt07也是和 04 一样的错误
+
+nice系列全部阵亡
+
+keyctl01 死循环调用不支持的 219 syscall
+同一系列的有 217号，288？289？290？
+
+mount由于没设备，全军覆没。得搞个 loop 设备才能进行下一步的测试
+
+ioctl 也是没设备pty、tty、loop、urandom
+全军覆没
+
+pages系列不算分啊
+
+process 系列可以运行，但是没啥分
+其中 process_vm01 可以得到的分很多
+****
