@@ -344,7 +344,7 @@ pub async fn sys_wait4(
         // return Ok(0);
     }
 
-    let op = WaitOptions::from_bits(options as i32).unwrap();
+    let op = WaitOptions::from_bits(options as i32).ok_or(Errno::EINVAL)?;
 
     // 缩小 locked_child 的作用域
     let target_task = {
