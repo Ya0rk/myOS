@@ -104,10 +104,6 @@ mod tests {
         const_assert_eq!(4, impl_id::RUST_SBI);
         const_assert_eq!(5, impl_id::DIOSIX);
         const_assert_eq!(6, impl_id::COFFER);
-        const_assert_eq!(7, impl_id::XEN);
-        const_assert_eq!(8, impl_id::POLARFIRE_HSS);
-        const_assert_eq!(9, impl_id::COREBOOT);
-        const_assert_eq!(10, impl_id::OREBOOT);
     }
     // §5
     #[cfg(feature = "legacy")]
@@ -251,8 +247,6 @@ mod tests {
         const_assert_eq!(20, firmware_event::HFENCE_VVMA_ASID_SENT);
         const_assert_eq!(21, firmware_event::HFENCE_VVMA_ASID_RECEIVED);
         const_assert_eq!(65535, firmware_event::PLATFORM);
-
-        const_assert_eq!(4096, shmem_size::SIZE);
     }
     // §12
     #[test]
@@ -308,13 +302,11 @@ mod tests {
             () => {
                 const_assert_eq!(shmem_size::NATIVE, shmem_size::RV64);
             }
+            #[cfg(target_pointer_width = "128")]
+            () => {
+                const_assert_eq!(shmem_size::NATIVE, shmem_size::RV128);
+            }
         }
-        // FIXME(2024-08-03): gate target pointer width at 128
-        // Currently, values for `target_pointer_width` expected by Rustc compiler are only `16`, `32`, and `64`.
-        // #[cfg(target_pointer_width = "128")]
-        // () => {
-        //     const_assert_eq!(shmem_size::NATIVE, shmem_size::RV128);
-        // }
     }
     // §16
     #[test]

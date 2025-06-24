@@ -12,18 +12,12 @@
 [package]
 edition = "2021"
 name = "sbi-spec"
-version = "0.0.8"
+version = "0.0.7"
 authors = [
     "YdrMaster <ydrml@hotmail.com>",
     "Luo Jia <me@luojia.cc>",
 ]
-build = false
-autolib = false
-autobins = false
-autoexamples = false
-autotests = false
-autobenches = false
-description = "Definitions and constants in the RISC-V Supervisor Binary Interface (RISC-V SBI)"
+description = "Definitions and constants in RISC-V Supervisor Binary Interface (RISC-V SBI)"
 documentation = "https://docs.rs/sbi-spec"
 readme = "README.md"
 keywords = [
@@ -39,10 +33,6 @@ categories = [
 ]
 license = "MulanPSL-2.0 OR MIT"
 repository = "https://github.com/rustsbi/rustsbi"
-
-[lib]
-name = "sbi_spec"
-path = "src/lib.rs"
 
 [dev-dependencies.static_assertions]
 version = "1.1.0"
