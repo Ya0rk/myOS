@@ -143,7 +143,8 @@ pub trait FileTrait: Send + Sync {
     }
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
     async fn pwrite(&self, buf: &[u8], offset: usize, len: usize) -> SysResult<usize> {
-        unimplemented!("not support!");
+        // unimplemented!("not support!");
+        Ok(0)
     }
     fn lseek(&self, _offset: isize, _whence: usize) -> SysResult<usize> {
         info!("{}", self.get_name().unwrap());
