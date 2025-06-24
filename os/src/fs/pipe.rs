@@ -23,10 +23,10 @@ use log::info;
 use spin::Mutex;
 
 pub struct Pipe {
-    flags: OpenFlags,
-    other: LateInit<Weak<Pipe>>,
-    is_reader: bool,
-    buffer: Arc<SpinNoIrqLock<PipeInner>>,
+    pub flags: OpenFlags,
+    pub other: LateInit<Weak<Pipe>>,
+    pub is_reader: bool,
+    pub buffer: Arc<SpinNoIrqLock<PipeInner>>,
 }
 
 impl Pipe {
@@ -79,6 +79,9 @@ impl Pipe {
             writer.wake();
         }
     }
+    pub fn with_mut_buffer<T>(&self, f: impl FnOnce(&mut PipeInner) -> T) -> T {
+        f(&mut self.buffer.lock())
+    }
 }
 
 impl Drop for Pipe {
@@ -105,10 +108,10 @@ enum RingBufferStatus {
 }
 
 pub struct PipeInner {
-    buf: VecDeque<u8>,
-    reader_waker: VecDeque<Waker>,
-    writer_waker: VecDeque<Waker>,
-    status: RingBufferStatus,
+    pub buf: VecDeque<u8>,
+    pub reader_waker: VecDeque<Waker>,
+    pub writer_waker: VecDeque<Waker>,
+    pub status: RingBufferStatus,
 }
 
 impl PipeInner {
