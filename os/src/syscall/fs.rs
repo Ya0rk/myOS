@@ -160,7 +160,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
 /// ```
 pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let path = user_cstr(pathname.into())?.unwrap();
+    let path = user_cstr(pathname.into())?.ok_or(Errno::EINVAL)?;
     debug!("[sys_fsstatat] pathname {},", path);
     let cwd = task.get_current_path();
     info!(
@@ -562,7 +562,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     }
 
     // 判断flags是否合法
-    let flag = OpenFlags::from_bits(flags as i32).unwrap();
+    let flag = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cloexec = {
         match flag {
             OpenFlags::O_CLOEXEC => Some(true),

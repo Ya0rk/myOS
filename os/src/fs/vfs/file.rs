@@ -138,7 +138,8 @@ pub trait FileTrait: Send + Sync {
     }
     /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
     async fn pread(&self, mut buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
-        unimplemented!("not support!");
+        // unimplemented!("not support!");
+        Ok(0)
     }
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
     async fn pwrite(&self, buf: &[u8], offset: usize, len: usize) -> SysResult<usize> {

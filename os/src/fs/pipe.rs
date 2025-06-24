@@ -136,7 +136,7 @@ impl PipeInner {
 #[async_trait]
 impl FileTrait for Pipe {
     fn set_flags(&self, _flags: OpenFlags) {
-        todo!()
+        
     }
     fn get_flags(&self) -> OpenFlags {
         self.flags
