@@ -1,5 +1,5 @@
 use core::{arch::asm, fmt::Debug};
-// use riscv::register::sstatus::FS;
+use crate::hal::arch::is_enable_fp;
 use super::super::arch::sstatus::{self, Sstatus, FS, SPP};
 use log::info;
 use loongarch64::register::*;
@@ -12,7 +12,6 @@ pub struct UserFloatRegs {
     pub fcc: u8,      // 88+4
     pub need_save: u8,
     pub need_restore: u8,
-    pub dirty: u8,
 }
 
 #[repr(C)]
@@ -301,15 +300,14 @@ impl UserFloatRegs {
             fcc: 0,
             need_save: 0,
             need_restore: 0,
-            dirty: 0,
         }
     }
 
     /// 在任务切换到内核态时，判断是否需要保存浮点寄存器的内容
     pub fn trap_in_do_with_freg(&mut self, sstatus: Sstatus) {
-        if sstatus.fs() == FS::Dirty {
-            self.need_save = 1;
-        }
+        // if sstatus.fs() == FS::Dirty {
+        //     self.need_save = 1;
+        // }
     }
 
     /// 在内核态切换到任务时，恢复浮点寄存器的内容

@@ -10,7 +10,6 @@ pub struct UserFloatRegs {
     fcsr: u32,
     need_save: u8,
     need_restore: u8,
-    dirty: u8,
 }
 
 #[repr(C)]
@@ -152,7 +151,6 @@ impl UserFloatRegs {
             fcsr: 0,
             need_save: 0,
             need_restore: 0,
-            dirty: 0,
         }
     }
 
