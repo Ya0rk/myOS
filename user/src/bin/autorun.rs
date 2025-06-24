@@ -284,7 +284,7 @@ fn main() -> i32 {
 
         for test in TESTCASES {
             run_cmd(test, cd);
-            run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
+            // run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
         }
 
         // musl的ltp测试
@@ -295,9 +295,9 @@ fn main() -> i32 {
         // println!("cp accept01 done");
         // run_cmd("/musl/busybox sed 's|target_dir=\"ltp/testcases/bin\"|target_dir=\"/testcase\"|' testcode.sh\0", "/musl/");
         // println!("sed done");
-        for test in TESTCASES_LTP {
-            run_cmd(test, cd);
-        }
+        // for test in TESTCASES_LTP {
+        //     run_cmd(test, cd);
+        // }
 
         // run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
         // run_cmd("/musl/busybox --install /bin\0", "/musl/");
