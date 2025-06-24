@@ -7,9 +7,11 @@ use crate::{
 use alloc::boxed::Box;
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
+use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use core::{
     sync::atomic::{AtomicUsize, Ordering},
     task::Waker,
+    any::Any
 };
 use log::info;
 use spin::RwLock;
@@ -48,7 +50,7 @@ impl FileMeta {
 /// 该 trait 定义了文件操作的基本接口，所有文件类型都需要实现这个 trait。
 /// 它提供了读取、写入、查询状态等基本文件操作。
 #[async_trait]
-pub trait FileTrait: Send + Sync {
+pub trait FileTrait: Any + Send + Sync + DowncastSync {
     fn get_inode(&self) -> Arc<dyn InodeTrait>;
     fn readable(&self) -> bool;
     fn writable(&self) -> bool;
@@ -165,3 +167,5 @@ pub trait FileTrait: Send + Sync {
         Ok(true)
     }
 }
+
+impl_downcast!(sync FileTrait);
