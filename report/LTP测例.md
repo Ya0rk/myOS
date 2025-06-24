@@ -3,7 +3,6 @@
 - [x] ./ltp/testcases/bin/accept01
 - [x] ./ltp/testcases/bin/accept02
 - [x] ./ltp/testcases/bin/accept03
-- [x] ./ltp/testcases/bin/accept04
 - [x] ./ltp/testcases/bin/accept4_01
 - [x] ./ltp/testcases/bin/asapi_01 
 - [x] ./ltp/testcases/bin/alarm02
@@ -464,3 +463,24 @@
 - [x] ./ltp/testcases/bin/waitpid01
 - [x] ./ltp/testcases/bin/write01
 - [x] ./ltp/testcases/bin/write02
+
+./ltp/testcases/bin/dup201
+./ltp/testcases/bin/dup205
+因为函数put_fd_in 而 panic
+
+/musl # ./ltp/testcases/bin/execve01_child
+tst_test.c:162: TBROK: LTP_IPC_PATH is not defined
+
+fork09是压力测试，不评分，搞了 1000 个文件在那
+
+fork13需要创建文件/proc/sys/kernel/pid_max
+
+statfs01死在Panicked at src/mm/memory_space/mod.rs:682 called `Option::unwrap()` on a `None` value
+
+[ERROR][HARTID0][TASK10]Unsupported syscall_id: 264
+../../../../include/lapi/name_to_handle_at.h:47: TFAIL: name_to_handle_at() should fail with EOVERFLOW: ENOENT (2)
+有骗的机会？
+
+434 系统调用pidfd_open01
+
+286 系统调用 preadv
