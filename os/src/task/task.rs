@@ -888,11 +888,10 @@ impl TaskControlBlock {
         self.fd_table.lock().remove(fd)
     }
     /// 在指定位置设置fd
-    pub fn put_fd_in(&self, fd: FdInfo, idx: usize) {
+    pub fn put_fd_in(&self, fd: FdInfo, idx: usize) -> SysResult {
         self.fd_table
             .lock()
             .put_in(fd, idx)
-            .expect("task [put fd in] fail")
     }
     /// 清空fd_table
     pub fn clear_fd_table(&self) {

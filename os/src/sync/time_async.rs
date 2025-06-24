@@ -32,7 +32,7 @@ pub struct TimerHandle(u64);
 // 定时器条目
 struct TimerEntry {
     expire: Duration,    // 到期时间
-    waker: Option<Waker>,        // 唤醒器
+    waker: Option<Waker>,// 唤醒器
     handle: TimerHandle, // 用于取消的句柄
 }
 
@@ -46,11 +46,18 @@ impl TimerEntry {
     }
 }
 
-// 时间轮结构
+// 时间轮结构 - 用于实现高效定时器管理的数据结构
+// 时间轮算法将时间划分为多个槽(slot)，每个槽对应一个时间间隔
+// 定时器根据到期时间被分配到不同的槽中，通过轮询当前槽来触发到期定时器
 #[cfg(feature = "timewhell")]
 struct TimingWheel {
+    // 时间轮的槽数组，每个槽存储一组定时器条目
+    // TIME_WHEEL_SLOTS 是时间轮的槽数量，通常为2的幂次方
     slots: [Vec<TimerEntry>; TIME_WHEEL_SLOTS],
+    // 当前指向的槽索引，随着时间推移循环递增
     current_slot: usize,
+    // 时间轮当前表示的时间点
+    // 通常从系统启动或时间轮创建开始累计
     current_time: Duration,
 }
 
@@ -293,7 +300,7 @@ impl<F: Future> Future for TimeoutFuture<F> {
 }
 
 #[cfg(feature = "timewhell")]
-impl<F: Future> Drop for mTimeoutFuture<F> {
+impl<F: Future> Drop for TimeoutFuture<F> {
     fn drop(&mut self) {
         // 确保定时器被取消
         if let Some(handle) = self.timer_handle.take() {

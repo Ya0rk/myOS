@@ -1294,12 +1294,8 @@ pub fn sys_getitimer(which: usize, curr_value: usize) -> SysResult<usize> {
                 core::ptr::write(curr_ptr, itimer);
             }
         }
-        ITIMER_PROF => {
-            unimplemented!()
-        }
-        ITIMER_VIRTUAL => {
-            unimplemented!()
-        }
+        ITIMER_PROF => {}
+        ITIMER_VIRTUAL => {}
         _ => return Err(Errno::EINVAL),
     }
 

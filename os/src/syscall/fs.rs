@@ -6,7 +6,7 @@ use crate::fs::{
     MNT_TABLE, SEEK_CUR,
 };
 use crate::hal::config::{AT_FDCWD, PAGE_SIZE, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
-use crate::mm::user_ptr::{user_cstr, user_ref_mut, user_slice, user_slice_mut};
+use crate::mm::user_ptr::{check_readable, user_cstr, user_ref_mut, user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
@@ -83,14 +83,20 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 /// len: 数组的长度
 pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
     // info!("[sys_readv] start");
+    if unlikely((iovcnt as isize) < 0) {
+        return Err(Errno::EINVAL);
+    }
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let mut res = 0;
-    if fd >= task.fd_table_len() {
+    if unlikely(fd >= task.fd_table_len()) {
         return Err(Errno::EBADF);
     }
 
     let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    if unlikely(file.is_dir()) {
+        return Err(Errno::EISDIR);
+    }
     if unlikely(!file.readable()) {
         return Err(Errno::EPERM);
     }
@@ -98,10 +104,17 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
     for i in 0..iovcnt {
         let iov_st = iov.add(core::mem::size_of::<IoVec>() * i) as *mut IoVec;
         let len = (unsafe { *iov_st }).iov_len;
+        if unlikely((len as isize) < 0) {
+            return Err(Errno::EINVAL);
+        }
         if len == 0 {
             continue;
         }
         let base = (unsafe { *iov_st }).iov_base;
+        println!("base = {:#x}", base);
+        if unlikely(base == 0) {
+            return Err(Errno::EFAULT);
+        }
         let buffer = unsafe { core::slice::from_raw_parts_mut(base as *mut u8, len) };
         let read_len = file.read(buffer).await?;
         res += read_len;
@@ -589,7 +602,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     let new_temp_fd = old_temp_fd.clone().off_Ocloexec(!cloexec);
     // info!("[sys_dup3] old file name = {}, oldfd = {}", old_temp_fd.clone().file.unwrap().get_name()?, oldfd);
     // 将newfd 放到指定位置
-    task.put_fd_in(new_temp_fd, newfd);
+    task.put_fd_in(new_temp_fd, newfd)?;
 
     Ok(newfd)
 }
@@ -709,9 +722,9 @@ pub fn sys_mount(
 /// Success: 返回0； 失败： 返回-1；
 pub fn sys_chdir(path: usize) -> SysResult<usize> {
     info!("[sys_chdir] start, path = {:#x}", path);
-    if unlikely(path == 0 || path > USER_SPACE_TOP) {
-        info!("[sys_chdir] path ptr is null, fault.");
-        return Err(Errno::EFAULT);
+    match check_readable(path.into(), 1) {
+        Ok(_) => {}
+        Err(_) => return Err(Errno::EFAULT)
     }
 
     let token = current_user_token();
