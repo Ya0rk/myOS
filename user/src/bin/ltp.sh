@@ -5,7 +5,7 @@ echo "#### OS COMP TEST GROUP START ltp-musl ####"
 # Define target directory
 target_dir="/musl/ltp/testcases/bin"
 
-backip=$(cat <<EOF
+backip="
 chown02
 abs01
 
@@ -388,17 +388,14 @@ process_madvise01
 process_vm01
 process_vm_readv02
 process_vm_readv03
-
-EOF
-)
+"
 
 # List of test cases (no array, using space-separated string)
 # you can add prog you want to test.if it succeed, you can put it in var backip.
 # from jdlu
-ltp_cases=$(cat <<EOF
+ltp_cases="
 mem_process
-EOF
-)
+"
 
 
 for case in $backip; do
