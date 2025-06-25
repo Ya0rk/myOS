@@ -401,7 +401,7 @@ EOF
 )
 
 
-for case in $ltp_cases; do
+for case in $backip; do
   file="$target_dir/$case"
 
   if [ -f "$file" ]; then

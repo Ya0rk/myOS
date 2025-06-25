@@ -1,5 +1,4 @@
 use core::{arch::asm, fmt::Debug};
-use crate::hal::arch::is_enable_fp;
 use super::super::arch::sstatus::{self, Sstatus, FS, SPP};
 use log::info;
 use loongarch64::register::*;
