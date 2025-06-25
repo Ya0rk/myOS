@@ -235,9 +235,6 @@ fn main() -> i32 {
     //     // 除去busybox和basic
     //     for test in TESTCASES {
     //         run_cmd(test, cd);
-
-    //         // 打印内存信息
-    //         // run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
     //     }
 
     //     // // ltp测试

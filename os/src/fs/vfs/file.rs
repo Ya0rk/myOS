@@ -7,9 +7,11 @@ use crate::{
 use alloc::boxed::Box;
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
+use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use core::{
     sync::atomic::{AtomicUsize, Ordering},
     task::Waker,
+    any::Any
 };
 use log::info;
 use spin::RwLock;
@@ -48,7 +50,7 @@ impl FileMeta {
 /// 该 trait 定义了文件操作的基本接口，所有文件类型都需要实现这个 trait。
 /// 它提供了读取、写入、查询状态等基本文件操作。
 #[async_trait]
-pub trait FileTrait: Send + Sync {
+pub trait FileTrait: Any + Send + Sync + DowncastSync {
     fn get_inode(&self) -> Arc<dyn InodeTrait>;
     fn readable(&self) -> bool;
     fn writable(&self) -> bool;
@@ -138,11 +140,13 @@ pub trait FileTrait: Send + Sync {
     }
     /// 从指定偏移量读取数据到用户缓冲区(主要是支持sys_pread64)
     async fn pread(&self, mut buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
-        unimplemented!("not support!");
+        // unimplemented!("not support!");
+        Ok(0)
     }
     /// 将数据从指定偏移量写入文件，返回实际写入的字节数(主要是支持sys_pwrite64)
     async fn pwrite(&self, buf: &[u8], offset: usize, len: usize) -> SysResult<usize> {
-        unimplemented!("not support!");
+        // unimplemented!("not support!");
+        Ok(0)
     }
     fn lseek(&self, _offset: isize, _whence: usize) -> SysResult<usize> {
         info!("{}", self.get_name().unwrap());
@@ -163,3 +167,5 @@ pub trait FileTrait: Send + Sync {
         Ok(true)
     }
 }
+
+impl_downcast!(sync FileTrait);

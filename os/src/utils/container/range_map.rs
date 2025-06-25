@@ -16,7 +16,7 @@ struct Node<U, V> {
 /// # Panic
 ///
 /// Range is clipped or range is empty.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct RangeMap<U: Ord + Copy + Add<usize>, V>(BTreeMap<U, Node<U, V>>);
 
 impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V> {

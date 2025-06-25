@@ -51,7 +51,7 @@ pub struct TaskControlBlock {
     pub task_status: SpinNoIrqLock<TaskStatus>,
 
     pub thread_group: Shared<ThreadGroup>,
-    pub memory_space: Shared<MemorySpace>,
+    pub memory_space: SyncUnsafeCell<Shared<MemorySpace>>,
     pub parent: Shared<Option<Weak<TaskControlBlock>>>,
     pub children: Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
     pub fd_table: Shared<FdTable>,
@@ -109,7 +109,7 @@ impl TaskControlBlock {
             tgid: AtomicUsize::new(tgid),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             thread_group: new_shared(ThreadGroup::new()),
-            memory_space: new_shared(memory_space),
+            memory_space: SyncUnsafeCell::new(new_shared(memory_space)),
             parent: new_shared(None),
             children: new_shared(BTreeMap::new()),
             fd_table: new_shared(FdTable::new()),
@@ -171,8 +171,9 @@ impl TaskControlBlock {
         // **** access inner exclusively
         // substitute memory_set
         unsafe { memory_space.switch_page_table() };
-        let mut mem = self.memory_space.lock();
-        *mem = memory_space;
+        // let mut mem = self.memory_space.lock();
+        // *mem = memory_space;
+        *self.get_memory_space_mut() = new_shared(memory_space);
         self.detach_all_shm();
         let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), argv, env, auxv);
 
@@ -240,15 +241,15 @@ impl TaskControlBlock {
         let trap_cx = SyncUnsafeCell::new(*trap_cx);
 
         let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
-            true => self.memory_space.clone(),
+            true => SyncUnsafeCell::new(self.get_memory_space().clone()),
             false => {
                 info!("[process_fork] self memoty space.");
                 let child_memory_space =
-                    MemorySpace::from_user_lazily(&mut self.memory_space.lock());
+                    MemorySpace::from_user_lazily(&mut self.get_memory_space().lock());
                 unsafe {
                     sfence();
                 }
-                new_shared(child_memory_space)
+                SyncUnsafeCell::new(new_shared(child_memory_space))
             }
         };
 
@@ -349,14 +350,14 @@ impl TaskControlBlock {
         };
 
         let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
-            true => self.memory_space.clone(),
+            true => SyncUnsafeCell::new(self.get_memory_space().clone()), 
             false => {
                 let child_memory_space =
-                    MemorySpace::from_user_lazily(&mut self.memory_space.lock());
+                    MemorySpace::from_user_lazily(&mut self.get_memory_space().lock());
                 unsafe {
                     sfence();
                 }
-                new_shared(child_memory_space)
+                SyncUnsafeCell::new(new_shared(child_memory_space))
             }
         };
 
@@ -427,7 +428,7 @@ impl TaskControlBlock {
                 // 在pthread中tidaddress会被父线程或者其他线程 通过futex系统调用 轮循监测(poll)
                 // 如果tidaddress被清零了，其他线程会检测到这里的值改变，那么说明有线程退出
                 // 在futex中会执行wake唤醒其他线程
-                if Arc::strong_count(&self.memory_space) > 1 {
+                if Arc::strong_count(self.get_memory_space()) > 1 {
                     // println!("[handle exit] clear child tid {:#x}, task id {}", tidaddress, pid);
                     core::ptr::write(tidaddress as *mut usize, 0);
                     let key = FutexHashKey::get_futex_key(tidaddress, FutexOp::empty());
@@ -776,7 +777,7 @@ impl TaskControlBlock {
     }
 
     pub fn get_user_token(&self) -> usize {
-        self.memory_space.lock().token()
+        self.get_memory_space().lock().token()
     }
 
     /// 进程状态
@@ -808,11 +809,17 @@ impl TaskControlBlock {
     pub fn get_trap_cx_mut(&self) -> &'static mut TrapContext {
         unsafe { &mut *(self.trap_cx.get() as *mut TrapContext) }
     }
+    pub fn get_memory_space(&self) -> &Shared<MemorySpace> {
+        unsafe{ & *self.memory_space.get() }
+    }
+    pub fn get_memory_space_mut(&self) -> &mut Shared<MemorySpace> {
+        unsafe{ &mut *self.memory_space.get() }
+    }
 
     /// 刷新TLB
     pub fn switch_pgtable(&self) {
         unsafe {
-            self.memory_space.lock().switch_page_table();
+            self.get_memory_space_mut().lock().switch_page_table();
         };
     }
 
@@ -855,7 +862,7 @@ impl TaskControlBlock {
 
     /// 移除所有的 `MapArea`
     pub fn recycle_data_pages(&self) {
-        self.memory_space.lock().recycle_data_pages();
+        self.get_memory_space().lock().recycle_data_pages();
     }
 
     // fd
@@ -973,7 +980,7 @@ impl TaskControlBlock {
     }
 
     pub fn with_mut_memory_space<T>(&self, f: impl FnOnce(&mut MemorySpace) -> T) -> T {
-        f(&mut self.memory_space.lock())
+        f(&mut self.get_memory_space().lock())
     }
 
     pub fn with_mut_shmid_table<T>(&self, f: impl FnOnce(&mut ShmidTable) -> T) -> T {

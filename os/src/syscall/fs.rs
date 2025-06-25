@@ -173,7 +173,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
 /// ```
 pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
-    let path = user_cstr(pathname.into())?.unwrap();
+    let path = user_cstr(pathname.into())?.ok_or(Errno::EINVAL)?;
     debug!("[sys_fsstatat] pathname {},", path);
     let cwd = task.get_current_path();
     info!(
@@ -575,7 +575,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
     }
 
     // 判断flags是否合法
-    let flag = OpenFlags::from_bits(flags as i32).unwrap();
+    let flag = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cloexec = {
         match flag {
             OpenFlags::O_CLOEXEC => Some(true),
@@ -929,7 +929,25 @@ pub async fn sys_sendfile(
     if !src.readable() || !dest.writable() {
         return Err(Errno::EPERM);
     }
-    let count = count.min(src.get_inode().get_size() - offset + PAGE_SIZE);
+
+    let file_size = {
+        if src.is_pipe() {
+            src.clone()
+                .downcast_arc::<Pipe>()
+                .map_err( |_| Errno::EINVAL )?
+                .with_mut_buffer( | buffer | {
+                    buffer.buf.len()
+                } )
+        }
+        else if src.is_deivce() {
+            todo!()
+        }
+        else { // file on disk
+            src.get_inode().get_size()
+        }
+    };
+
+    let count = count.min(file_size - offset + PAGE_SIZE);
 
     let mut len: usize = 0;
     let mut buf = vec![0u8; count];

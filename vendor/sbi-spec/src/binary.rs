@@ -29,7 +29,7 @@ pub const RET_ERR_FAILED: usize = -1isize as _;
 pub const RET_ERR_NOT_SUPPORTED: usize = -2isize as _;
 /// Error for invalid parameter.
 pub const RET_ERR_INVALID_PARAM: usize = -3isize as _;
-/// Error for denied.
+/// Error for denied (unused in standard extensions).
 pub const RET_ERR_DENIED: usize = -4isize as _;
 /// Error for invalid address.
 pub const RET_ERR_INVALID_ADDRESS: usize = -5isize as _;
@@ -69,7 +69,7 @@ pub enum Error {
     NotSupported,
     /// Error for invalid parameter.
     InvalidParam,
-    /// Error for denied.
+    /// Error for denied (unused in standard extensions).
     Denied,
     /// Error for invalid address.
     InvalidAddress,
@@ -126,8 +126,12 @@ impl SbiRet {
             value: 0,
         }
     }
-    /// SBI call denied for unsatisfied entry criteria, or insufficient access
-    /// permission to debug console or CPPC register.
+    /// SBI call denied.
+    ///
+    /// As the time this document was written,
+    /// there is currently no function in SBI standard that returns this error.
+    /// However, custom extensions or future standard functions may return this
+    /// error if appropriate.
     #[inline]
     pub const fn denied() -> Self {
         Self {
@@ -227,29 +231,6 @@ impl SbiRet {
         matches!(self.error, RET_SUCCESS)
     }
 
-    /// Returns `true` if the SBI call succeeded and the value inside of it matches a predicate.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    ///
-    /// ```
-    /// # use sbi_spec::binary::SbiRet;
-    /// let x = SbiRet::success(2);
-    /// assert_eq!(x.is_ok_and(|x| x > 1), true);
-    ///
-    /// let x = SbiRet::success(0);
-    /// assert_eq!(x.is_ok_and(|x| x > 1), false);
-    ///
-    /// let x = SbiRet::no_shmem();
-    /// assert_eq!(x.is_ok_and(|x| x > 1), false);
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn is_ok_and(self, f: impl FnOnce(usize) -> bool) -> bool {
-        self.into_result().is_ok_and(f)
-    }
-
     /// Returns `true` if current SBI return is an error.
     ///
     /// # Examples
@@ -268,27 +249,6 @@ impl SbiRet {
     #[inline]
     pub const fn is_err(&self) -> bool {
         !self.is_ok()
-    }
-
-    /// Returns `true` if the result is an error and the value inside of it matches a predicate.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use sbi_spec::binary::{SbiRet, Error};
-    /// let x = SbiRet::denied();
-    /// assert_eq!(x.is_err_and(|x| x == Error::Denied), true);
-    ///
-    /// let x = SbiRet::invalid_address();
-    /// assert_eq!(x.is_err_and(|x| x == Error::Denied), false);
-    ///
-    /// let x = SbiRet::success(0);
-    /// assert_eq!(x.is_err_and(|x| x == Error::Denied), false);
-    /// ```
-    #[must_use]
-    #[inline]
-    pub fn is_err_and(self, f: impl FnOnce(Error) -> bool) -> bool {
-        self.into_result().is_err_and(f)
     }
 
     /// Converts from `SbiRet` to [`Option<usize>`].
@@ -455,54 +415,6 @@ impl SbiRet {
         self.into_result().map_err(op)
     }
 
-    /// Calls a function with a reference to the contained value if current SBI call succeeded.
-    ///
-    /// Returns the original result.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use sbi_spec::binary::SbiRet;
-    /// // Assume that SBI debug console have read 512 bytes into a buffer.
-    /// let ret = SbiRet::success(512);
-    /// // Inspect the SBI DBCN call result.
-    /// let idx = ret
-    ///     .inspect(|x| println!("bytes written: {x}"))
-    ///     .map(|x| x - 1)
-    ///     .expect("SBI DBCN call failed");
-    /// assert_eq!(idx, 511);
-    /// ```
-    #[inline]
-    pub fn inspect<F: FnOnce(&usize)>(self, f: F) -> Self {
-        if let Ok(ref t) = self.into_result() {
-            f(t);
-        }
-
-        self
-    }
-
-    /// Calls a function with a reference to the contained value if current SBI result is an error.
-    ///
-    /// Returns the original result.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use sbi_spec::binary::SbiRet;
-    /// // Assume that SBI debug console write operation failed for invalid parameter.
-    /// let ret = SbiRet::invalid_param();
-    /// // Print the error if SBI DBCN call failed.
-    /// let ret = ret.inspect_err(|e| eprintln!("failed to read from SBI console: {e:?}"));
-    /// ```
-    #[inline]
-    pub fn inspect_err<F: FnOnce(&Error)>(self, f: F) -> Self {
-        if let Err(ref e) = self.into_result() {
-            f(e);
-        }
-
-        self
-    }
-
     /// Returns the contained success value, consuming the `self` value.
     ///
     /// # Panics
@@ -631,7 +543,7 @@ impl SbiRet {
     // fixme: should be pub const fn once this function in Result is stablized in constant
     // fixme: should parameter be `res: SbiRet`?
     #[inline]
-    pub fn and<U>(self, res: Result<U, Error>) -> Result<U, Error> {
+    pub fn and(self, res: Result<usize, Error>) -> Result<usize, Error> {
         self.into_result().and(res)
     }
 
@@ -761,119 +673,58 @@ impl SbiRet {
     }
 }
 
-/// Check if the implementation contains the provided `bit`.
-///
-/// ## Parameters
-///
-/// - `mask`: bitmask defining the range of bits.
-/// - `base`: the starting bit index. (default: `0`)
-/// - `ignore`: if `base` is equal to this value, ignore the `mask` parameter, and consider all `bit`s set.
-/// - `bit`: the bit index to check for membership in the `mask`.
-#[inline]
-pub(crate) const fn has_bit(mask: usize, base: usize, ignore: usize, bit: usize) -> bool {
-    if base == ignore {
-        // ignore the `mask`, consider all `bit`s as set.
-        true
-    } else if bit < base {
-        // invalid index, under minimum range.
-        false
-    } else if (bit - base) >= usize::BITS as usize {
-        // invalid index, over max range.
-        false
-    } else {
-        // index is in range, check if it is set in the mask.
-        mask & (1 << (bit - base)) != 0
-    }
-}
-
 /// Hart mask structure in SBI function calls.
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone)]
 pub struct HartMask {
-    hart_mask: usize,
-    hart_mask_base: usize,
+    inner: BitVector,
 }
 
 impl HartMask {
-    /// Special value to ignore the `mask`, and consider all `bit`s as set.
-    pub const IGNORE_MASK: usize = usize::MAX;
-
-    /// Construct a [HartMask] from mask value and base hart id.
+    /// Construct a hart mask from mask value and base hart id.
     #[inline]
-    pub const fn from_mask_base(hart_mask: usize, hart_mask_base: usize) -> Self {
-        Self {
+    pub const fn from_mask_base(hart_mask: usize, hart_mask_base: usize) -> HartMask {
+        HartMask {
+            inner: BitVector {
+                hart_mask,
+                hart_mask_base,
+            },
+        }
+    }
+
+    /// Returns `hart_mask` and `hart_mask_base` parameters from the hart mask structure.
+    #[inline]
+    pub const fn into_inner(self) -> (usize, usize) {
+        (self.inner.hart_mask, self.inner.hart_mask_base)
+    }
+
+    /// Check if the `hart_id` is included in this hart mask structure.
+    #[inline]
+    pub const fn has_bit(&self, hart_id: usize) -> bool {
+        let BitVector {
             hart_mask,
             hart_mask_base,
+        } = self.inner;
+        if hart_mask_base == usize::MAX {
+            // If `hart_mask_base` equals `usize::MAX`, that means `hart_mask` is ignored
+            // and all available harts must be considered.
+            return true;
         }
-    }
-
-    /// Gets the special value for ignoring the `mask` parameter.
-    #[inline]
-    pub const fn ignore_mask(&self) -> usize {
-        Self::IGNORE_MASK
-    }
-
-    /// Returns `mask` and `base` parameters from the [HartMask].
-    #[inline]
-    pub const fn into_inner(self) -> (usize, usize) {
-        (self.hart_mask, self.hart_mask_base)
-    }
-
-    /// Returns whether the [HartMask] contains the provided `hart_id`.
-    #[inline]
-    pub const fn has_bit(self, hart_id: usize) -> bool {
-        has_bit(
-            self.hart_mask,
-            self.hart_mask_base,
-            Self::IGNORE_MASK,
-            hart_id,
-        )
+        let Some(idx) = hart_id.checked_sub(hart_mask_base) else {
+            // hart_id < hart_mask_base, not in current mask range
+            return false;
+        };
+        if idx >= usize::BITS as usize {
+            // hart_idx >= hart_mask_base + XLEN, not in current mask range
+            return false;
+        }
+        hart_mask & (1 << idx) != 0
     }
 }
 
-/// Counter index mask structure in SBI function calls for the `PMU` extension §11.
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub struct CounterMask {
-    counter_idx_mask: usize,
-    counter_idx_base: usize,
-}
-
-impl CounterMask {
-    /// Special value to ignore the `mask`, and consider all `bit`s as set.
-    pub const IGNORE_MASK: usize = usize::MAX;
-
-    /// Construct a [CounterMask] from mask value and base counter index.
-    #[inline]
-    pub const fn from_mask_base(counter_idx_mask: usize, counter_idx_base: usize) -> Self {
-        Self {
-            counter_idx_mask,
-            counter_idx_base,
-        }
-    }
-
-    /// Gets the special value for ignoring the `mask` parameter.
-    #[inline]
-    pub const fn ignore_mask(&self) -> usize {
-        Self::IGNORE_MASK
-    }
-
-    /// Returns `mask` and `base` parameters from the [CounterMask].
-    #[inline]
-    pub const fn into_inner(self) -> (usize, usize) {
-        (self.counter_idx_mask, self.counter_idx_base)
-    }
-
-    /// Returns whether the [CounterMask] contains the provided `counter`.
-    #[inline]
-    pub const fn has_bit(self, counter: usize) -> bool {
-        has_bit(
-            self.counter_idx_mask,
-            self.counter_idx_base,
-            Self::IGNORE_MASK,
-            counter,
-        )
-    }
+#[derive(Debug, Copy, Clone)]
+struct BitVector {
+    hart_mask: usize,
+    hart_mask_base: usize,
 }
 
 /// Physical slice wrapper with type annotation.
@@ -1022,7 +873,7 @@ impl<T> Copy for SharedPtr<T> {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::HartMask;
 
     #[test]
     fn rustsbi_hart_mask() {
@@ -1051,36 +902,6 @@ mod tests {
         for i in 0..5 {
             assert!(mask.has_bit(i));
         }
-        assert!(mask.has_bit(usize::MAX));
-    }
-
-    #[test]
-    fn rustsbi_counter_index_mask() {
-        let mask = CounterMask::from_mask_base(0b1, 400);
-        assert!(!mask.has_bit(0));
-        assert!(mask.has_bit(400));
-        assert!(!mask.has_bit(401));
-        let mask = CounterMask::from_mask_base(0b110, 500);
-        assert!(!mask.has_bit(0));
-        assert!(!mask.has_bit(500));
-        assert!(mask.has_bit(501));
-        assert!(mask.has_bit(502));
-        assert!(!mask.has_bit(500 + (usize::BITS as usize)));
-        let max_bit = 1 << (usize::BITS - 1);
-        let mask = CounterMask::from_mask_base(max_bit, 600);
-        assert!(mask.has_bit(600 + (usize::BITS as usize) - 1));
-        assert!(!mask.has_bit(600 + (usize::BITS as usize)));
-        let mask = CounterMask::from_mask_base(0b11, usize::MAX - 1);
-        assert!(!mask.has_bit(usize::MAX - 2));
-        assert!(mask.has_bit(usize::MAX - 1));
-        assert!(mask.has_bit(usize::MAX));
-        assert!(!mask.has_bit(0));
-        let mask = CounterMask::from_mask_base(0, usize::MAX);
-        let null_mask = CounterMask::from_mask_base(0, 0);
-        (0..=usize::BITS as usize).for_each(|i| {
-            assert!(mask.has_bit(i));
-            assert!(!null_mask.has_bit(i));
-        });
         assert!(mask.has_bit(usize::MAX));
     }
 }

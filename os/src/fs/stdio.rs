@@ -64,7 +64,8 @@ impl FileTrait for Stdin {
         todo!()
     }
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        todo!()
+        // todo!()
+        Ok(())
     }
     fn is_dir(&self) -> bool {
         false
@@ -99,8 +100,18 @@ impl FileTrait for Stdout {
         self.write(buf).await
     }
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        print!("{}", core::str::from_utf8(user_buf).unwrap());
-        Ok(user_buf.len())
+        match core::str::from_utf8(user_buf) {
+            Ok(text) => {
+                print!("{}", text);
+                Ok(text.len())
+            }
+                ,
+            Err(e) =>  {
+                Err(Errno::EBADCALL)
+            }
+        }
+        // print!("{}", core::str::from_utf8(user_buf).unwarp());
+        // Ok(user_buf.len())
     }
 
     fn get_name(&self) -> SysResult<String> {
