@@ -7,7 +7,7 @@ use core::arch::global_asm;
 use core::fmt::Display;
 use log::info;
 use user_trap::{user_trap_handler, user_trap_return};
-
+use crate::hal::arch::shutdown;
 use crate::signal::do_signal;
 use crate::sync::{get_waker, suspend_now};
 use crate::task::{TaskControlBlock, TaskStatus};
@@ -80,6 +80,7 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
         }
     }
     info!("[trap loop] task pid = {} exit", task.get_pid());
+    task.check_shutdown();
     task.do_exit();
 }
 

@@ -38,7 +38,6 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             if unlikely(!file.writable()) {
                 return Err(Errno::EPERM);
             }
-            // let file = file.clone();
             let mut size = len;
             if unlikely(task.fsz_limit.lock().is_some()) {
                 size = task.fsz_limit.lock().unwrap().rlim_max;
@@ -63,7 +62,6 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             if unlikely(!file.readable()) {
                 return Err(Errno::EPERM);
             }
-            // let file = file.clone();
             let buf = unsafe { core::slice::from_raw_parts_mut(buf as *mut u8, len) };
             Ok(file.read(buf).await? as usize)
         }
@@ -147,9 +145,6 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
         if len == 0 {
             continue;
         }
-        if fd != 1 {
-            info!("    [sys_writev] len = {}", len);
-        }
         let base = (unsafe { &*iov_st }).iov_base;
         let buffer = unsafe { core::slice::from_raw_parts(base as *const u8, len) };
         let write_len = file.write(buffer).await?;
@@ -191,10 +186,6 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
-        // if unlikely(!inode.is_dir()) {
-        //     log::error!("[sys_fstatat] dirfd = {} is not a dir.", dirfd);
-        //     return Err(Errno::ENOTDIR);
-        // }
         let other_cwd = inode.get_name()?;
         if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout")) {
             return Ok(0);
@@ -976,7 +967,6 @@ pub async fn sys_sendfile(
         src.lseek(len as isize, SEEK_CUR).unwrap();
         let ptr = user_ref_mut(offset.into())?.unwrap();
         *ptr = new_offset;
-        // *translated_refmut(token, offset as *mut usize) = new_offset;
     }
     info!("[sys_sendfile] finished");
     Ok(len)
@@ -1036,14 +1026,12 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
 /// according to the directive whence as follows
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     info!("[sys_lseek] start");
-    // println!("[sys_lseek] start, fd = {}, offset = {}, whence = {}", fd, offset, whence);
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
     }
     let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
     let res = file.lseek(offset, whence)?;
-    // println!("[sys_lseek] lseek finished, res = {}", res);
 
     Ok(res)
 }

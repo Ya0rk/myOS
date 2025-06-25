@@ -192,7 +192,7 @@ impl TaskControlBlock {
         debug!("task.exec.pid={}", self.pid.0);
     }
 
-    pub fn process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
+    pub fn do_process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
         info!("[process_fork] start, flags = {:?}", flag);
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
@@ -299,12 +299,11 @@ impl TaskControlBlock {
             new_task.get_pid(),
             new_task.get_parent().unwrap().get_pid()
         );
-        // info!("task fdtable len = {}", new_task.fd_table_len());
 
         new_task
     }
 
-    pub fn thread_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
+    pub fn do_thread_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
         info!("[thread_fork] start, flags = {:?}", flag);
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
@@ -412,15 +411,6 @@ impl TaskControlBlock {
         // println!("[do_exit] Task pid = {} exit;", self.get_pid());
         let pid = self.get_pid();
 
-        // 如果是init进程
-        if pid == INITPROC_PID {
-            info!(
-                "init process exit with exit_code {} ...",
-                self.get_exit_code()
-            );
-            shutdown(false);
-        }
-
         if let Some(tidaddress) = self.get_child_cleartid() {
             info!("[handle exit] clear child tid {:#x}", tidaddress);
             unsafe {
@@ -462,17 +452,7 @@ impl TaskControlBlock {
             for (child_pid, child) in lock_child.iter() {
                 if child.is_zombie() {
                     info!("[do_exit] child pdi = {} is zmobie", child_pid);
-                    let sig_info = SigInfo::new(
-                        SigNom::SIGCHLD,
-                        SigCode::CLD_EXITED,
-                        SigErr::empty(),
-                        SigDetails::Chld {
-                            pid: *child_pid,
-                            status: child.get_status(),
-                            exit_code: child.get_exit_code(),
-                        },
-                    );
-                    init_proc.proc_recv_siginfo(sig_info);
+                    child.exit_notify(&init_proc);
                 }
                 child.set_parent(Some(Arc::downgrade(&init_proc)));
             }
@@ -488,35 +468,33 @@ impl TaskControlBlock {
                     parent.get_pid(),
                     self.get_exit_code()
                 );
-                // println!(
-                //     "[do_exit] task to info parent pid = {}, exit code = {}",
-                //     parent.get_pid(),
-                //     self.get_exit_code()
-                // );
-                let sig_info = SigInfo::new(
-                    SigNom::SIGCHLD,
-                    SigCode::CLD_EXITED,
-                    SigErr::empty(),
-                    SigDetails::Chld {
-                        pid,
-                        status: self.get_status(),
-                        // 这里需要将exitcode移回去，因为在sys_exit中位移过
-                        // exit_code: (self.get_exit_code() & 0xff00) >> 8
-                        exit_code: self.get_exit_code(),
-                    },
-                );
-                parent.proc_recv_siginfo(sig_info);
+                self.exit_notify(&parent);
             }
             None => {
                 use log::error;
                 error!("proc {} has no parent!", self.get_pid());
-                // return;
             }
         }
 
+        self.remove_thread_group_member(pid);
         self.clear_fd_table();
         self.detach_all_shm();
         self.recycle_data_pages();
+    }
+
+    /// 向父进程发送信号通知
+    fn exit_notify(&self, parent: &Arc<TaskControlBlock>) {
+        let sig_info = SigInfo::new(
+            SigNom::SIGCHLD,
+            SigCode::CLD_EXITED,
+            SigErr::empty(),
+            SigDetails::Chld {
+                pid: self.get_pid(),
+                status: self.get_status(),
+                exit_code: self.get_exit_code(),
+            },
+        );
+        parent.proc_recv_siginfo(sig_info);
     }
 
     pub fn do_wait4(&self, pid: usize, wstatus: usize, exit_code: i32) {
@@ -609,6 +587,16 @@ impl TaskControlBlock {
         self.set_pending(true);
         if sig_pending.need_wake.have(sig_info.signo as usize) {
             self.wake_up();
+        }
+    }
+
+    pub fn check_shutdown(&self) {
+        if self.get_pid() == INITPROC_PID {
+            info!(
+                "init process exit with exit_code {} ...",
+                self.get_exit_code()
+            );
+            shutdown(false);
         }
     }
 }
