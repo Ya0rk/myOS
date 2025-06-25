@@ -111,7 +111,6 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
             continue;
         }
         let base = (unsafe { *iov_st }).iov_base;
-        println!("base = {:#x}", base);
         if unlikely(base == 0) {
             return Err(Errno::EFAULT);
         }
