@@ -150,18 +150,16 @@ pub async fn sys_pselect(
     sigmask: usize,
 ) -> SysResult<usize> {
     info!("[sys_pselect] start.");
-    let mut readfds = match readfds_ptr {
-        0 => None,
-        _ => Some(unsafe { &mut *(readfds_ptr as *mut FdSet) }),
+    let mut get_fdset = |ptr: usize| {
+        match ptr {
+            0 => None,
+            _ => Some(unsafe { &mut *(ptr as *mut FdSet) }),
+        }
     };
-    let mut writefds = match writefds_ptr {
-        0 => None,
-        _ => Some(unsafe { &mut *(writefds_ptr as *mut FdSet) }),
-    };
-    let mut exceptfds = match exceptfds_ptr {
-        0 => None,
-        _ => Some(unsafe { &mut *(exceptfds_ptr as *mut FdSet) }),
-    };
+    let mut readfds = get_fdset(readfds_ptr);
+    let mut writefds = get_fdset(writefds_ptr);
+    let mut exceptfds = get_fdset(exceptfds_ptr);
+
     let timeout = match timeout {
         0 => None,
         _ => {
@@ -171,8 +169,6 @@ pub async fn sys_pselect(
     };
     info!("[sys_pselect] nfds = {}, readfds = {:?}, writefds = {:?}, exceptfds = {:?}, timeout = {:?}",
             nfds, readfds, writefds, exceptfds, timeout);
-    // println!("[sys_pselect] nfds = {}, readfds = {:?}, writefds = {:?}, exceptfds = {:?}, timeout = {:?}",
-    //     nfds, readfds, writefds, exceptfds, timeout);
 
     let mut file_events: Vec<PollFd> = Vec::new();
     let task = current_task().unwrap();
@@ -183,7 +179,7 @@ pub async fn sys_pselect(
         }
         let fd_slot = fd / FD_PER_BITS;
         let offset = fd % FD_PER_BITS;
-        // println!("fd = {}, fd_slot = {}, offset = {}, (1<<offset) = {}", fd, fd_slot, offset, (1<<offset));
+
         let mut find_and_push = |set: &FdSet, event: PollEvents| {
             if set.isset(fd_slot, offset) {
                 if let Some(pollfd) = file_events.last_mut()
@@ -232,8 +228,6 @@ pub async fn sys_pselect(
         SigMaskGuard::new(task.clone(), new_sigmask)
     };
 
-    // println!("[sys_pselect] readfds: {:#x}, writefds: {:#x}, exceptfds: {:#x}",
-        // readfds_ptr, writefds_ptr, exceptfds_ptr);
     let iofuture = IoFutrue::new(
         file_events,
         UptrFmt::Pselect([readfds_ptr, writefds_ptr, exceptfds_ptr]),

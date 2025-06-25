@@ -201,8 +201,8 @@ pub fn sys_clone(
     let current_task = current_task().unwrap();
     let token = current_task.get_user_token();
     let new_task = match flag.contains(CloneFlags::CLONE_THREAD) {
-        true => current_task.thread_fork(flag),
-        false => current_task.process_fork(flag),
+        true => current_task.do_thread_fork(flag),
+        false => current_task.do_process_fork(flag),
     };
     drop(current_task);
     info!(
@@ -237,7 +237,6 @@ pub fn sys_clone(
         if ctid == 0 {
             return Err(Errno::EINVAL);
         }
-        // unsafe { core::ptr::write(ctid as *mut usize, new_pid as usize); }
         let ctid_ptr = user_ref_mut::<usize>(ctid.into())?.unwrap();
         *ctid_ptr = new_pid as usize;
         new_task.set_child_settid(ctid);
@@ -259,7 +258,6 @@ pub fn sys_clone(
     add_task(&new_task);
     spawn_user_task(new_task);
     info!("[sys_clone] father proc return: {}", new_pid);
-    // println!("[sys_clone] clone succ, new pid : {}", new_pid);
     // 父进程返回子进程的pid
     Ok(new_pid as usize)
 }
@@ -341,7 +339,6 @@ pub async fn sys_wait4(
     if task.children.lock().is_empty() {
         info!("task {}, has no child, want pid = {}.", task.get_pid(), pid);
         return Err(Errno::ECHILD);
-        // return Ok(0);
     }
 
     let op = WaitOptions::from_bits(options as i32).ok_or(Errno::EINVAL)?;
@@ -717,7 +714,6 @@ pub fn sys_sigaction(signum: usize, act: usize, old_act: usize) -> SysResult<usi
     if old_act != 0 {
         let old_act = old_act as *mut SigAction;
         let cur_act = task.handler.lock().fetch_signal_handler(signum).sa;
-        // let cur_act = unsafe { *(&task.handler.lock().actions[signum - 1].sa as *const SigAction) };
         unsafe { core::ptr::write(old_act, cur_act); };
     }
     if act != 0 {
@@ -730,13 +726,7 @@ pub fn sys_sigaction(signum: usize, act: usize, old_act: usize) -> SysResult<usi
             new_act.sa_handler,
             new_act.sa_flags
         );
-        // println!(
-        //     "[sys_sigaction] taskid = {}, signum = {}, sa_handler = {:#x}, sa_flags = {:?}",
-        //     task.get_pid(),
-        //     signum,
-        //     new_act.sa_handler,
-        //     new_act.sa_flags
-        // );
+ 
         match new_act.sa_handler {
             SIG_DFL => {
                 let new_kaction = KSigAction::new(signo);
@@ -820,10 +810,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
         "[sys_kill] start, to kill pid = {}, signum = {}",
         pid, signum
     );
-    // println!(
-    //     "[sys_kill] start, to kill pid = {}, signum = {}",
-    //     pid, signum
-    // );
+ 
     if unlikely(signum == 0) {
         return Ok(0);
     }
@@ -894,9 +881,6 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
                 },
             );
             for target_pid in target_group.into_iter().filter(|pid| *pid != sender_pid) {
-                // if target_pid == INITPROC_PID {
-                //     continue;
-                // }
                 let recv_task = get_task_by_pid(target_pid).ok_or(Errno::ESRCH)?;
                 recv_task.proc_recv_siginfo(siginfo);
             }
@@ -906,7 +890,6 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
         }
         Target::AllProcessExceptInit => {
             let cur_task = current_task().unwrap();
-            // let sender_pid = cur_task.get_pgid();
             let mut siginfo = SigInfo::new(
                 signum,
                 SigCode::User,
@@ -931,9 +914,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
         }
         Target::ProcessGroup(p) => {
             let target_group = get_target_proc_group(p).ok_or(Errno::ESRCH)?;
-            // println!("[sys_kill] target_group = {:?},", target_group);
             let cur_task = current_task().unwrap();
-            // let sender_pid = cur_task.get_pgid();
             let siginfo = SigInfo::new(
                 signum,
                 SigCode::User,
@@ -972,7 +953,6 @@ pub fn sys_prlimit64(
         "[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}",
         pid, resource, new_limit, old_limit
     );
-    // println!("[sys_prlimit64] start, pid = {}, resource = {}, new_limit = {:#x}, old_limit = {:#x}", pid, resource, new_limit, old_limit);
     let task = match pid {
         0 => current_task().unwrap(),
         p if p > 0 => get_task_by_pid(p).ok_or(Errno::ESRCH)?,
@@ -986,7 +966,6 @@ pub fn sys_prlimit64(
         let now_limit = match rs {
             RlimResource::Nofile => task.fd_table.lock().rlimit,
             RlimResource::Stack => RLimit64::new(USER_STACK_SIZE, USER_STACK_SIZE),
-            // RlimResource::Data => RLimit64::new(KERNEL_HEAP_SIZE, KERNEL_HEAP_SIZE),
             RlimResource::Nproc => task.fd_table.lock().rlimit,
             _ => RLimit64::new_bare(),
         };
@@ -998,7 +977,6 @@ pub fn sys_prlimit64(
     // 修改当前限制
     if new_limit != 0 {
         let new_limit = unsafe { *(new_limit as *const RLimit64) };
-        // println!("new limit = {:?}", new_limit);
         if unlikely(new_limit.rlim_cur > new_limit.rlim_max) {
             return Err(Errno::EINVAL);
         }
@@ -1256,10 +1234,6 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
                     ItimerFuture::new(Duration::from(next_expire), callback, task.clone(), which)
                         .await
                 });
-                // spawn_kernel_task(async move {
-                //     ItimerFuture::new(Duration::from(next_expire), callback, new_itimer.it_interval.into())
-                //         .await
-                // });
             }
         }
         ITIMER_VIRTUAL => {
