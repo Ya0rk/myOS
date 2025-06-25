@@ -400,6 +400,7 @@ mem_process
 EOF
 )
 
+
 for case in $ltp_cases; do
   file="$target_dir/$case"
 
