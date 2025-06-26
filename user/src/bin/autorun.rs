@@ -14,8 +14,15 @@ const TEST: &[&str] = &[
     // "./busybox_testcode.sh\0",
 ];
 
+const MUSL_LTP: &[&str] = &[
+    "/ltp_testcode_musl.sh\0",
+];
+
+const GLIBC_LTP: &[&str] = &[
+    "/ltp_testcode_glibc.sh\0"
+];
+
 const TESTCASES: &[&str] = &[
-    "/ltp_testcode_ours.sh\0",
     // "./time-test\0",
     // "./test-splice.sh\0",
     // "./libctest_testcode.sh\0",
@@ -210,7 +217,6 @@ fn run_cmd(cmd: &str, pwd: &str) {
 
 #[no_mangle]
 fn main() -> i32 {
-    // run_cmd("/glibc/busybox --install /bin\0");
     let child_pid = fork();
     if child_pid == 0 {
         let cd = "/glibc/";
@@ -237,12 +243,10 @@ fn main() -> i32 {
             run_cmd(test, cd);
         }
 
-        // // ltp测试
-        // run_cmd("/glibc/busybox echo '#### OS COMP TEST GROUP START ltp-musl ####'", "/glibc/");
-        // for test in TESTCASES_LTP {
-        //     run_cmd(test, cd);
-        // }
-        // run_cmd("echo '#### OS COMP TEST GROUP END ltp-musl ####'", "/glibc/");
+        // ltp测试
+        for test in GLIBC_LTP {
+            run_cmd(test, cd);
+        }
         
         run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
         exit(0); 
@@ -251,7 +255,6 @@ fn main() -> i32 {
         loop {
             let mut exit_code: i32 = 0;
             let pid = waitpid(child_pid as usize, &mut exit_code, 0);
-            // let pid = wait(&mut exit_code);
             if pid == child_pid {
                 break;
             }
@@ -285,16 +288,9 @@ fn main() -> i32 {
         }
 
         // musl的ltp测试
-        // run_cmd("/musl/busybox mkdir /testcase", "/musl/");
-        // run_cmd("/musl/busybox cp /musl/ltp/testcases/bin/abs01 /testcase/abs01\0", "/musl/");
-        // println!("cp abs01 done");
-        // run_cmd("/musl/busybox cp /musl/ltp/testcases/bin/accept01 /testcase/accept01\0", "/musl/");
-        // println!("cp accept01 done");
-        // run_cmd("/musl/busybox sed 's|target_dir=\"ltp/testcases/bin\"|target_dir=\"/testcase\"|' testcode.sh\0", "/musl/");
-        // println!("sed done");
-        // for test in TESTCASES_LTP {
-        //     run_cmd(test, cd);
-        // }
+        for test in MUSL_LTP {
+            run_cmd(test, cd);
+        }
 
         // run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
         // run_cmd("/musl/busybox --install /bin\0", "/musl/");

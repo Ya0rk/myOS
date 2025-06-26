@@ -129,15 +129,23 @@ pub async fn create_init_files() -> SysResult {
         "/etc/localtime".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     );
+    
     if let Ok(FileClass::File(file) ) = open(
-        "/ltp_testcode_ours.sh".into(),
+        "/ltp_testcode_musl.sh".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR
     ) {
-        let buf = ltp::LTP_testcode.as_bytes();
+        let buf = ltp::MUSL_LTP_testcode.as_bytes();
         file.write(&buf).await;
-    } else {
-        panic!("can't build our ltp script")
     }
+    
+    if let Ok(FileClass::File(file) ) = open(
+        "/ltp_testcode_glibc.sh".into(),
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR
+    ) {
+        let buf = ltp::GLIBC_LTP_testcode.as_bytes();
+        file.write(&buf).await;
+    }
+
     Ok(())
 }
 
