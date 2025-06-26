@@ -10,8 +10,8 @@ use user_lib::{chdir, execve, exit, fork, wait, waitpid, yield_};
 
 // 可能会造成动态链接库冲突的测试
 const TEST: &[&str] = &[
-    // "./basic_testcode.sh\0",
-    // "./busybox_testcode.sh\0",
+    "./basic_testcode.sh\0",
+    "./busybox_testcode.sh\0",
 ];
 
 const MUSL_LTP: &[&str] = &[
@@ -25,15 +25,15 @@ const GLIBC_LTP: &[&str] = &[
 const TESTCASES: &[&str] = &[
     // "./time-test\0",
     // "./test-splice.sh\0",
-    // "./libctest_testcode.sh\0",
-    // "./lua_testcode.sh\0",
+    "./libctest_testcode.sh\0",
+    "./lua_testcode.sh\0",
     // "./netperf_testcode.sh\0",
-    // "./libcbench_testcode.sh\0",
-    // "./iozone_testcode.sh\0",
+    "./libcbench_testcode.sh\0",
+    "./iozone_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
     // "./iperf_testcode.sh\0",
-    // "./lmbench_testcode.sh\0",
+    "./lmbench_testcode.sh\0",
     // "./run-static.sh\0",
 ];
 
@@ -244,9 +244,9 @@ fn main() -> i32 {
         }
 
         // ltp测试
-        for test in GLIBC_LTP {
-            run_cmd(test, cd);
-        }
+        // for test in GLIBC_LTP {
+        //     run_cmd(test, cd);
+        // }
         
         run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
         exit(0); 
