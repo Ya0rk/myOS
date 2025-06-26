@@ -24,7 +24,7 @@ use crate::{
 };
 use alloc::sync::{Arc, Weak};
 use core::hash::{Hash, Hasher};
-use spin::rwlock::RwLock;
+use spin::{rwlock::RwLock, RwLockWriteGuard};
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum DentryStatus {
@@ -56,6 +56,16 @@ pub struct Dentry {
     inode: RwLock<Vec<Arc<dyn InodeTrait>>>,
     /// dentry的状态
     status: RwLock<DentryStatus>,
+}
+
+impl Dentry {
+    pub fn with_children<F, R>(&self, f: F) -> R
+    where 
+        F: FnOnce(&mut RwLockWriteGuard<'_, HashMap<String, Arc<Dentry>>>) -> R,
+    {
+        let mut children = self.children.write();
+        f(&mut children)
+    }
 }
 
 impl PartialEq for Dentry {
