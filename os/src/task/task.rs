@@ -476,7 +476,7 @@ impl TaskControlBlock {
             }
         }
 
-        self.remove_thread_group_member(pid);
+        // self.remove_thread_group_member(pid);
         self.clear_fd_table();
         self.detach_all_shm();
         self.recycle_data_pages();
