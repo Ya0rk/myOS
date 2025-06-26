@@ -187,7 +187,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
-        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout")) {
+        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") || other_cwd == String::from("Stdin")) {
             return Ok(0);
         }
         resolve_path(other_cwd, path)
@@ -305,7 +305,7 @@ pub fn sys_statx(
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
-        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout")) {
+        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") || other_cwd == String::from("Stdin")) {
             return Ok(0);
         }
         resolve_path(other_cwd, path)
@@ -1330,7 +1330,7 @@ pub fn sys_readlinkat(
             };
             let c_path = alloc::format!("{}\0", file.path);
             let path_bytes = c_path.as_bytes();
-            let len = max(path_bytes.len(), bufsiz);
+            let len = min(path_bytes.len(), bufsiz);
             ub[0..len].copy_from_slice(&path_bytes[0..len]);
             return Ok(len);
         }
