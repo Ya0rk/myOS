@@ -217,49 +217,49 @@ fn run_cmd(cmd: &str, pwd: &str) {
 
 #[no_mangle]
 fn main() -> i32 {
-    let child_pid = fork();
-    if child_pid == 0 {
-        let cd = "/glibc/";
-        chdir(&conert_str2byte(cd));
-        for test in TEST {
-            run_cmd(test, cd);
-        }
-        // 拷贝动态库到指定位置,这里是glibc的动态库
-        #[cfg(target_arch = "loongarch64")]
-        {
-            run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /lib64/ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
-            run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
-        }
-        #[cfg(target_arch = "riscv64")]
-        {
-            run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
-            run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
-            run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0", "/glibc/");
+    // let child_pid = fork();
+    // if child_pid == 0 {
+    //     let cd = "/glibc/";
+    //     chdir(&conert_str2byte(cd));
+    //     for test in TEST {
+    //         run_cmd(test, cd);
+    //     }
+    //     // 拷贝动态库到指定位置,这里是glibc的动态库
+    //     #[cfg(target_arch = "loongarch64")]
+    //     {
+    //         run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /lib64/ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
+    //         run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
+    //     }
+    //     #[cfg(target_arch = "riscv64")]
+    //     {
+    //         run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
+    //         run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
+    //         run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0", "/glibc/");
             
-        }
+    //     }
 
-        // 除去busybox和basic
-        for test in TESTCASES {
-            run_cmd(test, cd);
-        }
+    //     // 除去busybox和basic
+    //     for test in TESTCASES {
+    //         run_cmd(test, cd);
+    //     }
 
-        // ltp测试
-        for test in GLIBC_LTP {
-            run_cmd(test, cd);
-        }
+    //     // ltp测试
+    //     for test in GLIBC_LTP {
+    //         run_cmd(test, cd);
+    //     }
         
-        run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
-        exit(0); 
-    } else {
-        println!("main parent");
-        loop {
-            let mut exit_code: i32 = 0;
-            let pid = waitpid(child_pid as usize, &mut exit_code, 0);
-            if pid == child_pid {
-                break;
-            }
-        }
-    }
+    //     run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
+    //     exit(0); 
+    // } else {
+    //     println!("main parent");
+    //     loop {
+    //         let mut exit_code: i32 = 0;
+    //         let pid = waitpid(child_pid as usize, &mut exit_code, 0);
+    //         if pid == child_pid {
+    //             break;
+    //         }
+    //     }
+    // }
 
     let child_pid = fork();
     if child_pid == 0 {
