@@ -144,7 +144,6 @@ getsockopt01
 keyctl02
 keyctl03
 keyctl04
-keyctl05
 keyctl06
 keyctl07
 keyctl08
@@ -423,7 +422,7 @@ write02
 # you can add prog you want to test.if it succeed, you can put it in var backip.
 # from jdlu
 ltp_cases="
-waitid09
+keyctl05
 "
 
 
