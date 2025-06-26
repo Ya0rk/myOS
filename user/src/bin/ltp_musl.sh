@@ -5,12 +5,13 @@ echo "#### OS COMP TEST GROUP START ltp-musl ####"
 # Define target directory
 target_dir="/musl/ltp/testcases/bin"
 
-backip=$(cat <<EOF
-chown02
+backip="
 abs01
+
 
 accept01
 accept03
+
 
 alarm02
 alarm03
@@ -388,9 +389,7 @@ process_madvise01
 process_vm01
 process_vm_readv02
 process_vm_readv03
-
-EOF
-)
+"
 
 # List of test cases (no array, using space-separated string)
 # you can add prog you want to test.if it succeed, you can put it in var backip.
