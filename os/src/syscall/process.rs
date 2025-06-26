@@ -436,15 +436,7 @@ pub async fn sys_wait4(
                             exit_code,
                         } = sig_info.sifields
                         {
-                            match pid {
-                                -1 => break (find_pid, status, exit_code),
-                                p if p > 0 => {
-                                    if find_pid == p as usize {
-                                        break (find_pid, status, exit_code);
-                                    }
-                                }
-                                _ => break (find_pid, status, exit_code),
-                            }
+                            break (find_pid, status, exit_code);
                         }
                     }
                     None => {
