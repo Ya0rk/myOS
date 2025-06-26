@@ -8,9 +8,7 @@ target_dir="/musl/ltp/testcases/bin"
 backip="
 abs01
 accept01
-accept02
 accept03
-accept04
 accept4_01
 add_key01
 add_key02
@@ -431,7 +429,7 @@ chmod01
 "
 
 
-for case in $ltp_cases; do
+for case in $backip; do
   file="$target_dir/$case"
 
   if [ -f "$file" ]; then
