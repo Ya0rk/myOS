@@ -395,13 +395,12 @@ EOF
 # List of test cases (no array, using space-separated string)
 # you can add prog you want to test.if it succeed, you can put it in var backip.
 # from jdlu
-ltp_cases=$(cat <<EOF
+ltp_cases="
 mem_process
-EOF
-)
+"
 
 
-for case in $backip; do
+for case in $ltp_cases; do
   file="$target_dir/$case"
 
   if [ -f "$file" ]; then
@@ -411,8 +410,6 @@ for case in $backip; do
     ret=$?
 
     echo "FAIL LTP CASE $case : $ret"
-    #   else
-    #     echo "SKIP LTP CASE $case : not found"
   fi
 done
 
