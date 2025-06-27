@@ -337,7 +337,6 @@ shmget04
 shmget05
 shmget06
 shmnstest
-shmt02
 signal01
 signal02
 signal03
