@@ -920,24 +920,25 @@ pub async fn sys_sendfile(
         return Err(Errno::EPERM);
     }
 
-    let file_size = {
-        if src.is_pipe() {
-            src.clone()
-                .downcast_arc::<Pipe>()
-                .map_err( |_| Errno::EINVAL )?
-                .with_mut_buffer( | buffer | {
-                    buffer.buf.len()
-                } )
-        }
-        else if src.is_deivce() {
-            todo!()
-        }
-        else { // file on disk
-            src.get_inode().get_size()
-        }
-    };
+    // let file_size = {
+    //     if src.is_pipe() {
+    //         src.clone()
+    //             .downcast_arc::<Pipe>()
+    //             .map_err( |_| Errno::EINVAL )?
+    //             .with_mut_buffer( | buffer | {
+    //                 buffer.buf.len()
+    //             } )
+    //     }
+    //     else if src.is_deivce() {
+    //         todo!()
+    //     }
+    //     else { // file on disk
+    //         src.get_inode().get_size()
+    //     }
+    // };
 
-    let count = count.min(file_size - offset + PAGE_SIZE);
+    // let count = count.min(file_size - offset + PAGE_SIZE);
+    let count = count.min(src.get_inode().get_size() - offset + PAGE_SIZE);
 
     let mut len: usize = 0;
     let mut buf = vec![0u8; count];
