@@ -12,7 +12,7 @@ use crate::ipc::shm::SHARED_MEMORY_MANAGER;
 use crate::ipc::IPCKey;
 use crate::mm::address::VirtAddr;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
-use crate::mm::memory_space::{init_stack, vm_area::MapPerm, MemorySpace};
+use crate::mm::memory_space::{create_elf_tables, vm_area::MapPerm, MemorySpace};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
 use crate::signal::{
     SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom,
@@ -94,7 +94,7 @@ impl TaskControlBlock {
         crate::hal::arch::set_sum();
         // unsafe{riscv::register::sstatus::set_sum();}
         let (user_sp, argc, argv_p, env_p) =
-            init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
+            create_elf_tables(sp_init.into(), Vec::new(), Vec::new(), auxv);
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp);
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
@@ -176,7 +176,7 @@ impl TaskControlBlock {
         // *mem = memory_space;
         *self.get_memory_space_mut() = new_shared(memory_space);
         self.detach_all_shm();
-        let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), argv, env, auxv);
+        let (user_sp, argc, argv_p, env_p) = create_elf_tables(sp_init.into(), argv, env, auxv);
 
         // set trap cx
         let trap_cx = self.get_trap_cx_mut();

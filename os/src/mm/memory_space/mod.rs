@@ -599,7 +599,7 @@ impl MemorySpace {
     /// aligned and in the beginning of the vm_area with type Shm). The
     /// check should be done at the caller who call `detach_shm`
     pub fn detach_shm(&mut self, shmaddr: VirtAddr) {
-        let mut range_to_remove = None;
+        let mut range2remove = None;
         if let Some((range, vm_area)) = self
             .areas()
             .iter()
@@ -609,7 +609,7 @@ impl MemorySpace {
             //     panic!("[detach_shm] 'vm_area.vma_type != VmAreaType::Shm' this won't happen");
             // }
             // log::info!("[detach_shm] try to remove {:?}", range);
-            range_to_remove = Some(range);
+            range2remove = Some(range);
             // for vpn in vm_area.range_vpn() {
             //     self.page_table_mut().unmap(vpn);
             // }
@@ -622,7 +622,7 @@ impl MemorySpace {
         // } else {
         //     panic!("[detach_shm] range_to_remove is None! This should never happen");
         // }
-        range_to_remove.map(| range | self.areas_mut().force_remove_one(range));
+        range2remove.map(| range | self.areas_mut().force_remove_one(range));
     }
 
     /// Alloc stack and map it in the page table.
@@ -634,13 +634,14 @@ impl MemorySpace {
 
         let shared = false;
 
-        let stack_range: Range<VirtAddr> =
-            VirtAddr::from_usize_range(U_SEG_STACK_BEG..U_SEG_STACK_END);
+        // let stack_range: Range<VirtAddr> =
+        //     VirtAddr::from_usize_range(U_SEG_STACK_BEG..U_SEG_STACK_END);
 
-        let range = self
-            .areas()
-            .find_free_range(stack_range, size)
-            .expect("too many stack!");
+        // let range = self
+        //     .areas()
+        //     .find_free_range(stack_range, size)
+        //     .expect("too many stack!");
+        let range = VirtAddr::from_usize_range(U_SEG_STACK_END - size..U_SEG_STACK_END);
 
         // align to 16 bytes
         let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
@@ -658,13 +659,14 @@ impl MemorySpace {
 
         let shared = false;
 
-        let stack_range: Range<VirtAddr> =
-            VirtAddr::from_usize_range(U_SEG_STACK_BEG..U_SEG_STACK_END);
+        // let stack_range: Range<VirtAddr> =
+        //     VirtAddr::from_usize_range(U_SEG_STACK_BEG..U_SEG_STACK_END);
 
-        let range = self
-            .areas()
-            .find_free_range(stack_range, size)
-            .expect("too many stack!");
+        // let range = self
+        //     .areas()
+        //     .find_free_range(stack_range, size)
+        //     .expect("too many stack!");
+        let range = VirtAddr::from_usize_range(U_SEG_STACK_END - size..U_SEG_STACK_END);
 
         // align to 16 bytes
         let sp_init = VirtAddr::from(((range.end.to_usize()) - 1) & !0xf);
@@ -680,8 +682,8 @@ impl MemorySpace {
 
         let shared = false;
 
-        let heap_range: Range<VirtAddr> =
-            VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_END);
+        // let heap_range: Range<VirtAddr> =
+        //     VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_END);
 
         const INIT_SIZE: usize = PAGE_SIZE;
         let range = VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_BEG + INIT_SIZE);
@@ -693,8 +695,8 @@ impl MemorySpace {
         
         let shared = false;
 
-        let heap_range: Range<VirtAddr> =
-            VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_END);
+        // let heap_range: Range<VirtAddr> =
+        //     VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_END);
 
         const INIT_SIZE: usize = PAGE_SIZE;
         let range = VirtAddr::from_usize_range(U_SEG_HEAP_BEG..U_SEG_HEAP_BEG + INIT_SIZE);
@@ -732,14 +734,12 @@ impl MemorySpace {
         } else if new_brk < range.end {
             let ret = self.areas_mut().reduce_back(range.start, new_brk);
             if ret.is_ok() {
-                let (range_va, _) = self.areas_mut().get_key_value(range.start).unwrap();
-                let vma = self.areas_mut().force_remove_one(range_va.clone());
-                let (left, middle, right) = vma.split(range_va);
-                debug_assert!(left.is_none());
-                debug_assert!(middle.is_some());
-                debug_assert!(right.is_some());
-                let mut right_vma = right.unwrap();
-                right_vma.unmap(self.page_table_mut());
+                // let (range_va, _) = self.areas_mut().get_key_value(range.start).unwrap();
+                let new_heap_range = range.start..new_brk;
+                let heap_vma = self.areas_mut().force_remove_one(new_heap_range.clone());
+                let (left, middle, right) = heap_vma.split(new_heap_range);
+                let mut range2remove = right.unwrap();
+                range2remove.unmap(self.page_table_mut());
                 self.push_vma_lazily(middle.unwrap());
             }
             ret
@@ -759,50 +759,64 @@ impl MemorySpace {
         for (range, area) in user_space.areas().iter() {
             log::info!("[MemorySpace::from_user_lazily] cloning {area:?}");
             let mut new_area = area.clone();
-            debug_assert_eq!(range, new_area.range_va());
-            for vpn in area.range_vpn() {
-                if let Some(page) = area.pages.get(&vpn) {
+            // debug_assert_eq!(range, new_area.range_va());
+            area.range_vpn().for_each( | vpn | {
+                area.pages.get(&vpn).map( | page | {
                     let pte = user_space.page_table_mut().find_pte(vpn).unwrap();
-                    let (pte_flags, ppn) = match area.vma_type {
-                        VmAreaType::Shm => {
-                            // If shared memory,
-                            // then we don't need to modify the pte flags,
-                            // i.e. no copy-on-write.
-                            // log::info!("[from_user_lazily] clone Shared Memory");
-                            new_area.pages.insert(vpn, page.clone());
-                            (pte.flags(), page.ppn())
-                        }
+                    let mut pte_flags = pte.flags();
+                    let shared = area.shared;
+                    let is_writable = pte_flags.is_W();
+                    pte_flags.set_COW( !shared && is_writable )
+                        .set_W(!shared)
+                        .set_D(!shared);
+                    pte.set_flags(pte_flags);
+                    new_area.pages.insert(vpn, page.clone());
+                    memory_space.page_table_mut().map_leaf(vpn, page.ppn(), pte_flags);
+                });
+            });
+            // for vpn in area.range_vpn() {
+            //     if let Some(page) = area.pages.get(&vpn) {
+            //         let pte = user_space.page_table_mut().find_pte(vpn).unwrap();
+            //         let (pte_flags, ppn) = match area.vma_type {
+            //             VmAreaType::Shm => {
+            //                 // If shared memory,
+            //                 // then we don't need to modify the pte flags,
+            //                 // i.e. no copy-on-write.
+            //                 // log::info!("[from_user_lazily] clone Shared Memory");
+            //                 new_area.pages.insert(vpn, page.clone());
+            //                 (pte.flags(), page.ppn())
+            //             }
 
-                        VmAreaType::Mmap => {
-                            if area.mmap_flags.contains(MmapFlags::MAP_SHARED) {
-                                new_area.pages.insert(vpn, page.clone());
-                                (pte.flags(), page.ppn())
-                            }
-                            else {
-                                // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
-                                let mut new_flags = pte.flags() | PTEFlags::COW;
-                                new_flags.remove(PTEFlags::W);
-                                new_flags.remove(PTEFlags::D);
-                                pte.set_flags(new_flags);
-                                (new_flags, page.ppn())
-                            }
-                        }
-                        _ => {
-                            // copy on write
-                            // TODO: MmapFlags::MAP_SHARED
-                            // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
-                            let mut new_flags = pte.flags() | PTEFlags::COW;
-                            new_flags.remove(PTEFlags::W);
-                            new_flags.remove(PTEFlags::D);
-                            pte.set_flags(new_flags);
-                            (new_flags, page.ppn())
-                        }
-                    };
-                    memory_space.page_table_mut().map_leaf(vpn, ppn, pte_flags);
-                } else {
-                    // lazy allocated area
-                }
-            }
+            //             VmAreaType::Mmap => {
+            //                 if area.mmap_flags.contains(MmapFlags::MAP_SHARED) {
+            //                     new_area.pages.insert(vpn, page.clone());
+            //                     (pte.flags(), page.ppn())
+            //                 }
+            //                 else {
+            //                     // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
+            //                     let mut new_flags = pte.flags() | PTEFlags::COW;
+            //                     new_flags.remove(PTEFlags::W);
+            //                     new_flags.remove(PTEFlags::D);
+            //                     pte.set_flags(new_flags);
+            //                     (new_flags, page.ppn())
+            //                 }
+            //             }
+            //             _ => {
+            //                 // copy on write
+            //                 // TODO: MmapFlags::MAP_SHARED
+            //                 // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
+            //                 let mut new_flags = pte.flags() | PTEFlags::COW;
+            //                 new_flags.remove(PTEFlags::W);
+            //                 new_flags.remove(PTEFlags::D);
+            //                 pte.set_flags(new_flags);
+            //                 (new_flags, page.ppn())
+            //             }
+            //         };
+            //         memory_space.page_table_mut().map_leaf(vpn, ppn, pte_flags);
+            //     } else {
+            //         // lazy allocated area
+            //     }
+            // }
             memory_space.push_vma_lazily(new_area);
         }
         memory_space
@@ -1030,6 +1044,7 @@ impl MemorySpace {
 
         // First find the left most vm_area containing `range.start`.
         if let Some((first_range, first_vma)) = self.areas_mut().get_key_value_mut(range.start) {
+            // first_range.
             if first_range.start >= range.start && first_range.end <= range.end {
                 log::debug!(
                     "[MemorySpace::unmap] remove left most area {:?}",
@@ -1111,7 +1126,7 @@ impl MemorySpace {
     }
 }
 
-pub fn init_stack(
+pub fn create_elf_tables(
     sp_init: VirtAddr,
     args: Vec<String>,
     envp: Vec<String>,
@@ -1158,25 +1173,44 @@ pub fn init_stack(
     let mut sp = sp_init.to_usize();
     debug_assert!(sp & 0xf == 0);
 
+
+    // 必须手动保证对sp的访问不非法
     // 存放环境与参数的字符串本身
     fn push_str(sp: &mut usize, s: &str) -> usize {
         let len = s.len();
         *sp -= len + 1; // +1 for NUL ('\0')
         unsafe {
-            for (i, c) in s.bytes().enumerate() {
-                log::trace!(
-                    "push_str: {:x} ({:x}) <- {:?}",
-                    *sp + i,
-                    i,
-                    core::str::from_utf8_unchecked(&[c])
-                );
+            // for (i, c) in s.bytes().enumerate() {
+            //     // log::trace!(
+            //     //     "push_str: {:x} ({:x}) <- {:?}",
+            //     //     *sp + i,
+            //     //     i,
+            //     //     core::str::from_utf8_unchecked(&[c])
+            //     // );
+            //     *((*sp as *mut u8).add(i)) = c;
+            // }
+            s.bytes().enumerate().for_each(|(i, c)| {
                 *((*sp as *mut u8).add(i)) = c;
-            }
+            });
             *(*sp as *mut u8).add(len) = 0u8;
         }
         *sp
     }
-
+    // 存放 auxv
+    fn push_aux_elm(sp: &mut usize, elm: &AuxHeader) {
+        *sp -= core::mem::size_of::<AuxHeader>();
+        unsafe {
+            core::ptr::write(*sp as *mut AuxHeader, *elm);
+        }
+    }
+    // 存放 envp 与 argv 指针
+    fn push_usize(sp: &mut usize, ptr: usize) {
+        *sp -= core::mem::size_of::<usize>();
+        log::debug!("addr: 0x{:x}, content: {:x}", *sp, ptr);
+        unsafe {
+            core::ptr::write(*sp as *mut usize, ptr);
+        }
+    }
     let env_ptrs: Vec<usize> = envp.iter().rev().map(|s| push_str(&mut sp, s)).collect();
     let arg_ptrs: Vec<usize> = args.iter().rev().map(|s| push_str(&mut sp, s)).collect();
 
@@ -1187,34 +1221,20 @@ pub fn init_stack(
 
     let rand_size = 0;
     let platform = "RISC-V64";
-    let rand_bytes = "Meow~ O4 here;D"; // 15 + 1 char for 16bytes
+    let rand_bytes = "Dlnx w.r.t.Phnx"; // 15 + 1 char for 16bytes
 
     sp -= rand_size;
     push_str(&mut sp, platform);
     push_str(&mut sp, rand_bytes);
     align16(&mut sp);
 
-    // 存放 auxv
-    fn push_aux_elm(sp: &mut usize, elm: &AuxHeader) {
-        *sp -= core::mem::size_of::<AuxHeader>();
-        unsafe {
-            core::ptr::write(*sp as *mut AuxHeader, *elm);
-        }
-    }
+
     // 注意推栈是 "倒着" 推的，所以先放 null, 再逆着放别的
     push_aux_elm(&mut sp, &AuxHeader::new(AT_NULL, 0));
     for aux in auxv.into_iter().rev() {
         push_aux_elm(&mut sp, &aux);
     }
 
-    // 存放 envp 与 argv 指针
-    fn push_usize(sp: &mut usize, ptr: usize) {
-        *sp -= core::mem::size_of::<usize>();
-        log::debug!("addr: 0x{:x}, content: {:x}", *sp, ptr);
-        unsafe {
-            core::ptr::write(*sp as *mut usize, ptr);
-        }
-    }
 
     push_usize(&mut sp, 0);
     env_ptrs.iter().for_each(|ptr| push_usize(&mut sp, *ptr));
