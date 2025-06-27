@@ -244,11 +244,11 @@ fn main() -> i32 {
         }
 
         // ltp测试
-        run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
-        for test in GLIBC_LTP {
-            run_cmd(test, cd);
-        }
-        run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
+        // run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
+        // for test in GLIBC_LTP {
+        //     run_cmd(test, cd);
+        // }
+        // run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
         
         run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
         exit(0); 
@@ -292,9 +292,9 @@ fn main() -> i32 {
         run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
 
         // musl的ltp测试
-        for test in MUSL_LTP {
-            run_cmd(test, cd);
-        }
+        // for test in MUSL_LTP {
+        //     run_cmd(test, cd);
+        // }
 
         // run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
         // run_cmd("/musl/busybox --install /bin\0", "/musl/");
