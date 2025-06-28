@@ -512,3 +512,20 @@
     )
   )
 }
+
+#let code-figure(content, caption: [], supplement: [代码], label-name: "") = {
+  let fig = figure(
+    hit-sourcecode(content),
+    caption: caption,
+    kind: raw,
+    supplement: supplement,
+  )
+  [
+    #if label-name == "" {
+      [#fig]
+    } else {
+      let new-label = label(label-name)
+      [#fig #new-label]
+    }
+  ]
+}
