@@ -19,7 +19,7 @@ pub struct TimerQueue {
     long_term: SpinNoIrqLock<BinaryHeap<TimerEntry>>, // 长期定时器（最小堆）
     handle_counter: SpinNoIrqLock<u64>,               // 定时器句柄计数器
 }
-```
+```,
     caption: [TimerQueue 结构],
   label-name: "TimeQueue 结构",
 )
@@ -30,6 +30,7 @@ pub struct TimerQueue {
 
 时间轮是一种高效的定时器管理数据结构，特别适合处理大量短周期定时器。鉴于我们内核的时钟中断间隔为10ms，所以将时间轮划分为60个槽位，同时时间轮的滴答间隔为10ms， 10ms自动推进一槽，与硬件时钟中断完美同步。如下图所示，当时间指针指向的槽位为1时，代表这次推进将处理1槽位中所有的定时器。槽内采用平铺向量存储，插入/删除操作达到O(1)常数时间，相较于最小堆插入O(log n)/删除O(log n)更加高效。
 
+#code-figure(
 ```rs
 struct TimingWheel {
     // 时间轮的槽数组，每个槽存储一组定时器条目
@@ -39,7 +40,10 @@ struct TimingWheel {
     // 时间轮当前表示的时间点
     current_time: Duration,
 }
-```
+```,
+    caption: [TimingWheel 结构体],
+    label-name: "timing-wheel-struct",
+)
 
 #figure(
     image("../assets/timingwhell.png", width: 60%),
@@ -83,6 +87,7 @@ struct TimingWheel {
 
 我们使用TimeEntry表示定时器，每个定时器都携带专属的TimerHandle——一个单调递增的唯一标识符。当异步Future结束其生命周期时，我们需要drop其中剩下时的定时器，这时就可以通过对比TimerHandle找到对应的定时器。系统先在时间轮中闪电扫描，然后扫描二叉堆。为优化堆内搜索，我们设计了临时缓存策略：将非目标项暂存后重新入堆，避免了重建整个堆的昂贵开销。这种双路径检索确保删除操作始终保持高效。
 
+#code-figure(
 ```rust
 // 定时器条目
 struct TimerEntry {
@@ -90,10 +95,14 @@ struct TimerEntry {
     waker: Option<Waker>,// 唤醒器
     handle: TimerHandle, // 用于取消的句柄
 }
-```
+```,
+    caption: [TimerEntry 结构体],
+    label-name: "timer-entry-struct",
+)
 
 为了充分利用异步的优势，我们将需要监测的任务被封装在一个超时Future中（如下所示），deadline表示任务的超时期限，timer_handle用于Drop机制中确保定时器资源的回收，即使任务提前完成也不会留下幽灵定时器。我们使用poll轮循的方式对任务进行推进检测，轮询时执行三重检测：首先尝试推进内部任务，其次检查期限是否届满，最后才注册唤醒器，并且唤醒器只会注册一次。
 
+#code-figure(
 ```rust
 pub struct TimeoutFuture<F: Future> {
     inner: F,
@@ -109,6 +118,9 @@ impl<F: Future> Drop for TimeoutFuture<F> {
         }
     }
 }
-```
+```,
+    caption: [TimeoutFuture 结构体与 Drop 实现],
+    label-name: "timeout-future-drop",
+)
 
 目前Del0n1x已实现较为高效的定时任务管理，但是该优化并没有在初赛的测试用例中体现出来，在初赛测试用例中大部分定时器时间为1s，其实都会被分配到最小堆结构中。这也反向说明了对于代码的优化也要在特定的场景中才能得到体现，比如时间轮适合处理大量短周期定时任务，最小堆适合处理少量长周期定时任务。

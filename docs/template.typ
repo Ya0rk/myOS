@@ -515,7 +515,7 @@
 
 #let code-figure(content, caption: [], supplement: [代码], label-name: "") = {
   let fig = figure(
-    hit-sourcecode(content),
+    content,
     caption: caption,
     kind: raw,
     supplement: supplement,

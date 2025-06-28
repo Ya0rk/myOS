@@ -1,4 +1,4 @@
-#import "../template.typ": img
+#import "../template.typ": img, code-figure
 
 = 文件系统
 
@@ -18,6 +18,7 @@ SuperBlock trait 超级块属性是一个具体的文件系统的抽象。每一
 
 超级块`SuperBlock trait`的定义如下：
 
+#code-figure(
 ```rust
 pub trait SuperBlockTrait: Send + Sync {
     /// 获取根节点
@@ -27,7 +28,10 @@ pub trait SuperBlockTrait: Send + Sync {
     /// 显示文件系统信息
     fn fs_stat(&self) -> StatFs;
 }
-```
+```,
+    caption: [文件系统超级块],
+    label-name: "Super block",
+)
 
 与C 语言相比，rust 提供了足够的抽象机制。对于不同的文件系统，实现 SuperBlock trait后就可以在文件系统中安全和高效地使用，鲜明的方法名称也为编程带来方便。 rust 同时区别于传统的面向对象语言，抛弃了继承机制的设计，鼓励面向 trait（翻译为属性） 编程，并使用组合替代继承，使得代码结构更为简单高效。
 
@@ -35,18 +39,12 @@ pub trait SuperBlockTrait: Send + Sync {
 
 对于具体的文件系统，只需要实现自己的超级块对象，其中包含 `SuperBlockMeta` 的字段，就能完成继承对超级块基类的继承。比如对 FAT32 文件系统，我们只需要构造这样一个 `FatSuperBlock` 对象就能完成对 VFS `SuperBlockMeta` 的继承，同时，只需要为 `FatSuperBlock` 实现 `SuperBlock` trait 就能实现对接口方法的多态行为。这样就能在 Rust 语言中使用面向对象的设计来大大简化具体文件系统与 VFS 层接口对接的代码量。
 
-```rust
-pub struct FatSuperBlock {
-    meta: SuperBlockMeta,
-    fs: Arc<FatFs>,
-}
-```
 
 === Inode
 
 索引节点（inode）是文件系统的核心，是文件的抽象。
 
-索引节点属性 InodeTrait 是对索引节点（inode）的抽象，不同的文件系统有其自身的实现，但是其暴露出的方法是统一的。Linux 当中inode 结构体有 struct inode_operations *i_op 字段，InodeTrait 与索引节点（inode）的 inode_operations功能类似，定义了索引节点（inode）应当实现的功能。
+索引节点属性 InodeTrait 是对索引节点（inode）的抽象，不同的文件系统有其自身的实现，但是其暴露出的方法是统一的。Linux 当中inode 结构体有 struct inode_operations \*i_op 字段，InodeTrait 与索引节点（inode）的 inode_operations功能类似，定义了索引节点（inode）应当实现的功能。
 
 不同文件系统的 inode 结构体应当实现 InodeTrait。在 Linux 中，当处理内核文件系统操作或文件系统相关系统调用的时候，会获得对应的 inode 对象，随后去检查并调用 inode->i_op 中的回调函数来实现具体功能。这种面向方法（也可以成为面向对象）的编程思想极大地提高了内核编码的安全性和便利性，我们无需关心各个文件系统当中如何实现具体的方法的，我们仅仅需调用暴露的方法就好了。
 
@@ -56,6 +54,7 @@ rust 可以很方便地做到这一点，因为 rust 原生面向Trait 编程。
 
 索引节点属性 `InodeTrait` 的主要内容如下：
 
+#code-figure(
 ```rust
 pub trait InodeTrait: Send + Sync {
     /// inode 的信息
@@ -81,7 +80,10 @@ pub trait InodeTrait: Send + Sync {
     /// io 操作
     fn ioctl(&self, op: usize, arg: usize) -> SysResult<usize>
 }
-```
+```,
+    caption: [InodeTrait 接口定义],
+    label-name: "inode-trait",
+)
 
 
 === Dentry
@@ -110,6 +112,7 @@ pub trait InodeTrait: Send + Sync {
 )<phoenix-design>
 
 目录项`Dentry`的定义如下：
+#code-figure(
 ```rust
 pub struct Dentry {
     /// 目录项文件名
@@ -123,10 +126,14 @@ pub struct Dentry {
     /// dentry的状态
     status: RwLock<DentryStatus>,
 }
-```
+```,
+    caption: [Dentry 结构体],
+    label-name: "dentry-struct",
+)
 通过children 字段获得当前目录项的子目录项，通过 parent 获得当前目录项的双亲目录项，注意到这里使用弱引用（不增加引用计数）防止出现循环引用。inode 字段为所持有的索引节点（inode）。
 
 定义目录项状态DentryStatus
+#code-figure(
 ```rust
 pub enum DentryStatus {
     /// 这个 dentry 是有效的，并且已经初始化
@@ -136,7 +143,10 @@ pub enum DentryStatus {
     /// 这个 dentry 是无效的
     Negtive,
 }
-```
+```,
+    caption: [DentryStatus 枚举],
+    label-name: "dentry-status",
+)
 目录项状态在这三个状态之间转移，当目录项被标记为无效时，会在合适的时机进行回收，并且释放对索引节点（inode）对象的引用。当目录项尚未初始化的时候，会在访问时初始化。只有当目录项有效时才可以进行访问。
 
 目录项 （dentry）额外使用了一个缓存（Cache）用于加速从路径到目录项的查找，目录项缓存（DentryCache）使用内核定义的 Cache 泛型容器进行定义。目录项缓存的存在极大地加速了获得索引节点（inode）的过程，获得显著的性能提升。
@@ -205,12 +215,16 @@ devfs 中的文件代表一些具体的设备，比如终端、硬盘等。devfs
 
 以下为页缓存（Page Cache）的定义
 
+#code-figure(
 ```rust
 pub struct PageCache {
     pub pages: RwLock<BTreeMap<usize, Arc<Page>>>,
     inode: RwLock<Option<Weak<dyn InodeTrait>>>,
 }
-```
+```,
+    caption: [PageCache 结构体],
+    label-name: "page-cache",
+)
 
 在 PageCache 实现中以页对齐的地址为 key 去获得对应的页帧（Page）。
 

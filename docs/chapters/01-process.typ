@@ -1,15 +1,15 @@
-#import "../template.typ": img, tbl
+#import "../template.typ": img, tbl, code-figure
 
 = 进程管理
 
 == 概述
 
-Del0n1x操作系统采用无栈协程作为核心任务管理模型，该设计基于用户级轻量级线程理念，允许任务在执行过程中挂起并恢复。
-无栈协程与有栈协程的核心差异体现在上下文管理机制上：在rcore和xv6中，采用有栈方式进行任务切换，每次任务切换需要调用`__switch`函数，每个任务有独立栈空间
-并在切换时保存完整栈帧及`s0-s11`、`ra`、`sp`等14个RISC-V寄存器，
-而Del0n1x的无栈协程不依赖独立栈结构，转而通过状态机管理上下文状态，任务挂起时仅需保存当前执行位置和关键状态变量，显著降低内存开销与切换延迟。
+Del0n1x操作系统采用无栈协程作为核心任务管理模型，该设计基于用户级轻量级线程理念，允许任务在执行过程中挂起并恢复。
+无栈协程与有栈协程的核心差异体现在上下文管理机制上：在rcore和xv6中，采用有栈方式进行任务切换，每次任务切换需要调用`__switch`函数，每个任务有独立栈空间
+并在切换时保存完整栈帧及`s0-s11`、`ra`、`sp`等14个RISC-V寄存器，
+而Del0n1x的无栈协程不依赖独立栈结构，转而通过状态机管理上下文状态，任务挂起时仅需保存当前执行位置和关键状态变量，显著降低内存开销与切换延迟。
 
-在传统操作系统中，进程调度需切换用户级上下文、寄存器上下文和系统级上下文（含内核栈与页表），这种完整上下文切换必须通过内核态系统调用完成。
+在传统操作系统中，进程调度需切换用户级上下文、寄存器上下文和系统级上下文（含内核栈与页表），这种完整上下文切换必须通过内核态系统调用完成。
 但是Del0n1x采用共享内核栈架构，所有任务复用同一内核栈空间，任务切换时不涉及内核栈切换，这极大地降低了任务切换的开销。
 
 
@@ -25,7 +25,7 @@ await 将控制权交给调度器，以便另一个任务可以继续进行。�
     image("../assets/sched.png", width: 100%),
 )<leaderboard>
 
-=== 异步并不是“银弹”
+=== 异步并不是"银弹"
 
 我们在第一次接触异步调度时觉得，既然异步调度效率高，那为何不把所有的系统调用设计为异步形式呢？后来在深入了解到异步机制后发现，我们陷入了一个常见误区：把异步当成万能银弹。
 
@@ -39,7 +39,7 @@ await 将控制权交给调度器，以便另一个任务可以继续进行。�
 使得在任务调度过程中可以获取调度信息，通过调度信息，我们可以对任务做出更加精细的控制。
 如果任务在运行时被唤醒，则将其加入 FIFO 队列，其他的就放入 PRIO 队列进行管理。
 
-
+#code-figure(
 ```rs
 struct TaskQueue {
     normal: SpinNoIrqLock<VecDeque<Runnable>>,
@@ -55,14 +55,14 @@ if info.woken_while_running {
 }
 
 ....
-
-```
-#figure(
-    image("../assets/taskqueue.png", width: 100%),
-)<leaderboard>
+```,
+    caption: [任务队列结构],
+    label-name: "task-queue-struct",
+)
 
 在Del0n1x中，我们使用统一的 TaskFuture 封装了任务。对于用户任务，在poll轮循中实现了任务的切换调度。当任务checkin时，需要在修改TCB的时间戳记录调度时间，然后切换CPU中运行任务和切换页表。当任务checkout时，需要判断浮点寄存器状态是否为dirty以确定是否保存浮点寄存器，然后清空CPU当前任务，并记录任务checkout时间。 对于内核任务，Del0n1x并没有设计任务切换，而是让该任务一直poll，直到任务结束，这类任务主要是shell程序。
 
+#code-figure(
 ```rs
 pub enum TaskFuture<F: Future<Output = ()> + Send + 'static> {
     UserTaskFuture {
@@ -93,21 +93,29 @@ fn poll(
         }
     }
 }
-```
+```,
+    caption: [任务 Future 结构与 poll 实现],
+    label-name: "task-future-poll",
+)
 
 spawn_user_task可以设置一个用户任务。Del0n1x将用户任务的future设置为 trap_loop 循环，负责处理任务在用户态和内核态之间的切换，直到任务结束。执行 `executor::spawn(future)` 将任务挂入全局队列中等待被调度。
 
+#code-figure(
 ```rs
 pub fn spawn_user_task(user_task: Arc<TaskControlBlock>) {
     let future = TaskFuture::user_task(user_task.clone(), trap_loop(user_task));
     executor::spawn(future);
 }
-```
+```,
+    caption: [用户任务生成函数],
+    label-name: "spawn-user-task",
+)
 
 == 多核心CPU管理
 
 在Del0n1x中，我们将处理器抽象为CPU，使用内核中CPU结构体进行统一管理。current 中保存当前正在运行的任务的 TCB；timer_irq_cnt 记录内核时钟中断次数，在内核时钟中断处理函数中会增加这个计数器，trap return时会清零，如果计数器大于阈值，手动对该任务yield进行调度，避免任务一直占用CPU；kernel_trap_ret_value 用于记录 pagafault 返回值。
 
+#code-figure(
 ```rs
 pub struct CPU {
     current: Option<Arc<TaskControlBlock>>,
@@ -115,19 +123,27 @@ pub struct CPU {
     hart_id: usize,
     kernel_trap_ret_value: Option<SysResult<()>>,
 }
-```
+```,
+    caption: [CPU 结构体定义],
+    label-name: "cpu-struct",
+)
 
 单个CPU被存放在全局的 PROCESSORS 管理器中，并向外暴露接口，通过管理器我们能获取到当前任务的上下文信息和页表token、CPU id号等。
 
+#code-figure(
 ```rs
 const PROCESSOR: CPU = CPU::new();
 pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSOR; HART_NUM]));
-```
+```,
+    caption: [全局 CPU 管理器],
+    label-name: "processors-global",
+)
 
 == 任务控制块
 
 进程是操作系统中资源管理的基本单位，而线程是操作系统中调度的基本单位。由于在linux设计理念中，线程是轻量级进程，所以在Del0n1x中使用统一的任务控制块来管理进程和线程。
 
+#code-figure(
 ```rs
 pub struct TaskControlBlock {
     pub pid: Pid,                                                 // 任务标识符
@@ -160,7 +176,11 @@ pub struct TaskControlBlock {
     pub prio: SyncUnsafeCell<SchedParam>,               // 调度优先级和策略
     pub exit_code: AtomicI32,                           // 退出码
 }
-```
+```,
+    caption: [任务控制块结构体],
+    label-name: "task-control-block",
+)
+
 利用rust Arc引用计数和clone机制，可以有效的解决进程和线程之间资源共享和隔离问题。对于可以共享的资源，调用 Arc::clone() 仅增加引用计数（原子操作），未复制底层数据，父子进程共享同一份数据。如果是可以独立的资源（如memory_space），调用clone会递归复制整个结构，生成完全独立的数据副本，父子进程修改互不影响。
 
 === 进程和线程联系
@@ -188,6 +208,7 @@ pub struct TaskControlBlock {
 进程和进程之间是树状结构，通过 parent 和 children 字段指明父进程和子进程。
 Del0n1x 使用`Manager`管理任务和进程组，结构设计如下：
 
+#code-figure(
 ```rs
 pub struct Manager {
     pub task_manager: SpinNoIrqLock<TaskManager>,
@@ -198,8 +219,10 @@ pub struct Manager {
 pub struct TaskManager(pub HashMap<Pid, Weak<TaskControlBlock>>);
 /// 存放进程组的管理器，通过进程组的leader 的pid可以定位到进程组
 pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
-```
-
+```,
+    caption: [任务与进程组管理结构体],
+    label-name: "manager-struct",
+)
 
 === 任务的状态
 
@@ -210,6 +233,7 @@ pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
 - Stopped: 任务被暂停执行，但未被终止，收到 SIGSTOP 信号
 - Zombie: 任务已终止，但尚未被父进程回收
 
+#code-figure(
 ```rust
 pub enum TaskStatus {
     Ready,
@@ -217,7 +241,10 @@ pub enum TaskStatus {
     Stopped,
     Zombie,
 }
-```
+```,
+    caption: [任务状态枚举],
+    label-name: "task-status-enum",
+)
 
 #figure(
     image("../assets/status.png", width: 100%),

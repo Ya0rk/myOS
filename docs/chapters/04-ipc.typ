@@ -7,6 +7,7 @@
 
 信号是操作系统向进程传递事件通知的一种机制，主要用于通知进程发生了异步事件。在我们的内核中，严格按照Liunx中对于信号结构的设计，实现了相对完善且清晰的信号机制。 信号相关结构体设计自顶向下为分别为，SigStruct（一个包含所有信号处理方法的数组），其中每个元素为 KSigAction（内核层信号动作），SigAction（信号处理相关配置），三者关系如下：
 
+#code-figure(
 ```rs
 #[derive(Clone, Copy)]
 pub struct SigStruct {
@@ -34,12 +35,16 @@ pub struct SigAction {
     /// - 处理函数返回后，阻塞信号集恢复为原状态
     pub sa_mask: SigMask,
 }
-```
+```,
+    caption: [信号相关结构体定义],
+    label-name: "signal-structs",
+)
 
 == 信号传输
 
 在Del0n1x中，用户可以通过 kill 系统调用向进程传送信号，利用参数 pid 可以找到对应的进程或进程组，然后调用 TCB 成员函数接口 proc_recv_siginfo 将信号推入对应进程的待处理信号队列中（结构如下）：
 
+#code-figure(
 ```rs
 pub struct SigPending {
     /// 检测哪些sig已经在队列中,避免重复加入队列
@@ -51,7 +56,10 @@ pub struct SigPending {
     /// 如果遇到的信号也在need_wake中，那就唤醒task
     pub need_wake: SigMask,
 }
-```
+```,
+    caption: [SigPending 结构体],
+    label-name: "sigpending-struct",
+)
 
 我们将信号处理队列分为普通队列和优先队列，对不同的信号做了优先级处理，这样的数据结构时的Del0n1x对于紧急时间和高优先级时的相应延迟更低，提高了内核的实时性。
 
