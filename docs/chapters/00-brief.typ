@@ -60,6 +60,6 @@ Del0n1x 初赛阶段的内核主要模块和完成情况如下表格：
 
 // TODO: 修改架构图片
 #img(
-  image("../assets/phoenix-design.png", width: 70%),
+  image("../assets/整体架构图.png", width: 70%),
   caption: "Del0n1x内核架构设计"
 )<phoenix-design>
