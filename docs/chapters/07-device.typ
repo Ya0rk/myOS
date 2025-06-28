@@ -15,11 +15,10 @@
 
 对于一个块设备的具体实现，需要实现`块设备属性` BlockDriver trait， 通过这样的设计，可以将设备进行一个统一的管理与使用。
 
-
-#img(
-  image("../assets/todo", width: 70%),
-  caption: "设备抽象的层次结构"
-)<phoenix-design>
+// #img(
+//   image("../assets/todo", width: 70%),
+//   caption: "设备抽象的层次结构"
+// )<phoenix-design>
 
 == 设备树
 

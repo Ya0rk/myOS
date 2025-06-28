@@ -91,20 +91,20 @@ pub trait InodeTrait: Send + Sync {
 目录项 Dentry 是目录树上节点的抽象。每一个有效的目录项持有对一个合法的索引节点（inode） 的引用操作系统应用程序使用路径获得对应的文件，这一过程是由目录项（dentry） 完成。目录项构成了一颗目录树，一般而言，通过从挂载节点向下搜索，实现对文件的查找。同时 Dentry 还对文件系统目录树进行了管理。
 
 #img(
-  image("../assets/todo", width: 70%),
+  image("../assets/访问目录树.png", width: 70%),
   caption: "访问目录树的过程"
 )<phoenix-design>
 
 在初始化目录树的过程中，我们需要将具体的文件系统挂载（mount）在 目录树上，目录树提供了这一功能的实现。我们可以把任意的文件系统挂载到目录树上的文件夹节点上，将该目录项（dentry） 持有的 inode `替换`为该文件系统的根目录，我们就可以通过对应的路径，去访问该文件系统下的文件。
 
 #img(
-  image("../assets/todo", width: 70%),
+  image("../assets/mount_umount.png", width: 70%),
   caption: "挂载过程"
 )<phoenix-design>
 
 在我们的实现中，当我们挂载了一个新的文件系统到某个目录项上时，原有的目录项上持有的索引节点（inode）的引用会隐藏起来，当从这个目录项上卸载（unmount）该文件系统的时候原来持有的索引节点（inode）会恢复，进而恢复原有的子树结构。
 
-目前仅支持内核中调用
+目前仅支持内核中调用，未来我们希望实现 loop 设备后在用户态也可以使用
 
 目录项`Dentry`的定义如下：
 
@@ -229,11 +229,10 @@ Ext4 文件系统的索引节点（inode）会持有这一页缓存，当不做�
 
 用户态程序使用`open`系统调用打开文件后，会获得文件描述符（File Descriptor）来用于控制文件（File），这需要内核为每一个进程创建一个对应的文件描述符表（Fd Table）用于实现文件描述符转换到文件的映射
 
-
-#img(
-  image("../assets/todo", width: 70%),
-  caption: "一次从 read 系统调用的过程"
-)<phoenix-design>
+// #img(
+//   image("../assets/todo", width: 70%),
+//   caption: "一次从 read 系统调用的过程"
+// )<phoenix-design>
 
 以下为文件描述符表的实现：
 
