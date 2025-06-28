@@ -1,0 +1,11 @@
+## localsetting
+.vscode
+## pdf
+*.pdf
+
+Makefile
+
+*.drawio.bkp
+
+## MacOS
+**/.DS_Store
