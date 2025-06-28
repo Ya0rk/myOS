@@ -1,5 +1,6 @@
 #include "chapters/00-brief.typ"
 #include "chapters/01-process.typ"
+#include "chapters/88-trap.typ"
 #include "chapters/02-mem.typ"
 #include "chapters/03-fs.typ"
 #include "chapters/04-ipc.typ"
