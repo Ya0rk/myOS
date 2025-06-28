@@ -17,7 +17,7 @@
 
 
 #img(
-  image("todo", width: 70%),
+  image("../assets/todo", width: 70%),
   caption: "设备抽象的层次结构"
 )<phoenix-design>
 

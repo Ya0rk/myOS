@@ -1,4 +1,4 @@
-#import "../template.typ": img
+#import "../template.typ": img, code-figure
 
 = 内存管理
 
@@ -43,10 +43,10 @@ impl Drop for FrameTracker {
 
 Phoenix 地址空间的设计如下图所示：
 
-#img(
-    image("../assets/address-space.png"),
-    caption: "地址空间"
-)<address_layout>
+// #img(
+//     image("../assets/address-space.png"),
+//     caption: "地址空间"
+// )<address_layout>
 
 Phonix 内核态页表保存在全局内核地址空间 `KERNEL_SPACE` 中，用户地址空间共享内核二级页表。
 

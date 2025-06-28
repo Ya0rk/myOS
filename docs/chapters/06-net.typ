@@ -1,4 +1,5 @@
 #import "../algorithm.typ": algorithm-figure
+#import "../template.typ": code-figure
 #import "@preview/lovelace:0.2.0": *
 = 网络模块
 <网络模块>
