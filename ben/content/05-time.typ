@@ -45,7 +45,7 @@ struct TimingWheel {
 
 #figure(
   image("assets/timingwhell.png"),
-  caption: [时间轮结构]
+  caption: [时间轮结构],
   supplement: [图],
 )<时间轮结构>
 
