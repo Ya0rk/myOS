@@ -1,111 +1,80 @@
 #import "../template.typ": img, tbl
-
+#import "../algorithm.typ": algorithm-figure
+#import "@preview/lovelace:0.2.0": *
 = 进程间通信
 
 == 信号机制
 
-信号是操作系统向进程传递事件通知的一种机制，主要用于通知进程发生了异步事件。Phoenix 与往届作品 Titanix 的信号机制相比，信号机制更加完善。Titanix 的信号队列中只有信号编号，Phoenix 参考了 Linux 的实现，使用`SigInfo`结构体代替，除了能表示信号编号外，还能携带更多的信息：
+信号是操作系统向进程传递事件通知的一种机制，主要用于通知进程发生了异步事件。在我们的内核中，严格按照Liunx中对于信号结构的设计，实现了相对完善且清晰的信号机制。 信号相关结构体设计自顶向下为分别为，SigStruct（一个包含所有信号处理方法的数组），其中每个元素为 KSigAction（内核层信号动作），SigAction（信号处理相关配置），三者关系如下：
 
 ```rs
-pub struct SigInfo {
-    pub sig: Sig,
-    pub code: i32,
-    pub details: SigDetails,
+#[derive(Clone, Copy)]
+pub struct SigStruct {
+    pub actions: [KSigAction; MAX_SIGNUM],
+}
+
+/// 内核层信号动作
+#[derive(Clone, Copy)]
+pub struct KSigAction {
+    pub sa: SigAction,
+    pub sa_type: SigHandlerType,
+}
+
+/// 用户层信号处理配
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SigAction {
+    /// 信号处理函数类型，可能是自定义，也可能是默认
+    pub sa_handler: usize,
+    /// 控制信号处理行为的标志位
+    pub sa_flags: SigActionFlag,
+    pub sa_restorer: usize,
+    /// 在执行信号处理函数期间临时阻塞的信号集合
+    /// - 信号处理函数执行时，内核会自动将 sa_mask 中的信号添加到进程的阻塞信号集中
+    /// - 处理函数返回后，阻塞信号集恢复为原状态
+    pub sa_mask: SigMask,
 }
 ```
 
-这种设计与 POSIX 标准中的 `siginfo_t` 结构体相似，增强了 Phoenix 系统与标准 POSIX 接口的兼容性。并且使得 Phoenix 的信号机制具备了更强的表达能力和灵活性。携带附加信息可以是信号的来源、产生原因和相关的上下文数据。例如，`code` 字段可以用于区分不同类型的信号或事件，`details` 字段则可以包含更详细的上下文信息：
+== 信号传输
+
+在Del0n1x中，用户可以通过 kill 系统调用向进程传送信号，利用参数 pid 可以找到对应的进程或进程组，然后调用 TCB 成员函数接口 proc_recv_siginfo 将信号推入对应进程的待处理信号队列中（结构如下）：
 
 ```rs
-pub enum SigDetails {
-    None,
-    Kill {
-        /// sender's pid
-        pid: usize,
-    },
-    CHLD {
-        /// which child
-        pid: usize,
-        /// exit code
-        status: i32,
-        utime: Duration,
-        stime: Duration,
-    },
+pub struct SigPending {
+    /// 检测哪些sig已经在队列中,避免重复加入队列
+    mask: SigMask,
+    /// 普通队列
+    fifo: VecDeque<SigInfo>,
+    /// 存放 SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGFPE, SIGSYS
+    prio: VecDeque<SigInfo>,
+    /// 如果遇到的信号也在need_wake中，那就唤醒task
+    pub need_wake: SigMask,
 }
 ```
-例如，当子进程状态变为`Zombie`时需要向父进程发送`SIGCHLD`信号告知父进程状态改变，此时将`SigInfo`中的`SigDetails`字段设为`CHLD`，并且告诉父进程自己的`pid`、状态码`status`、用户态运行时间`utime`和内核态运行时间`stime`，这些信息可以有助于父进程在`Wait4`系统调用时掌握子进程的数据。
 
-=== 信号处理函数
+我们将信号处理队列分为普通队列和优先队列，对不同的信号做了优先级处理，这样的数据结构时的Del0n1x对于紧急时间和高优先级时的相应延迟更低，提高了内核的实时性。
 
-在任务由内核态返回到用户态之前，往往需要执行信号处理函数，检查和处理挂起的信号，调用适当的信号处理程序或执行默认行为，确保进程能够正确响应和处理信号。这一机制是操作系统处理异步事件、进程控制和进程间通信的重要组成部分。
+对于队列中的信号结构体 SigInfo设计，我们借鉴了Linux中的 siginfo_t 实现方式，同时对其进行了简化和封装，能够携带更多的数据信息（发送者pid、子进程exit code和信号编码等），这样极大的方便了 Wait4 和 do_signal 中对于不同信号的处理分发流程。
 
-这里涉及到一个细节，就是如果此时信号待处理队列中有多个需要处理的信号同时到来，那么应该以什么顺序处理。大部分往届作品都是按照信号到来顺序依次处理的，这种 FIFO（先入先出）方法虽然简单直接，但在处理高优先级和紧急事件时可能存在不足。例如，当一个需要立即响应的紧急信号和一个普通信号同时到达时，按照到达顺序处理可能导致紧急信号的响应延迟。Phoenix 在设计信号处理机制时，参考了 Linux 内核的实现，引入了信号优先级的概念，这样的好处是紧急信号可以立即得到处理，减少了响应延迟，提升了系统对关键事件的响应能力。例如，当发生非法内存访问时，会触发`SIGSEGV`（Segmentation Fault）信号，指示程序运行中出现严重问题，这种信号在 Phoenix 中会优先处理。
+== 信号处理
 
-用户可以使用`sigaction`系统调用为某些信号自定义信号处理函数，操作系统内核会按照如下步骤来调用用户自定义的信号处理函数：
-+ 保存上下文：内核会保存当前的进程执行上下文，包括寄存器状态、堆栈指针、程序计数器等，以便在信号处理完成后恢复进程的执行。
-+ 切换到用户态：内核切换到用户态，并开始执行用户自定义的信号处理函数
-+ 恢复上下文：使用 `sigreturn` 函数返回到内核态并且恢复之前保存的进程上下文，如寄存器状态、堆栈指针、程序计数器等。
+进程因系统调用、中断或异常进入内核态，完成内核任务后，在返回用户态前，内核会检查该进程的未决信号。Del0n1x中信号处理集中在 do_signal 函数中，我们会依次遍历prio和fifo队列，如果该信号没有被阻塞，则根据 siginfo 中信号编码找到对应的信号处理函数 KSigAction，然后对 KSigAction 中的 sa_type 字段进行模式匹配，对应的动作分别为 Ignore(忽略该信号)、Default（系统默认处理）和Customized（用户自定义处理函数）。
 
-这里同样存在一个问题，即切换到用户态需要保存上下文，那么应该将上下文保存在哪里？部分作品如往届一等奖作品 Titanix 将上下文记录在内核态，这当然也可以，但是对于 POSIX 规范中一些标志位就难以支持，例如设置了`SA_SIGINFO`标志位的信号处理程序的函数签名会变成如下形式：
+对于用户自定义函数，内核会下面的流程进行处理（如下图）：
 
-```c
-void handler(int sig, siginfo_t *info, void *ucontext);
-```
+构建用户态栈帧：在内核栈中创建新栈帧，如果用户没有自定义栈帧位置，那么默认为将用户栈sp向低地址扩展分配，确保信号处理函数有独立栈空间。
 
-这里`ucontext`是指向`ucontext_t`结构体的指针，提供接收信号时进程的上下文信息，如果将进程上下文保存在了内核态，那么用户将有机会访问到内核中的信息，这无疑是非常不安全的。虽然竞赛并未有测试程序需要用到该标志位，但是 Phoenix 的目标是实现符合 POSIX 规范的操作系统，因此依然实现了该标志位。
+修改返回上下文：将原用户态执行点（如 pc 寄存器）保存到UContex中，然后复制到用户栈；然后修改当前trap_context指向用户处理函数。
 
-Phoenix 参考了 Linux 的设计，将信号处理时需要保存的进程上下文保存在了用户栈中，这样`ucontext`指向用户栈就非常安全。
+切换至用户态：跳转至信号处理函数入口并执行用户自定义函数。在这一过程中，为了避免信号的嵌套处理，需要将原信号加入屏蔽字。
 
-=== 系统调用的打断与恢复
+切换到内核态：处理函数结束后调用 sigreturn() 系统调用，主动陷入内核态。
+内核从用户栈恢复原进程上下文，清除信号屏蔽字。
 
-在往届参赛作品中，几乎都不支持被含有`SA_RESTART`标志的信号打断的系统调用的恢复功能。在类Unix操作系统中，如果慢系统调用（如 `sys_read`、`sys_pselect6`）在执行期间被信号打断并且该信号的处理程序（signal handler）被触发，那么：
-+ #strong[带有 `SA_RESTART` 标志位的信号]：信号处理程序返回后，该系统调用会被自动重新启动，而不是直接返回错误。这对某些慢系统调用（如 read、write、select、pselect 等）尤为重要，因为这些调用可能会因为等待外部事件而阻塞很长时间。
-+ #strong[没有 `SA_RESTART` 标志位的信号]：系统调用会被打断并返回一个错误代码，通常是 EINTR（表示系统调用被中断）。调用者需要检查返回值并决定是否重新执行该系统调用
 
-Phoenix 的设计目标是实现功能完善的操作系统，因此支持了被打断的系统调用的恢复功能。
+// TODO: 需要自己画一个
 
-Phoenix采用如下的方案：如果是系统调用陷入内核，并且系统调用返回的是`SysError::EINTR`错误，`trap_handler`函数会返回`true`表示系统调用被信号打断了，
-```rs
-pub async fn trap_handler(task: &Arc<Task>) -> bool {
-    /* skip */
-    match cause {
-        Trap::Exception(e) => {
-            match e {
-                Exception::UserEnvCall => {
-                    let syscall_no = cx.syscall_no();
-                    cx.set_user_pc_to_next();
-                    // get system call return value
-                    let ret = Syscall::new(task)
-                        .syscall(syscall_no, cx.syscall_args())
-                        .await;
-                    cx.save_last_user_a0();
-                    cx.set_user_a0(ret);
-                    if ret == -(SysError::EINTR as isize) as usize {
-                        return true;
-                    }
-                }
-                /* skip */
-            }
-        }
-        /* skip */
-    }
-    false
-}
-```
-`trap_handler`函数的返回值会传递给`do_signal`函数，在`do_signal`中检测信号是否含有`SA_RESTART`标志位，如果发现需要重启系统调用，会将`TrapContext`中的`sepc`寄存器-4，表示重新执行，由于用户自定义的信号处理程序`signal handler`函数执行完的返回值会将`a0`寄存器覆盖掉，这里使用`restore_last_user_a0`函数进行备份。
-```rs
-pub fn do_signal(task: &Arc<Task>, mut intr: bool) -> SysResult<()> {
-    /* skip */
-
-    while /* skip */ {
-        let action = /* skip */;
-        if intr && action.flags.contains(SigActionFlag::SA_RESTART) {
-            cx.sepc -= 4;
-            cx.restore_last_user_a0();
-            intr = false;
-        }
-        /* skip */
-    }
-    /* skip */
-}
-```
+#figure(
+    image("../assets/do_signal.png", width: 90%),
+)<leaderboard>

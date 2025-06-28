@@ -1,80 +1,108 @@
+#import "../algorithm.typ": algorithm-figure
+#import "@preview/lovelace:0.2.0": *
 = 时钟模块
 <时钟模块>
-
-== 时钟中断
-<时钟中断>
-
-RISC-V架构中，内置时钟和计数器用于实现操作系统的计时机制，其中64位的`mtime`计数器记录处理器自上电以来的时钟周期，而`mtimecmp`用于触发时钟中断。由于内核处于S特权级，无法直接访问这些M特权级的CSR，因此通过SEE（OpenSBI）提供的SBI接口间接实现计时器控制。
-
-Phoenix中利用`riscv::register::time::read()`函数读取 RISC-V 架构下的
-`mtime`
-计数器的值，得到系统自启动以来经过的时钟周期数作为系统时间，转换为Rust核心库`core`中的`Duration`结构体，它能够清晰地表示时间间隔，避免了直接操作裸露的计数值所带来的错误和混淆，确保时间的计算和表示是统一的，并且可以利用
-`Duration` 提供的丰富的时间操作方法（如加减法、比较等）
-
-== 定时器
-<定时器>
-
-在操作系统中，定时器通常用来管理一段时间后需要触发的事件。这些定时器需要记录触发时间和要执行的回调函数。
-
-Phoenix的定时器结构体`Timer`参考了Linux系统的回调函数设计，但是结合了rust的特性。Phoenix定义了`TimerEvent`
-trait，定义了一个通用的接口，用于描述定时器触发时需要执行的操作。与往届作品Titanix仅在`Timer`中定义了`Waker`用于唤醒相比，这种设计提高了定时器的灵活性。
-
-```rust
-/// A trait that defines the event to be triggered when a timer expires.
-/// The TimerEvent trait requires a callback method to be implemented,
-/// which will be called when the timer expires.
-pub trait TimerEvent: Send + Sync {
-    /// The callback method to be called when the timer expires.
-    /// This method consumes the event data and optionally returns a new
-    /// timer.
-    ///
-    /// # Returns
-    /// An optional Timer object that can be used to schedule another timer.
-    fn callback(self: Box<Self>) -> Option<Timer>;
-}
-```
-
-`callback`方法的参数`self: Box<Self>`通过将 `self` 移动到 `Box`
-内，保证了 trait 对象的动态分发能力（即运行时多态），并且确保调用
-`callback`
-时定时器的数据所有权被安全转移。返回值为`Option<Timer>`，表示在当前定时器触发后，可以选择性地创建一个新的定时器，这种设计使得定时器能够链式触发，以便支持需要重复触发定时器的`sys_setitimer`系统调用。通过
-`Send` 和 `Sync` trait
-bounds，确保定时器事件在多线程环境中是安全的。可以在线程间传递和共享
-`Timer` 实例，而无需担心数据竞争问题。
-
-`Timer`
-结构体用来表示一个具体的定时器实例，包含到期时间和需要执行的回调函数。具体设计如下：
-
-```rust
-/// Represents a timer with an expiration time and associated event data.
-/// The Timer structure contains the expiration time and the data required
-/// to handle the event when the timer expires.
-pub struct Timer {
-    /// The expiration time of the timer.
-    /// This indicates when the timer is set to trigger.
-    pub expire: Duration,
-
-    /// A boxed dynamic trait object that implements the TimerEvent trait.
-    /// This allows different types of events to be associated with the
-    /// timer.
-    pub data: Box<dyn TimerEvent>,
-}
-```
 
 == 定时器队列
 <定时器队列>
 
-Phoenix使用`TimerManager`
-结构体实现了一个高效、安全且易于管理的定时器管理机制。使用`BinaryHeap`二叉堆数据结构按到期时间排序管理所有的定时器，其插入和删除操作复杂度为
-O(log n)，能在 O(1)
-时间内获取最早到期的定时器，确保定时器触发的实时性。Phoenix支持用户态时间中断和内核态时间中断，两种中断触发时都会检查是否有定时器到期。
+在操作系统的定时器模块中，我们创造性地实现了一套混合定时器管理系统，将时间轮算法与最小堆优化相结合，相较于Phoenix和Pantheon使用的最小堆数据结构，我们的混合定时器在时间的处理上更加精细，同时在特定场景下更加的高效。
 
-```rust
-/// `TimerManager` is responsible for managing all the timers in the system.
-pub struct TimerManager {
-    /// A priority queue to store the timers.
-    timers: SpinNoIrqLock<BinaryHeap<Reverse<Timer>>>,
+我们将定时器分为了短期和长期两种，以600ms作为阈值，将小于阈值的划分为短期定时器，大于阈值的划分为长期定时器。两种定时器分别存储在时间轮和最小堆中。
+
+```rs
+// 定时器队列
+pub struct TimerQueue {
+    wheel: SpinNoIrqLock<TimingWheel>,                // 短期定时器（<600ms）
+    long_term: SpinNoIrqLock<BinaryHeap<TimerEntry>>, // 长期定时器（最小堆）
+    handle_counter: SpinNoIrqLock<u64>,               // 定时器句柄计数器
 }
 ```
 
-目前Phoenix已实现较为高效的定时任务管理，但是仍有可以改进的地方，例如当前使用的`BinaryHeap`数据结构虽然在插入和删除操作上的复杂度较低，但由于其需要频繁分配和释放内存，可能会导致性能上的开销。而侵入式链表（如Linux中的`list_head`）可以减少内存分配和释放的频率，Linux采用侵入式链表与红黑树实现了更高效的定时任务管理。
+=== 时间轮设计
+<时间轮设计>
+
+时间轮是一种高效的定时器管理数据结构，特别适合处理大量短周期定时器。鉴于我们内核的时钟中断间隔为10ms，所以将时间轮划分为60个槽位，同时时间轮的滴答间隔为10ms， 10ms自动推进一槽，与硬件时钟中断完美同步。如下图所示，当时间指针指向的槽位为1时，代表这次推进将处理1槽位中所有的定时器。槽内采用平铺向量存储，插入/删除操作达到O(1)常数时间，相较于最小堆插入O(log n)/删除O(log n)更加高效。
+
+```rs
+struct TimingWheel {
+    // 时间轮的槽数组，每个槽存储一组定时器条目
+    slots: [Vec<TimerEntry>; TIME_WHEEL_SLOTS],
+    // 当前指向的槽索引，随着时间推移循环递增
+    current_slot: usize,
+    // 时间轮当前表示的时间点
+    current_time: Duration,
+}
+```
+
+#figure(
+    image("../assets/timingwhell.png", width: 60%),
+)<leaderboard>
+
+时间轮推进算法如下所示，通过该函数我们获取到所有超时的定时器waker，返回给上级调用者用于批量唤醒。
+
+#algorithm-figure(
+  pseudocode(
+    no-number,
+    [*function* advance_to(target_time: Duration) $\to$ Vec<Waker>],
+    [wake_list ← 空列表],
+    [计算需要推进的槽数 slots_to_advance = calc_slot(target_time)],
+    [*for* 每个需要处理的槽 *do*],
+    ind,
+    [*for* 当前槽中的每个定时器条目 *do*],
+    ind,
+    [*if* 条目已过期(expire ≤ target_time) *then*],
+    ind,
+    [将条目的waker加入唤醒列表],
+    [从槽中移除该条目],
+    ded,
+    [*else*],
+    ind,
+    [保留该条目],
+    ded,
+    ded,
+    [移动指针到下一个槽],
+    [更新时间轮当前时间],
+    [*if* 当前时间超过目标时间 *then* 提前退出],
+    ded,
+    [*return* wake_list],
+  ),
+  caption: [时间轮推进算法],
+  label-name: "time-wheel-advance-simplified",
+  supplement: [算法]
+)
+
+== 定时器
+<定时器>
+
+我们使用TimeEntry表示定时器，每个定时器都携带专属的TimerHandle——一个单调递增的唯一标识符。当异步Future结束其生命周期时，我们需要drop其中剩下时的定时器，这时就可以通过对比TimerHandle找到对应的定时器。系统先在时间轮中闪电扫描，然后扫描二叉堆。为优化堆内搜索，我们设计了临时缓存策略：将非目标项暂存后重新入堆，避免了重建整个堆的昂贵开销。这种双路径检索确保删除操作始终保持高效。
+
+```rust
+// 定时器条目
+struct TimerEntry {
+    expire: Duration,    // 到期时间
+    waker: Option<Waker>,// 唤醒器
+    handle: TimerHandle, // 用于取消的句柄
+}
+```
+
+为了充分利用异步的优势，我们将需要监测的任务被封装在一个超时Future中（如下所示），deadline表示任务的超时期限，timer_handle用于Drop机制中确保定时器资源的回收，即使任务提前完成也不会留下幽灵定时器。我们使用poll轮循的方式对任务进行推进检测，轮询时执行三重检测：首先尝试推进内部任务，其次检查期限是否届满，最后才注册唤醒器，并且唤醒器只会注册一次。
+
+```rust
+pub struct TimeoutFuture<F: Future> {
+    inner: F,
+    deadline: Duration,
+    timer_handle: Option<TimerHandle>,
+}
+
+impl<F: Future> Drop for TimeoutFuture<F> {
+    fn drop(&mut self) {
+        // 确保定时器被删除
+        if let Some(handle) = self.timer_handle.take() {
+            TIMER_QUEUE.cancel(handle);
+        }
+    }
+}
+```
+
+目前Del0n1x已实现较为高效的定时任务管理，但是该优化并没有在初赛的测试用例中体现出来，在初赛测试用例中大部分定时器时间为1s，其实都会被分配到最小堆结构中。这也反向说明了对于代码的优化也要在特定的场景中才能得到体现，比如时间轮适合处理大量短周期定时任务，最小堆适合处理少量长周期定时任务。
