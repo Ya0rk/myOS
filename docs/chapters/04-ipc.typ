@@ -1,4 +1,4 @@
-#import "../template.typ": img, tbl
+#import "../template.typ": img, tbl, code-figure
 #import "../algorithm.typ": algorithm-figure
 #import "@preview/lovelace:0.2.0": *
 = 进程间通信
