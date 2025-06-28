@@ -513,6 +513,15 @@
   )
 }
 
+#import "@preview/codelst:2.0.1": sourcecode, code-frame
+
+#let codelst-sourcecode = sourcecode
+#let hit-sourcecode = codelst-sourcecode.with(frame: code => {
+  set text(font: 字体.代码, size: 字号.五号)
+  code-frame(code, numbering: true)
+})
+
+
 #let code-figure(content, caption: [], supplement: [代码], label-name: "") = {
   let fig = figure(
     content,
