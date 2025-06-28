@@ -407,12 +407,6 @@ waitid10
 waitid11
 waitpid01
 waitpid04
-waitpid06
-waitpid07
-waitpid08
-waitpid09
-waitpid10
-waitpid11
 write01
 write02
 "
