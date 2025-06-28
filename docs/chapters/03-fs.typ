@@ -37,8 +37,6 @@ pub trait SuperBlockTrait: Send + Sync {
 
 我们的内核中简化了超级块的提供的功能，仅提供有限的信息
 
-对于具体的文件系统，只需要实现自己的超级块对象，其中包含 `SuperBlockMeta` 的字段，就能完成继承对超级块基类的继承。比如对 FAT32 文件系统，我们只需要构造这样一个 `FatSuperBlock` 对象就能完成对 VFS `SuperBlockMeta` 的继承，同时，只需要为 `FatSuperBlock` 实现 `SuperBlock` trait 就能实现对接口方法的多态行为。这样就能在 Rust 语言中使用面向对象的设计来大大简化具体文件系统与 VFS 层接口对接的代码量。
-
 
 === Inode
 
@@ -84,6 +82,8 @@ pub trait InodeTrait: Send + Sync {
     caption: [InodeTrait 接口定义],
     label-name: "inode-trait",
 )
+
+在文件对象 File 或者目录项对象中会持有数据类型为 `Arc<dyn InodeTrait>` 的索引节点（inode）对象。通过索引节点（inode）对象，,通过其实现的 Inode trait 接口我们可以获得文件的各种信息，进行文件的读写、创建、删除等操作。在调用 InodeTrait 定义的方法的时候，我们不需要关心其具体的数据类型，这一行为会自动分派给对应的文件系统的索引节点（inode）实现。
 
 
 === Dentry
