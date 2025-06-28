@@ -1,4 +1,5 @@
 #import "../algorithm.typ": algorithm-figure
+#import "../template.typ" : code-figure
 #import "@preview/lovelace:0.2.0": *
 = 时钟模块
 <时钟模块>
@@ -10,6 +11,7 @@
 
 我们将定时器分为了短期和长期两种，以600ms作为阈值，将小于阈值的划分为短期定时器，大于阈值的划分为长期定时器。两种定时器分别存储在时间轮和最小堆中。
 
+#code-figure(
 ```rs
 // 定时器队列
 pub struct TimerQueue {
@@ -18,6 +20,10 @@ pub struct TimerQueue {
     handle_counter: SpinNoIrqLock<u64>,               // 定时器句柄计数器
 }
 ```
+    caption: [TimerQueue 结构],
+  label-name: "TimeQueue 结构",
+)
+
 
 === 时间轮设计
 <时间轮设计>
