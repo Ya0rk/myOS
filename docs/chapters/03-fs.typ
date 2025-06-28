@@ -10,6 +10,11 @@
 
 Del0n1x OS 的虚拟文件系统的主要数据结构为`SuperBlock`、`Inode`、`Dentry`、`File`。
 
+#img(
+  image("../assets/vfs.png", width: 70%),
+  caption: "文件系统"
+)<phoenix-design>
+
 
 === SuperBlock
 
