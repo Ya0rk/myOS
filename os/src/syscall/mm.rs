@@ -170,10 +170,10 @@ pub fn sys_shmget(key: isize, size: usize, shmflg: i32) -> SysResult<usize> {
             return Err(Errno::EEXIST);
         }
         if unlikely(size > shmobj.size()) {
-            error!(
-                "[sys_shmget] {} key: {}, size: {}, shmflag: {:?}",
-                line!(), key, size, shmflag
-            );
+            // error!(
+            //     "[sys_shmget] {} key: {}, size: {}, shmflag: {:?}",
+            //     line!(), key, size, shmflag
+            // );
             return Err(Errno::EINVAL);
         }
         // not used
@@ -188,10 +188,10 @@ pub fn sys_shmget(key: isize, size: usize, shmflg: i32) -> SysResult<usize> {
         return Err(Errno::ENOENT);
     }
     if unlikely(size == 0) {
-        error!(
-            "[sys_shmget] {} key: {}, size: {}, shmflag: {:?}",
-            line!(), key, size, shmflag
-        );
+        // error!(
+        //     "[sys_shmget] {} key: {}, size: {}, shmflag: {:?}",
+        //     line!(), key, size, shmflag
+        // );
         
         return Err(Errno::EINVAL);
     }
@@ -226,19 +226,19 @@ pub fn sys_shmctl(shmid: isize, op: isize, buf: *const u8) -> SysResult<usize> {
                 Ok(0)
             } else {
                 
-                error!(
-                    "[sys_shmctl] {} shmid: {}, op: {:?}, buf_addr: {:#x}",
-                    line!(), shmid, op, buf as usize
-                );
+                // error!(
+                //     "[sys_shmctl] {} shmid: {}, op: {:?}, buf_addr: {:#x}",
+                //     line!(), shmid, op, buf as usize
+                // );
                 Err(Errno::EINVAL)
             }
         }
         ShmOp::IPC_RMID => {
             warn!("[sys_shmctl] IPC_RMID, unimplemented");
-            error!(
-                "[sys_shmctl] IPC_RMID: {} shmid: {}, op: {:?}, buf_addr: {:#x}",
-                line!(), shmid, op, buf as usize
-            );
+            // error!(
+            //     "[sys_shmctl] IPC_RMID: {} shmid: {}, op: {:?}, buf_addr: {:#x}",
+            //     line!(), shmid, op, buf as usize
+            // );
             Ok(0)
         }
         ShmOp::IPC_INFO => {
@@ -305,10 +305,10 @@ pub fn sys_shmat(shmid: isize, shmaddr: *const u8, shmflg: i32) -> SysResult<usi
         Ok(ret.0)
     } else {
         
-        error!(
-            "[sys_shmat] {} shmid: {}, shmaddr: {:#x}, shmflag: {:?}",
-            line!(), shmid, shmaddr.0, shmflag
-        );
+        // error!(
+        //     "[sys_shmat] {} shmid: {}, shmaddr: {:#x}, shmflag: {:?}",
+        //     line!(), shmid, shmaddr.0, shmflag
+        // );
         Err(Errno::EINVAL)
     }
 }

@@ -244,13 +244,14 @@ fn main() -> i32 {
         }
 
         // ltp测试
-        run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
-        for test in GLIBC_LTP {
-            run_cmd(test, cd);
-        }
+        // run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
+        // for test in GLIBC_LTP {
+        //     run_cmd(test, cd);
+        // }
         // run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
         
         run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
+        run_cmd("/glibc/busybox rm -rf /lib64/*\0", "/glibc/");
         exit(0); 
     } else {
         println!("main parent");
@@ -287,17 +288,16 @@ fn main() -> i32 {
         run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
         for test in TESTCASES {
             run_cmd(test, cd);
-            // run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
         }
         run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
 
         // musl的ltp测试
-        for test in MUSL_LTP {
-            run_cmd(test, cd);
-        }
+        // for test in MUSL_LTP {
+        //     run_cmd(test, cd);
+        // }
 
-        // run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
-        // run_cmd("/musl/busybox --install /bin\0", "/musl/");
+        run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
+        run_cmd("/musl/busybox rm -rf /lib64/*\0", "/musl/");
         
         exit(0);
     } else {
@@ -310,7 +310,76 @@ fn main() -> i32 {
                 break;
             }
         }
-    } 
+    }
+
+    let child_pid = fork();
+    if child_pid == 0 {
+        musl_ltp();
+        exit(0);
+    } else {
+        loop {
+            let mut exit_code: i32 = 0;
+            let pid = waitpid(child_pid as usize, &mut exit_code, 0);
+            if pid == child_pid {
+                break;
+            }
+        }
+    }
+
+
+    let child_pid = fork();
+    if child_pid == 0 {
+        glibc_ltp();
+        exit(0);
+    } else {
+        loop {
+            let mut exit_code: i32 = 0;
+            let pid = waitpid(child_pid as usize, &mut exit_code, 0);
+            if pid == child_pid {
+                break;
+            }
+        }
+    }
 
     0
+}
+
+
+fn glibc_ltp() {
+    let cd = "/glibc/";
+    chdir(&conert_str2byte(cd));
+    #[cfg(target_arch = "loongarch64")]
+    {
+        run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /lib64/ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
+        run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-loongarch-lp64d.so.1 /ld-linux-loongarch-lp64d.so.1\0", "/glibc/");
+    }
+    #[cfg(target_arch = "riscv64")]
+    {
+        run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
+        run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
+        run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0", "/glibc/");
+    }
+
+    for test in GLIBC_LTP {
+        run_cmd(test, cd);
+    }
+}
+
+fn musl_ltp() {
+    let cd = "/musl/";
+    chdir(&conert_str2byte(cd));
+    #[cfg(target_arch = "loongarch64")]
+    {
+        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0", "/musl/");
+    }
+    #[cfg(target_arch = "riscv64")]
+    {
+        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0", "/musl/");
+        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0", "/musl/");
+        run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0", "/musl/");
+        run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0", "/musl/");
+    }
+    for test in MUSL_LTP {
+        run_cmd(test, cd);
+    }
 }

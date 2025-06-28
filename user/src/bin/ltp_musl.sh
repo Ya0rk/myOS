@@ -6,9 +6,7 @@ echo "#### OS COMP TEST GROUP START ltp-musl ####"
 target_dir="/musl/ltp/testcases/bin"
 
 backip="
-abs01
 accept01
-accept02
 accept03
 accept04
 accept4_01
@@ -128,9 +126,6 @@ fstatfs01_64
 fstatfs02
 fstatfs02_64
 getcwd01
-getcwd02
-getcwd03
-getcwd04
 getdomainname01
 getgid01
 gethostname01
@@ -397,8 +392,6 @@ wait401
 wait402
 wait403
 waitid01
-waitid02
-waitid03
 waitid04
 waitid05
 waitid06

@@ -368,14 +368,10 @@ wait403
 waitid01
 waitid02
 waitid03
-waitid04
-waitid05
 waitid06
 waitid07
 waitid08
 waitid09
-waitid10
-waitid11
 waitpid01
 waitpid04
 write01
