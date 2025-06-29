@@ -156,8 +156,8 @@ pub enum DentryStatus {
 目录项 （dentry）额外使用了一个缓存（Cache）用于加速从路径到目录项的查找，目录项缓存（DentryCache）使用内核定义的 Cache 泛型容器进行定义。目录项缓存的存在极大地加速了获得索引节点（inode）的过程，获得显著的性能提升。
 
 #figure(
-  image("assets/todo"),
-  caption: [没有 cache，有cache 在 musl 和 glib 下的性能对比],
+  image("assets/dentry_cache性能对比.png"),
+  caption: [dentry cache性能对比],
   supplement: [图],
 )<文件系统>
 
