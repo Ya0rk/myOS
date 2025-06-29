@@ -23,167 +23,15 @@ const GLIBC_LTP: &[&str] = &[
 ];
 
 const TESTCASES: &[&str] = &[
-    // "./time-test\0",
-    // "./test-splice.sh\0",
     "./libctest_testcode.sh\0",
     "./lua_testcode.sh\0",
-    // // "./netperf_testcode.sh\0",
     "./libcbench_testcode.sh\0",
     "./iozone_testcode.sh\0",
+    "./lmbench_testcode.sh\0",
+    // "./netperf_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
     // "./iperf_testcode.sh\0",
-    "./lmbench_testcode.sh\0",
-    // "./run-static.sh\0",
-];
-
-const TESTCASES_LTP: &[&str] = &[
-    // 已过滤掉所有未选中的测试用例
-    // 以下按原始顺序列出所有选中的测试路径
-    // "./ltp/testcases/bin/readv01\0",
-    // "./ltp/testcases/bin/readv02\0",
-    // "./ltp/testcases/bin/reboot01\0",
-    // "./ltp/testcases/bin/recvmsg02\0",
-    // "./ltp/testcases/bin/request_key01\0",
-    // "./ltp/testcases/bin/request_key05\0",
-    // "./ltp/testcases/bin/rmdir01\0",
-    // "./ltp/testcases/bin/sbrk01\0",
-    // "./ltp/testcases/bin/sbrk02\0",
-    // "./ltp/testcases/bin/sched_get_priority_max01\0",
-    // "./ltp/testcases/bin/sched_get_priority_min01\0",
-    // "./ltp/testcases/bin/sched_getparam01\0",
-    // "./ltp/testcases/bin/sched_getscheduler01\0",
-    // "./ltp/testcases/bin/sched_rr_get_interval01\0",
-    // "./ltp/testcases/bin/sched_setparam03\0",
-    // "./ltp/testcases/bin/semctl07\0",
-    // "./ltp/testcases/bin/semget01\0",
-    // "./ltp/testcases/bin/gethostname01\0",
-    // "./ltp/testcases/bin/getdomainname01\0",
-    // "./ltp/testcases/bin/setdomainname01\0",
-    // "./ltp/testcases/bin/setdomainname02\0",
-    // "./ltp/testcases/bin/sethostname01\0",
-    // "./ltp/testcases/bin/sethostname02\0",
-    // "./ltp/testcases/bin/setfsuid02\0",
-    // "./ltp/testcases/bin/setgid01\0",
-    // "./ltp/testcases/bin/setgroups01\0",
-    // "./ltp/testcases/bin/setgroups02\0",
-    // "./ltp/testcases/bin/abs01\0",
-    // "./ltp/testcases/bin/accept01\0",
-    // "./ltp/testcases/bin/accept03\0",
-    // "./ltp/testcases/bin/accept04\0",
-    // "./ltp/testcases/bin/accept4_01\0",
-    // "./ltp/testcases/bin/asapi_01\0",
-    // "./ltp/testcases/bin/alarm02\0",
-    // "./ltp/testcases/bin/alarm03\0",
-    // "./ltp/testcases/bin/alarm05\0",
-    // "./ltp/testcases/bin/alarm06\0",
-    // "./ltp/testcases/bin/alarm07\0",
-    // "./ltp/testcases/bin/atof01\0",
-    // "./ltp/testcases/bin/bind01\0",
-    // "./ltp/testcases/bin/bind02\0",
-    // "./ltp/testcases/bin/brk01\0",
-    // "./ltp/testcases/bin/capget01\0",
-    // "./ltp/testcases/bin/chmod01\0",
-    // "./ltp/testcases/bin/chmod03\0",
-    // "./ltp/testcases/bin/chmod05\0",
-    // "./ltp/testcases/bin/chown01\0",
-    // "./ltp/testcases/bin/chown02\0",
-    // "./ltp/testcases/bin/chown03\0",
-    // "./ltp/testcases/bin/chown05\0",
-    // "./ltp/testcases/bin/chroot03\0",
-    // "./ltp/testcases/bin/clock_getres01\0",
-    // "./ltp/testcases/bin/clock_nanosleep04\0",
-    // "./ltp/testcases/bin/close_range02\0",
-    // "./ltp/testcases/bin/close01\0",
-    // "./ltp/testcases/bin/clone01\0",
-    // "./ltp/testcases/bin/clone02\0",
-    // "./ltp/testcases/bin/clone03\0",
-    // "./ltp/testcases/bin/clone06\0",
-    // "./ltp/testcases/bin/clone07\0",
-    // "./ltp/testcases/bin/connect01\0",
-    // "./ltp/testcases/bin/dup01\0",
-    // "./ltp/testcases/bin/dup02\0",
-    // "./ltp/testcases/bin/exit01\0",
-    // "./ltp/testcases/bin/exit02\0",
-    // "./ltp/testcases/bin/fchdir01\0",
-    // "./ltp/testcases/bin/fchdir02\0",
-    // "./ltp/testcases/bin/fcntl01\0",
-    // "./ltp/testcases/bin/fcntl02\0",
-    // "./ltp/testcases/bin/getgid01\0",
-    // "./ltp/testcases/bin/getcwd01\0",
-    // "./ltp/testcases/bin/getcwd02\0",
-    // "./ltp/testcases/bin/getpeername01\0",
-    // "./ltp/testcases/bin/getpgid01\0",
-    // "./ltp/testcases/bin/getpid02\0",
-    // "./ltp/testcases/bin/getsockname01\0",
-    // "./ltp/testcases/bin/getsockopt01\0",
-    // "./ltp/testcases/bin/getitimer01\0",
-    // "./ltp/testcases/bin/getitimer02\0",
-    // "./ltp/testcases/bin/lseek01\0",
-    // "./ltp/testcases/bin/mkdir02\0",
-    // "./ltp/testcases/bin/mkdir03\0",
-    // "./ltp/testcases/bin/mkdirat01\0",
-    // "./ltp/testcases/bin/mkdirat02\0",
-    // "./ltp/testcases/bin/nextafter01\0",
-    // "./ltp/testcases/bin/open01\0",
-    // "./ltp/testcases/bin/open02\0",
-    // "./ltp/testcases/bin/openat01\0",
-    // "./ltp/testcases/bin/pipe01\0",
-    // "./ltp/testcases/bin/rt_sigaction01\0",
-    // "./ltp/testcases/bin/sched_setparam01\0",
-    // "./ltp/testcases/bin/sched_setparam02\0",
-    // "./ltp/testcases/bin/setpgid01\0",
-    // "./ltp/testcases/bin/setpgid02\0",
-    // "./ltp/testcases/bin/setpgrp01\0",
-    // "./ltp/testcases/bin/setregid01\0",
-    // "./ltp/testcases/bin/setregid04\0",
-    // "./ltp/testcases/bin/setreuid01\0",
-    // "./ltp/testcases/bin/setrlimit01\0",
-    // "./ltp/testcases/bin/setrlimit02\0",
-    // "./ltp/testcases/bin/setrlimit03\0",
-    // "./ltp/testcases/bin/setrlimit04\0",
-    // "./ltp/testcases/bin/setsid01\0",
-    // "./ltp/testcases/bin/setsockopt01\0",
-    // "./ltp/testcases/bin/setsockopt03\0",
-    // "./ltp/testcases/bin/setsockopt04\0",
-    // "./ltp/testcases/bin/settimeofday02\0",
-    // "./ltp/testcases/bin/setuid01\0",
-    // "./ltp/testcases/bin/setxattr02\0",
-    // "./ltp/testcases/bin/sigaction01\0",
-    // "./ltp/testcases/bin/sigaction02\0",
-    // "./ltp/testcases/bin/sigaltstack01\0",
-    // "./ltp/testcases/bin/sigaltstack02\0",
-    // "./ltp/testcases/bin/signal01\0",
-    // "./ltp/testcases/bin/signal02\0",
-    // "./ltp/testcases/bin/signal03\0",
-    // "./ltp/testcases/bin/signal04\0",
-    // "./ltp/testcases/bin/signal05\0",
-    // "./ltp/testcases/bin/sigwait01\0",
-    // "./ltp/testcases/bin/socket02\0",
-    // "./ltp/testcases/bin/socketpair01\0",
-    // "./ltp/testcases/bin/socketpair02\0",
-    // "./ltp/testcases/bin/splice01\0",
-    // "./ltp/testcases/bin/splice03\0",
-    // "./ltp/testcases/bin/splice07\0",
-    // "./ltp/testcases/bin/stack_space\0",
-    // "./ltp/testcases/bin/stat01\0",
-    // "./ltp/testcases/bin/stat01_64\0",
-    // "./ltp/testcases/bin/stat02\0",
-    // "./ltp/testcases/bin/stat02_64\0",
-    // "./ltp/testcases/bin/stream01\0",
-    // "./ltp/testcases/bin/stream02\0",
-    // "./ltp/testcases/bin/stream03\0",
-    // "./ltp/testcases/bin/stream04\0",
-    // "./ltp/testcases/bin/stream05\0",
-    // "./ltp/testcases/bin/string01\0",
-    // "./ltp/testcases/bin/sync_file_range01\0",
-    // "./ltp/testcases/bin/syscall01\0",
-    // "./ltp/testcases/bin/sysconf01\0",
-    // "./ltp/testcases/bin/sysinfo01\0",
-    // "./ltp/testcases/bin/sysinfo02\0",
-    // "./ltp/testcases/bin/waitpid01\0",
-    // "./ltp/testcases/bin/write01\0",
-    // "./ltp/testcases/bin/write02\0",
 ];
 
 /// 传入str引用转换为C风格字符串，使其可以被用作系统调用
@@ -243,13 +91,6 @@ fn main() -> i32 {
             run_cmd(test, cd);
         }
 
-        // ltp测试
-        // run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
-        // for test in GLIBC_LTP {
-        //     run_cmd(test, cd);
-        // }
-        // run_cmd("/glibc/busybox cat /proc/meminfo\0", "/glibc/");
-        
         run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
         run_cmd("/glibc/busybox rm -rf /lib64/*\0", "/glibc/");
         exit(0); 
@@ -291,11 +132,6 @@ fn main() -> i32 {
         }
         run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
 
-        // musl的ltp测试
-        // for test in MUSL_LTP {
-        //     run_cmd(test, cd);
-        // }
-
         run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
         run_cmd("/musl/busybox rm -rf /lib64/*\0", "/musl/");
         
@@ -305,13 +141,13 @@ fn main() -> i32 {
         loop {
             let mut exit_code: i32 = 0;
             let pid = waitpid(child_pid as usize, &mut exit_code, 0);
-            // let pid = wait(&mut exit_code);
             if pid == child_pid {
                 break;
             }
         }
     }
 
+    // musl ltp 测例
     let child_pid = fork();
     if child_pid == 0 {
         musl_ltp();
@@ -326,7 +162,7 @@ fn main() -> i32 {
         }
     }
 
-
+    // glibc ltp 测试
     let child_pid = fork();
     if child_pid == 0 {
         glibc_ltp();
