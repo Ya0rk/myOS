@@ -6,7 +6,11 @@
 
 为支持多平台运行与测试，Del0n1x 在内核中实现了功能基本完整的硬件抽象层，可以运行于 RISC-V64 和 LoongArch64 两种指令集架构的 QEMU 平台。Del0n1x的内核代码全部基于硬件抽象层开发，屏蔽了架构细节和平台差异，具有更好的兼容性和可移植性。
 
-【硬件抽象层示意图】
+#figure(
+  image("assets/硬件抽象层示意图.png"),
+  caption: [硬件抽象层示意图],
+  supplement: [图]
+)
 
 
 == 处理器访问接口
@@ -23,21 +27,40 @@ Del0n1x 在`riscv`和`loongarch`外部库的帮助下，对 RISC-V 和 LoongArch
 == 内核入口例程
 
 RISC-V 和 LoongArch 架构在内核启动上的细节有所异同。LoongArch 架构启动时需要配置直接映射地址翻译模式，需要为分页地址翻译模式设置高半空间、低半空间两个页表 token ，还需要设置 TLB 重填异常入口，这些都是 RISC-V 架构下内核启动所不需要的步骤。Del0n1x 的硬件抽象层将初始化时的架构相关部分抽象为`arch_init()`例程，供内核初始化时调用，为内核入口的规范化提供支持。
-【代码，arch_init重构完毕后填写】
+
+// 【代码，arch_init重构完毕后填写】
+#code-figure(
+  ```rust
+// loongarch
+pub fn arch_init() {
+    mmu_init();
+    euen::set_fpe(true);
+    tlb_init(tlb_fill as usize);
+}
+```,
+  caption: [arch_init 例程],
+  label-name: "arch_init"
+)
+
 
 == 内存管理单元与地址空间
 
 === 物理内存
 
 RISC-V 和 LoongArch 的 QEMU virt 平台的物理编址方式和布局存在很大区别。以下分别为两个平台的物理地址布局：
-【图片】
+
+#figure(
+  image("assets/物理地址布局.png"),
+  caption: [QEMU virt 物理地址布局],
+  supplement: [图]
+)
 
 RISC-V QEMU virt 平台将 RAM 编码于`0x8000_0000`以上的物理地址空间。而 LoongArch QEMU virt 平台则将 RAM 切分为`lowram`和`highram`两个部分，其中`lowram`位于`0x1000_0000`以下的物理地址空间，`highram`位于`0x9000_0000`以上的物理地址空间。Del0n1x 将内核镜像加载于`lowram`中。
 
 === 分页地址翻译模式
 
 // rv完整 la两半
-Del0n1x 使用 SV39 分页地址翻译模式。在不考虑直接映射窗口的前提下， Del0n1x 将完整的39位虚拟地址空间分为高半部分和低半部分，高半部分的地址范围为`0xffff_ffc0_0000_0000~0xffff_ffff_ffff_ffff`，低半部分的地址范围为`0x0000_0000_0000_0000~0x0000_003f_ffff_ffff`。【可以用表格展示】
+Del0n1x 使用 SV39 分页地址翻译模式。在不考虑直接映射窗口的前提下， Del0n1x 将完整的39位虚拟地址空间分为高半部分和低半部分，高半部分的地址范围为`0xffff_ffc0_0000_0000~0xffff_ffff_ffff_ffff`，低半部分的地址范围为`0x0000_0000_0000_0000~0x0000_003f_ffff_ffff`。在分页地址翻译模式中，地址格式不满足 39 位整数的符号拓展形式的，将被视为非法地址。
 
 RISC-V 架构使用控制状态寄存器 SATP 控制分页模式类型（如SV39）并存储页表根目录的物理页号。Del0n1x 为每一个进程创建一张页表，并为其应用整个虚拟地址空间内的全部映射。当地址空间切换时，通过对 SATP 的修改，即可达到切换页表的目的。
 
@@ -45,15 +68,69 @@ LoongArch 架构的情况有所不同。LoongArch 架构使用 CSR.CRMD 控制�
 
 Del0n1x 在硬件抽象层中为两种架构实现了分页地址翻译模式的初始化，为 LoongArch 手动配置了 SV39 分页模式。由于 Del0n1x 使用虚拟地址空间的高半部分作为通用的内核地址空间，借助 LoongArch 架构的“双目录”设计，在地址空间切换时只需修改 CSR.PGDL。
 
-【代码：mmu_init】
+#code-figure(
+```rust
+pub fn mmu_init() {
+    // 设置页表项长度
+    pwcl::set_pte_width(8); 
+    // 设置页表第三级目录的索引位位置和长度
+    pwcl::set_ptbase(PAGE_SIZE_SHIFT);
+    pwcl::set_ptwidth(PAGE_SIZE_SHIFT - 3);
+    // 设置页表第二级目录的索引位位置和长度
+    pwcl::set_dir1_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3);
+    pwcl::set_dir1_width(PAGE_SIZE_SHIFT - 3);
+    // 设置页表根目录的索引位位置和长度
+    pwch::set_dir3_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3 + PAGE_SIZE_SHIFT - 3);
+    pwch::set_dir3_width(PAGE_SIZE_SHIFT - 3);
+}
+```,
+  caption: [LoongArch SV39 分页地址翻译模式初始化],
+  label-name: "la-mmu-init"
+)
+
 
 === 页表
 
 Del0n1x 支持两种架构下的多级页表。在硬件抽象层中，Del0n1x 为两种架构分别实现了对页表项（Page Table Entry，PTE）的封装，可以便捷地访问 PTE 中存储的物理页号和各标志位。Del0n1x 使用 Rust 宏为 PTE 标志位定义了统一的`checker`和`setter`方法，用于在内核代码中灵活修改 PTE 标志位。
 
-Del0n1x 的设计中，LoongArch 架构的内核地址空间需要单独使用一张页表，而RISC-V架构的内核地址空间则与用户地址空间共用同一张。Del0n1x 在硬件抽象层中为两个架构均映射一张内核页表，区别在于 LoongArch 架构下该页表会被写入 CSR.PGDH 并永不切换，而 RISC-V 架构下该页表只作为一个映射用户地址空间时的模板。当创建新的进程页表时，内核页表中根目录中映射地址空间高半部分的页表项将被复制到新的页表中，供内核态访问。
+#code-figure(
+```rust
+bitflags! {
+    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+    pub struct PTEFlags: usize {
+        const V = 1 << 0;
+        const R = 1 << 1;
+        const W = 1 << 2;
+        const X = 1 << 3;
+        const U = 1 << 4;
+        const G = 1 << 5;
+        const A = 1 << 6;
+        const D = 1 << 7;
+        const COW = 1 << 8;
+    }
+}
+impl PTEFlags {
+    // 为标志位FLAG实现is_[FLAG](&self) -> bool方法
+    impl_flag_checker!(
+        pub U,
+        pub V,
+        ... // 篇幅需要，省略
+        pub COW
+    );
+    // 为标志位FLAG实现set_[FLAG](&mut self, bool)-> &mut Self 方法，支持链式调用
+    impl_flag_setter!(
+        pub U,
+        pub V,
+        ... // 篇幅需要，省略
+    );
+}
+``` ,
+  caption: [RISC-V PTEFlags 实现],
+  label-name: "riscv-pteflags-impl"
+)
 
-【代码，page_table】
+
+Del0n1x 的设计中，LoongArch 架构的内核地址空间需要单独使用一张页表，而RISC-V架构的内核地址空间则与用户地址空间共用同一张。Del0n1x 在硬件抽象层中为两个架构均映射一张内核页表，区别在于 LoongArch 架构下该页表会被写入 CSR.PGDH 并永不切换，而 RISC-V 架构下该页表只作为一个映射用户地址空间时的模板。当创建新的进程页表时，内核页表中根目录中映射地址空间高半部分的页表项将被复制到新的页表中，供内核态访问。
 
 === 直接映射窗口
 
@@ -63,8 +140,7 @@ Del0n1x 使用`0x8000_xxxx_xxxx_xxxx`和`0x9000_xxxx_xxxx_xxxx`两个直接映�
 
 === TLB重填
 
-LoongArch 架构使用软件管理 TLB。当发生 TLB 中没有匹配项时，将触发 TLB 重填异常，跳转到内核设置的 TLB 重填入口执行软件重填。Del0n1x 使用了往届优秀作品 NPUCore-IMPACT 编写的 TLB 重填代码。
+LoongArch 架构使用软件管理 TLB。当发生 TLB 中没有匹配项时，将触发 TLB 重填异常，跳转到内核设置的 TLB 重填入口执行软件重填。现阶段 Del0n1x 使用了往届优秀作品 NPUCore-IMPACT 编写的 TLB 重填代码。
 
-【可能贴代码】
 
 #pagebreak()  // 强制分页
