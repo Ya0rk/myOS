@@ -280,7 +280,7 @@ impl Dentry {
         parent_children.remove(&child_name);
         self.set_status(DentryStatus::Negtive);
         self.set_status(DentryStatus::Negtive);
-        // DENTRY_CACHE.remove(&self.get_abs_path()).expect("failed to remove dentry from cache");
+        DENTRY_CACHE.remove(&self.get_abs_path()).expect("failed to remove dentry from cache");
         // error!("[release_self] release dentry {}, ref count: {}", self.get_abs_path(), Arc::strong_count(&self));
         Ok(0)
     }
