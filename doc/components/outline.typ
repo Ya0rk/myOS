@@ -22,5 +22,4 @@
   }
 
   #outline(title: align(center)[目录], indent: n => [#h(1em)] * n)
-  // #outline(title: align(center)[目录], indent: auto)
 ]

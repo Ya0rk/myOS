@@ -85,13 +85,13 @@
     if it.level == 1 {
       align(center)[
         #v(1em)
-        #main-format-heading(it: it, font: 字体.黑体, size: 字号.小二)
+        #main-format-heading(it: it, font: 字体.宋体, size: 字号.小二)
         #v(.3em)
       ]
     } else if it.level == 2 {
-      main-format-heading(it: it, font: 字体.黑体, size: 字号.小三)
+      main-format-heading(it: it, font: 字体.宋体, size: 字号.小三)
     } else if it.level >= 3 {
-      main-format-heading(it: it, font: 字体.黑体, size: 字号.小四)
+      main-format-heading(it: it, font: 字体.宋体, size: 字号.小四)
     }
   }
 
@@ -140,4 +140,92 @@
   }
 
   content
+}
+#import "./components/typography.typ": 字体, 字号
+#let project(
+  projectname: "",
+  teamname: "",
+  teammates: (),
+  teachers: (),
+  date: (1926, 8, 17),
+  logopath: "",
+  body,
+) = {
+  // 封面
+  align(center)[
+    // hust logo
+    #v(30pt)
+
+    #image(logopath, width: 100%)
+
+    #v(50pt)
+
+    #text(
+      size: 36pt,
+      font: 字体.黑体,
+      weight: "bold"
+    )[#projectname]
+
+    #v(40pt)
+
+    #text(
+      font: 字体.宋体,
+      size: 22pt,
+    )[
+      设计文档
+    ]
+
+    #v(100pt)
+
+    #let info_value(body) = {
+      rect(
+        width: 100%,
+        inset: 2pt,
+        stroke: (
+          bottom: 1pt + black
+        ),
+        text(
+          font: 字体.黑体,
+          size: 16pt,
+          bottom-edge: "descender"
+        )[
+          #body
+        ]
+      ) 
+    }
+    
+    #let info_key(body) = {
+      rect(width: 100%, inset: 2pt, 
+       stroke: none,
+       text(
+        font: 字体.黑体,
+        size: 16pt,
+        body
+      ))
+    }
+
+    #grid(
+      columns: (70pt, 180pt),
+      rows: (40pt, 40pt),
+      gutter: 3pt,
+      info_key("参赛队名"),
+      info_value(teamname),
+      info_key("队伍成员"),
+      info_value(teammates.join("、")),
+      info_key("指导老师"),
+      info_value(teachers.join("、")),
+    )
+
+    #v(40pt)
+    #text(
+      font: 字体.黑体,
+      size: 16pt,
+    )[
+      #date.at(0) 年 #date.at(1) 月
+    ]
+    // #pagebreak()
+  ]
+
+
+  body
 }

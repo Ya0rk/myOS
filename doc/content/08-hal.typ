@@ -66,3 +66,5 @@ Del0n1x 使用`0x8000_xxxx_xxxx_xxxx`和`0x9000_xxxx_xxxx_xxxx`两个直接映�
 LoongArch 架构使用软件管理 TLB。当发生 TLB 中没有匹配项时，将触发 TLB 重填异常，跳转到内核设置的 TLB 重填入口执行软件重填。Del0n1x 使用了往届优秀作品 NPUCore-IMPACT 编写的 TLB 重填代码。
 
 【可能贴代码】
+
+#pagebreak()  // 强制分页

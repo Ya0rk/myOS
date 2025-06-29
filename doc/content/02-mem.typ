@@ -231,29 +231,36 @@ impl MemorySpace {
 
 此外，Phoenix 基于此实现了用户态指针内容的零拷贝技术，即内核态不需要软件模拟地址翻译并复制用户态指针指向的数据到内核态，而是可以直接访问用户态指针，避免用户态数据到内核态数据的拷贝。用户态传入的指针经过检查后，会被转换成 `UserRef`、`UserMut` 和 `UserSlice` 对象。每一个对象都存放具体的指针，并保存了 `SumGuard` 以获取内核态访问用户地址空间的权限。Phoenix 充分利用了 Rust 提供的类型机制，为上述对象实现了 `deref` 方法，使得在不改变外部函数签名的情况下，依然能保持 `sstatus`寄存器`sum` 位开启，直接访问用户地址空间。这种实现不仅高效，还极大缩短了代码量。例如，`sys_read` 函数只需短短3行代码，不仅实现了用户地址空间检查，还能将文件内容零拷贝直接填充到用户提供的缓冲区。
 
-```rust
-/// User slice. Hold slice from `UserPtr` and a `SumGuard` to provide user
-/// space access.
-pub struct UserSlice<'a, T> {
-    slice: &'a mut [T],
-    _guard: SumGuard,
-}
-
-impl<'a, T> core::ops::DerefMut for UserSlice<'a, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.slice
+#code-figure(
+    ```rust
+    /// User slice. Hold slice from `UserPtr` and a `SumGuard` to provide user
+    /// space access.
+    pub struct UserSlice<'a, T> {
+        slice: &'a mut [T],
+        _guard: SumGuard,
     }
-}
 
-pub async fn sys_read(
-    &self,
-    fd: usize,
-    buf: UserWritePtr<u8>,
-    count: usize,
-) -> SyscallResult {
-    let file = self.task.with_fd_table(|table| table.get_file(fd))?;
-    let mut buf: UserSlice<'_, u8> = buf.into_mut_slice(&task, count)?;
-    file.read(&mut buf).await
-}
-```
+    impl<'a, T> core::ops::DerefMut for UserSlice<'a, T> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.slice
+        }
+    }
 
+    pub async fn sys_read(
+        &self,
+        fd: usize,
+        buf: UserWritePtr<u8>,
+        count: usize,
+    ) -> SyscallResult {
+        let file = self.task.with_fd_table(|table| table.get_file(fd))?;
+        let mut buf: UserSlice<'_, u8> = buf.into_mut_slice(&task, count)?;
+        file.read(&mut buf).await
+    }
+    ```,
+    caption: [用户指针],
+    label-name: "用户指针",
+)
+
+
+
+#pagebreak()  // 强制分页

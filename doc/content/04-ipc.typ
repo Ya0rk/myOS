@@ -29,8 +29,8 @@ pub struct SigAction {
     pub sa_flags: SigActionFlag,
     pub sa_restorer: usize,
     /// 在执行信号处理函数期间临时阻塞的信号集合
-    /// - 信号处理函数执行时，内核会自动将 sa_mask 中的信号添加到进程的阻塞信号集中
-    /// - 处理函数返回后，阻塞信号集恢复为原状态
+    /// 信号处理函数执行时，内核会自动将 sa_mask 中的信号添加到进程的阻塞信号集
+    /// 处理函数返回后，阻塞信号集恢复为原状态
     pub sa_mask: SigMask,
 }
 ```,
@@ -86,3 +86,5 @@ pub struct SigPending {
   caption: [信号处理],
   supplement: [图],
 )<信号处理>
+
+#pagebreak()  // 强制分页

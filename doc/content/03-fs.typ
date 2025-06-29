@@ -114,21 +114,25 @@ pub trait InodeTrait: Send + Sync {
 目前仅支持内核中调用，未来我们希望实现 loop 设备后在用户态也可以使用
 
 目录项`Dentry`的定义如下：
+#code-figure(
+    ```rust
+    pub struct Dentry {
+        /// 目录项文件名
+        name: RwLock<String>,
+        /// 对父dentry的弱引用
+        parent: Weak<Dentry>,
+        /// 孩子dentry的强引用
+        children: RwLock<HashMap<String, Arc<Dentry>>>,
+        /// 当前的持有的的inode对象
+        inode: RwLock<Vec<Arc<dyn InodeTrait>>>,
+        /// dentry的状态
+        status: RwLock<DentryStatus>,
+    }
+    ```,
+    caption: [Dentry结构],
+    label-name: "dentry结构", 
+)
 
-```rust
-pub struct Dentry {
-    /// 目录项文件名
-    name: RwLock<String>,
-    /// 对父dentry的弱引用
-    parent: Weak<Dentry>,
-    /// 孩子dentry的强引用
-    children: RwLock<HashMap<String, Arc<Dentry>>>,
-    /// 当前的持有的的inode对象
-    inode: RwLock<Vec<Arc<dyn InodeTrait>>>,
-    /// dentry的状态
-    status: RwLock<DentryStatus>,
-}
-```
 
 通过children 字段获得当前目录项的子目录项，通过 parent 获得当前目录项的双亲目录项，注意到这里使用弱引用（不增加引用计数）防止出现循环引用。inode 字段为所持有的索引节点（inode）。
 
@@ -242,22 +246,28 @@ Ext4 文件系统的索引节点（inode）会持有这一页缓存，当不做�
 
 以下为文件描述符表的实现：
 
-```
-pub struct FdTable {
+
+#code-figure(
+    ```rust
+    pub struct FdTable {
     pub table: Vec<FdInfo>,
     pub rlimit: RLimit64,
     free_bitmap: Vec<u64>,
     next_free: usize,
     freed_stack: Vec<usize>,
-}
+    }
 
-#[derive(Clone)]
-pub struct FdInfo {
-    pub file: Option<Arc<dyn FileTrait>>,
-    pub flags: OpenFlags,
-}
+    #[derive(Clone)]
+    pub struct FdInfo {
+        pub file: Option<Arc<dyn FileTrait>>,
+        pub flags: OpenFlags,
+    }
+    ```,
+    caption: [FdTable结构],
+    label-name: "FdTable",
+)
 
-```
 
 
 
+#pagebreak()  // 强制分页

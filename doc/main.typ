@@ -1,4 +1,4 @@
-#import "conf.typ": doc, preface, main
+#import "conf.typ": doc, preface, main, project
 #import "components/cover.typ": cover
 #import "components/figure.typ": algorithm-figure, code-figure
 #import "components/outline.typ": outline-page
@@ -8,10 +8,15 @@
 
 #set text(lang: "zh", region: "cn")
 
-#cover(
-  title: "Del0n1x",
-  institute: "哈尔滨工业大学(深圳)",
+#show: project.with(
+  projectname: "Del0n1x",
+  teamname: "Del0n1x",
+  teammates: ("姚俊杰", "卢家鼎", "林顺喆"),
+  teachers: ("夏文", "仇洁婷"),
+  date: (2025, 6),
+  logopath: "./content/assets/hitsz-logo.jpg"
 )
+
 
 #show: preface.with(title: "Del0n1x")
 

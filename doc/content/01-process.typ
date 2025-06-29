@@ -27,13 +27,13 @@ await 将控制权交给调度器，以便另一个任务可以继续进行。�
   supplement: [图],
 )<任务调度>
 
-=== 异步并不是"银弹"
+=== 异步编程并非"万能钥匙"
 
-我们在第一次接触异步调度时觉得，既然异步调度效率高，那为何不把所有的系统调用设计为异步形式呢？后来在深入了解到异步机制后发现，我们陷入了一个常见误区：把异步当成万能银弹。
+在初次接触异步调度机制时，我们曾天真地认为：既然异步调度效率如此之高，何不将所有函数都设计为异步形式？但随着对异步机制的深入理解，我们逐渐认识到这实际上陷入了一个典型的认知误区——将异步视为解决所有问题的"银弹"。
 
-首先异步的核心价值在于解决 I/O 瓶颈。 I/O 的延迟远高于 CPU 计算，磁盘/网络操作耗时可能是微秒（μs）甚至毫秒（ms）级，而 CPU 指令是纳秒（ns）级。异步 I/O 允许 CPU 在等待慢速 I/O 时执行其他任务。CPU 密集型操作无等待需求，如getpid(), sched_yield() 等系统调用本身不阻塞，异步化不会带来收益，反而增加调度开销。若一个操作本身能在短时间内完成，同步调用直接返回结果的开销远小于异步回调的上下文切换。
+首先需要明确的是，异步编程的核心价值在于解决I/O密集型场景的性能瓶颈。在计算机系统中，I/O操作（如磁盘读写、网络通信）的延迟通常高达微秒(μs)至毫秒(ms)级别，而CPU指令的执行时间仅为纳秒(ns)级。异步I/O的优势在于允许CPU在等待慢速I/O操作完成期间，转而执行其他计算任务，从而显著提升系统吞吐量。然而，对于CPU密集型操作（如getpid()、sched_yield()等系统调用），它们本身不存在阻塞等待的情况，强制异步化不仅无法带来性能提升，反而会引入额外的调度开销。这样的背景下同步调用的直接返回机制在性能上远优于异步回调所需的上下文切换。
 
-其次状态管理困难。异步操作需通过回调和细致的 Future 设计，如果想要精细的控制poll中代码处理流程，需要自己实现 Future 的 poll 轮循进行状态管理，这无疑会复杂化内核实现与bug调试。
+其次，异步编程带来了显著的状态管理复杂度。异步操作通常需要通过回调函数或Future机制来实现，开发者必须精心设计状态机来管理操作的生命周期。特别是在内核开发中，若要对poll阶段的代码流程进行精细控制，往往需要手动实现Future的poll轮询机制，这种复杂的状态管理不仅增加了代码的实现难度，更大大提升了调试和维护的成本。一个典型的内核异步实现往往需要处理：任务唤醒、资源竞争、错误恢复等多重状态，这使得系统稳定性的保障变得极具挑战性。
 
 == 任务调度队列与执行器
 
@@ -144,39 +144,40 @@ pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSO
 == 任务控制块
 
 进程是操作系统中资源管理的基本单位，而线程是操作系统中调度的基本单位。由于在linux设计理念中，线程是轻量级进程，所以在Del0n1x中使用统一的任务控制块来管理进程和线程。
+同时我们对TCB字段进行细粒化的加锁处理，类似 memory_space 和 trap_cx 等高频访问的字段来说，可以显著减少并发过程中锁的竞争，提高并发效率。
 
 #code-figure(
 ```rs
 pub struct TaskControlBlock {
-    pub pid: Pid,                                                 // 任务标识符
-    pub tgid: AtomicUsize,                                        // leader的pid号
-    pub pgid: AtomicUsize,                                        // 进程组id
-    pub task_status: SpinNoIrqLock<TaskStatus>,                   // 任务状态
-    pub thread_group: Shared<ThreadGroup>,                        // 线程组
-    pub memory_space: Shared<MemorySpace>,                        // 地址空间
-    pub parent: Shared<Option<Weak<TaskControlBlock>>>,           // 父进程
-    pub children: Shared<BTreeMap<usize, Arc<TaskControlBlock>>>, // 子进程
+    pub pid: Pid,                        // 任务标识符
+    pub tgid: AtomicUsize,       // leader的pid号
+    pub pgid: AtomicUsize,      // 进程组id
+    pub task_status: SpinNoIrqLock<TaskStatus>,                                     // 任务状态
+    pub thread_group: Shared<ThreadGroup>,                                           // 线程组
+    pub memory_space: Shared<MemorySpace>,                                       // 地址空间
+    pub parent: Shared<Option<Weak<TaskControlBlock>>>,                  // 父进程
+    pub children: Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,   // 子进程
     pub fd_table: Shared<FdTable>,                                // 文件描述表
-    pub current_path: Shared<String>,                             // 路径
-    pub robust_list: Shared<RobustList>,                          // 存储线程的信息
-    pub futex_list: Shared<FutexBucket>,                          // futex互斥锁队列
-    pub itimers: Shared<[ITimerVal; 3]>,                          // 任务的内部时钟
-    pub fsz_limit: Shared<Option<RLimit64>>,                      // 任务的资源限制
-    pub shmid_table: Shared<ShmidTable>,
-    pub pending: AtomicBool,                            // 是否有信号待处理
-    pub ucontext: AtomicUsize,                          // 信号用户态指针
-    pub sig_pending: SpinNoIrqLock<SigPending>,         // 信号列表
-    pub blocked: SyncUnsafeCell<SigMask>,               // 任务阻塞信号
-    pub handler: Shared<SigStruct>,                     // 信号处理集合
-    pub sig_stack: SyncUnsafeCell<Option<SignalStack>>, // 信号栈
-    pub waker: SyncUnsafeCell<Option<Waker>>,           // 任务唤醒句柄
-    pub trap_cx: SyncUnsafeCell<TrapContext>,           // 上下文
-    pub time_data: SyncUnsafeCell<TimeData>,            // 时间戳
+    pub current_path: Shared<String>,                           // 路径
+    pub robust_list: Shared<RobustList>,                        // 存储线程的信息
+    pub futex_list: Shared<FutexBucket>,                       // futex互斥锁队列
+    pub itimers: Shared<[ITimerVal; 3]>,                        // 任务的内部时钟
+    pub fsz_limit: Shared<Option<RLimit64>>,              // 任务的资源限制
+    pub shmid_table: Shared<ShmidTable>,                   // sysv进程共享内存表
+    pub pending: AtomicBool,                                         // 是否有信号待处理
+    pub ucontext: AtomicUsize,                                       // 信号用户态指针
+    pub sig_pending: SpinNoIrqLock<SigPending>,       // 信号列表
+    pub blocked: SyncUnsafeCell<SigMask>,                  // 任务阻塞信号
+    pub handler: Shared<SigStruct>,                               // 信号处理集合
+    pub sig_stack: SyncUnsafeCell<Option<SignalStack>>,   // 信号栈
+    pub waker: SyncUnsafeCell<Option<Waker>>,                // 任务唤醒句柄
+    pub trap_cx: SyncUnsafeCell<TrapContext>,                   // 上下文
+    pub time_data: SyncUnsafeCell<TimeData>,                    // 时间戳
     pub clear_child_tid: SyncUnsafeCell<Option<usize>>, // CHILD_CLEARTID清除地址
-    pub set_child_tid: SyncUnsafeCell<Option<usize>>,   // CHILD_SETTID设置地址
-    pub cpuset: SyncUnsafeCell<CpuSet>,                 // CPU亲和性掩码
-    pub prio: SyncUnsafeCell<SchedParam>,               // 调度优先级和策略
-    pub exit_code: AtomicI32,                           // 退出码
+    pub set_child_tid: SyncUnsafeCell<Option<usize>>,     // CHILD_SETTID设置地址
+    pub cpuset: SyncUnsafeCell<CpuSet>,                            // CPU亲和性掩码
+    pub prio: SyncUnsafeCell<SchedParam>,                       // 调度优先级和策略
+    pub exit_code: AtomicI32,                                               // 退出码
 }
 ```,
     caption: [任务控制块结构体],
@@ -235,21 +236,12 @@ pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
 - Stopped: 任务被暂停执行，但未被终止，收到 SIGSTOP 信号
 - Zombie: 任务已终止，但尚未被父进程回收
 
-#code-figure(
-```rust
-pub enum TaskStatus {
-    Ready,
-    Running,
-    Stopped,
-    Zombie,
-}
-```,
-    caption: [任务状态枚举],
-    label-name: "task-status-enum",
-)
+进程间状态转化如下：
 
 #figure(
   image("assets/status.png"),
-  caption: [状态转化图],
+  caption: [进程状态转化图],
   supplement: [图],
-)<状态转化>
+)<进程状态转化>
+
+#pagebreak()  // 强制分页

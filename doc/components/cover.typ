@@ -1,13 +1,17 @@
 #import "typography.typ": 字体, 字号
 
 #let cover(
+  logo: "",
   title: "",
   institute: "",
   year: datetime.today().year(),
   month: datetime.today().month(),
 ) = {
   align(center)[
-
+    // 添加校徽图片（在顶部居中显示）
+    #if logo != "" {
+      image(logo, width: 3cm)  // 调整width参数控制图片大小
+    }
     #let space_scale_ratio = 1.2
 
     #v(字号.小四 * 3 * space_scale_ratio)
