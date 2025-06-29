@@ -42,5 +42,5 @@
 
 - Phoenix：无栈协程、内存管理
 
-- polyhal： 硬件抽象层
+- Polyhal，NPUCore-IMPACT： 硬件抽象层
 
