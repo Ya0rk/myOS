@@ -61,8 +61,6 @@ Phonix 内核态页表保存在全局内核地址空间 `KERNEL_SPACE` 中，用
 
 #code-figure(
 ```rust
-// arch/src/riscv64/entry.rs
-
 #[link_section = ".bss.stack"]
 static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE * MAX_HARTS] =
     [0u8; KERNEL_STACK_SIZE * MAX_HARTS];
@@ -78,13 +76,9 @@ static mut BOOT_PAGE_TABLE: BootPageTable = {
     BootPageTable(arr)
 };
 
-#[naked]
-#[no_mangle]
-#[link_section = ".text.entry"]
 unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) -> ! {
     core::arch::asm!(
         // 1. set boot stack
-        // sp = boot_stack + (hartid + 1) * 64KB
         "
             addi    t0, a0, 1
             slli    t0, t0, 16              // t0 = (hart_id + 1) * 64KB
@@ -92,7 +86,6 @@ unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) -> ! {
             add     sp, sp, t0              // set boot stack
         ",
         // 2. enable sv39 page table
-        // satp = (8 << 60) | PPN(page_table)
         "
             la      t0, {page_table}
             srli    t0, t0, 12
@@ -102,7 +95,6 @@ unsafe extern "C" fn _start(hart_id: usize, dtb_addr: usize) -> ! {
             sfence.vma
         ",
         // 3. jump to rust_main
-        // add virtual address offset to sp and pc
         "
             li      t2, {virt_ram_offset}
             or      sp, sp, t2

@@ -52,21 +52,37 @@ Socket trait定义了完整的套接字操作接口，既包含标准的bind/con
 ```rust
 #[async_trait]
 pub trait Socket: FileTrait {
+    /// 异步接受一个传入的连接请求
     async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)>;
+    /// 异步连接到指定的地址
     async fn connect(&self, addr: &SockAddr) -> SysResult<()>;
+    /// 异步发送消息到指定地址
     async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize>;
+    /// 异步接收消息
     async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)>;
+    /// 绑定套接字到本地地址
     fn bind(&self, addr: &SockAddr) -> SysResult<()>;
+    /// 开始监听传入连接
     fn listen(&self, backlog: usize) -> SysResult<()>;
+    /// 设置接收缓冲区大小
     fn set_recv_buf_size(&self, size: u32) -> SysResult<()>;
+    /// 设置发送缓冲区大小
     fn set_send_buf_size(&self, size: u32) -> SysResult<()>;
+    /// 获取当前接收缓冲区大小
     fn get_recv_buf_size(&self) -> SysResult<usize>;
+    /// 获取当前发送缓冲区大小
     fn get_send_buf_size(&self) -> SysResult<usize>;
+    /// 关闭套接字
     fn shutdown(&self, how: ShutHow) -> SysResult<()>;
+    /// 获取套接字绑定的本地地址
     fn get_sockname(&self) -> SysResult<SockAddr>;
+    /// 获取对端连接的地址
     fn get_peername(&self) -> SysResult<SockAddr>;
+    /// 设置TCP保持活动选项
     fn set_keep_alive(&self, action: u32) -> SysResult<()>;
+    /// 启用/禁用Nagle算法(TCP延迟发送)
     fn enable_nagle(&self, action: u32) -> SysResult<()>;
+    /// 获取套接字类型
     fn get_socktype(&self) -> SysResult<Sock>;
 }
 ```,

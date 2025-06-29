@@ -60,7 +60,7 @@ Del0n1x 初赛阶段的内核主要模块和完成情况如下表格：
 // TODO: 修改架构图片
 
 #figure(
-  image("img/rCore换栈.png"),
-  caption: [rCore 上下文切换],
+  image("assets/整体架构图.png"),
+  caption: [Del0n1x整体架构图],
   supplement: [图],
-)<rCore上下文切换>
+)<Del0n1x整体架构图>

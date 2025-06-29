@@ -13,9 +13,12 @@
 ```rs
 // 定时器队列
 pub struct TimerQueue {
-    wheel: SpinNoIrqLock<TimingWheel>,                // 短期定时器（<600ms）
-    long_term: SpinNoIrqLock<BinaryHeap<TimerEntry>>, // 长期定时器（最小堆）
-    handle_counter: SpinNoIrqLock<u64>,               // 定时器句柄计数器
+    /// 短期定时器（<600ms）
+    wheel: SpinNoIrqLock<TimingWheel>,
+    /// 长期定时器（最小堆）
+    long_term: SpinNoIrqLock<BinaryHeap<TimerEntry>>,
+    /// 定时器句柄计数器
+    handle_counter: SpinNoIrqLock<u64>,
 }
 ```,
     caption: [TimerQueue 结构],
@@ -91,9 +94,12 @@ struct TimingWheel {
 ```rust
 // 定时器条目
 struct TimerEntry {
-    expire: Duration,    // 到期时间
-    waker: Option<Waker>,// 唤醒器
-    handle: TimerHandle, // 用于取消的句柄
+    /// 到期时间
+    expire: Duration,
+    /// 唤醒器
+    waker: Option<Waker>,
+    /// 用于取消的句柄
+    handle: TimerHandle,
 }
 ```,
     caption: [TimerEntry 结构体],

@@ -9,11 +9,11 @@
 #set text(lang: "zh", region: "cn")
 
 #cover(
-  title: "MinotaurOS",
-  institute: "哈尔滨工业大学",
+  title: "Del0n1x",
+  institute: "哈尔滨工业大学(深圳)",
 )
 
-#show: preface.with(title: "MinotaurOS")
+#show: preface.with(title: "Del0n1x")
 
 #outline-page()
 
