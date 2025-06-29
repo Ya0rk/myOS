@@ -85,13 +85,13 @@
     if it.level == 1 {
       align(center)[
         #v(1em)
-        #main-format-heading(it: it, font: 字体.宋体, size: 字号.小二)
+        #main-format-heading(it: it, font: 字体.黑体, size: 字号.小二)
         #v(.3em)
       ]
     } else if it.level == 2 {
-      main-format-heading(it: it, font: 字体.宋体, size: 字号.小三)
+      main-format-heading(it: it, font: 字体.黑体, size: 字号.小三)
     } else if it.level >= 3 {
-      main-format-heading(it: it, font: 字体.宋体, size: 字号.小四)
+      main-format-heading(it: it, font: 字体.黑体, size: 字号.小四)
     }
   }
 
@@ -169,7 +169,7 @@
     #v(40pt)
 
     #text(
-      font: 字体.宋体,
+      font: 字体.黑体,
       size: 22pt,
     )[
       设计文档

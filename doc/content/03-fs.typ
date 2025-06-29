@@ -38,9 +38,9 @@ pub trait SuperBlockTrait: Send + Sync {
     label-name: "Super block",
 )
 
-与C 语言相比，rust 提供了足够的抽象机制。对于不同的文件系统，实现 SuperBlock trait后就可以在文件系统中安全和高效地使用，鲜明的方法名称也为编程带来方便。 rust 同时区别于传统的面向对象语言，抛弃了继承机制的设计，鼓励面向 trait（翻译为属性） 编程，并使用组合替代继承，使得代码结构更为简单高效。
+#h(2em)与 C 语言相比，rust 提供了足够的抽象机制。对于不同的文件系统，实现 SuperBlock trait后就可以在文件系统中安全和高效地使用，鲜明的方法名称也为编程带来方便。 rust 同时区别于传统的面向对象语言，抛弃了继承机制的设计，鼓励面向 trait（翻译为属性） 编程，并使用组合替代继承，使得代码结构更为简单高效。
 
-我们的内核中简化了超级块的提供的功能，仅提供有限的信息
+我们的内核中简化了超级块的提供的功能，仅提供有限的信息。
 
 
 === Inode
@@ -63,7 +63,8 @@ pub trait InodeTrait: Send + Sync {
     /// inode 的信息
     fn fstat(&self) -> Kstat;
     /// 在文件夹上创建一个子文件
-    fn do_create(&self, bare_dentry: Arc<Dentry>, _ty: InodeType) -> Option<Arc<dyn InodeTrait>>;
+    fn do_create(&self, bare_dentry: Arc<Dentry>, _ty: InodeType) 
+        -> Option<Arc<dyn InodeTrait>>;
     /// 读文件
     fn read_at(&self, _off: usize, _buf: &mut [u8]) -> usize;
     /// 写文件
@@ -77,7 +78,8 @@ pub trait InodeTrait: Send + Sync {
     /// 获得page cache
     fn get_page_cache(&self) -> Option<Arc<PageCache>>;
     /// 更名
-    fn rename(&self, old_path: Arc<Dentry>, new_path: Arc<Dentry>) -> SysResult<usize>;
+    fn rename(&self, old_path: Arc<Dentry>, new_path: Arc<Dentry>) 
+        -> SysResult<usize>;
     /// 文件夹读取目录项
     fn read_dents(&self) -> Option<Vec<Dirent>>;
     /// io 操作
@@ -88,7 +90,7 @@ pub trait InodeTrait: Send + Sync {
     label-name: "inode-trait",
 )
 
-在文件对象 File 或者目录项对象中会持有数据类型为 `Arc<dyn InodeTrait>` 的索引节点（inode）对象。通过索引节点（inode）对象，,通过其实现的 Inode trait 接口我们可以获得文件的各种信息，进行文件的读写、创建、删除等操作。在调用 InodeTrait 定义的方法的时候，我们不需要关心其具体的数据类型，这一行为会自动分派给对应的文件系统的索引节点（inode）实现。
+#h(2em)在文件对象 File 或者目录项对象中会持有数据类型为 `Arc<dyn InodeTrait>` 的索引节点（inode）对象。通过索引节点（inode）对象，,通过其实现的 Inode trait 接口我们可以获得文件的各种信息，进行文件的读写、创建、删除等操作。在调用 InodeTrait 定义的方法的时候，我们不需要关心其具体的数据类型，这一行为会自动分派给对应的文件系统的索引节点（inode）实现。
 
 
 === Dentry
@@ -101,7 +103,7 @@ pub trait InodeTrait: Send + Sync {
   supplement: [图],
 )<文件系统>
 
-在初始化目录树的过程中，我们需要将具体的文件系统挂载（mount）在 目录树上，目录树提供了这一功能的实现。我们可以把任意的文件系统挂载到目录树上的文件夹节点上，将该目录项（dentry） 持有的 inode `替换`为该文件系统的根目录，我们就可以通过对应的路径，去访问该文件系统下的文件。
+#h(2em)在初始化目录树的过程中，我们需要将具体的文件系统挂载（mount）在 目录树上，目录树提供了这一功能的实现。我们可以把任意的文件系统挂载到目录树上的文件夹节点上，将该目录项（dentry） 持有的 inode `替换`为该文件系统的根目录，我们就可以通过对应的路径，去访问该文件系统下的文件。
 
 #figure(
   image("assets/mount_umount.png"),
@@ -109,9 +111,9 @@ pub trait InodeTrait: Send + Sync {
   supplement: [图],
 )<文件系统>
 
-在我们的实现中，当我们挂载了一个新的文件系统到某个目录项上时，原有的目录项上持有的索引节点（inode）的引用会隐藏起来，当从这个目录项上卸载（unmount）该文件系统的时候原来持有的索引节点（inode）会恢复，进而恢复原有的子树结构。
+#h(2em)在我们的实现中，当我们挂载了一个新的文件系统到某个目录项上时，原有的目录项上持有的索引节点（inode）的引用会隐藏起来，当从这个目录项上卸载（unmount）该文件系统的时候原来持有的索引节点（inode）会恢复，进而恢复原有的子树结构。
 
-目前仅支持内核中调用，未来我们希望实现 loop 设备后在用户态也可以使用
+目前仅支持内核中调用，未来我们希望实现 loop 设备后在用户态也可以使用。
 
 目录项`Dentry`的定义如下：
 #code-figure(
@@ -134,9 +136,9 @@ pub trait InodeTrait: Send + Sync {
 )
 
 
-通过children 字段获得当前目录项的子目录项，通过 parent 获得当前目录项的双亲目录项，注意到这里使用弱引用（不增加引用计数）防止出现循环引用。inode 字段为所持有的索引节点（inode）。
+#h(2em)通过children 字段获得当前目录项的子目录项，通过 parent 获得当前目录项的双亲目录项，注意到这里使用弱引用（不增加引用计数）防止出现循环引用。inode 字段为所持有的索引节点（inode）。
 
-定义目录项状态DentryStatus
+定义目录项状态DentryStatus：
 #code-figure(
 ```rust
 pub enum DentryStatus {
@@ -151,7 +153,7 @@ pub enum DentryStatus {
     caption: [DentryStatus 枚举],
     label-name: "dentry-status",
 )
-目录项状态在这三个状态之间转移，当目录项被标记为无效时，会在合适的时机进行回收，并且释放对索引节点（inode）对象的引用。当目录项尚未初始化的时候，会在访问时初始化。只有当目录项有效时才可以进行访问。
+#h(2em)目录项状态在这三个状态之间转移，当目录项被标记为无效时，会在合适的时机进行回收，并且释放对索引节点（inode）对象的引用。当目录项尚未初始化的时候，会在访问时初始化。只有当目录项有效时才可以进行访问。
 
 目录项 （dentry）额外使用了一个缓存（Cache）用于加速从路径到目录项的查找，目录项缓存（DentryCache）使用内核定义的 Cache 泛型容器进行定义。目录项缓存的存在极大地加速了获得索引节点（inode）的过程，获得显著的性能提升。
 
@@ -188,35 +190,51 @@ Ext4（第四代扩展文件系统）是Ext3文件系统的继承者，主要用
 procfs 是一种特殊的文件系统，它不是从磁盘上的文件系统中读取数据，而是从内核中
 读取数据。procfs 包括：
 
-- `/proc/mounts` : 显示当前挂载的文件系统
-- `/proc/meminfo` :  提供关于系统内存使用情况的信息，包括总内存、可用内存、缓存和缓冲区等详细数据
-- `/proc/exe` : 当前正在运行的程序
-- `/proc/self` : 当前正在运行的进程所持有的内容
+#list(
+    [`/proc/mounts` : 显示当前挂载的文件系统],
+    [`/proc/meminfo` :  提供关于系统内存使用情况的信息，包括总内存、可用内存、缓存和缓冲区等详细数据],
+    [`/proc/exe` : 当前正在运行的程序],
+    [`/proc/self` : 当前正在运行的进程所持有的内容],
+    indent: 2em
+)
+// - `/proc/mounts` : 显示当前挂载的文件系统
+// - `/proc/meminfo` :  提供关于系统内存使用情况的信息，包括总内存、可用内存、缓存和缓冲区等详细数据
+// - `/proc/exe` : 当前正在运行的程序
+// - `/proc/self` : 当前正在运行的进程所持有的内容
 
-这个文件系统完整地实现了 VFS 中所有的接口，用户可以`透明`地使用其中的文件
+#h(2em)这个文件系统完整地实现了 VFS 中所有的接口，用户可以`透明`地使用其中的文件。
 
 用户态程序可以很方便地从这些文件中提取相关信息。
 
 === devfs
 
 devfs 中的文件代表一些具体的设备，比如终端、硬盘等。devfs 内包含：
-- `/dev/zero` : 一个无限长的全 0 文件
-- `/dev/null` : 用于丢弃所有写入的数据，并且读取时会立即返回 EOF（文件结束）
-- `/dev/random` : 一个伪随机数生成器，提供随机数据流
-- `/dev/rtc` : 实时时钟设备，提供日期和时间
-- `/dev/tty` : 终端设备，能支持 ioctl 中的特定命令
-- `/dev/loop0` : 回环设备，用于虚拟块设备
+#list(
+    [`/dev/zero` : 一个无限长的全 0 文件],
+    [`/dev/null` : 用于丢弃所有写入的数据，并且读取时会立即返回 EOF（文件结束）],
+    [`/dev/random` : 一个伪随机数生成器，提供随机数据流],
+    [`/dev/rtc` : 实时时钟设备，提供日期和时间],
+    [`/dev/tty` : 终端设备，能支持 ioctl 中的特定命令],
+    [`/dev/loop0` : 回环设备，用于虚拟块设备],
+    indent: 2em
+)
+// - `/dev/zero` : 一个无限长的全 0 文件
+// - `/dev/null` : 用于丢弃所有写入的数据，并且读取时会立即返回 EOF（文件结束）
+// - `/dev/random` : 一个伪随机数生成器，提供随机数据流
+// - `/dev/rtc` : 实时时钟设备，提供日期和时间
+// - `/dev/tty` : 终端设备，能支持 ioctl 中的特定命令
+// - `/dev/loop0` : 回环设备，用于虚拟块设备
 
 
 == 页缓存
 
 页缓存（Page Cache）以页为单位缓存文件的内容。当我们需要读文件的时候，在缓存命中的情况下，就不需要去访问持久化设备，从而提高性能。当写文件的时候，也可以直接往页缓存中写，同时标记为脏页，就可以直接返回，而不需要等待数据真正地被写入到磁盘。脏页由内核进行统一的管理。总而言之，页缓存的设计极大地提高了文件的读写性能。
 
-页缓存同时也是连接文件系统模块和内存模块的桥梁。用户可以调用 mmap 系统调用，将文件的页缓存映射到用户态地址空间中，用户就可以安全且高效地实现对文件的访问。 mmap设计 可以复用页缓存机制而安全高效地实现
+页缓存同时也是连接文件系统模块和内存模块的桥梁。用户可以调用 mmap 系统调用，将文件的页缓存映射到用户态地址空间中，用户就可以安全且高效地实现对文件的访问。 mmap设计 可以复用页缓存机制而安全高效地实现。
 
 在用户态程序借助文件进行进程间通信（IPC）这一常见场景下，性能也会获得极大地提升。
 
-以下为页缓存（Page Cache）的定义
+以下为页缓存（Page Cache）的定义：
 
 #code-figure(
 ```rust
@@ -229,7 +247,7 @@ pub struct PageCache {
     label-name: "page-cache",
 )
 
-在 PageCache 实现中以页对齐的地址为 key 去获得对应的页帧（Page）。
+#h(2em)在 PageCache 实现中以页对齐的地址为 key 去获得对应的页帧（Page）。
 
 Ext4 文件系统的索引节点（inode）会持有这一页缓存，当不做特别要求的时候，均在页缓存中读写。系统会对页缓存进行管理，实现对齐其创建，映射与释放。并且当索引节点（inode）被释放的时候，其持有的页缓存（PageCache）也会自动释放，进而释放所持有的页帧。
 
@@ -237,7 +255,7 @@ Ext4 文件系统的索引节点（inode）会持有这一页缓存，当不做�
 
 === FdTable
 
-用户态程序使用`open`系统调用打开文件后，会获得文件描述符（File Descriptor）来用于控制文件（File），这需要内核为每一个进程创建一个对应的文件描述符表（Fd Table）用于实现文件描述符转换到文件的映射
+用户态程序使用`open`系统调用打开文件后，会获得文件描述符（File Descriptor）来用于控制文件（File），这需要内核为每一个进程创建一个对应的文件描述符表（Fd Table）用于实现文件描述符转换到文件的映射。
 
 // #img(
 //   image("../assets/todo", width: 70%),
@@ -250,14 +268,12 @@ Ext4 文件系统的索引节点（inode）会持有这一页缓存，当不做�
 #code-figure(
     ```rust
     pub struct FdTable {
-    pub table: Vec<FdInfo>,
-    pub rlimit: RLimit64,
-    free_bitmap: Vec<u64>,
-    next_free: usize,
-    freed_stack: Vec<usize>,
+        pub table: Vec<FdInfo>,
+        pub rlimit: RLimit64,
+        free_bitmap: Vec<u64>,
+        next_free: usize,
+        freed_stack: Vec<usize>,
     }
-
-    #[derive(Clone)]
     pub struct FdInfo {
         pub file: Option<Arc<dyn FileTrait>>,
         pub flags: OpenFlags,

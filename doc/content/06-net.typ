@@ -15,7 +15,10 @@
 #code-figure(
 ```rust
 /// 将一个socket加入到fd表中
-pub fn sock_map_fd(socket: Arc<dyn FileTrait>, cloexec_enable: bool) -> SysResult<usize> {
+pub fn sock_map_fd(
+    socket: Arc<dyn FileTrait>, 
+    cloexec_enable: bool
+) -> SysResult<usize> {
     let mut flag = OpenFlags::O_RDWR;
     let fdInfo = FdInfo::new(socket, flag);
     let new_info = fdInfo.off_Ocloexec(!cloexec_enable);
@@ -27,7 +30,7 @@ pub fn sock_map_fd(socket: Arc<dyn FileTrait>, cloexec_enable: bool) -> SysResul
     caption: [将 socket 映射到 fd 的函数],
     label-name: "sock-map-fd-fn",
 )
-SockMeta结构体作为套接字的核心元数据容器，采用Rust的强类型系统精确描述套接字状态。其字段设计反映了网络连接的全生命周期：从初始创建时的空端口和端点，到绑定后的本地地址确定，再到连接建立后的远程端点记录。特别是通过Option类型明确区分已初始化和未初始化状态，避免了传统C实现中常见的无效值问题。
+#h(2em)SockMeta结构体作为套接字的核心元数据容器，采用Rust的强类型系统精确描述套接字状态。其字段设计反映了网络连接的全生命周期：从初始创建时的空端口和端点，到绑定后的本地地址确定，再到连接建立后的远程端点记录。特别是通过Option类型明确区分已初始化和未初始化状态，避免了传统C实现中常见的无效值问题。
 
 #code-figure(
 ```rust
@@ -46,20 +49,23 @@ pub struct SockMeta {
     label-name: "sockmeta-struct",
 )
 
-Socket trait定义了完整的套接字操作接口，既包含标准的bind/connect/listen等基本操作，也提供了send_msg/recv_msg等增强功能。该trait标记为async_trait以适应现代异步IO需求，同时继承FileTrait实现了文件描述符的统一管理，可以通过Filetrait中的pollin、pollout异步检查网络缓冲区是否可读可写。
+#h(2em)Socket trait定义了完整的套接字操作接口，既包含标准的bind/connect/listen等基本操作，也提供了send_msg/recv_msg等增强功能。该trait标记为async_trait以适应现代异步IO需求，同时继承FileTrait实现了文件描述符的统一管理，可以通过Filetrait中的pollin、pollout异步检查网络缓冲区是否可读可写。
 
 #code-figure(
 ```rust
 #[async_trait]
 pub trait Socket: FileTrait {
     /// 异步接受一个传入的连接请求
-    async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)>;
+    async fn accept(&self, flags: OpenFlags) 
+        -> SysResult<(IpEndpoint, usize)>;
     /// 异步连接到指定的地址
     async fn connect(&self, addr: &SockAddr) -> SysResult<()>;
     /// 异步发送消息到指定地址
-    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize>;
+    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) 
+        -> SysResult<usize>;
     /// 异步接收消息
-    async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)>;
+    async fn recv_msg(&self, buf: &mut [u8]) 
+        -> SysResult<(usize, SockAddr)>;
     /// 绑定套接字到本地地址
     fn bind(&self, addr: &SockAddr) -> SysResult<()>;
     /// 开始监听传入连接
@@ -117,11 +123,18 @@ poll()方法是整个网络栈的驱动引擎，实现了事件处理的核心�
 
 iface.poll()调用实现了三层重要功能：
 
-- 接收处理：从设备读取数据包并递交给相应协议处理程序
+#list(
+    [接收处理：从设备读取数据包并递交给相应协议处理程序],
+    [发送处理：将协议栈待发送数据提交给设备驱动],
+    [状态更新：维护TCP定时器、重传队列等状态机],
+    indent: 4em
+)
 
-- 发送处理：将协议栈待发送数据提交给设备驱动
+// - 接收处理：从设备读取数据包并递交给相应协议处理程序
 
-- 状态更新：维护TCP定时器、重传队列等状态机
+// - 发送处理：将协议栈待发送数据提交给设备驱动
+
+// - 状态更新：维护TCP定时器、重传队列等状态机
 
 该方法主要在发送和就收数据的循环中使用，驱动协议栈与设备的异步交互。
 #code-figure(
@@ -164,7 +177,7 @@ pub struct UdpSocket {
     label-name: "tcp-udp-socket-struct",
 )
 
-在Tcp、Udp数据结构中，都是用SocketHandle表示自己的句柄。该句柄存放在smoltcp提供的全局SOCKET_SET中，该set可以类比为fdtable，方便快速获取到该套接字的相关句柄，并通过该句柄实现与smoltcp底层网络栈功能交互。
+#h(2em)在Tcp、Udp数据结构中，都是用SocketHandle表示自己的句柄。该句柄存放在smoltcp提供的全局SOCKET_SET中，该set可以类比为fdtable，方便快速获取到该套接字的相关句柄，并通过该句柄实现与smoltcp底层网络栈功能交互。
 
 #code-figure(
 ```rs

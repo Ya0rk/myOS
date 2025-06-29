@@ -6,11 +6,16 @@
 
 中断与异常是用户态与内核态之间切换的中重要机制。在Del0n1x中，为了更加清晰的设计模式，将中断异常分为两类：
 
-  - 用户中断异常：发生在用户态(U-Mode)的中断或异常
+#list(
+    [用户中断异常：发生在用户态(U-Mode)的中断或异常],
+    [内核中断异常：发生在内核态(S-Mode)的中断或异常],
+    indent: 2em
+)
+//   - 用户中断异常：发生在用户态(U-Mode)的中断或异常
 
-  - 内核中断异常：发生在内核态(S-Mode)的中断或异常
+//   - 内核中断异常：发生在内核态(S-Mode)的中断或异常
 
-当用户态发生中断或异常时，系统需要完成从用户态到内核态的切换。这个过程通过汇编函数 ` __trap_from_user` 实现，这是用户态中断处理的入口点，负责保存完整的用户上下文。而sepc（era）、stval（estat）等寄存器则是由硬件自动完成保存。用户上下文保存在如下结构中：
+#h(2em)当用户态发生中断或异常时，系统需要完成从用户态到内核态的切换。这个过程通过汇编函数 ` __trap_from_user` 实现，这是用户态中断处理的入口点，负责保存完整的用户上下文。而sepc（era）、stval（estat）等寄存器则是由硬件自动完成保存。用户上下文保存在如下结构中：
 
 #code-figure(
 ```rs
@@ -30,7 +35,7 @@ pub struct TrapContext {
     label-name: "TrapContext-struct",
 )
 
-需要注意的是，在riscv64中，我们通过检测fs寄存器是否被使用决定是否保存浮点寄存器，这样的设计减少上下文切换的开销。但是通过查阅手册，loongarch64架构中并没有提供这样的寄存器，所以我们将loongarch64中浮点寄存器的保存处理放置在`__trap_from_user`，同时我们在TrapContext中增加了`fcsr`字段用于保存浮点控制状态寄存器。`fcsr`是浮点运算单元（FPU）的核心控制寄存器，它负责管理浮点运算的异常标志、舍入模式、使能控制等关键功能。
+#h(2em)需要注意的是，在riscv64中，我们通过检测fs寄存器是否被使用决定是否保存浮点寄存器，这样的设计减少上下文切换的开销。但是通过查阅手册，loongarch64架构中并没有提供这样的寄存器，所以我们将loongarch64中浮点寄存器的保存处理放置在`__trap_from_user`，同时我们在TrapContext中增加了`fcsr`字段用于保存浮点控制状态寄存器。`fcsr`是浮点运算单元（FPU）的核心控制寄存器，它负责管理浮点运算的异常标志、舍入模式、使能控制等关键功能。
 
 == 处理过程
 
@@ -110,7 +115,6 @@ Trap::Exception(Exception::UserEnvCall) => { // 7
               cx.user_gp.a0 = err as usize;
           } else {
               cx.user_gp.a0 = (-(err as isize)) as usize;
-              info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
           }
       }
   }

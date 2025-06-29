@@ -62,7 +62,7 @@ if info.woken_while_running {
     label-name: "task-queue-struct",
 )
 
-在Del0n1x中，我们使用统一的 TaskFuture 封装了任务。对于用户任务，在poll轮循中实现了任务的切换调度。当任务checkin时，需要在修改TCB的时间戳记录调度时间，然后切换CPU中运行任务和切换页表。当任务checkout时，需要判断浮点寄存器状态是否为dirty以确定是否保存浮点寄存器，然后清空CPU当前任务，并记录任务checkout时间。 对于内核任务，Del0n1x并没有设计任务切换，而是让该任务一直poll，直到任务结束，这类任务主要是shell程序。
+#h(2em)在Del0n1x中，我们使用统一的 TaskFuture 封装了任务。对于用户任务，在poll轮循中实现了任务的切换调度。当任务checkin时，需要在修改TCB的时间戳记录调度时间，然后切换CPU中运行任务和切换页表。当任务checkout时，需要判断浮点寄存器状态是否为dirty以确定是否保存浮点寄存器，然后清空CPU当前任务，并记录任务checkout时间。 对于内核任务，Del0n1x并没有设计任务切换，而是让该任务一直poll，直到任务结束，这类任务主要是shell程序。
 
 #code-figure(
 ```rs
@@ -100,12 +100,15 @@ fn poll(
     label-name: "task-future-poll",
 )
 
-spawn_user_task可以设置一个用户任务。Del0n1x将用户任务的future设置为 trap_loop 循环，负责处理任务在用户态和内核态之间的切换，直到任务结束。执行 `executor::spawn(future)` 将任务挂入全局队列中等待被调度。
+#h(2em)spawn_user_task可以设置一个用户任务。Del0n1x将用户任务的future设置为 trap_loop 循环，负责处理任务在用户态和内核态之间的切换，直到任务结束。执行 `executor::spawn(future)` 将任务挂入全局队列中等待被调度。
 
 #code-figure(
 ```rs
 pub fn spawn_user_task(user_task: Arc<TaskControlBlock>) {
-    let future = TaskFuture::user_task(user_task.clone(), trap_loop(user_task));
+    let future = TaskFuture::user_task(
+        user_task.clone(), 
+        trap_loop(user_task)
+    );
     executor::spawn(future);
 }
 ```,
@@ -130,12 +133,13 @@ pub struct CPU {
     label-name: "cpu-struct",
 )
 
-单个CPU被存放在全局的 PROCESSORS 管理器中，并向外暴露接口，通过管理器我们能获取到当前任务的上下文信息和页表token、CPU id号等。
+#h(2em)单个CPU被存放在全局的 PROCESSORS 管理器中，并向外暴露接口，通过管理器我们能获取到当前任务的上下文信息和页表token、CPU id号等。
 
 #code-figure(
 ```rs
 const PROCESSOR: CPU = CPU::new();
-pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSOR; HART_NUM]));
+pub static PROCESSORS: SyncProcessors = 
+    SyncProcessors(UnsafeCell::new([PROCESSOR; HART_NUM]));
 ```,
     caption: [全局 CPU 管理器],
     label-name: "processors-global",
@@ -149,42 +153,46 @@ pub static PROCESSORS: SyncProcessors = SyncProcessors(UnsafeCell::new([PROCESSO
 #code-figure(
 ```rs
 pub struct TaskControlBlock {
-    pub pid: Pid,                        // 任务标识符
-    pub tgid: AtomicUsize,       // leader的pid号
+    pub pid: Pid,               // 任务标识符
+    pub tgid: AtomicUsize,      // leader的pid号
     pub pgid: AtomicUsize,      // 进程组id
-    pub task_status: SpinNoIrqLock<TaskStatus>,                                     // 任务状态
-    pub thread_group: Shared<ThreadGroup>,                                           // 线程组
-    pub memory_space: Shared<MemorySpace>,                                       // 地址空间
-    pub parent: Shared<Option<Weak<TaskControlBlock>>>,                  // 父进程
-    pub children: Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,   // 子进程
-    pub fd_table: Shared<FdTable>,                                // 文件描述表
-    pub current_path: Shared<String>,                           // 路径
-    pub robust_list: Shared<RobustList>,                        // 存储线程的信息
-    pub futex_list: Shared<FutexBucket>,                       // futex互斥锁队列
-    pub itimers: Shared<[ITimerVal; 3]>,                        // 任务的内部时钟
-    pub fsz_limit: Shared<Option<RLimit64>>,              // 任务的资源限制
-    pub shmid_table: Shared<ShmidTable>,                   // sysv进程共享内存表
-    pub pending: AtomicBool,                                         // 是否有信号待处理
-    pub ucontext: AtomicUsize,                                       // 信号用户态指针
-    pub sig_pending: SpinNoIrqLock<SigPending>,       // 信号列表
-    pub blocked: SyncUnsafeCell<SigMask>,                  // 任务阻塞信号
-    pub handler: Shared<SigStruct>,                               // 信号处理集合
-    pub sig_stack: SyncUnsafeCell<Option<SignalStack>>,   // 信号栈
-    pub waker: SyncUnsafeCell<Option<Waker>>,                // 任务唤醒句柄
-    pub trap_cx: SyncUnsafeCell<TrapContext>,                   // 上下文
-    pub time_data: SyncUnsafeCell<TimeData>,                    // 时间戳
-    pub clear_child_tid: SyncUnsafeCell<Option<usize>>, // CHILD_CLEARTID清除地址
-    pub set_child_tid: SyncUnsafeCell<Option<usize>>,     // CHILD_SETTID设置地址
-    pub cpuset: SyncUnsafeCell<CpuSet>,                            // CPU亲和性掩码
-    pub prio: SyncUnsafeCell<SchedParam>,                       // 调度优先级和策略
-    pub exit_code: AtomicI32,                                               // 退出码
+    pub task_status: SpinNoIrqLock<TaskStatus>,// 任务状态
+    pub thread_group: Shared<ThreadGroup>,     // 线程组
+    pub memory_space: Shared<MemorySpace>,     // 地址空间
+    pub fd_table: Shared<FdTable>,             // 文件描述表
+    pub current_path: Shared<String>,          // 路径
+    pub robust_list: Shared<RobustList>,       // 存储线程的信息
+    pub futex_list: Shared<FutexBucket>,       // futex互斥锁队列
+    pub itimers: Shared<[ITimerVal; 3]>,       // 任务的内部时钟
+    pub fsz_limit: Shared<Option<RLimit64>>,   // 任务的资源限制
+    pub shmid_table: Shared<ShmidTable>,       // sysv进程共享内存表
+    pub pending: AtomicBool,                   // 是否有信号待处理
+    pub ucontext: AtomicUsize,                 // 信号用户态指针
+    pub sig_pending: SpinNoIrqLock<SigPending>,// 信号列表
+    pub blocked: SyncUnsafeCell<SigMask>,      // 任务阻塞信号
+    pub handler: Shared<SigStruct>,            // 信号处理集合
+    pub sig_stack: SyncUnsafeCell<Option<SignalStack>>, // 信号栈
+    pub waker: SyncUnsafeCell<Option<Waker>>,  // 任务唤醒句柄
+    pub trap_cx: SyncUnsafeCell<TrapContext>,  // 上下文
+    pub time_data: SyncUnsafeCell<TimeData>,   // 时间戳
+    pub cpuset: SyncUnsafeCell<CpuSet>,        // CPU亲和性掩码
+    pub prio: SyncUnsafeCell<SchedParam>,      // 调度优先级和策略
+    pub exit_code: AtomicI32,                  // 退出码
+    /// CHILD_CLEARTID清除地址
+    pub clear_child_tid: SyncUnsafeCell<Option<usize>>,
+    /// CHILD_SETTID设置地址
+    pub set_child_tid: SyncUnsafeCell<Option<usize>>,
+    /// 父进程
+    pub parent: Shared<Option<Weak<TaskControlBlock>>>,
+    /// 子进程
+    pub children: Shared<BTreeMap<usize, Arc<TaskControlBlock>>>,
 }
 ```,
     caption: [任务控制块结构体],
     label-name: "task-control-block",
 )
 
-利用rust Arc引用计数和clone机制，可以有效的解决进程和线程之间资源共享和隔离问题。对于可以共享的资源，调用 Arc::clone() 仅增加引用计数（原子操作），未复制底层数据，父子进程共享同一份数据。如果是可以独立的资源（如memory_space），调用clone会递归复制整个结构，生成完全独立的数据副本，父子进程修改互不影响。
+#h(2em)利用rust Arc引用计数和clone机制，可以有效的解决进程和线程之间资源共享和隔离问题。对于可以共享的资源，调用 Arc::clone() 仅增加引用计数（原子操作），未复制底层数据，父子进程共享同一份数据。如果是可以独立的资源（如memory_space），调用clone会递归复制整个结构，生成完全独立的数据副本，父子进程修改互不影响。
 
 === 进程和线程联系
 
@@ -208,7 +216,7 @@ pub struct TaskControlBlock {
   ]
 )
 
-进程和进程之间是树状结构，通过 parent 和 children 字段指明父进程和子进程。
+#h(2em)进程和进程之间是树状结构，通过 parent 和 children 字段指明父进程和子进程。
 Del0n1x 使用`Manager`管理任务和进程组，结构设计如下：
 
 #code-figure(
@@ -231,12 +239,19 @@ pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
 
 在rcore的基础上，我们为任务在运行过程中设计了4种状态:
 
-- Ready: 任务已准备好执行，等待调度器分配CPU时间片;
-- Running: 任务正在CPU上执行指令;
-- Stopped: 任务被暂停执行，但未被终止，收到 SIGSTOP 信号
-- Zombie: 任务已终止，但尚未被父进程回收
+#list(
+    [Ready: 任务已准备好执行，等待调度器分配CPU时间片;],
+    [Running: 任务正在CPU上执行指令;],
+    [Stopped: 任务被暂停执行，但未被终止，收到 SIGSTOP 信号],
+    [Zombie: 任务已终止，但尚未被父进程回收],
+    indent: 4em
+)
+// - Ready: 任务已准备好执行，等待调度器分配CPU时间片;
+// - Running: 任务正在CPU上执行指令;
+// - Stopped: 任务被暂停执行，但未被终止，收到 SIGSTOP 信号
+// - Zombie: 任务已终止，但尚未被父进程回收
 
-进程间状态转化如下：
+#h(2em)进程间状态转化如下：
 
 #figure(
   image("assets/status.png"),

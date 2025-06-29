@@ -18,11 +18,17 @@
 // 特殊通用寄存器读写、控制状态寄存器读写、特殊指令执行
 Del0n1x 在`riscv`和`loongarch`外部库的帮助下，对 RISC-V 和 LoongArch 两种架构下的处理器访问实现了统一抽象。在内核代码中，对处理器及相关资源的访问包括以下几种类型：
 
-- 读写通用寄存器 
-- 访问控制状态寄存器
-- 执行特殊的控制指令（如内核刷表指令）
+#list(
+    [读写通用寄存器],
+    [访问控制状态寄存器],
+    [执行特殊的控制指令（如内核刷表指令）],
+    indent: 2em
+)
+// - 读写通用寄存器 
+// - 访问控制状态寄存器
+// - 执行特殊的控制指令（如内核刷表指令）
 
-在 Del0n1x 中，这些操作只需要调用统一的接口即可完成，具体实现细节位于 HAL 中，便于构建架构无关的内核代码。
+#h(2em)在 Del0n1x 中，这些操作只需要调用统一的接口即可完成，具体实现细节位于 HAL 中，便于构建架构无关的内核代码。
 
 == 内核入口例程
 
@@ -80,7 +86,8 @@ pub fn mmu_init() {
     pwcl::set_dir1_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3);
     pwcl::set_dir1_width(PAGE_SIZE_SHIFT - 3);
     // 设置页表根目录的索引位位置和长度
-    pwch::set_dir3_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3 + PAGE_SIZE_SHIFT - 3);
+    pwch::set_dir3_base(PAGE_SIZE_SHIFT + PAGE_SIZE_SHIFT - 3 
+      + PAGE_SIZE_SHIFT - 3);
     pwch::set_dir3_width(PAGE_SIZE_SHIFT - 3);
 }
 ```,
@@ -96,7 +103,6 @@ Del0n1x 支持两种架构下的多级页表。在硬件抽象层中，Del0n1x �
 #code-figure(
 ```rust
 bitflags! {
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
     pub struct PTEFlags: usize {
         const V = 1 << 0;
         const R = 1 << 1;
@@ -117,7 +123,8 @@ impl PTEFlags {
         ... // 篇幅需要，省略
         pub COW
     );
-    // 为标志位FLAG实现set_[FLAG](&mut self, bool)-> &mut Self 方法，支持链式调用
+    // 为标志位FLAG实现set_[FLAG](&mut self, bool)-> &mut Self 
+    // 方法，支持链式调用
     impl_flag_setter!(
         pub U,
         pub V,
@@ -130,7 +137,7 @@ impl PTEFlags {
 )
 
 
-Del0n1x 的设计中，LoongArch 架构的内核地址空间需要单独使用一张页表，而RISC-V架构的内核地址空间则与用户地址空间共用同一张。Del0n1x 在硬件抽象层中为两个架构均映射一张内核页表，区别在于 LoongArch 架构下该页表会被写入 CSR.PGDH 并永不切换，而 RISC-V 架构下该页表只作为一个映射用户地址空间时的模板。当创建新的进程页表时，内核页表中根目录中映射地址空间高半部分的页表项将被复制到新的页表中，供内核态访问。
+#h(2em)Del0n1x 的设计中，LoongArch 架构的内核地址空间需要单独使用一张页表，而RISC-V架构的内核地址空间则与用户地址空间共用同一张。Del0n1x 在硬件抽象层中为两个架构均映射一张内核页表，区别在于 LoongArch 架构下该页表会被写入 CSR.PGDH 并永不切换，而 RISC-V 架构下该页表只作为一个映射用户地址空间时的模板。当创建新的进程页表时，内核页表中根目录中映射地址空间高半部分的页表项将被复制到新的页表中，供内核态访问。
 
 === 直接映射窗口
 
