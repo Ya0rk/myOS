@@ -88,6 +88,97 @@ pub struct SigPending {
   supplement: [图],
 )<信号处理>
 
+== 管道 Pipe
+
+每个进程有自己独立的地址空间，在用户态的情况下，任何一个进程的全局变量对于其他进程都是不可访问的，所以进程之间的数据交换必须通过内核，
+内核为不同的进程之间开辟一个缓冲区，进程 A 将数据写入缓冲区，然后进程 B 从缓冲区中取走数据，Pipe 就是通过这样的机制实现进程间的通信。
+
+=== Pipe 设计
+
+从基本功能的分析得知，Pipe 需要维护一个写端和一个读端供进程操作缓冲区，同时，考虑到读写之间并发问题，我们需要对缓冲区加锁，也就是默认当
+有一方在读或在写时，另一方需要阻塞；除此之外，为了解决缓冲区并没有数据但是读者持有锁的问题，我们还需要设计读写者唤醒机制，基于异步架构的
+调度方式，Del01x 用数组保存进程 waker 句柄来记录有待唤醒的读写者。基于此，Del0n1x 的 Pipe 结构设计如下：
+
+#code-figure(
+    ```rust
+    pub struct Pipe {
+        pub flags: OpenFlags,
+        pub other: LateInit<Weak<Pipe>>,
+        pub is_reader: bool,
+        pub buffer: Arc<SpinNoIrqLock<PipeInner>>,
+    }
+    pub struct PipeInner {
+        pub buf: VecDeque<u8>,
+        pub reader_waker: VecDeque<Waker>,
+        pub writer_waker: VecDeque<Waker>,
+        pub status: RingBufferStatus,
+    }
+    ```,
+    caption: [Pipe 结构设计],
+    label-name: "Pipe 结构设计",
+)
+
+#h(2em)鉴于在 Linux 中 Pipe 是一种文件，Del0n1x 为 Pipe 实现了 FileTrait，这样我们可以像操作文件一样建立和操控 Pipe。
+
+=== 读者写者通信
+
+在 Del0n1x 中，我们通过手写 Future 的方式实现管理读者写者之间同步。下面以读者为例，我们为读者实现 `PipeReadFuture` 记录
+读者在异步轮循中的关键字段，解释如下。在读者访问缓冲区前，会计算目前可读的长度，如果缓冲区没有数据，那么读者会将自己的唤醒句柄
+waker 保存在 pipe 的读者带唤醒数组中，等待写者完成数据写入后唤醒；如果缓冲区有数据，那么读者将该数据段拷贝到 userbuf 中，并通知
+写者此时 Pipe 缓冲区有空余空间可写。
+
+
+#code-figure(
+    ```rust
+    struct PipeReadFuture<'a> {
+        /// 与写者通信的管道
+        pipe: &'a Pipe,
+        /// 用户空间指针
+        userbuf: &'a mut [u8],
+        /// 记录当前用户数据buf读取到的位置
+        cur: usize, 
+    }
+
+    impl Future for PipeReadFuture<'_> {
+        type Output = SysResult<usize>;
+
+        fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) 
+        -> Poll<Self::Output> {
+            let this = unsafe { self.get_unchecked_mut() };
+            let userbuf_left = this.userbuf.len() - this.cur;
+            let read_size = {
+                let mut inner = this.pipe.buffer.lock();
+                inner.available_read(userbuf_left)
+            };
+
+            if read_size > 0 {
+                let mut inner = this.pipe.buffer.lock();
+                let target = &mut this.userbuf[this.cur..this.cur + read_size];
+                for (i, byte) in inner.buf.drain(..read_size).enumerate() {
+                    target[i] = byte;
+                }
+                this.cur += read_size;
+                this.pipe.wake_writers(&mut inner);
+                Poll::Ready(Ok(read_size))
+            } else if !this.pipe.other_alive() {
+                return Poll::Ready(Ok(0));
+            } else {
+                let mut inner = this.pipe.buffer.lock();
+                inner.reader_waker.push_back(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+    ```,
+    caption: [读者同步],
+    label-name: "读者同步",
+)
+
+#h(2em)这样的设计看似读者写者之间互相交错唤醒，场面和谐。但试想一下一种极端情况，如果读者或者写者在操作完缓冲区后，因为一些原因导致进程
+退出，而此时 Pipe 中还有待唤醒的读者或写者，那这样会造成死等的情况。这样的 bug 是在适配 libcbench 的 ptread 中发现的，为了解决这样的问题，
+需要 为 Pipe 实现 Drop 方式自动唤醒等待队列中的进程。
+
+
 == System V IPC 机制
 
 === System V IPC 对象
