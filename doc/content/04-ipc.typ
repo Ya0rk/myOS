@@ -29,7 +29,8 @@ pub struct SigAction {
     pub sa_flags: SigActionFlag,
     pub sa_restorer: usize,
     /// 在执行信号处理函数期间临时阻塞的信号集合
-    /// 信号处理函数执行时，内核会自动将 sa_mask 中的信号添加到进程的阻塞信号集
+    /// 信号处理函数执行时，内核会自动将 sa_mask 中的信号添加到进程的阻塞
+    /// 信号集
     /// 处理函数返回后，阻塞信号集恢复为原状态
     pub sa_mask: SigMask,
 }
@@ -59,7 +60,7 @@ pub struct SigPending {
     label-name: "sigpending-struct",
 )
 
-我们将信号处理队列分为普通队列和优先队列，对不同的信号做了优先级处理，这样的数据结构时的Del0n1x对于紧急时间和高优先级时的相应延迟更低，提高了内核的实时性。
+#h(2em)我们将信号处理队列分为普通队列和优先队列，对不同的信号做了优先级处理，这样的数据结构时的Del0n1x对于紧急时间和高优先级时的相应延迟更低，提高了内核的实时性。
 
 对于队列中的信号结构体 SigInfo设计，我们借鉴了Linux中的 siginfo_t 实现方式，同时对其进行了简化和封装，能够携带更多的数据信息（发送者pid、子进程exit code和信号编码等），这样极大的方便了 Wait4 和 do_signal 中对于不同信号的处理分发流程。
 
@@ -86,5 +87,110 @@ pub struct SigPending {
   caption: [信号处理],
   supplement: [图],
 )<信号处理>
+
+== System V IPC 机制
+
+=== System V IPC 对象
+
+Del0n1x 支持进程间通过System V IPC机制进行通信。System V IPC使用全局唯一的IPC Key标识 IPC 对象，知晓IPC Key的进程可以调用相关的ABI获取IPC对象，并使用相关的 ABI 创建通信信道。
+
+System V IPC 对象包括三种类型的对象：
+#list(
+    [消息队列 Message Queue，msg],
+    [信号量 Semaphore，sem],
+    [共享内存 Shared Memory，shm],
+    indent: 4em
+)
+
+#h(2em)Del0n1x 实现了 IPCPerm 结构体用于维护 IPC 对象的所有权和权限信息。在此基础上，Del0n1x 对共享内存对象提供了支持，并为其余两种类型的IPC对象预留了可供拓展的接口。
+
+#code-figure(
+```rust
+#[repr(C)]
+pub struct IPCPerm {
+    pub key: IPCKey,
+    pub uid: u32,
+    pub gid: u32,
+    pub cuid: u32,
+    pub cgid: u32,
+    pub mode: IPCPermMode,
+    pub seq: u32,
+}
+```,
+    caption: [IPC Perm结构体],
+    label-name: "ipc-perm-struct"
+)     
+
+=== IPC Key管理器
+
+Del0n1x 定义了一个全局的IPC Key管理器，为每一个IPC对象分配唯一的IPC Key。
+#code-figure(
+```rust
+pub struct IPCKey(pub i32);
+pub struct IPCKeyAllocator {
+    current: i32,
+    recycled: BTreeSet<i32>,
+}
+impl IPCKeyAllocator {
+    /// 初始化分配器
+    pub fn new() -> Self {...}
+    /// 分配IPC Key
+    pub fn alloc(&mut self) -> IPCKey {...}
+    /// 释放IPC Key
+    pub fn dealloc(&mut self, key: i32) {...}
+}
+```,
+    caption: [IPC Key全局分配器],
+    label-name: "ipc-key-allocator"
+)           
+
+#h(2em)进程可以通过传入`IPC_PRIVATE`调用分配器为创建的 IPC 对象分配IPC Key，也可以指定对象的IPC Key，以便从IPC对象管理器中获取IPC Key对应的IPC对象。
+
+#code-figure(
+```rust
+impl IPCKey {
+    pub fn new_alloc() -> IPCKey {
+        IPC_KEY_ALLOCATOR.lock().alloc()
+    }
+    pub fn from_user(user_key: i32) -> IPCKey {
+        const IPC_PRIVATE: i32 = 0;
+        if (user_key == IPC_PRIVATE) {
+            Self::new_alloc()
+        } else {
+            IPCKey(user_key)
+        }
+    }
+}
+```,
+    caption: [IPC Key的创建与获取],
+    label-name: "ipc-key-init"
+)
+
+=== System V 共享内存
+
+Del0n1x 实现了`ShmidDs`和`ShmObj`数据结构，作为操作 System V 共享内存的句柄。用户进程可以使用 `shmget`、`shmctl`、`shmat`、`shmdt`等 System V 共享内存相关 ABI 创建、访问共享内存 IPC 对象，并通过映射和读写 System V 共享内存实现通信。
+
+#code-figure(
+```rust
+/// System V共享内存对象元数据
+pub struct ShmidDs {
+    pub shm_perm: IPCPerm,
+    pub shm_segsz: usize,
+    pub shm_atime: usize,
+    pub shm_dtime: usize,
+    pub shm_ctime: usize,
+    pub shm_cpid: usize,
+    pub shm_lpid: usize,
+    pub shm_nattch: usize,
+}
+/// 维护System V共享内存的映射目标
+pub struct ShmObject {
+    pub shmid_ds: ShmidDs,
+    pub pages: Vec<Weak<Page>>,
+}
+```,
+    caption: [System V共享内存IPC对象],
+    label-name: "sysv-shm-obj"
+)
 
 #pagebreak()  // 强制分页
