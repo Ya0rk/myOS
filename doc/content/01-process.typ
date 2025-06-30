@@ -27,13 +27,13 @@ await 将控制权交给调度器，以便另一个任务可以继续进行。�
   supplement: [图],
 )<任务调度>
 
-=== 异步编程并非"万能钥匙"
+// === 异步编程并非"万能钥匙"
 
-在初次接触异步调度机制时，我们曾天真地认为：既然异步调度效率如此之高，何不将所有函数都设计为异步形式？但随着对异步机制的深入理解，我们逐渐认识到这实际上陷入了一个典型的认知误区——将异步视为解决所有问题的"银弹"。
+// 在初次接触异步调度机制时，我们曾天真地认为：既然异步调度效率如此之高，何不将所有函数都设计为异步形式？但随着对异步机制的深入理解，我们逐渐认识到这实际上陷入了一个典型的认知误区——将异步视为解决所有问题的"银弹"。
 
-首先需要明确的是，异步编程的核心价值在于解决I/O密集型场景的性能瓶颈。在计算机系统中，I/O操作（如磁盘读写、网络通信）的延迟通常高达微秒(μs)至毫秒(ms)级别，而CPU指令的执行时间仅为纳秒(ns)级。异步I/O的优势在于允许CPU在等待慢速I/O操作完成期间，转而执行其他计算任务，从而显著提升系统吞吐量。然而，对于CPU密集型操作（如getpid()、sched_yield()等系统调用），它们本身不存在阻塞等待的情况，强制异步化不仅无法带来性能提升，反而会引入额外的调度开销。这样的背景下同步调用的直接返回机制在性能上远优于异步回调所需的上下文切换。
+// 首先需要明确的是，异步编程的核心价值在于解决I/O密集型场景的性能瓶颈。在计算机系统中，I/O操作（如磁盘读写、网络通信）的延迟通常高达微秒(μs)至毫秒(ms)级别，而CPU指令的执行时间仅为纳秒(ns)级。异步I/O的优势在于允许CPU在等待慢速I/O操作完成期间，转而执行其他计算任务，从而显著提升系统吞吐量。然而，对于CPU密集型操作（如getpid()、sched_yield()等系统调用），它们本身不存在阻塞等待的情况，强制异步化不仅无法带来性能提升，反而会引入额外的调度开销。这样的背景下同步调用的直接返回机制在性能上远优于异步回调所需的上下文切换。
 
-其次，异步编程带来了显著的状态管理复杂度。异步操作通常需要通过回调函数或Future机制来实现，开发者必须精心设计状态机来管理操作的生命周期。特别是在内核开发中，若要对poll阶段的代码流程进行精细控制，往往需要手动实现Future的poll轮询机制，这种复杂的状态管理不仅增加了代码的实现难度，更大大提升了调试和维护的成本。一个典型的内核异步实现往往需要处理：任务唤醒、资源竞争、错误恢复等多重状态，这使得系统稳定性的保障变得极具挑战性。
+// 其次，异步编程带来了显著的状态管理复杂度。异步操作通常需要通过回调函数或Future机制来实现，开发者必须精心设计状态机来管理操作的生命周期。特别是在内核开发中，若要对poll阶段的代码流程进行精细控制，往往需要手动实现Future的poll轮询机制，这种复杂的状态管理不仅增加了代码的实现难度，更大大提升了调试和维护的成本。一个典型的内核异步实现往往需要处理：任务唤醒、资源竞争、错误恢复等多重状态，这使得系统稳定性的保障变得极具挑战性。
 
 == 任务调度队列与执行器
 
@@ -62,10 +62,10 @@ if info.woken_while_running {
     label-name: "task-queue-struct",
 )
 
-#h(2em)在Del0n1x中，我们使用统一的 TaskFuture 封装了任务。对于用户任务，在poll轮循中实现了任务的切换调度。当任务checkin时，需要在修改TCB的时间戳记录调度时间，然后切换CPU中运行任务和切换页表。当任务checkout时，需要判断浮点寄存器状态是否为dirty以确定是否保存浮点寄存器，然后清空CPU当前任务，并记录任务checkout时间。 对于内核任务，Del0n1x并没有设计任务切换，而是让该任务一直poll，直到任务结束，这类任务主要是shell程序。
+#h(2em)在Del0n1x中，我们使用统一的 `TaskFuture` 封装了任务。
 
 #code-figure(
-```rs
+```rust
 pub enum TaskFuture<F: Future<Output = ()> + Send + 'static> {
     UserTaskFuture {
         task: Arc<TaskControlBlock>,
@@ -75,7 +75,13 @@ pub enum TaskFuture<F: Future<Output = ()> + Send + 'static> {
         future: F,
     },
 }
+```,
+    caption: [任务 Future 枚举],
+    label-name: "task-future-enum"
+)
 
+#code-figure(
+```rs
 fn poll(
     self: Pin<&mut Self>,
     cx: &mut core::task::Context<'_>,
@@ -96,11 +102,13 @@ fn poll(
     }
 }
 ```,
-    caption: [任务 Future 结构与 poll 实现],
+    caption: [任务 Future poll 实现],
     label-name: "task-future-poll",
 )
 
-#h(2em)spawn_user_task可以设置一个用户任务。Del0n1x将用户任务的future设置为 trap_loop 循环，负责处理任务在用户态和内核态之间的切换，直到任务结束。执行 `executor::spawn(future)` 将任务挂入全局队列中等待被调度。
+#h(2em)对于用户任务，在poll轮循中实现了任务的切换调度。当任务checkin时，需要在修改TCB的时间戳记录调度时间，然后切换CPU中运行任务和切换页表。当任务checkout时，需要判断浮点寄存器状态是否为dirty以确定是否保存浮点寄存器，然后清空CPU当前任务，并记录任务checkout时间。 对于内核任务，Del0n1x并没有设计任务切换，而是让该任务一直poll，直到任务结束，这类任务主要是shell程序。
+
+spawn_user_task可以设置一个用户任务。Del0n1x将用户任务的future设置为 trap_loop 循环，负责处理任务在用户态和内核态之间的切换，直到任务结束。执行 `executor::spawn(future)` 将任务挂入全局队列中等待被调度。
 
 #code-figure(
 ```rs
@@ -147,8 +155,8 @@ pub static PROCESSORS: SyncProcessors =
 
 == 任务控制块
 
-进程是操作系统中资源管理的基本单位，而线程是操作系统中调度的基本单位。由于在linux设计理念中，线程是轻量级进程，所以在Del0n1x中使用统一的任务控制块来管理进程和线程。
-同时我们对TCB字段进行细粒化的加锁处理，类似 memory_space 和 trap_cx 等高频访问的字段来说，可以显著减少并发过程中锁的竞争，提高并发效率。
+进程是操作系统中资源管理的基本单位，而线程是操作系统中调度的基本单位。由于在Linux设计理念中，线程是轻量级进程，所以在Del0n1x中使用统一的任务控制块（Task Control Block，TCB）来管理进程和线程。
+同时我们对TCB字段进行细粒化的加锁处理，类似 `memory_space` 和 `trap_cx` 等高频访问的字段来说，可以显著减少并发过程中锁的竞争，提高并发效率。
 
 #code-figure(
 ```rs
@@ -192,7 +200,7 @@ pub struct TaskControlBlock {
     label-name: "task-control-block",
 )
 
-#h(2em)利用Rust Arc引用计数和clone机制，可以有效的解决进程和线程之间资源共享和隔离问题。对于可以共享的资源，调用 Arc::clone() 仅增加引用计数（原子操作），未复制底层数据，父子进程共享同一份数据。如果是可以独立的资源（如memory_space），调用clone会递归复制整个结构，生成完全独立的数据副本，父子进程修改互不影响。
+#h(2em)利用Rust Arc引用计数和clone机制，可以有效的解决进程和线程之间资源共享和隔离问题。对于可以共享的资源，调用 `Arc::clone()` 仅增加引用计数（原子操作），未复制底层数据，父子进程共享同一份数据。如果是可以独立的资源，调用clone会递归复制整个结构，生成完全独立的数据副本，父子进程修改互不影响。
 
 === 进程和线程联系
 
@@ -216,7 +224,7 @@ pub struct TaskControlBlock {
   ]
 )
 
-#h(2em)进程和进程之间是树状结构，通过 parent 和 children 字段指明父进程和子进程。
+#h(2em)进程和进程之间是树状结构，通过 `parent` 和 `children` 字段指明父进程和子进程。
 Del0n1x 使用`Manager`管理任务和进程组，结构设计如下：
 
 #code-figure(
@@ -225,7 +233,6 @@ pub struct Manager {
     pub task_manager: SpinNoIrqLock<TaskManager>,
     pub process_group: SpinNoIrqLock<ProcessGroupManager>,
 }
-
 /// 存放所有任务的管理器，可以通过pid快速找到对应的Task
 pub struct TaskManager(pub HashMap<Pid, Weak<TaskControlBlock>>);
 /// 存放进程组的管理器，通过进程组的leader 的pid可以定位到进程组
@@ -237,7 +244,7 @@ pub struct ProcessGroupManager(HashMap<PGid, Vec<Pid>>);
 
 === 任务的状态
 
-在rcore的基础上，我们为任务在运行过程中设计了4种状态:
+在rCore的基础上，我们为任务在运行过程中设计了4种状态:
 
 #list(
     [Ready: 任务已准备好执行，等待调度器分配CPU时间片;],

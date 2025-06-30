@@ -24,3 +24,9 @@ all:
 clean:
 	rm kernel-la
 	rm kernel-rv
+
+doc: 
+	make -C ./doc
+	cp ./doc/main.pdf ./Del0n1x初赛文档.pdf
+
+.PHONY: all clean doc docker build_docker run

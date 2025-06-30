@@ -2,9 +2,9 @@
 
 = 硬件抽象层
 
-== 硬件抽象层（Hardware Abstraction Layer，HAL）总览
+== 硬件抽象层总览
 
-为支持多平台运行与测试，Del0n1x 在内核中实现了功能基本完整的硬件抽象层，可以运行于 RISC-V64 和 LoongArch64 两种指令集架构的 QEMU 平台。Del0n1x的内核代码全部基于硬件抽象层开发，屏蔽了架构细节和平台差异，具有更好的兼容性和可移植性。
+为支持多平台运行与测试，Del0n1x 在内核中实现了功能基本完整的硬件抽象层（Hardware Abstraction Layer，HAL），可以运行于 RISC-V64 和 LoongArch64 两种指令集架构的 QEMU 平台。Del0n1x的内核代码全部基于硬件抽象层开发，屏蔽了架构细节和平台差异，具有更好的兼容性和可移植性。
 
 #figure(
   image("assets/硬件抽象层示意图.png"),
@@ -141,7 +141,7 @@ impl PTEFlags {
 
 === 直接映射窗口
 
-LoongArch 架构支持直接映射地址翻译模式，该模式下允许通过修改 CSR.DMW0 ~ CSR.DMW3 控制状态寄存器配置至多4个直接映射窗口。当虚拟地址的高4位（在LoongArch64中为[63:60]位）恰好与某个直接映射窗口的高4位相同时，虚拟地址将被直接映射为其低 PALEN 位的物理地址（PALEN为机器物理地址长度）。使用`cpucfg`指令可以查明，LoongArch QEMU virt平台下 PALEN=48，故直接映射窗口将`0xW000_xxxx_xxxx_xxxx`范围内的所有虚拟地址映射为`0x0000_xxxx_xxxx_xxxx`。通过修改 CSR.DMWx 还可配置直接映射窗口的允许访问特权级、存储访问类型。
+LoongArch 架构支持直接映射地址翻译模式，该模式下允许通过修改 CSR.DMW0 ~ CSR.DMW3 控制状态寄存器配置至多4个直接映射窗口。当虚拟地址的高4位（在LoongArch64中为[63:60]位）恰好与某个直接映射窗口的高4位相同时，虚拟地址将被直接映射为其低 PALEN 位的物理地址（PALEN为机器有效物理地址长度）。使用`cpucfg`指令可以查明，LoongArch QEMU virt平台下 PALEN=48，故直接映射窗口将`0xW000_xxxx_xxxx_xxxx`范围内的所有虚拟地址映射为`0x0000_xxxx_xxxx_xxxx`。通过修改 CSR.DMWx 还可配置直接映射窗口的允许访问特权级、存储访问类型。
 
 Del0n1x 使用`0x8000_xxxx_xxxx_xxxx`和`0x9000_xxxx_xxxx_xxxx`两个直接映射窗口，均限定内核特权级（PLV0）使用，分别用于设备访问和物理内存访问。
 
