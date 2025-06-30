@@ -93,7 +93,7 @@ impl FileTrait for Stdin {
         if termios.is_echo() {
             self.inode.write_directly(0, &user_buf);
         }
-        Ok(0)
+        Ok(res)
     }   
     async fn write(&self, _user_buf: &[u8]) -> SysResult<usize> {
         Err(Errno::EINVAL)
@@ -238,7 +238,7 @@ impl InodeTrait for TtyInode {
                 0
             }
         };
-        print!("{}", core::str::from_utf8(_buf).expect("no utf8"));
+        // print!("{}", core::str::from_utf8(_buf).expect("no utf8"));
         Box::pin(async move { res })
     }
 
@@ -342,7 +342,7 @@ impl TtyInodeInner {
     fn new() -> Self {
         Self {
             // TODO 可能在龙芯会出错？
-            fg_pgid: 1,
+            fg_pgid: 0,
             win_size: WinSize::new(),
             termios: Termios::new(),
         }

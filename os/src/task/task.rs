@@ -105,7 +105,7 @@ impl TaskControlBlock {
             pid: pid_handle,
 
             // Shared
-            pgid: AtomicUsize::new(1),
+            pgid: AtomicUsize::new(0),
             tgid: AtomicUsize::new(tgid),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             thread_group: new_shared(ThreadGroup::new()),
