@@ -62,6 +62,18 @@ Del0n1x 初赛阶段的内核主要模块和完成情况如下表格：
   supplement: [图],
 )<Del0n1x整体架构图>
 
+#v(1em)
+
+#h(2em)截至6月30日初赛结束前，Del0n1x的排名如下图：
+
+#figure(
+  image("assets/初赛排名.png"),
+  caption: [初赛排名],
+  supplement: [图]
+)
+
+#pagebreak()
+
 整个项目的代码结构如下：
 
 ```
@@ -99,5 +111,8 @@ vendor                      # 第三方依赖
 report                      # 文档
 bootloader                  # 引导加载程序
 ```
+
+
+
 
 #pagebreak()  // 强制分页

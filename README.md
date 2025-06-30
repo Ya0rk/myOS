@@ -6,7 +6,7 @@
 
 [github仓库链接](https://github.com/Ya0rk/myOS): 欢迎向我们提出issue.
 
-初赛阶段幻灯片、演示视频网盘链接：https://pan.baidu.com/s/1_tQLRbiCeaAwdt7w8bSeOw?pwd=5q7y 提取码: 5q7y
+初赛阶段幻灯片、演示视频网盘链接：[百度网盘](https://pan.baidu.com/s/1L5dUNLOb49hK_sLLOIiHvg?pwd=t881) 提取码: t881
 
 Del0n1x 是一个使用 Rust 语言编写的同时适配 RISC-V64 和 LoongArch64 的跨平台操作系统，目标是实现一个 Linux 兼容的多核操作系统，支持进程调度、文件系统、网络等功能。
 
@@ -23,6 +23,9 @@ Del0n1x 是一个使用 Rust 语言编写的同时适配 RISC-V64 和 LoongArch6
 
 ![](./report/image/整体架构图.png)
 
+截至6月30日初赛结束前，Del0n1x的排名如下图：
+
+![](./report/image/初赛排名.png)
 
 ## 目录架构
 
