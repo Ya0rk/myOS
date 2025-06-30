@@ -767,8 +767,8 @@ impl MemorySpace {
                     let shared = area.shared;
                     let is_writable = pte_flags.is_W();
                     pte_flags.set_COW( !shared && is_writable )
-                        .set_W(!shared)
-                        .set_D(!shared);
+                        .set_W(shared && is_writable)
+                        .set_D(shared && is_writable);
                     pte.set_flags(pte_flags);
                     new_area.pages.insert(vpn, page.clone());
                     memory_space.page_table_mut().map_leaf(vpn, page.ppn(), pte_flags);
