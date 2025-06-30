@@ -1,5 +1,5 @@
 use crate::{
-    fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, Stdout, S_IFCHR},
+    fs::{ffi::RenameFlags, stdio::{TtyInode, TTYINODE}, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, Stdout, S_IFCHR},
     mm::{page::Page, UserBuffer},
     sync::{SpinNoIrqLock, TimeStamp},
     task::get_init_proc,
@@ -14,19 +14,21 @@ use alloc::{
 use async_trait::async_trait;
 
 pub struct DevTty {
-    inode: Arc<StdoutInode>,
-};
+    inode: Arc<TtyInode>,
+}
 
 impl DevTty {
     pub fn new() -> Self {
-        Self
+        Self {
+            inode: TTYINODE.clone(),
+        }
     }
 }
 
 #[async_trait]
 impl FileTrait for DevTty {
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        todo!()
+        self.inode.clone()
     }
     fn readable(&self) -> bool {
         true
@@ -37,6 +39,7 @@ impl FileTrait for DevTty {
     fn executable(&self) -> bool {
         false
     }
+    // ERROR! 这里的依赖方向搞错了
     async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
         let init_proc = get_init_proc();
         if let Some(tty_device) = init_proc.get_file_by_fd(0) {

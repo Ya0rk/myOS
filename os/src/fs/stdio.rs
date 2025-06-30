@@ -13,7 +13,7 @@ use crate::mm::{page::Page, UserBuffer};
 use crate::sync::SpinNoIrqLock;
 use crate::sync::TimeStamp;
 use crate::task::get_current_hart_id;
-use crate::task::Pid;
+
 use crate::utils::Errno;
 use crate::utils::SysResult;
 use alloc::boxed::Box;
@@ -28,6 +28,7 @@ use spin::Mutex;
 
 const LF: usize = 0x0a;
 const CR: usize = 0x0d;
+type Pid = u32;
 
 pub struct Stdin {
     inode: Arc<TtyInode>,
@@ -36,7 +37,7 @@ pub struct Stdin {
 impl Stdin {
     pub fn new() -> Self {
         Self {
-            inode: stdoutInodeInst.clone(),
+            inode: TTYINODE.clone(),
         }
     }
 }
@@ -48,7 +49,7 @@ pub struct Stdout {
 impl Stdout {
     pub fn new() -> Self {
         Self {
-            inode:stdoutInodeInst.clone(), 
+            inode:TTYINODE.clone(), 
         }
     }
 }
@@ -69,18 +70,31 @@ impl FileTrait for Stdin {
     }
     async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
         //一次读取多个字符
-        let mut c: usize;
-        let mut count: usize = 0;
-        while count < user_buf.len() {
-            c = console_getchar();
-            if c > 255 {
-                break;
+        // let mut c: usize;
+        // let mut count: usize = 0;
+        // while count < user_buf.len() {
+        //     c = console_getchar();
+        //     if c > 255 {
+        //         break;
+        //     }
+        //     user_buf[count] = c as u8;
+        //     count += 1;
+        // }
+        // Ok(count)
+        let res = {self.inode.read_dirctly(0, user_buf).await};
+        let termios = {self.inode.inner.lock().termios};
+        if termios.is_icrnl() {
+            for i in 0..res {
+                if user_buf[i] == '\r' as u8 {
+                    user_buf[i] = '\n' as u8;
+                }
             }
-            user_buf[count] = c as u8;
-            count += 1;
+        };
+        if termios.is_echo() {
+            self.inode.write_directly(0, &user_buf);
         }
-        Ok(count)
-    }
+        Ok(0)
+    }   
     async fn write(&self, _user_buf: &[u8]) -> SysResult<usize> {
         Err(Errno::EINVAL)
         // panic!("Cannot write to stdin!");
@@ -135,18 +149,20 @@ impl FileTrait for Stdout {
         self.write(buf).await
     }
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        match core::str::from_utf8(user_buf) {
-            Ok(text) => {
-                print!("{}", text);
-                Ok(text.len())
-            }
-                ,
-            Err(e) =>  {
-                Err(Errno::EBADCALL)
-            }
-        }
+        // match core::str::from_utf8(user_buf) {
+        //     Ok(text) => {
+        //         print!("{}", text);
+        //         Ok(text.len())
+        //     }
+        //         ,
+        //     Err(e) =>  {
+        //         Err(Errno::EBADCALL)
+        //     }
+        // }
         // print!("{}", core::str::from_utf8(user_buf).unwarp());
         // Ok(user_buf.len())
+        let res = self.inode.write_directly(0, &user_buf).await;
+        Ok(res)
     }
 
     fn get_name(&self) -> SysResult<String> {
@@ -173,13 +189,13 @@ impl FileTrait for Stdout {
 /// 
 /// 这里采用单例模式
 pub struct TtyInode {
-    inner: SpinNoIrqLock<StdoutInodeInner>,
+    inner: SpinNoIrqLock<TtyInodeInner>,
 }
 
 impl TtyInode {
     fn new() -> Self {
         Self {
-            inner: SpinNoIrqLock::new(StdoutInodeInner::new())
+            inner: SpinNoIrqLock::new(TtyInodeInner::new())
         }
     }
 }
@@ -194,15 +210,38 @@ impl InodeTrait for TtyInode {
     #[must_use]
     #[allow(elided_named_lifetimes,clippy::type_complexity,clippy::type_repetition_in_bounds)]
     fn read_dirctly<'life0,'life1,'async_trait>(&'life0 self,_offset:usize,_buf: &'life1 mut [u8]) ->  ::core::pin::Pin<Box<dyn ::core::future::Future<Output = usize> + ::core::marker::Send+'async_trait> >where 'life0:'async_trait,'life1:'async_trait,Self:'async_trait {
-        todo!()
+        // 一次读取多个字符
+        let mut c: usize;
+        let mut count: usize = 0;
+        while count < _buf.len() {
+            c = console_getchar();
+            if c > 255 {
+                break;
+            }
+            _buf[count] = c as u8;
+            count += 1;
+        }
+        Box::pin(async move { count })
     }
 
     #[doc = " 直接写"]
     #[must_use]
     #[allow(elided_named_lifetimes,clippy::type_complexity,clippy::type_repetition_in_bounds)]
     fn write_directly<'life0,'life1,'async_trait>(&'life0 self,_offset:usize,_buf: &'life1[u8]) ->  ::core::pin::Pin<Box<dyn ::core::future::Future<Output = usize> + ::core::marker::Send+'async_trait> >where 'life0:'async_trait,'life1:'async_trait,Self:'async_trait {
-        todo!()
+        let res = match core::str::from_utf8(_buf) {
+            Ok(text) => {
+                print!("{}", text);
+                text.len()
+            }
+                ,
+            Err(e) =>  {
+                0
+            }
+        };
+        print!("{}", core::str::from_utf8(_buf).expect("no utf8"));
+        Box::pin(async move { res })
     }
+
 
     #[doc = " 获取时间戳，用于修改或访问"]
     fn get_timestamp(&self) ->  &SpinNoIrqLock<TimeStamp>  {
@@ -229,12 +268,14 @@ impl InodeTrait for TtyInode {
         log::info!("[TtyFile::ioctl] cmd {:?}, value {:#x}", cmd, arg);
         match cmd {
             TtyIoctl::TCGETS | TtyIoctl::TCGETA => {
+                debug_point!("TCGETS");
                 unsafe {
                     *(arg as *mut Termios) = self.inner.lock().termios;
                 }
                 Ok(0)
             }
             TtyIoctl::TCSETS | TtyIoctl::TCSETSW | TtyIoctl::TCSETSF => {
+                debug_point!("TCSETS");
                 unsafe {
                     self.inner.lock().termios = *(arg as *const Termios);
                     log::info!("termios {:#x?}", self.inner.lock().termios);
@@ -242,22 +283,27 @@ impl InodeTrait for TtyInode {
                 Ok(0)
             }
             TtyIoctl::TIOCGPGRP => {
+                debug_point!("TIOCGPGRP");
                 let fg_pgid = self.inner.lock().fg_pgid.clone();
-                log::info!("[TtyFile::ioctl] get fg pgid {fg_pgid}");
+                debug_point!("TIOCGPGRP");
+                log::info!("[TtyFile::ioctl] get fg pgid {:?}", fg_pgid);
                 unsafe {
                     *(arg as *mut Pid) = fg_pgid;
                 }
+                debug_point!("TIOCGPGRP");
                 Ok(0)
             }
             TtyIoctl::TIOCSPGRP => {
+                debug_point!("TIOCSPGRP");
                 let user_ptr: &Pid = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
                 unsafe {
                     self.inner.lock().fg_pgid = user_ptr.clone();
                 }
-                log::info!("[TtyFile::ioctl] set fg pgid {}", user_ptr);
+                log::info!("[TtyFile::ioctl] set fg pgid {:?}", user_ptr);
                 Ok(0)
             }
             TtyIoctl::TIOCGWINSZ => {
+                debug_point!("TIOCGWINSZ");
                 let win_size = self.inner.lock().win_size;
                 log::info!("[TtyFile::ioctl] get window size {win_size:?}");
                 unsafe {
@@ -266,6 +312,7 @@ impl InodeTrait for TtyInode {
                 Ok(0)
             }
             TtyIoctl::TIOCSWINSZ => {
+                debug_point!("TIOCSWINSZ");
                 unsafe {
                     self.inner.lock().win_size = *(arg as *const WinSize);
                 }
@@ -279,79 +326,23 @@ impl InodeTrait for TtyInode {
         }
     }
 
-    // fn ioctl(&self,op:usize,arg:usize) -> SysResult<usize> {
-    //     use TtyIoctlCmd::*;
-    //     let cmd = op;
-    //     let Some(cmd) = TtyIoctlCmd::from_repr(cmd) else {
-    //         log::error!("[TtyFile::ioctl] cmd {cmd} not included");
-    //         unimplemented!()
-    //     };
-    //     log::info!("[TtyFile::ioctl] cmd {:?}, value {:#x}", cmd, arg);
-    //     match cmd {
-    //         TCGETS | TCGETA => {
-    //             unsafe {
-    //                 *(arg as *mut Termios) = self.inner.lock().termios;
-    //             }
-    //             Ok(0)
-    //         }
-    //         TCSETS | TCSETSW | TCSETSF => {
-    //             unsafe {
-    //                 self.inner.lock().termios = *(arg as *const Termios);
-    //                 log::info!("termios {:#x?}", self.inner.lock().termios);
-    //             }
-    //             Ok(0)
-    //         }
-    //         TIOCGPGRP => {
-    //             let fg_pgid = self.inner.lock().fg_pgid;
-    //             log::info!("[TtyFile::ioctl] get fg pgid {fg_pgid}");
-    //             unsafe {
-    //                 *(arg as *mut Pid) = fg_pgid;
-    //             }
-    //             Ok(0)
-    //         }
-    //         TIOCSPGRP => {
-    //             unsafe {
-    //                 self.inner.lock().fg_pgid = *(arg as *const Pid);
-    //             }
-    //             let fg_pgid = self.inner.lock().fg_pgid;
-    //             log::info!("[TtyFile::ioctl] set fg pgid {fg_pgid}");
-    //             Ok(0)
-    //         }
-    //         TIOCGWINSZ => {
-    //             let win_size = self.inner.lock().win_size;
-    //             log::info!("[TtyFile::ioctl] get window size {win_size:?}",);
-    //             unsafe {
-    //                 *(arg as *mut WinSize) = win_size;
-    //             }
-    //             Ok(0)
-    //         }
-    //         TIOCSWINSZ => {
-    //             unsafe {
-    //                 self.inner.lock().win_size = *(arg as *const WinSize);
-    //             }
-    //             Ok(0)
-    //         }
-    //         TCSBRK => Ok(0),
-    //         _ => todo!(),
-    //     } 
-    // }
 }
 
 lazy_static! {
-    static ref stdoutInodeInst: Arc<TtyInode> = Arc::new(TtyInode::new());
+    pub static ref TTYINODE: Arc<TtyInode> = Arc::new(TtyInode::new());
 }
 
-struct StdoutInodeInner {
+struct TtyInodeInner {
     fg_pgid: Pid,
     win_size: WinSize,
     termios: Termios,
 }
 
-impl StdoutInodeInner {
+impl TtyInodeInner {
     fn new() -> Self {
         Self {
             // TODO 可能在龙芯会出错？
-            fg_pgid: 1.into(),
+            fg_pgid: 1,
             win_size: WinSize::new(),
             termios: Termios::new(),
         }
