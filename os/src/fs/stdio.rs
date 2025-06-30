@@ -5,31 +5,30 @@ use super::Kstat;
 use super::OpenFlags;
 use crate::fs::page_cache::PageCache;
 use crate::fs::Dirent;
+use crate::fs::Page;
 use crate::hal::arch::console_getchar;
-use crate::mm::user_ptr::user_mut_ptr;
-use crate::mm::user_ptr::user_ref;
-use crate::mm::user_ptr::user_ref_mut;
-use crate::mm::{page::Page, UserBuffer};
-use crate::sync::SpinNoIrqLock;
-use crate::sync::TimeStamp;
-use crate::task::get_current_hart_id;
+use crate::mm::user_ptr::{user_mut_ptr, user_ref, user_ref_mut};
 
-use crate::utils::Errno;
-use crate::utils::SysResult;
+use crate::sync::{SpinNoIrqLock, TimeStamp};
+use crate::utils::{Errno, SysResult};
+
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use async_trait::async_trait;
+use bitflags::bitflags;
 use lazy_static::lazy_static;
-use log::error;
-use log::info;
-use spin::Mutex;
+use log::{error, info};
 
-const LF: usize = 0x0a;
-const CR: usize = 0x0d;
 type Pid = u32;
+
+lazy_static! {
+    /// The global singleton TTY Inode, shared by Stdin, Stdout, and Stderr.
+    pub static ref TTY_INODE: Arc<TtyInode> = Arc::new(TtyInode::new());
+}
+
+// --- Stdin ---
 
 pub struct Stdin {
     inode: Arc<TtyInode>,
@@ -38,10 +37,49 @@ pub struct Stdin {
 impl Stdin {
     pub fn new() -> Self {
         Self {
-            inode: TTYINODE.clone(),
+            inode: TTY_INODE.clone(),
         }
     }
 }
+
+#[async_trait]
+impl FileTrait for Stdin {
+    fn readable(&self) -> bool { true }
+    fn writable(&self) -> bool { false }
+    fn executable(&self) -> bool { false }
+    fn get_flags(&self) -> OpenFlags { OpenFlags::O_RDONLY }
+    fn is_dir(&self) -> bool { false }
+    fn get_inode(&self) -> Arc<dyn InodeTrait> { self.inode.clone() }
+
+    async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
+        if user_buf.is_empty() {
+            return Ok(0);
+        }
+        let res = self.inode.read_dirctly(0, user_buf).await;
+        Ok(res)
+    }
+
+    async fn write(&self, _user_buf: &[u8]) -> SysResult<usize> {
+        Err(Errno::EINVAL)
+    }
+
+    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
+        // Stdin is a special file, fstat can be a no-op returning Ok.
+        Ok(())
+    }
+
+    fn get_name(&self) -> SysResult<String> {
+        Ok("stdin".into())
+    }
+
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
+        Err(Errno::EPERM)
+    }
+
+    async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> { None }
+}
+
+// --- Stdout ---
 
 pub struct Stdout {
     inode: Arc<TtyInode>,
@@ -50,145 +88,49 @@ pub struct Stdout {
 impl Stdout {
     pub fn new() -> Self {
         Self {
-            inode: TTYINODE.clone(),
+            inode: TTY_INODE.clone(),
         }
     }
 }
 
-#[async_trait]
-impl FileTrait for Stdin {
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        false
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    fn get_flags(&self) -> OpenFlags {
-        OpenFlags::O_RDONLY
-    }
-    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
-        //一次读取多个字符
-        // let mut c: usize;
-        // let mut count: usize = 0;
-        // while count < user_buf.len() {
-        //     c = console_getchar();
-        //     if c > 255 {
-        //         break;
-        //     }
-        //     user_buf[count] = c as u8;
-        //     count += 1;
-        // }
-        // Ok(count)
-        let res = { self.inode.read_dirctly(0, user_buf).await };
-        let termios = { self.inode.inner.lock().termios };
-        if termios.is_icrnl() {
-            for i in 0..res {
-                if user_buf[i] == '\r' as u8 {
-                    user_buf[i] = '\n' as u8;
-                }
-            }
-        };
-        if termios.is_echo() {
-            self.inode.write_directly(0, &user_buf);
-        }
-        Ok(res)
-    }
-    async fn write(&self, _user_buf: &[u8]) -> SysResult<usize> {
-        Err(Errno::EINVAL)
-        // panic!("Cannot write to stdin!");
-    }
-
-    fn get_name(&self) -> SysResult<String> {
-        Ok("Stdin".to_string())
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
-    }
-    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        // todo!()
-        Ok(())
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        self.inode.clone()
-    }
-
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        todo!()
-    }
-}
-///
-/// 当前先记录工作行为
-///
-/// 将vi 的软件行为进行记录
-///
-/// 注意到应当去除这里对底层接口 print 的调用，转用 tty inode 进行实现
-///
 #[async_trait]
 impl FileTrait for Stdout {
-    fn readable(&self) -> bool {
-        false
-    }
-    fn writable(&self) -> bool {
-        true
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    fn get_flags(&self) -> OpenFlags {
-        OpenFlags::O_WRONLY
-    }
+    fn readable(&self) -> bool { false }
+    fn writable(&self) -> bool { true }
+    fn executable(&self) -> bool { false }
+    fn get_flags(&self) -> OpenFlags { OpenFlags::O_WRONLY }
+    fn is_dir(&self) -> bool { false }
+    fn get_inode(&self) -> Arc<dyn InodeTrait> { self.inode.clone() }
+
     async fn read(&self, _user_buf: &mut [u8]) -> SysResult<usize> {
-        panic!("Cannot read from stdout!");
+        Err(Errno::EINVAL)
     }
-    async fn write_at(&self, offset: usize, buf: &[u8]) -> SysResult<usize> {
-        self.write(buf).await
-    }
+
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        // match core::str::from_utf8(user_buf) {
-        //     Ok(text) => {
-        //         print!("{}", text);
-        //         Ok(text.len())
-        //     }
-        //         ,
-        //     Err(e) =>  {
-        //         Err(Errno::EBADCALL)
-        //     }
-        // }
-        // print!("{}", core::str::from_utf8(user_buf).unwarp());
-        // Ok(user_buf.len())
-        let res = self.inode.write_directly(0, &user_buf).await;
+        let res = self.inode.write_directly(0, user_buf).await;
         Ok(res)
     }
 
-    fn get_name(&self) -> SysResult<String> {
-        Ok("Stdout".to_string())
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
-    }
     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        todo!()
+        // Stdout is a special file, fstat can be a no-op returning Ok.
+        Ok(())
     }
-    fn is_dir(&self) -> bool {
-        false
+    
+    fn get_name(&self) -> SysResult<String> {
+        Ok("stdout".into())
     }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        self.inode.clone()
+
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
+        Err(Errno::EPERM)
     }
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        todo!()
-    }
+    
+    async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> { None }
 }
 
-/// 临时设置，应当迁移到 tty，
-///
-/// 这里采用单例模式
+
+// --- TtyInode ---
+
+/// Represents the shared state and logic for a Terminal Device (TTY).
 pub struct TtyInode {
     inner: SpinNoIrqLock<TtyInodeInner>,
 }
@@ -201,163 +143,138 @@ impl TtyInode {
     }
 }
 
+#[async_trait]
 impl InodeTrait for TtyInode {
-    #[doc = " 设置大小"]
-    fn set_size(&self, new_size: usize) -> SysResult {
-        Ok(())
-    }
-
-    #[doc = " 绕过cache，直接从磁盘读"]
-    #[must_use]
-    #[allow(
-        elided_named_lifetimes,
-        clippy::type_complexity,
-        clippy::type_repetition_in_bounds
-    )]
-    fn read_dirctly<'life0, 'life1, 'async_trait>(
-        &'life0 self,
-        _offset: usize,
-        _buf: &'life1 mut [u8],
-    ) -> ::core::pin::Pin<
-        Box<dyn ::core::future::Future<Output = usize> + ::core::marker::Send + 'async_trait>,
-    >
-    where
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        Self: 'async_trait,
-    {
-        // 一次读取多个字符
-        let mut c: usize;
+    async fn read_dirctly(&self, _offset: usize, buf: &mut [u8]) -> usize {
+        // This is a simplified, blocking implementation.
+        // A real-world kernel would use wait queues and interrupts here.
         let mut count: usize = 0;
-        while count < _buf.len() {
-            c = console_getchar();
-            if c > 255 {
-                break;
+        let vmin = self.inner.lock().termios.cc[5] as usize; // VMIN
+
+        // while count < buf.len() {
+            let mut ch = console_getchar() as u8;
+
+            let termios = self.inner.lock().termios;
+
+            // Handle ICRNL (translate carriage return to newline)
+            if termios.is_icrnl() && ch == b'\r' {
+                ch = b'\n';
             }
-            _buf[count] = c as u8;
+
+            // Handle ECHO
+            if termios.is_echo() {
+                // Here we directly print, a more complex driver might queue this output
+                print!("{}", ch as char);
+            }
+
+            buf[count] = ch;
             count += 1;
-        }
-        Box::pin(async move { count })
+            
+            // For raw mode, VMIN is often 1, so we return after one character.
+            // if count >= vmin {
+            //     break;
+            // }
+        // }
+        count
     }
 
-    #[doc = " 直接写"]
-    #[must_use]
-    #[allow(
-        elided_named_lifetimes,
-        clippy::type_complexity,
-        clippy::type_repetition_in_bounds
-    )]
-    fn write_directly<'life0, 'life1, 'async_trait>(
-        &'life0 self,
-        _offset: usize,
-        _buf: &'life1 [u8],
-    ) -> ::core::pin::Pin<
-        Box<dyn ::core::future::Future<Output = usize> + ::core::marker::Send + 'async_trait>,
-    >
-    where
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        Self: 'async_trait,
-    {
-        let res = match core::str::from_utf8(_buf) {
+    async fn write_directly(&self, _offset: usize, buf: &[u8]) -> usize {
+        match core::str::from_utf8(buf) {
             Ok(text) => {
-                // let filtered: String = text.chars().filter(|&c| c != '\x1b').collect();
-                print!("{}", text);
+                let filtered: String = text.chars().filter(|&c| c != '\x1b').collect();
+                print!("{}", filtered);
                 text.len()
             }
-            Err(e) => 0,
-        };
-        // print!("{}", core::str::from_utf8(_buf).expect("no utf8"));
-        Box::pin(async move { res })
-    }
-
-    #[doc = " 获取时间戳，用于修改或访问"]
-    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
-        todo!()
-    }
-
-    fn is_dir(&self) -> bool {
-        todo!()
-    }
-
-    #[doc = " get page cache from ext4 file"]
-    fn get_page_cache(&self) -> Option<Arc<PageCache>> {
-        todo!()
-    }
-
-    #[doc = " 获得目录项"]
-    fn read_dents(&self) -> Option<Vec<Dirent>> {
-        todo!()
-    }
-
-    fn ioctl(&self, op: usize, arg: usize) -> SysResult<usize> {
-        let cmd = TtyIoctl::from_bits(op as u32).ok_or(Errno::EINVAL)?;
-        debug_point!("[tty_ioctl]");
-        log::info!("[TtyFile::ioctl] cmd {:?}, value {:#x}", cmd, arg);
-        match cmd {
-            TtyIoctl::TCGETS | TtyIoctl::TCGETA => {
-                debug_point!("TCGETS");
-                unsafe {
-                    *(arg as *mut Termios) = self.inner.lock().termios;
-                }
-                Ok(0)
-            }
-            TtyIoctl::TCSETS | TtyIoctl::TCSETSW | TtyIoctl::TCSETSF => {
-                debug_point!("TCSETS");
-                unsafe {
-                    self.inner.lock().termios = *(arg as *const Termios);
-                    log::info!("termios {:#x?}", self.inner.lock().termios);
-                }
-                Ok(0)
-            }
-            TtyIoctl::TIOCGPGRP => {
-                debug_point!("TIOCGPGRP");
-                let fg_pgid = self.inner.lock().fg_pgid.clone();
-                debug_point!("TIOCGPGRP");
-                log::info!("[TtyFile::ioctl] get fg pgid {:?}", fg_pgid);
-                unsafe {
-                    *(arg as *mut Pid) = fg_pgid;
-                }
-                debug_point!("TIOCGPGRP");
-                Ok(0)
-            }
-            TtyIoctl::TIOCSPGRP => {
-                debug_point!("TIOCSPGRP");
-                let user_ptr: &Pid = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
-                unsafe {
-                    self.inner.lock().fg_pgid = user_ptr.clone();
-                }
-                log::info!("[TtyFile::ioctl] set fg pgid {:?}", user_ptr);
-                Ok(0)
-            }
-            TtyIoctl::TIOCGWINSZ => {
-                debug_point!("TIOCGWINSZ");
-                let win_size = self.inner.lock().win_size;
-                log::info!("[TtyFile::ioctl] get window size {win_size:?}");
-                unsafe {
-                    *(arg as *mut WinSize) = win_size;
-                }
-                Ok(0)
-            }
-            TtyIoctl::TIOCSWINSZ => {
-                debug_point!("TIOCSWINSZ");
-                unsafe {
-                    self.inner.lock().win_size = *(arg as *const WinSize);
-                }
-                Ok(0)
-            }
-            TtyIoctl::TCSBRK => Ok(0),
-            _ => {
-                log::error!("[TtyFile::ioctl] Unsupported command: {cmd:?}");
-                Err(Errno::EINVAL)
+            Err(_) => {
+                // For non-utf8 data, print what we can lossily.
+                let lossy_string = String::from_utf8_lossy(buf);
+                let filtered: String = lossy_string.chars().filter(|&c| c != '\x1b').collect();
+                // print!("{}", lossy_string);
+                print!("{}", filtered);
+                lossy_string.len()
             }
         }
     }
+    
+
+    
+    fn ioctl(&self, op: usize, arg: usize) -> SysResult<usize> {
+        let cmd = TtyIoctlCmd::try_from(op).map_err(|_| Errno::EINVAL)?;
+        
+        info!("[TtyInode::ioctl] cmd: {:?}, arg: {:#x}", cmd, arg);
+        unsafe {
+            match cmd {
+                // --- GET 操作：从内核复制到用户空间 ---
+                TtyIoctlCmd::TCGETS | TtyIoctlCmd::TCGETA => {
+                    debug_point!("he wanto get ================== TCGETS");
+                    let mut user_termios_ptr = user_mut_ptr(arg.into())?.ok_or(Errno::EFAULT)?;
+                    *user_termios_ptr = self.inner.lock().termios.clone();
+                    info!("get from {:?} to {:?}", self.inner.lock().termios, user_termios_ptr);
+                    Ok(0)
+                }
+                TtyIoctlCmd::TIOCGPGRP => {
+                    debug_point!("TIOCGPGRP");
+                    let mut user_pid_ptr = user_mut_ptr(arg.into())?.ok_or(Errno::EFAULT)?;
+                    let fg_pgid = self.inner.lock().fg_pgid;
+                    log::info!("[TtyFile::ioctl] get fg pgid {:?}", fg_pgid);
+                    *user_pid_ptr = fg_pgid;
+                    Ok(0)
+                }
+                TtyIoctlCmd::TIOCGWINSZ => {
+                    debug_point!("TIOCGWINSZ");
+                    let mut user_winsize_ptr = user_mut_ptr(arg.into())?.ok_or(Errno::EFAULT)?;
+                    let win_size = self.inner.lock().win_size;
+                    log::info!("[TtyFile::ioctl] get window size {win_size:?}");
+                    *user_winsize_ptr = win_size;
+                    Ok(0)
+                }
+        
+                // --- SET 操作：从用户空间复制到内核 ---
+                TtyIoctlCmd::TCSETS | TtyIoctlCmd::TCSETSW | TtyIoctlCmd::TCSETSF => {
+                    debug_point!("he want to set ================== TCSETS");
+                    let user_termios_ref: &Termios = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                    // info!("he want to set {:?}", user_termios_ref);
+                    self.inner.lock().termios = user_termios_ref.clone();
+                    log::info!("[TtyFile::ioctl] set termios {:?} to {:?}", user_termios_ref, self.inner.lock().termios);
+                    Ok(0)
+                }
+                TtyIoctlCmd::TIOCSPGRP => {
+                    debug_point!("TIOCSPGRP");
+                    let user_pid_ref: &Pid = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                    let new_pgid = *user_pid_ref;
+                    self.inner.lock().fg_pgid = new_pgid;
+                    log::info!("[TtyFile::ioctl] set fg pgid {:?}", new_pgid);
+                    Ok(0)
+                }
+                TtyIoctlCmd::TIOCSWINSZ => {
+                    debug_point!("TIOCSWINSZ");
+                    let user_winsize_ref: &WinSize = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                    self.inner.lock().win_size = *user_winsize_ref;
+                    log::info!("[TtyFile::ioctl] set window size {:?}", *user_winsize_ref);
+                    Ok(0)
+                }
+        
+                // --- 其他操作 ---
+                TtyIoctlCmd::TCSBRK => {
+                    // No-op for now, sending a break is UART specific.
+                    Ok(0)
+                }
+                _ => {
+                    error!("[TtyInode::ioctl] Unsupported command: {:?}", cmd);
+                    Err(Errno::EINVAL)
+                }
+            }
+        }
+    }
+
+    fn set_size(&self, _new_size: usize) -> SysResult { Ok(()) }
+    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> { todo!() }
+    fn is_dir(&self) -> bool { false }
+    fn get_page_cache(&self) -> Option<Arc<PageCache>> { None }
+    fn read_dents(&self) -> Option<Vec<Dirent>> { None }
 }
 
-lazy_static! {
-    pub static ref TTYINODE: Arc<TtyInode> = Arc::new(TtyInode::new());
-}
+// --- TTY Internals ---
 
 struct TtyInodeInner {
     fg_pgid: Pid,
@@ -368,7 +285,6 @@ struct TtyInodeInner {
 impl TtyInodeInner {
     fn new() -> Self {
         Self {
-            // TODO 可能在龙芯会出错？
             fg_pgid: 0,
             win_size: WinSize::new(),
             termios: Termios::new(),
@@ -388,152 +304,147 @@ struct WinSize {
 impl WinSize {
     fn new() -> Self {
         Self {
-            ws_row: 67,
-            ws_col: 120,
+            ws_row: 24, // A more standard default height
+            ws_col: 80, // A more standard default width
             ws_xpixel: 0,
             ws_ypixel: 0,
         }
     }
 }
 
-// 定义 Termios 数据结构
-/// Defined in <asm-generic/termbits.h>
+/// Terminal I/O settings, defined in `<asm-generic/termbits.h>`
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 struct Termios {
-    /// Input mode flags.
     pub iflag: u32,
-    /// Output mode flags.
     pub oflag: u32,
-    /// Control mode flags.
     pub cflag: u32,
-    /// Local mode flags.
     pub lflag: u32,
-    /// Line discipline.
     pub line: u8,
-    /// control characters.
     pub cc: [u8; 19],
 }
 
 impl Termios {
+    /// Provides a new `Termios` struct with sane default values.
     fn new() -> Self {
         Self {
-            iflag: 0o60002, // IXON | BRKINT（禁用 ICRNL、IUTF8）
-            oflag: 0,       // 禁用 OPOST 和 ONLCR
-            cflag: 0o1200,  // CREAD | CS8
-            lflag: 0o0001,  // 仅 ISIG，禁用 ICANON、ECHO、ECHOE、ECHOK、ECHOCTL、IEXTEN
+            iflag: 0o002402, // BRKINT | IXON
+            oflag: 0o000005, // OPOST | ONLCR
+            cflag: 0o002277, // CREAD | CS8 | HUPCL
+            lflag: 0o0105073,// ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE
             line: 0,
             cc: [
-                3,   // VINTR (Ctrl-C)
-                28,  // VQUIT
-                127, // VERASE
-                21,  // VKILL
-                4,   // VEOF (Ctrl-D)
-                0,   // VTIME
-                1,   // VMIN
-                0,   // VSWTC
-                17,  // VSTART
-                19,  // VSTOP
-                26,  // VSUSP (Ctrl-Z)
-                0,   // VEOL
-                18,  // VREPAINT
-                15,  // VDISCARD
-                23,  // VWERASE
-                22,  // VLNEXT
-                0,   // VEOL2
-                0, 0,
+                3,   // 0: VINTR (Ctrl-C)
+                28,  // 1: VQUIT (Ctrl-\)
+                127, // 2: VERASE (Backspace)
+                21,  // 3: VKILL (Ctrl-U)
+                4,   // 4: VEOF (Ctrl-D)
+                1,   // 5: VMIN
+                0,   // 6: VTIME
+                0,   // 7: VSWTC
+                17,  // 8: VSTART (Ctrl-Q)
+                19,  // 9: VSTOP (Ctrl-S)
+                26,  // 10: VSUSP (Ctrl-Z)
+                0,   // 11: VEOL
+                18,  // 12: VREPRINT (Ctrl-R)
+                15,  // 13: VDISCARD (Ctrl-O)
+                23,  // 14: VWERASE (Ctrl-W)
+                22,  // 15: VLNEXT (Ctrl-V)
+                0,   // 16: VEOL2
+                0, 0, // 17, 18: Unused
             ],
         }
     }
 
+    /// Check if ICRNL (translate carriage return to newline on input) is set.
     fn is_icrnl(&self) -> bool {
-        const ICRNL: u32 = 0o0000400;
+        const ICRNL: u32 = 0o000400;
         self.iflag & ICRNL != 0
     }
 
+    /// Check if ECHO (echo input characters) is set.
     fn is_echo(&self) -> bool {
-        const ECHO: u32 = 0o0000010;
+        const ECHO: u32 = 0o000010;
         self.lflag & ECHO != 0
     }
 }
 
-/// Defined in <asm-generic/ioctls.h>
-#[derive(Debug)]
+/// TTY ioctl commands, defined in `<asm-generic/ioctls.h>`
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(usize)]
 enum TtyIoctlCmd {
-    // For struct termios
-    /// Gets the current serial port settings.
     TCGETS = 0x5401,
-    /// Sets the serial port settings immediately.
     TCSETS = 0x5402,
-    /// Sets the serial port settings after allowing the input and output
-    /// buffers to drain/empty.
     TCSETSW = 0x5403,
-    /// Sets the serial port settings after flushing the input and output
-    /// buffers.
     TCSETSF = 0x5404,
-    /// For struct termio
-    /// Gets the current serial port settings.
     TCGETA = 0x5405,
-    /// Sets the serial port settings immediately.
-    #[allow(unused)]
     TCSETA = 0x5406,
-    /// Sets the serial port settings after allowing the input and output
-    /// buffers to drain/empty.
-    #[allow(unused)]
     TCSETAW = 0x5407,
-    /// Sets the serial port settings after flushing the input and output
-    /// buffers.
-    #[allow(unused)]
     TCSETAF = 0x5408,
-    /// If the terminal is using asynchronous serial data transmission, and arg
-    /// is zero, then send a break (a stream of zero bits) for between 0.25
-    /// and 0.5 seconds.
     TCSBRK = 0x5409,
-    /// Get the process group ID of the foreground process group on this
-    /// terminal.
     TIOCGPGRP = 0x540F,
-    /// Set the foreground process group ID of this terminal.
     TIOCSPGRP = 0x5410,
-    /// Get window size.
     TIOCGWINSZ = 0x5413,
-    /// Set window size.
     TIOCSWINSZ = 0x5414,
-    UNSUPPORT,
 }
 
+impl TryFrom<usize> for TtyIoctlCmd {
+    type Error = ();
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0x5401 => Ok(Self::TCGETS),
+            0x5402 => Ok(Self::TCSETS),
+            0x5403 => Ok(Self::TCSETSW),
+            0x5404 => Ok(Self::TCSETSF),
+            0x5405 => Ok(Self::TCGETA),
+            0x5406 => Ok(Self::TCSETA),
+            0x5407 => Ok(Self::TCSETAW),
+            0x5408 => Ok(Self::TCSETAF),
+            0x5409 => Ok(Self::TCSBRK),
+            0x540F => Ok(Self::TIOCGPGRP),
+            0x5410 => Ok(Self::TIOCSPGRP),
+            0x5413 => Ok(Self::TIOCGWINSZ),
+            0x5414 => Ok(Self::TIOCSWINSZ),
+            _ => Err(()),
+        }
+    }
+}
+
+// C language definitions for terminal I/O input flags.
+// #define IGNBRK 0o0000001  // Ignore break condition.
+// #define BRKINT 0o0000002  // Signal interrupt on break.
+// #define IGNPAR 0o0000004  // Ignore characters with parity errors.
+// #define PARMRK 0o0000010  // Mark parity and framing errors.
+// #define INPCK 0o0000020   // Enable input parity check.
+// #define ISTRIP 0o0000040  // Strip 8th bit off characters.
+// #define INLCR 0o0000100   // Map NL to CR on input.
+// #define IGNCR 0o0000200   // Ignore CR.
+// #define ICRNL 0o0000400   // Map CR to NL on input.
+// #define IUCLC 0o0001000   // Map uppercase characters to lowercase on input (not in POSIX).
+// #define IXON 0o0002000    // Enable start/stop output control.
+// #define IXANY 0o0004000   // Enable any character to restart output.
+// #define IXOFF 0o0010000   // Enable start/stop input control.
+// #define IMAXBEL 0o0020000 // Ring bell when input queue is full (not in POSIX).
+// #define IUTF8 0o0040000   // Input is UTF8 (not in POSIX).
+
 bitflags! {
-    #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-    struct TtyIoctl: u32 {
-        /// Gets the current serial port settings.
-        const TCGETS = 0x5401;
-        /// Sets the serial port settings immediately.
-        const TCSETS = 0x5402;
-        /// Sets the serial port settings after allowing the input and output
-        /// buffers to drain/empty.
-        const TCSETSW = 0x5403;
-        /// Sets the serial port settings after flushing the input and output
-        /// buffers.
-        const TCSETSF = 0x5404;
-        /// Gets the current serial port settings (termio).
-        const TCGETA = 0x5405;
-        /// Sets the serial port settings immediately (termio).
-        const TCSETA = 0x5406;
-        /// Sets the serial port settings after allowing the input and output
-        /// buffers to drain/empty (termio).
-        const TCSETAW = 0x5407;
-        /// Sets the serial port settings after flushing the input and output
-        /// buffers (termio).
-        const TCSETAF = 0x5408;
-        /// Sends a break signal for asynchronous serial data transmission.
-        const TCSBRK = 0x5409;
-        /// Gets the process group ID of the foreground process group on this terminal.
-        const TIOCGPGRP = 0x540F;
-        /// Sets the foreground process group ID of this terminal.
-        const TIOCSPGRP = 0x5410;
-        /// Gets the window size of the terminal.
-        const TIOCGWINSZ = 0x5413;
-        /// Sets the window size of the terminal.
-        const TIOCSWINSZ = 0x5414;
+    /// Input flags for terminal I/O settings.
+    struct IFlag: u32 {
+        const IGNBRK = 0o0000001; // Ignore break condition.
+        const BRKINT = 0o0000002; // Signal interrupt on break.
+        const IGNPAR = 0o0000004; // Ignore characters with parity errors.
+        const PARMRK = 0o0000010; // Mark parity and framing errors.
+        const INPCK = 0o0000020;  // Enable input parity check.
+        const ISTRIP = 0o0000040; // Strip 8th bit off characters.
+        const INLCR = 0o0000100;  // Map NL to CR on input.
+        const IGNCR = 0o0000200;  // Ignore CR.
+        const ICRNL = 0o0000400;  // Map CR to NL on input.
+        const IUCLC = 0o0001000;  // Map uppercase characters to lowercase on input (not in POSIX).
+        const IXON = 0o0002000;   // Enable start/stop output control.
+        const IXANY = 0o0004000;  // Enable any character to restart output.
+        const IXOFF = 0o0010000;  // Enable start/stop input control.
+        const IMAXBEL = 0o0020000;// Ring bell when input queue is full (not in POSIX).
+        const IUTF8 = 0o0040000;  // Input is UTF8 (not in POSIX).
     }
 }
