@@ -3,7 +3,7 @@
 
 == 信号机制
 
-信号是操作系统向进程传递事件通知的一种机制，主要用于通知进程发生了异步事件。在我们的内核中，严格按照Liunx中对于信号结构的设计，实现了相对完善且清晰的信号机制。 信号相关结构体设计自顶向下为分别为，`SigStruct`（一个包含所有信号处理方法的数组），其中每个元素为 `KSigAction`（内核层信号动作），`SigAction`（信号处理相关配置），三者关系如下：
+信号是操作系统中进程交互的一种机制，主要用于通知进程发生了异步事件。在我们的内核中，严格按照Liunx中对于信号结构的设计，实现了相对完善且清晰的信号机制。 信号相关结构体设计自顶向下为分别为，`SigStruct`（一个包含所有信号处理方法的数组），其中每个元素为 `KSigAction`（内核层信号动作），`SigAction`（信号处理相关配置），三者关系如下：
 
 #code-figure(
 ```rs
@@ -62,7 +62,7 @@ pub struct SigPending {
 
 #h(2em)我们将信号处理队列分为普通队列和优先队列，对不同的信号做了优先级处理，这样的数据结构时的Del0n1x对于紧急时间和高优先级时的相应延迟更低，提高了内核的实时性。
 
-对于队列中的信号结构体 SigInfo设计，我们借鉴了Linux中的 `siginfo_t` 实现方式，同时对其进行了简化和封装，能够携带更多的数据信息（发送者pid、子进程exit code和信号编码等），这样极大的方便了 Wait4 和 `do_signal` 中对于不同信号的处理分发流程。
+对于队列中的信号结构体`SigInfo`设计，我们借鉴了Linux中的 `siginfo_t` 实现方式，同时对其进行了简化和封装，能够携带更多的数据信息（发送者pid、子进程exit code和信号编码等），这样极大的方便了 Wait4 和 `do_signal` 中对于不同信号的处理分发流程。
 
 == 信号处理
 
@@ -176,8 +176,8 @@ waker 保存在 pipe 的读者带唤醒数组中，等待写者完成数据写�
 )
 
 #h(2em)这样的设计看似读者写者之间互相交错唤醒，场面和谐。但试想一下一种极端情况，如果读者或者写者在操作完缓冲区后，因为一些原因导致进程
-退出，而此时 Pipe 中还有待唤醒的读者或写者，那这样会造成死等的情况。这样的 bug 是在适配 libcbench 的 pthread 中发现的，为了解决这样的问题，
-需要 为 Pipe 实现 `Drop` 方法自动唤醒等待队列中的进程。
+退出，而此时 Pipe 中还有待唤醒的读者或写者，那这样会造成死等的情况。这个问题是在适配 libcbench 的 pthread 过程中发现的，为了解决这样的问题，
+需要为 Pipe 实现 `Drop` 方法自动唤醒等待队列中的进程。
 
 
 == System V IPC 机制
@@ -198,7 +198,6 @@ System V IPC 对象包括三种类型的对象：
 
 #code-figure(
 ```rust
-#[repr(C)]
 pub struct IPCPerm {
     pub key: IPCKey,
     pub uid: u32,
@@ -215,10 +214,9 @@ pub struct IPCPerm {
 
 === IPC Key管理器
 
-Del0n1x 定义了一个全局的IPC Key管理器，为每一个IPC对象分配唯一的IPC Key。
+Del0n1x 使用全局IPC Key管理器，为每个IPC对象分配唯一的IPC Key。
 #code-figure(
 ```rust
-pub struct IPCKey(pub i32);
 pub struct IPCKeyAllocator {
     current: i32,
     recycled: BTreeSet<i32>,

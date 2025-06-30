@@ -5,8 +5,7 @@
 == 概述
 
 Del0n1x操作系统采用无栈协程作为核心任务管理模型，该设计基于用户级轻量级线程理念，允许任务在执行过程中挂起并恢复。
-无栈协程与有栈协程的核心差异体现在上下文管理机制上：在rcore和xv6中，采用有栈方式进行任务切换，每次任务切换需要调用`__switch`函数，每个任务有独立栈空间
-并在切换时保存完整栈帧及`s0-s11`、`ra`、`sp`等14个RISC-V寄存器，
+无栈协程与有栈协程的核心差异体现在上下文管理机制上：在rCore和xv6中，采用有栈方式进行任务切换，每个任务有独立栈空间，每次任务切换需要调用`__switch`函数，并在切换时保存完整栈帧及s0\~s11、ra、sp等14个RISC-V寄存器。
 而Del0n1x的无栈协程不依赖独立栈结构，转而通过状态机管理上下文状态，任务挂起时仅需保存当前执行位置和关键状态变量，显著降低内存开销与切换延迟。
 
 在传统操作系统中，进程调度需切换用户级上下文、寄存器上下文和系统级上下文（含内核栈与页表），这种完整上下文切换必须通过内核态系统调用完成。
@@ -15,11 +14,9 @@ Del0n1x操作系统采用无栈协程作为核心任务管理模型，该设计�
 
 == 任务调度
 
-在无栈协程中，任务调度并不需要在栈上保存任务栈帧，而是将必要的中间信息保存为状态机，放置在堆空间进行保存，这样不仅减少了任务调度开销，同时
-提高了调度过程中的安全性，降低栈溢出的风险。
+在无栈协程中，任务调度并不需要在栈上保存任务栈帧，而是将必要的中间信息保存为状态机，放置在堆空间进行保存，这样不仅减少了任务调度开销，同时提高了调度过程中的安全性，降低栈溢出的风险。
 
-在Del0n1x中，当对异步函数调用`.await`方法时，async-task库会首次调用Future的poll方法，如果poll返回的结果是Pending，那么该任务将被挂起，
-await 将控制权交给调度器，以便另一个任务可以继续进行。任务调度如下图：
+在Del0n1x中，当对异步函数调用`.await`方法时，async-task库会首次调用Future的poll方法，如果poll返回的结果是Pending，那么该任务将被挂起，await 将控制权交给调度器，以便另一个任务可以继续进行。任务调度如下图：
 
 #figure(
   image("assets/sched.png"),
@@ -37,8 +34,8 @@ await 将控制权交给调度器，以便另一个任务可以继续进行。�
 
 == 任务调度队列与执行器
 
-在任务调度队列实现中，Del0n1x将调度队列分为 FIFO 和 PRIO 队列，感谢优秀作品 Plntry 对 async-task 库做出的 Pr，
-使得在任务调度过程中可以获取调度信息，通过调度信息，我们可以对任务做出更加精细的控制。
+在任务调度队列实现中，Del0n1x将调度队列分为 FIFO 和 PRIO 队列。感谢优秀作品 Plntry 对 async-task 库做出的 PR，
+使我们在任务调度过程中可以获取调度信息。通过调度信息，我们可以对任务做出更加精细的控制。
 如果任务在运行时被唤醒，则将其加入 FIFO 队列，其他的就放入 PRIO 队列进行管理。
 
 #code-figure(
@@ -106,9 +103,9 @@ fn poll(
     label-name: "task-future-poll",
 )
 
-#h(2em)对于用户任务，在poll轮循中实现了任务的切换调度。当任务checkin时，需要在修改TCB的时间戳记录调度时间，然后切换CPU中运行任务和切换页表。当任务checkout时，需要判断浮点寄存器状态是否为dirty以确定是否保存浮点寄存器，然后清空CPU当前任务，并记录任务checkout时间。 对于内核任务，Del0n1x并没有设计任务切换，而是让该任务一直poll，直到任务结束，这类任务主要是shell程序。
+#h(2em)对于用户任务，在poll轮循中实现了任务的切换调度。当任务checkin时，需要在修改TCB的时间戳记录调度时间，然后切换CPU中运行任务和切换页表。当任务checkout时，需要判断浮点寄存器状态是否为dirty，以确定是否保存浮点寄存器，然后清空CPU当前任务，并记录任务checkout时间。 对于内核任务，Del0n1x并没有设计任务切换，而是让该任务一直poll，直到任务结束。这类任务主要是shell程序。
 
-spawn_user_task可以设置一个用户任务。Del0n1x将用户任务的future设置为 trap_loop 循环，负责处理任务在用户态和内核态之间的切换，直到任务结束。执行 `executor::spawn(future)` 将任务挂入全局队列中等待被调度。
+spawn_user_task可以设置一个用户任务。Del0n1x将用户任务的future设置为 `trap_loop` 循环，负责处理任务在用户态和内核态之间的切换，直到任务结束。执行 `executor::spawn(future)` 将任务挂入全局队列中等待被调度。
 
 #code-figure(
 ```rs
@@ -126,7 +123,7 @@ pub fn spawn_user_task(user_task: Arc<TaskControlBlock>) {
 
 == 多核心CPU管理
 
-在Del0n1x中，我们将处理器抽象为CPU，使用内核中CPU结构体进行统一管理。current 中保存当前正在运行的任务的 TCB；timer_irq_cnt 记录内核时钟中断次数，在内核时钟中断处理函数中会增加这个计数器，trap return时会清零，如果计数器大于阈值，手动对该任务yield进行调度，避免任务一直占用CPU；kernel_trap_ret_value 用于记录 pagafault 返回值。
+在Del0n1x中，我们将处理器抽象为CPU结构体，使用内核中CPU结构体进行统一管理。`current` 中保存当前正在运行的任务的 TCB。`timer_irq_cnt` 记录内核时钟中断次数，在内核时钟中断处理函数中会增加这个计数器，trap return时计数器会清零。如果计数器大于阈值，手动对该任务yield进行调度，避免任务一直占用CPU。`ktrap_ret` 用于记录 kernel trap处理结果。
 
 #code-figure(
 ```rs
@@ -134,14 +131,14 @@ pub struct CPU {
     current: Option<Arc<TaskControlBlock>>,
     timer_irq_cnt: usize,
     hart_id: usize,
-    kernel_trap_ret_value: Option<SysResult<()>>,
+    ktrap_ret: Option<SysResult<()>>,
 }
 ```,
     caption: [CPU 结构体定义],
     label-name: "cpu-struct",
 )
 
-#h(2em)单个CPU被存放在全局的 PROCESSORS 管理器中，并向外暴露接口，通过管理器我们能获取到当前任务的上下文信息和页表token、CPU id号等。
+#h(2em)单个CPU被存放在全局的`PROCESSORS`管理器中，并向外暴露接口，通过管理器我们能获取到当前任务的上下文信息和页表token、CPU id号等。
 
 #code-figure(
 ```rs
@@ -205,7 +202,7 @@ pub struct TaskControlBlock {
 === 进程和线程联系
 
 在 Del0n1x 中，我们使用 `ThreadGroup`管理线程组。
-其中选择 `BTreeMap` 作为管理数据结构，其中key是task pid，value是TCB的弱引用。
+其中选择 `BTreeMap` 作为管理数据结构，其中key为task pid，value为TCB的弱引用。
 线程之间需要一个leader，而该leader是一个进程，同样被 `ThreadGroup` 管理。
 线程组的leader可以用tgid表示；利用tgid可以通过 `BTreeMap` 快速定位到leader。
 线程与线程之间并没有父子关系，他们同属于一个进程创建。

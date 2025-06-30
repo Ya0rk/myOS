@@ -109,27 +109,21 @@ bitflags! {
         const W = 1 << 2;
         const X = 1 << 3;
         const U = 1 << 4;
-        const G = 1 << 5;
-        const A = 1 << 6;
-        const D = 1 << 7;
+        ... // 篇幅需要，省略
         const COW = 1 << 8;
     }
 }
 impl PTEFlags {
-    // 为标志位FLAG实现is_[FLAG](&self) -> bool方法
     impl_flag_checker!(
         pub U,
         pub V,
         ... // 篇幅需要，省略
-        pub COW
-    );
-    // 为标志位FLAG实现set_[FLAG](&mut self, bool)-> &mut Self 
-    // 方法，支持链式调用
+    );// 为标志位FLAG实现is_[FLAG](&self)方法
     impl_flag_setter!(
         pub U,
         pub V,
         ... // 篇幅需要，省略
-    );
+    );// 为标志位FLAG实现set_[FLAG](&mut self, bool)方法
 }
 ``` ,
   caption: [RISC-V PTEFlags 实现],
@@ -141,7 +135,7 @@ impl PTEFlags {
 
 === 直接映射窗口
 
-LoongArch 架构支持直接映射地址翻译模式，该模式下允许通过修改 CSR.DMW0 ~ CSR.DMW3 控制状态寄存器配置至多4个直接映射窗口。当虚拟地址的高4位（在LoongArch64中为[63:60]位）恰好与某个直接映射窗口的高4位相同时，虚拟地址将被直接映射为其低 PALEN 位的物理地址（PALEN为机器有效物理地址长度）。使用`cpucfg`指令可以查明，LoongArch QEMU virt平台下 PALEN=48，故直接映射窗口将`0xW000_xxxx_xxxx_xxxx`范围内的所有虚拟地址映射为`0x0000_xxxx_xxxx_xxxx`。通过修改 CSR.DMWx 还可配置直接映射窗口的允许访问特权级、存储访问类型。
+LoongArch 架构支持直接映射地址翻译模式，该模式下允许通过修改 CSR.DMW0 \~ CSR.DMW3 控制状态寄存器配置至多4个直接映射窗口。当虚拟地址的高4位（在LoongArch64中为[63:60]位）恰好与某个直接映射窗口的高4位相同时，虚拟地址将被直接映射为其低 PALEN 位的物理地址（PALEN为机器有效物理地址长度）。使用`cpucfg`指令可以查明，LoongArch QEMU virt平台下 PALEN=48，故直接映射窗口将`0xW000_xxxx_xxxx_xxxx`范围内的所有虚拟地址映射为`0x0000_xxxx_xxxx_xxxx`。通过修改 CSR.DMWx 还可配置直接映射窗口的允许访问特权级、存储访问类型。
 
 Del0n1x 使用`0x8000_xxxx_xxxx_xxxx`和`0x9000_xxxx_xxxx_xxxx`两个直接映射窗口，均限定内核特权级（PLV0）使用，分别用于设备访问和物理内存访问。
 
