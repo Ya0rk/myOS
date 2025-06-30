@@ -73,3 +73,6 @@ pub fn boot_all_harts(hartid: usize) {
         }
     }
 }
+
+pub fn arch_init() {
+}

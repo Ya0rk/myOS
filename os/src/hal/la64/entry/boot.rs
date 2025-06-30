@@ -1,5 +1,9 @@
 #![allow(unused)]
+use loongarch64::register::euen;
+
 use crate::hal::config::{HART_NUM, HART_START_ADDR, KERNEL_ADDR_OFFSET};
+use crate::hal::mem::tlb::tlb_fill;
+use crate::hal::mem::{mmu_init, tlb_init};
 use crate::{hal::arch::hart_start_success, mm::VirtAddr};
 use core::arch::asm;
 
@@ -19,6 +23,12 @@ pub fn logo() {
     );
 }
 
+pub fn platform() {
+    println!(r#"
+QEMU LoongArch64 virt
+    "#);
+}
+
 pub fn clear_bss() {
     extern "C" {
         fn sbss();
@@ -32,6 +42,7 @@ pub fn clear_bss() {
     }
 }
 
+
 /// boot start_hart之外的所有 hart
 pub fn boot_all_harts(hartid: usize) {
     for i in (0..HART_NUM).filter(|id| *id != hartid) {
@@ -44,4 +55,10 @@ pub fn boot_all_harts(hartid: usize) {
             println!("[kernel] ---------- hart {} is starting... ----------", i);
         }
     }
+}
+
+pub fn arch_init() {
+    mmu_init();
+    euen::set_fpe(true);
+    tlb_init(tlb_fill as usize);
 }
