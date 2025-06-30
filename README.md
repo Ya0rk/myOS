@@ -6,7 +6,7 @@
 
 [github仓库链接](https://github.com/Ya0rk/myOS): 欢迎向我们提出issue.
 
-- 初赛阶段幻灯片、演示视频：[百度网盘](https://pan.baidu.com/s/1L5dUNLOb49hK_sLLOIiHvg?pwd=t881) 提取码: t881
+- 初赛阶段幻灯片、演示视频：[百度网盘](https://pan.baidu.com/s/19P5LKVmHvv3Uh7tCzk3CPA?pwd=nm92) 提取码: nm92
 - 初赛文档：[Del0n1x初赛文档](./Del0n1x初赛文档.pdf)
 
 Del0n1x 是一个使用 Rust 语言编写的同时适配 RISC-V64 和 LoongArch64 的跨平台操作系统，目标是实现一个 Linux 兼容的多核操作系统，支持进程调度、文件系统、网络等功能。
@@ -104,6 +104,12 @@ bootloader                  # 引导加载程序
 - 支持外设中断。
 - 支持更多ltp测例，修复更多内核不稳定的bug。
 - 支持更多现实应用。
+
+## 参考
+
+- [Phoenix](https://github.com/ChenRuiwei/Phoenix)：无栈协程、内存管理
+- [Polyhal](https://github.com/Byte-OS/polyhal)，[NPUCore-­IMPACT](https://gitlab.eduxiji.net/educg-group-26011-2376549/T202410699992496-312)： 硬件抽象层
+- [Phoenix](https://github.com/ChenRuiwei/Phoenix)、[MinotaurOS](https://github.com/Dr-TSNG/MinotaurOS)：设计文档模板
 
 ## 工具链
 
