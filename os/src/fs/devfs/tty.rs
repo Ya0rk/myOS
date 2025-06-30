@@ -1,5 +1,5 @@
 use crate::{
-    fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
+    fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, Stdout, S_IFCHR},
     mm::{page::Page, UserBuffer},
     sync::{SpinNoIrqLock, TimeStamp},
     task::get_init_proc,
@@ -13,7 +13,9 @@ use alloc::{
 };
 use async_trait::async_trait;
 
-pub struct DevTty;
+pub struct DevTty {
+    inode: Arc<StdoutInode>,
+};
 
 impl DevTty {
     pub fn new() -> Self {

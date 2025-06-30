@@ -29,10 +29,20 @@ use spin::Mutex;
 const LF: usize = 0x0a;
 const CR: usize = 0x0d;
 
-pub struct Stdin;
+pub struct Stdin {
+    inode: Arc<TtyInode>,
+}
+
+impl Stdin {
+    pub fn new() -> Self {
+        Self {
+            inode: stdoutInodeInst.clone(),
+        }
+    }
+}
 
 pub struct Stdout {
-   inode: Arc<StdoutInode>, 
+   inode: Arc<TtyInode>, 
 }
 
 impl Stdout {
@@ -90,14 +100,20 @@ impl FileTrait for Stdin {
         false
     }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        todo!()
+        self.inode.clone()
     }
 
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         todo!()
     }
 }
-
+///
+/// 当前先记录工作行为
+/// 
+/// 将vi 的软件行为进行记录
+/// 
+/// 注意到应当去除这里对底层接口 print 的调用，转用 tty inode 进行实现
+/// 
 #[async_trait]
 impl FileTrait for Stdout {
     fn readable(&self) -> bool {
@@ -153,12 +169,14 @@ impl FileTrait for Stdout {
     }
 }
 
-/// 临时设置，应当迁移到 tty，这里采用单例模式
-struct StdoutInode {
+/// 临时设置，应当迁移到 tty，
+/// 
+/// 这里采用单例模式
+pub struct TtyInode {
     inner: SpinNoIrqLock<StdoutInodeInner>,
 }
 
-impl StdoutInode {
+impl TtyInode {
     fn new() -> Self {
         Self {
             inner: SpinNoIrqLock::new(StdoutInodeInner::new())
@@ -166,7 +184,7 @@ impl StdoutInode {
     }
 }
 
-impl InodeTrait for StdoutInode {
+impl InodeTrait for TtyInode {
     #[doc = " 设置大小"]
     fn set_size(&self,new_size:usize) -> SysResult {
         Ok(())
@@ -210,20 +228,20 @@ impl InodeTrait for StdoutInode {
         debug_point!("[tty_ioctl]");
         log::info!("[TtyFile::ioctl] cmd {:?}, value {:#x}", cmd, arg);
         match cmd {
-            x if x.contains(TtyIoctl::TCGETS) || x.contains(TtyIoctl::TCGETA) => {
+            TtyIoctl::TCGETS | TtyIoctl::TCGETA => {
                 unsafe {
                     *(arg as *mut Termios) = self.inner.lock().termios;
                 }
                 Ok(0)
             }
-            x if x.contains(TtyIoctl::TCSETS) || x.contains(TtyIoctl::TCSETSW) || x.contains(TtyIoctl::TCSETSF) => {
+            TtyIoctl::TCSETS | TtyIoctl::TCSETSW | TtyIoctl::TCSETSF => {
                 unsafe {
                     self.inner.lock().termios = *(arg as *const Termios);
                     log::info!("termios {:#x?}", self.inner.lock().termios);
                 }
                 Ok(0)
             }
-            x if x.contains(TtyIoctl::TIOCGPGRP) => {
+            TtyIoctl::TIOCGPGRP => {
                 let fg_pgid = self.inner.lock().fg_pgid.clone();
                 log::info!("[TtyFile::ioctl] get fg pgid {fg_pgid}");
                 unsafe {
@@ -231,7 +249,7 @@ impl InodeTrait for StdoutInode {
                 }
                 Ok(0)
             }
-            x if x.contains(TtyIoctl::TIOCSPGRP) => {
+            TtyIoctl::TIOCSPGRP => {
                 let user_ptr: &Pid = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
                 unsafe {
                     self.inner.lock().fg_pgid = user_ptr.clone();
@@ -239,7 +257,7 @@ impl InodeTrait for StdoutInode {
                 log::info!("[TtyFile::ioctl] set fg pgid {}", user_ptr);
                 Ok(0)
             }
-            x if x.contains(TtyIoctl::TIOCGWINSZ) => {
+            TtyIoctl::TIOCGWINSZ => {
                 let win_size = self.inner.lock().win_size;
                 log::info!("[TtyFile::ioctl] get window size {win_size:?}");
                 unsafe {
@@ -247,13 +265,13 @@ impl InodeTrait for StdoutInode {
                 }
                 Ok(0)
             }
-            x if x.contains(TtyIoctl::TIOCSWINSZ) => {
+            TtyIoctl::TIOCSWINSZ => {
                 unsafe {
                     self.inner.lock().win_size = *(arg as *const WinSize);
                 }
                 Ok(0)
             }
-            x if x.contains(TtyIoctl::TCSBRK) => Ok(0),
+            TtyIoctl::TCSBRK => Ok(0),
             _ => {
                 log::error!("[TtyFile::ioctl] Unsupported command: {cmd:?}");
                 Err(Errno::EINVAL)
@@ -320,7 +338,7 @@ impl InodeTrait for StdoutInode {
 }
 
 lazy_static! {
-    static ref stdoutInodeInst: Arc<StdoutInode> = Arc::new(StdoutInode::new());
+    static ref stdoutInodeInst: Arc<TtyInode> = Arc::new(TtyInode::new());
 }
 
 struct StdoutInodeInner {
@@ -469,6 +487,7 @@ enum TtyIoctlCmd {
     TIOCGWINSZ = 0x5413,
     /// Set window size.
     TIOCSWINSZ = 0x5414,
+    UNSUPPORT,
 }
 
 

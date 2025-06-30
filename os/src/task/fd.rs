@@ -158,7 +158,7 @@ impl FdTable {
 impl FdTable {
     pub fn new() -> Self {
         // 自带三个文件描述符，分别是标准输入、标准输出、标准错误
-        let stdin = FdInfo::new(Arc::new(Stdin), OpenFlags::O_RDONLY);
+        let stdin = FdInfo::new(Arc::new(Stdin::new()), OpenFlags::O_RDONLY);
         let stdout = FdInfo::new(Arc::new(Stdout::new()), OpenFlags::O_WRONLY);
         let stderr = FdInfo::new(Arc::new(Stdout::new()), OpenFlags::O_WRONLY);
         let mut fd_table = Vec::new();
