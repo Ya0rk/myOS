@@ -34,13 +34,13 @@ pub fn logo() {
     println!(
         r#"
                        
-    `YMM'   `MM'                   .g8""8q.    .M"""bgd 
-      VMA   ,V                   .dP'    `YM. ,MI    "Y 
-       VMA ,V ,pW"Wq.   ,pW"Wq.  dM'      `MM `MMb.     
-        VMMP 6W'   `Wb 6W'   `Wb MM        MM   `YMMNq. 
-         MM  8M     M8 8M     M8 MM.      ,MP .     `MM 
-         MM  YA.   ,A9 YA.   ,A9 `Mb.    ,dP' Mb     dM 
-       .JMML. `Ybmd9'   `YooOS'    `"bmmd"'   P"Ybmmd"  
+oooooooooo.             oooo    .oooo.                 .o              
+`888'   `Y8b            `888   d8P'`Y8b              o888              
+ 888      888  .ooooo.   888  888    888 ooo. .oo.    888  oooo    ooo 
+ 888      888 d88' `88b  888  888    888 `888P"Y88b   888   `88b..8P'  
+ 888      888 888ooo888  888  888    888  888   888   888     Y888'    
+ 888     d88' 888    .o  888  `88b  d88'  888   888   888   .o8"'88b   
+o888bood8P'   `Y8bod8P' o888o  `Y8bd8P'  o888o o888o o888o o88'   888o
                                                         
     "#
     );

@@ -25,6 +25,7 @@ easy-fs/Cargo.lock
 easy-fs/target/*
 easy-fs-fuse/Cargo.lock
 easy-fs-fuse/target/*
+doc/main.pdf
 tools/
 pushall.sh
 **/CMakeFiles/
