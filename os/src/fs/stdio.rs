@@ -261,8 +261,8 @@ impl InodeTrait for TtyInode {
     {
         let res = match core::str::from_utf8(_buf) {
             Ok(text) => {
-                let filtered: String = text.chars().filter(|&c| c != '\x1b').collect();
-                print!("{}", filtered);
+                // let filtered: String = text.chars().filter(|&c| c != '\x1b').collect();
+                print!("{}", text);
                 text.len()
             }
             Err(e) => 0,
