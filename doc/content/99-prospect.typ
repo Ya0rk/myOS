@@ -46,4 +46,4 @@
 
 - Polyhal，NPUCore-IMPACT： 硬件抽象层
 
-- Phoenix、MinotaurOs：设计文档模板
+- Phoenix、MinotaurOS：设计文档模板
