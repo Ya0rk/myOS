@@ -4,7 +4,7 @@ use super::InodeTrait;
 use super::Kstat;
 use super::OpenFlags;
 use crate::hal::arch::console_getchar;
-use crate::mm::{page::Page, UserBuffer};
+use crate::mm::{page::Page};
 use crate::task::get_current_hart_id;
 use crate::utils::Errno;
 use crate::utils::SysResult;

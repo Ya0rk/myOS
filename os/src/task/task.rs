@@ -13,7 +13,7 @@ use crate::ipc::IPCKey;
 use crate::mm::address::VirtAddr;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::memory_space::{create_elf_tables, vm_area::MapPerm, MemorySpace};
-use crate::mm::{memory_space, translated_refmut, MapPermission};
+use crate::mm::{memory_space, MapPermission};
 use crate::signal::{
     SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom,
     SigPending, SigStruct, SignalStack,

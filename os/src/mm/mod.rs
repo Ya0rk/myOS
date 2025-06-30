@@ -1,6 +1,6 @@
 mod ffi;
 mod heap_allocator;
-mod userbuffer;
+// mod userbuffer;
 // mod map_area;
 pub mod address;
 pub mod memory_space;
@@ -18,11 +18,11 @@ pub use address::{
 };
 pub use ffi::{MapPermission, MapType};
 use page_table::{enable_kernel_pgtable, KERNEL_PAGE_TABLE};
-pub use userbuffer::UserBuffer;
+// pub use userbuffer::UserBuffer;
 // pub use map_area::MapArea;
 pub use frame_allocator::{frame_alloc, frame_dealloc};
 pub use page_table::PageTable;
-pub use page_table::{translated_byte_buffer, translated_ref, translated_refmut, translated_str};
+// pub use page_table::{translated_byte_buffer, translated_ref, translated_refmut, translated_str};
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init(first: bool) {

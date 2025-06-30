@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 use core::ops::{Range, RangeBounds};
-use log::info;
+use log::{error, info};
 
 // use core::arch::riscv64::sfence_vma_vaddr; //这个core::arch::riscv64包会在hal::arch中统一引入
 use crate::hal::arch::sfence_vma_vaddr;
@@ -135,7 +135,7 @@ impl core::fmt::Debug for VmArea {
 
 impl Drop for VmArea {
     fn drop(&mut self) {
-        log::debug!("[VmArea::drop] drop {self:?}",);
+        // log::debug!("[VmArea::drop] drop {self:?}",);
     }
 }
 
@@ -153,7 +153,6 @@ impl VmArea {
             offset: 0,
             shared,
         };
-        log::debug!("[VmArea::new] {new:?}");
         new
     }
 
@@ -176,12 +175,10 @@ impl VmArea {
             offset,
             shared,
         };
-        log::debug!("[VmArea::new_mmap] {new:?}");
         new
     }
 
     pub fn from_another(another: &Self) -> Self {
-        log::debug!("[VmArea::from_another] {another:?}");
         Self {
             range_va: another.range_va(),
             pages: BTreeMap::new(),
@@ -254,14 +251,14 @@ impl VmArea {
                 pte.flags().union(pte_flags)
             );
             pte.set_flags(pte.flags().union(pte_flags));
-            unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+            sfence_vma_vaddr(vpn.to_vaddr().into());
         }
     }
 
     pub fn flush(&mut self) {
         let range_vpn = self.range_vpn();
         for vpn in range_vpn {
-            unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+            sfence_vma_vaddr(vpn.to_vaddr().into());
         }
     }
 
@@ -269,9 +266,7 @@ impl VmArea {
     ///
     /// Will alloc new pages for `VmArea` according to `VmAreaType`.
     pub fn map(&mut self, page_table: &mut PageTable) {
-        // NOTE: set pte flag with global mapping for kernel memory
-        // NOTE: here is used PTEFlags::from<MapPerm>()
-        let pte_flags: PTEFlags = self.map_perm.into();
+        let pte_flags = self.map_perm.into();
 
         for vpn in self.range_vpn() {
             let page = Page::new();
@@ -302,12 +297,7 @@ impl VmArea {
         }
     }
 
-    /// Copy the data to start_va + offset.
-    ///
-    /// # Safety
-    ///
-    /// Assume that all frames were cleared before.
-    // HACK: ugly
+    // to refactor
     pub fn copy_data_with_offset(
         &mut self,
         page_table: &mut PageTable,
@@ -315,26 +305,24 @@ impl VmArea {
         data: &[u8],
     ) {
         let mut offset = offset;
-        let mut start: usize = 0;
-        let mut current_vpn = self.start_vpn();
-        let len = data.len();
-        while start < len {
-            let src = &data[start..len.min(start + PAGE_SIZE - offset)];
-            let dst = page_table
-                .find_pte(current_vpn)
+        let mut slice_off: usize = 0;
+        let mut vpn = self.start_vpn();
+        let slice_len = data.len();
+        while slice_off < slice_len {
+            let src = &data[slice_off..slice_len.min(slice_off + PAGE_SIZE - offset)];
+            page_table
+                .find_pte(vpn)
                 .unwrap()
                 .ppn()
-                .get_bytes_array_from_range(offset..offset + src.len());
-            dst.copy_from_slice(src);
-            start += PAGE_SIZE - offset;
+                .get_bytes_array_from_range(offset..offset + src.len())
+                .copy_from_slice(src);
+            slice_off += PAGE_SIZE - offset;
             offset = 0;
-            current_vpn += 1;
+            vpn += 1;
         }
     }
 
     pub fn split(self, split_range: Range<VirtAddr>) -> (Option<Self>, Option<Self>, Option<Self>) {
-        debug_assert!(split_range.start.aligned() && split_range.end.aligned());
-        debug_assert!(split_range.start >= self.start_va() && split_range.end <= self.end_va());
         let (mut left, mut middle, mut right) = (None, None, None);
         let (left_range, middle_range, right_range) = (
             self.start_va()..split_range.start,
@@ -377,16 +365,9 @@ impl VmArea {
             right_vma.offset += right_vma.start_va() - self.start_va();
             right = Some(right_vma)
         }
-        // log::info!("[VmArea::split] left: {left:?}");
-        // log::info!("[VmArea::split] middle: {middle:?}");
-        // log::info!("[VmArea::split] right: {right:?}");
         (left, middle, right)
     }
 
-    // FIXME: should kill user program if it deref a invalid pointer, e.g. try to
-    // write at a read only area?
-    // NOTE: maybe a page fault on kernel space?
-    // DO NOT CONSIDER THIS DESIGN TEMPORARILY
     pub fn handle_page_fault(
         &mut self,
         page_table: &mut PageTable,
@@ -399,14 +380,11 @@ impl VmArea {
         );
 
         if !access_type.can_access(self.perm()) {
-            // info!("type = {:?}", access_type);
-            // info!("perm = {:?}", self.perm());
             backtrace();
-            log::error!(
+            error!(
                 "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
                 self.perm()
             );
-            // panic!("[handle_page_fault] vpn: {:#x}", vpn.0);
             return Err(Errno::EFAULT);
         }
 
@@ -414,35 +392,25 @@ impl VmArea {
         let pte = page_table.find_pte(vpn);
         if let Some(pte) = pte {
             let mut pte_flags = pte.flags();
-
-            debug_assert!(pte_flags.contains(PTEFlags::COW));
-            debug_assert!(!pte_flags.contains(PTEFlags::W));
-            debug_assert!(self.perm().contains(MapPerm::UW));
-
-            // PERF: copying data vs. lock the area vs. atomic ref cnt
             let old_page = self.get_page(vpn);
             let cnt = Arc::strong_count(old_page);
             info!("[handle_page_fault] page cnt:{}", cnt);
             if cnt > 1 {
-                // copy the data
                 page = Page::new();
                 page.copy_from_slice(old_page.get_bytes_array());
 
-                // unmap old page and map new page
-                pte_flags.remove(PTEFlags::COW);
-                pte_flags.insert(PTEFlags::W);
-                pte_flags.insert(PTEFlags::D);
+                pte_flags.set_COW(false)
+                    .set_W(true)
+                    .set_D(true);
                 page_table.map_leaf_force(vpn, page.ppn(), pte_flags);
-                // NOTE: track `Page` with great care
                 self.pages.insert(vpn, page);
-                unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+                sfence_vma_vaddr(vpn.to_vaddr().into());
             } else {
-                // set the pte to writable
-                pte_flags.remove(PTEFlags::COW);
-                pte_flags.insert(PTEFlags::W);
-                pte_flags.insert(PTEFlags::D);
+                pte_flags.set_COW(false)
+                    .set_W(true)
+                    .set_D(true);
                 pte.set_flags(pte_flags);
-                unsafe { sfence_vma_vaddr(vpn.to_vaddr().into()) };
+                sfence_vma_vaddr(vpn.to_vaddr().into());
             }
         } else {
             match self.vma_type {

@@ -1,5 +1,5 @@
 #![allow(unused)]
-use crate::{mm::UserBuffer, sync::SpinNoIrqLock};
+use crate::{sync::SpinNoIrqLock};
 
 const LCG_MULTIPLIER: u64 = 6364136223846793005;
 const LCG_INCREMENT: u64 = 1;

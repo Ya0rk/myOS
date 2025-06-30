@@ -1,6 +1,6 @@
 use crate::{
     hal::trap::__sigret_helper,
-    mm::translated_byte_buffer,
+    // mm::translated_byte_buffer,
     signal::{LinuxSigInfo, SigActionFlag, SigHandlerType, SigNom, UContext, SIG_DFL, SIG_IGN},
     task::TaskControlBlock,
 };

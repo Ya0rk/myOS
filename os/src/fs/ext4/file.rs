@@ -7,7 +7,7 @@ use crate::{
         SEEK_SET, S_IFCHR,
     },
     hal::config::PATH_MAX,
-    mm::{page::Page, user_ptr::user_slice_mut, UserBuffer},
+    mm::{page::Page, user_ptr::user_slice_mut},
     utils::{Errno, SysResult},
 };
 use alloc::boxed::Box;

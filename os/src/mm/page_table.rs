@@ -290,90 +290,90 @@ pub fn enable_kernel_pgtable() {
     kernel_token_write(KERNEL_PAGE_TABLE.lock().token());
 }
 // TODO: all below is to be discarded
-/// translate a pointer to a mutable u8 Vec through page table
-pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
-    let page_table = PageTable::from_token(token);
-    let mut start = ptr as usize;
-    let end = start + len;
-    let mut v = Vec::new();
+// translate a pointer to a mutable u8 Vec through page table
+// pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&'static mut [u8]> {
+//     let page_table = PageTable::from_token(token);
+//     let mut start = ptr as usize;
+//     let end = start + len;
+//     let mut v = Vec::new();
 
-    while start < end {
-        let start_va = VirtAddr::from(start);
-        let mut vpn = start_va.floor();
+//     while start < end {
+//         let start_va = VirtAddr::from(start);
+//         let mut vpn = start_va.floor();
 
-        // 翻译虚拟页号
-        let ppn = match page_table.translate(vpn) {
-            Some(pte) => pte.ppn(),
-            _ => {
-                println!("[kernel] mm: 0x{:x} not mapped", start);
-                // TODO: 实现lazy分配后，这里是否需要修改
-                vpn.step();
-                start = vpn.into(); // 跳过未映射的页
-                continue;
-            }
-        };
-        vpn.step();
-        // 计算当前页的结束地址
-        let mut end_va: VirtAddr = vpn.into();
-        end_va = end_va.min(VirtAddr::from(end));
-        // 获取字节数组切片
-        let slice_start = start_va.page_offset();
-        let slice_end = if end_va.page_offset() == 0 {
-            ppn.get_bytes_array().len()
-        } else {
-            end_va.page_offset()
-        };
-        v.push(&mut ppn.get_bytes_array()[slice_start..slice_end]);
+//         // 翻译虚拟页号
+//         let ppn = match page_table.translate(vpn) {
+//             Some(pte) => pte.ppn(),
+//             _ => {
+//                 println!("[kernel] mm: 0x{:x} not mapped", start);
+//                 // TODO: 实现lazy分配后，这里是否需要修改
+//                 vpn.step();
+//                 start = vpn.into(); // 跳过未映射的页
+//                 continue;
+//             }
+//         };
+//         vpn.step();
+//         // 计算当前页的结束地址
+//         let mut end_va: VirtAddr = vpn.into();
+//         end_va = end_va.min(VirtAddr::from(end));
+//         // 获取字节数组切片
+//         let slice_start = start_va.page_offset();
+//         let slice_end = if end_va.page_offset() == 0 {
+//             ppn.get_bytes_array().len()
+//         } else {
+//             end_va.page_offset()
+//         };
+//         v.push(&mut ppn.get_bytes_array()[slice_start..slice_end]);
 
-        // 更新起始地址
-        start = end_va.into();
-    }
+//         // 更新起始地址
+//         start = end_va.into();
+//     }
 
-    v
-}
-/// tdranslate a pointer to a const u8 Vec end with `\0` through page table to a `String`
-pub fn translated_str(token: usize, ptr: *const u8) -> String {
-    let page_table = PageTable::from_token(token);
-    let ptr: *mut u8 = KernelAddr::from(
-        page_table
-            .translate_va(VirtAddr::from(ptr as usize))
-            .unwrap(),
-    )
-    .0 as _;
-    let mut len: isize = 0;
-    unsafe {
-        while *ptr.offset(len) != 0 {
-            len += 1;
-        }
-        String::from_utf8(core::slice::from_raw_parts_mut(ptr, len as usize).to_vec()).unwrap()
-    }
-}
-/// translate a generic through page table and return a mutable reference
-/// 将一个用户的指针转化为一个可变引用，就能直接操作这个指针指向的内存了
-pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
-    //println!("into translated_refmut!");
-    let page_table = PageTable::from_token(token);
-    let va = ptr as usize;
+//     v
+// }
+// /// tdranslate a pointer to a const u8 Vec end with `\0` through page table to a `String`
+// pub fn translated_str(token: usize, ptr: *const u8) -> String {
+//     let page_table = PageTable::from_token(token);
+//     let ptr: *mut u8 = KernelAddr::from(
+//         page_table
+//             .translate_va(VirtAddr::from(ptr as usize))
+//             .unwrap(),
+//     )
+//     .0 as _;
+//     let mut len: isize = 0;
+//     unsafe {
+//         while *ptr.offset(len) != 0 {
+//             len += 1;
+//         }
+//         String::from_utf8(core::slice::from_raw_parts_mut(ptr, len as usize).to_vec()).unwrap()
+//     }
+// }
+// /// translate a generic through page table and return a mutable reference
+// /// 将一个用户的指针转化为一个可变引用，就能直接操作这个指针指向的内存了
+// pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
+//     //println!("into translated_refmut!");
+//     let page_table = PageTable::from_token(token);
+//     let va = ptr as usize;
 
-    // 检查指针
-    assert!(
-        ptr as usize % core::mem::align_of::<T>() == 0,
-        "[translated_refmut] ptr not aligned"
-    );
-    assert!(!ptr.is_null(), "[translated_refmut] ptr is null");
+//     // 检查指针
+//     assert!(
+//         ptr as usize % core::mem::align_of::<T>() == 0,
+//         "[translated_refmut] ptr not aligned"
+//     );
+//     assert!(!ptr.is_null(), "[translated_refmut] ptr is null");
 
-    KernelAddr::from(
-        page_table
-            .translate_va(VirtAddr::from(va))
-            .expect("[translated_refmut] translate failed"),
-    )
-    .get_mut()
-}
-/// 通过token，将一个指针转化为 特定的数据结构
-pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
-    //println!("into translated_refmut!");
-    let page_table = PageTable::from_token(token);
-    let va = ptr as usize;
+//     KernelAddr::from(
+//         page_table
+//             .translate_va(VirtAddr::from(va))
+//             .expect("[translated_refmut] translate failed"),
+//     )
+//     .get_mut()
+// }
+// /// 通过token，将一个指针转化为 特定的数据结构
+// pub fn translated_ref<T>(token: usize, ptr: *const T) -> &'static T {
+//     //println!("into translated_refmut!");
+//     let page_table = PageTable::from_token(token);
+//     let va = ptr as usize;
 
-    KernelAddr::from(page_table.translate_va(VirtAddr::from(va)).unwrap()).get_ref()
-}
+//     KernelAddr::from(page_table.translate_va(VirtAddr::from(va)).unwrap()).get_ref()
+// }
