@@ -125,11 +125,10 @@ pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
     }
     // Ok(0)
     if let Some(file) = task.get_file_by_fd(fd) {
-        if file.is_deivce() {
-            file.get_inode().ioctl(op, arg)
-        } else {
+        if file.is_pipe() {
             return Ok(0);
         }
+        file.get_inode().ioctl(op, arg)
     } else {
         Err(Errno::EBADF)
     }
