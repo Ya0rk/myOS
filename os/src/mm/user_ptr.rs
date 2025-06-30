@@ -17,19 +17,16 @@ use super::VirtAddr;
 pub fn try_load_page(addr: VirtAddr) -> SysResult<()> {
     #[cfg(target_arch = "riscv64")]
     unsafe fn try_load_page_inner(addr: usize) {
-        
-        
         asm!(
             "mv t0, a0",
             "lb t0, 0(t0)",
             in("a0") addr,
             out("t0") _,
         );
-    } 
+    }
 
     #[cfg(target_arch = "loongarch64")]
     unsafe fn try_load_page_inner(addr: usize) {
-        
         asm!(
             "or $t0, $a0, $zero",
             "ld.b $t0, $t0, 0",
@@ -43,7 +40,6 @@ pub fn try_load_page(addr: VirtAddr) -> SysResult<()> {
         try_load_page_inner(addr.0);
     }
 
-
     /// if None, which means no page fault is happened, Ok is expected
     /// if Some(Ok()), which means page fault is handled successfully, Ok is expected
     /// if Some(Err()), which means page fault failed because of no privilege or even no mapped area, Err is expected
@@ -53,7 +49,6 @@ pub fn try_load_page(addr: VirtAddr) -> SysResult<()> {
 pub fn try_store_page(addr: VirtAddr) -> SysResult<()> {
     #[cfg(target_arch = "riscv64")]
     unsafe fn try_store_page_inner(addr: usize) {
-        
         asm!(
             "mv t0, a0",
             "lb t1, 0(t0)",
@@ -83,9 +78,6 @@ pub fn try_store_page(addr: VirtAddr) -> SysResult<()> {
 
     take_ktrap_ret().map_or(Ok(()), |ret| ret)
 }
-
-
-
 
 pub fn check_readable(start_va: VirtAddr, len: usize) -> SysResult<()> {
     for va_page in (start_va.align_down()..(start_va + len)).step_by(PAGE_SIZE) {
@@ -123,7 +115,6 @@ pub fn user_ref_mut<T: Sized>(addr: VirtAddr) -> SysResult<Option<&'static mut T
         Ok(Some(&mut *ptr))
     }
 }
-
 
 pub unsafe fn user_ptr<T: Sized>(addr: VirtAddr) -> SysResult<Option<*const T>> {
     if addr.0 == 0 {

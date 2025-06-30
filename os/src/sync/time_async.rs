@@ -4,7 +4,10 @@ use super::{
     SpinNoIrqLock, TimeVal,
 };
 use crate::{
-    signal::{SigCode, SigDetails, SigErr, SigInfo, SigNom}, sync::{once::LateInit, time::ITIMER_REAL}, task::{get_task_by_pid, TaskControlBlock}, utils::{Errno, SysResult}
+    signal::{SigCode, SigDetails, SigErr, SigInfo, SigNom},
+    sync::{once::LateInit, time::ITIMER_REAL},
+    task::{get_task_by_pid, TaskControlBlock},
+    utils::{Errno, SysResult},
 };
 use alloc::{
     collections::binary_heap::BinaryHeap,
@@ -12,7 +15,12 @@ use alloc::{
     vec::Vec,
 };
 use core::{
-    cmp::{Ordering, Reverse}, future::Future, intrinsics::unlikely, pin::Pin, task::{Context, Poll, Waker}, time::Duration
+    cmp::{Ordering, Reverse},
+    future::Future,
+    intrinsics::unlikely,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+    time::Duration,
 };
 use log::info;
 use spin::Lazy;
@@ -21,9 +29,9 @@ use spin::Lazy;
 
 // 时间轮配置 - 针对600ms阈值优化
 // 由于我们的内核时钟中断间隔是10ms，所以将10ms做我一个槽
-const SHORT_TERM_THRESHOLD_MS: u64 = 600;        // 600ms内为短期定时器
-const TIME_WHEEL_SLOTS: usize = 60;              // 60个槽 (600ms / 10ms)
-const TIME_WHEEL_RESOLUTION_MS: u64 = 10;        // 每个槽10ms (60*10=600ms)
+const SHORT_TERM_THRESHOLD_MS: u64 = 600; // 600ms内为短期定时器
+const TIME_WHEEL_SLOTS: usize = 60; // 60个槽 (600ms / 10ms)
+const TIME_WHEEL_RESOLUTION_MS: u64 = 10; // 每个槽10ms (60*10=600ms)
 
 // 定时器句柄，用于取消定时器，这里句柄的值是唯一个
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -31,9 +39,9 @@ pub struct TimerHandle(u64);
 
 // 定时器条目
 struct TimerEntry {
-    expire: Duration,    // 到期时间
-    waker: Option<Waker>,// 唤醒器
-    handle: TimerHandle, // 用于取消的句柄
+    expire: Duration,     // 到期时间
+    waker: Option<Waker>, // 唤醒器
+    handle: TimerHandle,  // 用于取消的句柄
 }
 
 impl TimerEntry {
@@ -41,7 +49,7 @@ impl TimerEntry {
         Self {
             expire,
             waker: Some(waker),
-            handle
+            handle,
         }
     }
 }
@@ -64,7 +72,7 @@ struct TimingWheel {
 // 定时器队列
 pub struct TimerQueue {
     #[cfg(feature = "timewhell")]
-    wheel: SpinNoIrqLock<TimingWheel>,                // 短期定时器（<600ms）
+    wheel: SpinNoIrqLock<TimingWheel>, // 短期定时器（<600ms）
     long_term: SpinNoIrqLock<BinaryHeap<TimerEntry>>, // 长期定时器（最小堆）
     handle_counter: SpinNoIrqLock<u64>,               // 定时器句柄计数器
 }
@@ -88,21 +96,22 @@ impl TimingWheel {
     }
 
     fn calc_slot(&self, target_time: Duration) -> usize {
-        (target_time.saturating_sub(self.current_time).as_millis() as usize) / TIME_WHEEL_RESOLUTION_MS as usize
+        (target_time.saturating_sub(self.current_time).as_millis() as usize)
+            / TIME_WHEEL_RESOLUTION_MS as usize
     }
 
     // 添加定时器到时间轮
     fn add(&mut self, entry: TimerEntry) {
         let expire = entry.expire;
-        
+
         // 计算槽位置（基于相对时间）
         let mut slot_offset = self.calc_slot(expire);
-        
+
         // 确保在时间轮范围内
         if unlikely(slot_offset >= TIME_WHEEL_SLOTS) {
             slot_offset = TIME_WHEEL_SLOTS - 1;
         }
-        
+
         let slot_index = (self.current_slot + slot_offset) % TIME_WHEEL_SLOTS;
         self.slots[slot_index].push(entry);
     }
@@ -110,10 +119,10 @@ impl TimingWheel {
     // 推进时间轮并返回过期定时器
     fn advance_to(&mut self, target_time: Duration) -> Vec<Waker> {
         let mut wake_list = Vec::new();
-        
+
         // 计算需要推进的槽数
         let slots_to_advance = self.calc_slot(target_time);
-        
+
         // 处理跨过的槽
         for _ in 0..=slots_to_advance {
             // 处理当前槽
@@ -121,7 +130,7 @@ impl TimingWheel {
             let mut i = 0;
             while i < slot.len() {
                 let entry = &slot[i];
-                
+
                 // 检查是否过期
                 if entry.expire <= target_time {
                     // 添加到唤醒列表
@@ -131,17 +140,17 @@ impl TimingWheel {
                     i += 1; // 保留未过期元素
                 }
             }
-            
+
             // 移动到下一槽
             self.current_slot = (self.current_slot + 1) % TIME_WHEEL_SLOTS;
             self.current_time += Duration::from_millis(TIME_WHEEL_RESOLUTION_MS);
-            
+
             // 提前退出检查
             if self.current_time > target_time {
                 break;
             }
         }
-        
+
         wake_list
     }
 }
@@ -171,7 +180,7 @@ impl TimerQueue {
         {
             let expire = timer.expire;
             let current_time = time_duration().as_millis() as u64;
-            
+
             // 根据阈值决定放入时间轮还是堆
             if expire.as_millis() as u64 <= current_time + SHORT_TERM_THRESHOLD_MS {
                 // 短期：放入时间轮
@@ -201,11 +210,11 @@ impl TimerQueue {
             }
         }
         drop(wheel);
-        
+
         // 尝试从堆中取消
         let mut long_term = self.long_term.lock();
         let mut temp = Vec::new();
-        
+
         while let Some(entry) = long_term.pop() {
             if entry.handle == handle {
                 // 找到并丢弃
@@ -213,7 +222,7 @@ impl TimerQueue {
             }
             temp.push(entry);
         }
-        
+
         // 将未取消的条目放回堆中
         for entry in temp {
             long_term.push(entry);
@@ -228,11 +237,11 @@ impl TimerQueue {
         // 处理时间轮（获取过期定时器）
         #[cfg(feature = "timewhell")]
         wake_list.extend(self.wheel.lock().advance_to(current_time));
-        
+
         // 处理长期定时器
         {
             let mut long_term = self.long_term.lock();
-            
+
             while let Some(entry) = long_term.peek() {
                 if entry.expire >= current_time {
                     break;
@@ -243,7 +252,7 @@ impl TimerQueue {
                 }
             }
         }
-        
+
         // 唤醒所有任务（在锁外执行）
         for waker in wake_list {
             waker.wake();
@@ -329,7 +338,6 @@ impl PartialEq for TimerEntry {
 }
 
 impl Eq for TimerEntry {}
-
 
 // ======================================
 // pub struct TimerQueue {
@@ -490,7 +498,8 @@ impl<F: Fn() -> bool> Future for ItimerFuture<F> {
         let cur_time = time_duration();
 
         if cur_time >= this.next_expire {
-            if !((this.callback)()) { // 从闭包下面的中拿出来，避免死锁
+            if !((this.callback)()) {
+                // 从闭包下面的中拿出来，避免死锁
                 return Poll::Ready(());
             }
         }
@@ -501,9 +510,14 @@ impl<F: Fn() -> bool> Future for ItimerFuture<F> {
                 // 加入时钟队列
                 let tmp = task.whit_itimers(|itimers| {
                     let real_time = itimers[this.which];
-                    this.next_expire = (Duration::from(real_time.it_interval) + time_duration()).max(this.next_expire);
+                    this.next_expire = (Duration::from(real_time.it_interval) + time_duration())
+                        .max(this.next_expire);
                     // let new_timer = TimerTranc::new(this.next_expire, cx.waker().clone());
-                    let new_timer = TimerEntry::new(this.next_expire, cx.waker().clone(), TIMER_QUEUE.new_handle());
+                    let new_timer = TimerEntry::new(
+                        this.next_expire,
+                        cx.waker().clone(),
+                        TIMER_QUEUE.new_handle(),
+                    );
                     // TIMER_QUEUE.add(new_timer);
                     TIMER_QUEUE.add_timer(new_timer);
                     Poll::Pending

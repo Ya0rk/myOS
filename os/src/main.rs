@@ -137,7 +137,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // test_la_memory_space();
             // use crate::task::test_fd_performance;
             // test_fd_performance();
-            
 
             // unsafe  {
             //     let p = 0x9000_0000_0020_1000 as (*const usize);

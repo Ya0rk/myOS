@@ -25,7 +25,7 @@ pub fn kernel_trap_handler() {
     let stval = stval::read();
     let sepc = sepc::read();
     let cause = scause.cause();
-    let mut result: SysResult<()> = Ok(()); 
+    let mut result: SysResult<()> = Ok(());
     match cause {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             // 5
@@ -50,22 +50,21 @@ pub fn kernel_trap_handler() {
 
                 let task = current_task().unwrap();
                 // task.switch_pgtable();
-                result = task
-                    .with_mut_memory_space(|m| {
-                        // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
-                        m.handle_page_fault(stval.into(), access_type)
-                    });
+                result = task.with_mut_memory_space(|m| {
+                    // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
+                    m.handle_page_fault(stval.into(), access_type)
+                });
                 result.is_err().then(|| {
                     use crate::hal::arch::current_inst_len;
 
                     sepc::write(sepc + current_inst_len());
                 });
-                    // .unwrap_or_else(|e| {
-                    //     use log::error;
+                // .unwrap_or_else(|e| {
+                //     use log::error;
 
-                    //     task.set_zombie();
-                    //     error!("kernel trap:{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
-                    // });
+                //     task.set_zombie();
+                //     error!("kernel trap:{:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
+                // });
             }
             _ => {
                 result = Err(Errno::EINVAL);
@@ -73,13 +72,11 @@ pub fn kernel_trap_handler() {
             }
         },
         _ => {
-
             result = Err(Errno::EINVAL);
             panic!("a trap {:?} from kernel!", scause::read().cause());
         }
     }
     set_ktrap_ret(result);
-    
 }
 
 #[cfg(target_arch = "loongarch64")]

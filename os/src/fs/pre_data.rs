@@ -111,7 +111,6 @@ pub async fn initproc() -> Arc<NormalFile> {
     }
 }
 
-
 pub async fn test_initproc() -> Arc<NormalFile> {
     extern "C" {
         fn test_initproc_start();

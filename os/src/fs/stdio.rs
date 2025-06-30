@@ -23,6 +23,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use async_trait::async_trait;
 use lazy_static::lazy_static;
+use log::error;
 use log::info;
 use spin::Mutex;
 
@@ -43,13 +44,13 @@ impl Stdin {
 }
 
 pub struct Stdout {
-   inode: Arc<TtyInode>, 
+    inode: Arc<TtyInode>,
 }
 
 impl Stdout {
     pub fn new() -> Self {
         Self {
-            inode:TTYINODE.clone(), 
+            inode: TTYINODE.clone(),
         }
     }
 }
@@ -81,8 +82,8 @@ impl FileTrait for Stdin {
         //     count += 1;
         // }
         // Ok(count)
-        let res = {self.inode.read_dirctly(0, user_buf).await};
-        let termios = {self.inode.inner.lock().termios};
+        let res = { self.inode.read_dirctly(0, user_buf).await };
+        let termios = { self.inode.inner.lock().termios };
         if termios.is_icrnl() {
             for i in 0..res {
                 if user_buf[i] == '\r' as u8 {
@@ -94,7 +95,7 @@ impl FileTrait for Stdin {
             self.inode.write_directly(0, &user_buf);
         }
         Ok(res)
-    }   
+    }
     async fn write(&self, _user_buf: &[u8]) -> SysResult<usize> {
         Err(Errno::EINVAL)
         // panic!("Cannot write to stdin!");
@@ -123,11 +124,11 @@ impl FileTrait for Stdin {
 }
 ///
 /// 当前先记录工作行为
-/// 
+///
 /// 将vi 的软件行为进行记录
-/// 
+///
 /// 注意到应当去除这里对底层接口 print 的调用，转用 tty inode 进行实现
-/// 
+///
 #[async_trait]
 impl FileTrait for Stdout {
     fn readable(&self) -> bool {
@@ -186,7 +187,7 @@ impl FileTrait for Stdout {
 }
 
 /// 临时设置，应当迁移到 tty，
-/// 
+///
 /// 这里采用单例模式
 pub struct TtyInode {
     inner: SpinNoIrqLock<TtyInodeInner>,
@@ -195,21 +196,36 @@ pub struct TtyInode {
 impl TtyInode {
     fn new() -> Self {
         Self {
-            inner: SpinNoIrqLock::new(TtyInodeInner::new())
+            inner: SpinNoIrqLock::new(TtyInodeInner::new()),
         }
     }
 }
 
 impl InodeTrait for TtyInode {
     #[doc = " 设置大小"]
-    fn set_size(&self,new_size:usize) -> SysResult {
+    fn set_size(&self, new_size: usize) -> SysResult {
         Ok(())
     }
 
     #[doc = " 绕过cache，直接从磁盘读"]
     #[must_use]
-    #[allow(elided_named_lifetimes,clippy::type_complexity,clippy::type_repetition_in_bounds)]
-    fn read_dirctly<'life0,'life1,'async_trait>(&'life0 self,_offset:usize,_buf: &'life1 mut [u8]) ->  ::core::pin::Pin<Box<dyn ::core::future::Future<Output = usize> + ::core::marker::Send+'async_trait> >where 'life0:'async_trait,'life1:'async_trait,Self:'async_trait {
+    #[allow(
+        elided_named_lifetimes,
+        clippy::type_complexity,
+        clippy::type_repetition_in_bounds
+    )]
+    fn read_dirctly<'life0, 'life1, 'async_trait>(
+        &'life0 self,
+        _offset: usize,
+        _buf: &'life1 mut [u8],
+    ) -> ::core::pin::Pin<
+        Box<dyn ::core::future::Future<Output = usize> + ::core::marker::Send + 'async_trait>,
+    >
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
         // 一次读取多个字符
         let mut c: usize;
         let mut count: usize = 0;
@@ -226,25 +242,37 @@ impl InodeTrait for TtyInode {
 
     #[doc = " 直接写"]
     #[must_use]
-    #[allow(elided_named_lifetimes,clippy::type_complexity,clippy::type_repetition_in_bounds)]
-    fn write_directly<'life0,'life1,'async_trait>(&'life0 self,_offset:usize,_buf: &'life1[u8]) ->  ::core::pin::Pin<Box<dyn ::core::future::Future<Output = usize> + ::core::marker::Send+'async_trait> >where 'life0:'async_trait,'life1:'async_trait,Self:'async_trait {
+    #[allow(
+        elided_named_lifetimes,
+        clippy::type_complexity,
+        clippy::type_repetition_in_bounds
+    )]
+    fn write_directly<'life0, 'life1, 'async_trait>(
+        &'life0 self,
+        _offset: usize,
+        _buf: &'life1 [u8],
+    ) -> ::core::pin::Pin<
+        Box<dyn ::core::future::Future<Output = usize> + ::core::marker::Send + 'async_trait>,
+    >
+    where
+        'life0: 'async_trait,
+        'life1: 'async_trait,
+        Self: 'async_trait,
+    {
         let res = match core::str::from_utf8(_buf) {
             Ok(text) => {
-                print!("{}", text);
+                let filtered: String = text.chars().filter(|&c| c != '\x1b').collect();
+                print!("{}", filtered);
                 text.len()
             }
-                ,
-            Err(e) =>  {
-                0
-            }
+            Err(e) => 0,
         };
         // print!("{}", core::str::from_utf8(_buf).expect("no utf8"));
         Box::pin(async move { res })
     }
 
-
     #[doc = " 获取时间戳，用于修改或访问"]
-    fn get_timestamp(&self) ->  &SpinNoIrqLock<TimeStamp>  {
+    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         todo!()
     }
 
@@ -253,12 +281,12 @@ impl InodeTrait for TtyInode {
     }
 
     #[doc = " get page cache from ext4 file"]
-    fn get_page_cache(&self) -> Option<Arc<PageCache> >  {
+    fn get_page_cache(&self) -> Option<Arc<PageCache>> {
         todo!()
     }
 
     #[doc = " 获得目录项"]
-    fn read_dents(&self) -> Option<Vec<Dirent> >  {
+    fn read_dents(&self) -> Option<Vec<Dirent>> {
         todo!()
     }
 
@@ -325,7 +353,6 @@ impl InodeTrait for TtyInode {
             }
         }
     }
-
 }
 
 lazy_static! {
@@ -348,7 +375,6 @@ impl TtyInodeInner {
         }
     }
 }
-
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
@@ -392,33 +418,29 @@ struct Termios {
 impl Termios {
     fn new() -> Self {
         Self {
-            // IMAXBEL | IUTF8 | IXON | IXANY | ICRNL | BRKINT
-            iflag: 0o66402,
-            // OPOST | ONLCR
-            oflag: 0o5,
-            // HUPCL | CREAD | CSIZE | EXTB
-            cflag: 0o2277,
-            // IEXTEN | ECHOTCL | ECHOKE ECHO | ECHOE | ECHOK | ISIG | ICANON
-            lflag: 0o105073,
+            iflag: 0o60002, // IXON | BRKINT（禁用 ICRNL、IUTF8）
+            oflag: 0,       // 禁用 OPOST 和 ONLCR
+            cflag: 0o1200,  // CREAD | CS8
+            lflag: 0o0001,  // 仅 ISIG，禁用 ICANON、ECHO、ECHOE、ECHOK、ECHOCTL、IEXTEN
             line: 0,
             cc: [
-                3,   // VINTR Ctrl-C
+                3,   // VINTR (Ctrl-C)
                 28,  // VQUIT
                 127, // VERASE
                 21,  // VKILL
-                4,   // VEOF Ctrl-D
+                4,   // VEOF (Ctrl-D)
                 0,   // VTIME
                 1,   // VMIN
                 0,   // VSWTC
                 17,  // VSTART
                 19,  // VSTOP
-                26,  // VSUSP Ctrl-Z
-                255, // VEOL
+                26,  // VSUSP (Ctrl-Z)
+                0,   // VEOL
                 18,  // VREPAINT
                 15,  // VDISCARD
                 23,  // VWERASE
                 22,  // VLNEXT
-                255, // VEOL2
+                0,   // VEOL2
                 0, 0,
             ],
         }
@@ -434,7 +456,6 @@ impl Termios {
         self.lflag & ECHO != 0
     }
 }
-
 
 /// Defined in <asm-generic/ioctls.h>
 #[derive(Debug)]
@@ -480,7 +501,6 @@ enum TtyIoctlCmd {
     TIOCSWINSZ = 0x5414,
     UNSUPPORT,
 }
-
 
 bitflags! {
     #[derive(Debug, Copy, Clone, PartialEq, Eq)]

@@ -90,6 +90,6 @@ const ENV: &[&str] = &[
                 "PATH=/bin:/musl/basic:/musl/ltp:/musl:/\0",
                 "HOME=/\0",
                 "LD_LIBRARY_PATH=/lib\0",
-                "TERM=screen\0",
+                "TERM=xterm\0",
                 "LTPROOT=Ya0rk\0",
             ];

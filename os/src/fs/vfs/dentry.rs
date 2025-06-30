@@ -17,10 +17,12 @@ use crate::{
     fs::{
         ffi::InodeType, mkdir, open, path, procfs::PROCFS_SUPER_BLOCK, root_inode, AbsPath,
         FileClass, FileTrait, OpenFlags,
-    }, sync::{NoIrqLock, SpinNoIrqLock}, utils::{
+    },
+    sync::{NoIrqLock, SpinNoIrqLock},
+    utils::{
         cache::{Cache, CacheStatus},
         Errno, SysResult,
-    }
+    },
 };
 use alloc::sync::{Arc, Weak};
 use core::hash::{Hash, Hasher};
@@ -81,7 +83,6 @@ lazy_static! {
 }
 
 impl CacheStatus for Arc<Dentry> {
-
     fn is_valid(&self) -> bool {
         !self.is_negtive()
     }
@@ -184,7 +185,8 @@ impl Dentry {
         Some(parent)
     }
 
-    pub fn get_abs_path(&self) -> String { // 性能瓶颈有点慢， 可以在new_bare时就传入绝对路径设置好，file_name可以通过绝对路径获得，反过来就很麻烦
+    pub fn get_abs_path(&self) -> String {
+        // 性能瓶颈有点慢， 可以在new_bare时就传入绝对路径设置好，file_name可以通过绝对路径获得，反过来就很麻烦
         let name = self.name.read();
         {
             let read = self.path.read();
@@ -219,10 +221,12 @@ impl Dentry {
             }
             DentryStatus::Negtive => return None,
         };
-        if pattern.ends_with("..") { // 有点多于，这里的路径都是系统调用传来的，.. 和 . 已经处理了
+        if pattern.ends_with("..") {
+            // 有点多于，这里的路径都是系统调用传来的，.. 和 . 已经处理了
             info!("return parent");
             return self.parent();
-        } else if pattern.ends_with("/") || pattern.ends_with(".") || pattern == "" {  // 多余判断，并且好像pattern不会是/,因为上层是用/分割
+        } else if pattern.ends_with("/") || pattern.ends_with(".") || pattern == "" {
+            // 多余判断，并且好像pattern不会是/,因为上层是用/分割
             // info!("return name is {}", self.name.read());
             return Some(self.clone());
         }
@@ -390,7 +394,7 @@ impl Dentry {
         info!("[get_dentry_from_path] {}", path);
         {
             if let Some(dentry) = DENTRY_CACHE.get(path) {
-                return Ok(dentry)
+                return Ok(dentry);
             }
         }
         if !path.starts_with('/') {
@@ -439,10 +443,8 @@ impl Dentry {
             return Err(Errno::ENOENT);
         }
 
-
         DENTRY_CACHE.insert(&String::from(path), dentry_now.clone());
         Ok(dentry_now)
-        
     }
 }
 

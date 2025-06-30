@@ -1,5 +1,9 @@
 use crate::{
-    fs::{ffi::RenameFlags, stdio::{TtyInode, TTYINODE}, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, Stdout, S_IFCHR},
+    fs::{
+        ffi::RenameFlags,
+        stdio::{TtyInode, TTYINODE},
+        Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, Stdout, S_IFCHR,
+    },
     mm::{page::Page, UserBuffer},
     sync::{SpinNoIrqLock, TimeStamp},
     task::get_init_proc,

@@ -736,8 +736,7 @@ impl MemorySpace {
                             if area.mmap_flags.contains(MmapFlags::MAP_SHARED) {
                                 new_area.pages.insert(vpn, page.clone());
                                 (pte.flags(), page.ppn())
-                            }
-                            else {
+                            } else {
                                 // info!("[from_user_lazily] make pte {:#x} COW, at va {:#x}", pte.bits, vpn.0 << 12);
                                 let mut new_flags = pte.flags() | PTEFlags::COW;
                                 new_flags.remove(PTEFlags::W);

@@ -24,7 +24,6 @@ use crate::{
 use super::ffi::ShmOp;
 
 pub fn sys_brk(new_brk: *const u8) -> SysResult<usize> {
-
     info!("[sys_brk] new_brk: {:#x}", new_brk as usize);
 
     // #[cfg(feature = "test")]
@@ -40,7 +39,7 @@ pub fn sys_brk(new_brk: *const u8) -> SysResult<usize> {
     //         info!("[sys_brk] NO TEST");
     //     }
     // }
-    
+
     let task = current_task().unwrap();
     Ok(task
         .with_mut_memory_space(|m| m.reset_heap_break((new_brk as usize).into()))
@@ -60,7 +59,7 @@ pub fn sys_mmap(
     let prot = MmapProt::from_bits_truncate(prot);
     let perm = MapPerm::from(prot);
     info!("[sys_mmap] addr:{addr:#x}, length:{length:#x}, prot:{prot:?}, flags:{flags:?}, fd:{fd}, offset:{offset:#x}");
-    
+
     if unlikely(length == 0 || (addr & PAGE_MASK != 0) || (offset & PAGE_MASK != 0)) {
         info!("aaaaa");
         return Err(Errno::EINVAL);
@@ -118,7 +117,10 @@ pub fn sys_mmap(
 }
 
 pub fn sys_munmap(addr: *const u8, length: usize) -> SysResult<usize> {
-    info!("[sys_munmap] addr:{:#x}, length:{:#x}", addr as usize, length);
+    info!(
+        "[sys_munmap] addr:{:#x}, length:{:#x}",
+        addr as usize, length
+    );
     let addr = addr as usize;
     if unlikely(!is_aligned_to_page(addr)) {
         return Err(Errno::EINVAL);

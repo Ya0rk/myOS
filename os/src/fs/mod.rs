@@ -129,9 +129,9 @@ pub async fn create_init_files() -> SysResult {
         "/etc/localtime".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     );
-    if let Ok(FileClass::File(file) ) = open(
+    if let Ok(FileClass::File(file)) = open(
         "/ltp_testcode_ours.sh".into(),
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
         let buf = ltp::LTP_testcode.as_bytes();
         file.write(&buf).await;

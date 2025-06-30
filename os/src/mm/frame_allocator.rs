@@ -97,7 +97,6 @@ impl FrameAllocator for StackFrameAllocator {
     fn frame_free(&self) -> usize {
         self.end - self.current + self.recycled.len()
     }
-    
 }
 
 pub type FrameAllocatorImpl = StackFrameAllocator;
