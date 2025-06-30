@@ -1,6 +1,6 @@
 # Del0n1x
 
-![](./report/iamge/school.jpg)
+![](./report/image/school.jpg)
 
 ## 项目简介
 
@@ -19,7 +19,7 @@ Del0n1x 是一个使用 Rust 语言编写的同时适配 RISC-V64 和 LoongArch6
 | 网络模块 | 初步完成网络模块相关代码，由于时间原因还没有适配通过网络测例    |
 
 
-![](./整体架构图.png)
+![](./report/image/整体架构图.png)
 
 
 ## 目录架构
