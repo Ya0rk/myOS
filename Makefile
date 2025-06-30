@@ -16,7 +16,7 @@ build_docker:
 run:
 	docker exec -it myos /bin/bash
 
-all:
+all: extract
 	cp ./liblwext4-loongarch64.a ./vendor/lwext4_rust/c/lwext4/
 	cp ./liblwext4-riscv64.a ./vendor/lwext4_rust/c/lwext4/
 	cd ./os/ && make clean && make eval ARCH=riscv64 && make eval ARCH=loongarch64
@@ -29,4 +29,8 @@ doc:
 	make -C ./doc
 	cp ./doc/main.pdf ./Del0n1x初赛文档.pdf
 
-.PHONY: all clean doc docker build_docker run
+extract:
+	tar -xvzf vendor.tar.gz 
+
+
+.PHONY: all clean doc docker build_docker run extract 
