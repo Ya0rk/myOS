@@ -1,7 +1,5 @@
-mod ffi;
+
 mod heap_allocator;
-// mod userbuffer;
-// mod map_area;
 pub mod address;
 pub mod memory_space;
 pub mod page;
@@ -16,7 +14,6 @@ use spin::Mutex;
 pub use address::{
     Direct, KernelAddr, PageNum, Paged, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum,
 };
-pub use ffi::{MapPermission, MapType};
 use page_table::{enable_kernel_pgtable, KERNEL_PAGE_TABLE};
 // pub use userbuffer::UserBuffer;
 // pub use map_area::MapArea;

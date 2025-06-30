@@ -16,7 +16,7 @@ use crate::{
             MemorySpace, MmapFlags, MmapProt,
         },
         user_ptr::user_ref_mut,
-        MapPermission, VirtAddr,
+        VirtAddr,
     },
     utils::{Errno, SysResult},
 };
