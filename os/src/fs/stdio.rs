@@ -7,6 +7,7 @@ use crate::fs::page_cache::PageCache;
 use crate::fs::Dirent;
 use crate::fs::Page;
 use crate::hal::arch::console_getchar;
+use crate::hal::arch::console_putchar;
 use crate::mm::user_ptr::{user_mut_ptr, user_ref, user_ref_mut};
 
 use crate::sync::{SpinNoIrqLock, TimeStamp};
@@ -179,21 +180,34 @@ impl InodeTrait for TtyInode {
     }
 
     async fn write_directly(&self, _offset: usize, buf: &[u8]) -> usize {
-        match core::str::from_utf8(buf) {
-            Ok(text) => {
-                let filtered: String = text.chars().filter(|&c| c != '\x1b').collect();
-                print!("{}", filtered);
-                text.len()
+        let termios = self.inner.lock().termios;
+
+        // 1. 检查总开关 OPOST
+        if termios.is_opost() {
+            // 输出后处理已开启
+            for &byte in buf {
+                // 2. 检查具体的处理标志，例如 ONLCR
+                if termios.is_onlcr() && byte == b'\n' {
+                    console_putchar(b'\r' as usize);
+                    console_putchar(b'\n' as usize);
+                } else {
+                    // 在这里可以添加对 OCRNL, ONOCR 等其他标志的处理
+                    // 为了简化，我们暂时只处理 ONLCR
+                    console_putchar(byte as usize);
+                }
             }
-            Err(_) => {
-                // For non-utf8 data, print what we can lossily.
-                let lossy_string = String::from_utf8_lossy(buf);
-                let filtered: String = lossy_string.chars().filter(|&c| c != '\x1b').collect();
-                // print!("{}", lossy_string);
-                print!("{}", filtered);
-                lossy_string.len()
+        } else {
+            // 输出后处理被关闭 (vi 的情况)
+            // 直接、原始地输出所有字节
+            for &byte in buf {
+                
+                console_putchar(byte as usize);
             }
         }
+
+        // write 系统调用通常返回成功消耗的输入缓冲区字节数
+        // 在这个实现中，我们总是消耗掉所有字节
+        buf.len()
     }
     
 
@@ -208,8 +222,8 @@ impl InodeTrait for TtyInode {
                 TtyIoctlCmd::TCGETS | TtyIoctlCmd::TCGETA => {
                     debug_point!("he wanto get ================== TCGETS");
                     let mut user_termios_ptr = user_mut_ptr(arg.into())?.ok_or(Errno::EFAULT)?;
+                    info!("get from \n{:?} to \n{:?}", self.inner.lock().termios, *user_termios_ptr);
                     *user_termios_ptr = self.inner.lock().termios.clone();
-                    info!("get from {:?} to {:?}", self.inner.lock().termios, user_termios_ptr);
                     Ok(0)
                 }
                 TtyIoctlCmd::TIOCGPGRP => {
@@ -233,9 +247,8 @@ impl InodeTrait for TtyInode {
                 TtyIoctlCmd::TCSETS | TtyIoctlCmd::TCSETSW | TtyIoctlCmd::TCSETSF => {
                     debug_point!("he want to set ================== TCSETS");
                     let user_termios_ref: &Termios = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
-                    // info!("he want to set {:?}", user_termios_ref);
+                    log::info!("[TtyFile::ioctl] set termios \n{:?} from \n{:?}", user_termios_ref, self.inner.lock().termios);
                     self.inner.lock().termios = user_termios_ref.clone();
-                    log::info!("[TtyFile::ioctl] set termios {:?} to {:?}", user_termios_ref, self.inner.lock().termios);
                     Ok(0)
                 }
                 TtyIoctlCmd::TIOCSPGRP => {
@@ -313,7 +326,7 @@ impl WinSize {
 }
 
 /// Terminal I/O settings, defined in `<asm-generic/termbits.h>`
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 #[repr(C)]
 struct Termios {
     pub iflag: u32,
@@ -322,6 +335,19 @@ struct Termios {
     pub lflag: u32,
     pub line: u8,
     pub cc: [u8; 19],
+}
+
+impl core::fmt::Debug for Termios {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Termios")
+            .field("iflag", &format_args!("{:#o}", self.iflag)) // 打印八进制
+            .field("oflag", &format_args!("{:#o}", self.oflag)) // 打印八进制
+            .field("cflag", &format_args!("{:#o}", self.cflag)) // 打印八进制
+            .field("lflag", &format_args!("{:#o}", self.lflag)) // 打印八进制
+            .field("line", &self.line)
+            .field("cc", &self.cc)
+            .finish()
+    }
 }
 
 impl Termios {
@@ -367,6 +393,16 @@ impl Termios {
         const ECHO: u32 = 0o000010;
         self.lflag & ECHO != 0
     }
+
+    fn is_onlcr(&self) -> bool {
+        const ONLCR: u32 = 0o0000004;
+        self.oflag & ONLCR != 0
+    }
+
+    fn is_opost(&self) -> bool {
+        const OPOST: u32 = 0o0000001;
+        self.oflag & OPOST != 0
+    }
 }
 
 /// TTY ioctl commands, defined in `<asm-generic/ioctls.h>`
@@ -411,23 +447,6 @@ impl TryFrom<usize> for TtyIoctlCmd {
     }
 }
 
-// C language definitions for terminal I/O input flags.
-// #define IGNBRK 0o0000001  // Ignore break condition.
-// #define BRKINT 0o0000002  // Signal interrupt on break.
-// #define IGNPAR 0o0000004  // Ignore characters with parity errors.
-// #define PARMRK 0o0000010  // Mark parity and framing errors.
-// #define INPCK 0o0000020   // Enable input parity check.
-// #define ISTRIP 0o0000040  // Strip 8th bit off characters.
-// #define INLCR 0o0000100   // Map NL to CR on input.
-// #define IGNCR 0o0000200   // Ignore CR.
-// #define ICRNL 0o0000400   // Map CR to NL on input.
-// #define IUCLC 0o0001000   // Map uppercase characters to lowercase on input (not in POSIX).
-// #define IXON 0o0002000    // Enable start/stop output control.
-// #define IXANY 0o0004000   // Enable any character to restart output.
-// #define IXOFF 0o0010000   // Enable start/stop input control.
-// #define IMAXBEL 0o0020000 // Ring bell when input queue is full (not in POSIX).
-// #define IUTF8 0o0040000   // Input is UTF8 (not in POSIX).
-
 bitflags! {
     /// Input flags for terminal I/O settings.
     struct IFlag: u32 {
@@ -446,5 +465,164 @@ bitflags! {
         const IXOFF = 0o0010000;  // Enable start/stop input control.
         const IMAXBEL = 0o0020000;// Ring bell when input queue is full (not in POSIX).
         const IUTF8 = 0o0040000;  // Input is UTF8 (not in POSIX).
+    }
+}
+
+bitflags! {
+    /// Output flags for terminal I/O settings.
+    struct OFlag: u32 {
+        const OPOST = 0o0000001;   // Post-process output.
+        const OLCUC = 0o0000002;   // Map lowercase characters to uppercase on output (not in POSIX).
+        const ONLCR = 0o0000004;   // Map NL to CR-NL on output.
+        const OCRNL = 0o0000010;   // Map CR to NL on output.
+        const ONOCR = 0o0000020;   // No CR output at column 0.
+        const ONLRET = 0o0000040;  // NL performs CR function.
+        const OFILL = 0o0000100;   // Use fill characters for delay.
+        const OFDEL = 0o0000200;   // Fill is DEL.
+        const NLDLY = 0o0000400;   // Select newline delays.
+        const NL0 = 0o0000000;     // Newline type 0.
+        const NL1 = 0o0000400;     // Newline type 1.
+        const CRDLY = 0o0003000;   // Select carriage-return delays.
+        const CR0 = 0o0000000;     // Carriage-return delay type 0.
+        const CR1 = 0o0001000;     // Carriage-return delay type 1.
+        const CR2 = 0o0002000;     // Carriage-return delay type 2.
+        const CR3 = 0o0003000;     // Carriage-return delay type 3.
+        const TABDLY = 0o0014000;  // Select horizontal-tab delays.
+        const TAB0 = 0o0000000;    // Horizontal-tab delay type 0.
+        const TAB1 = 0o0004000;    // Horizontal-tab delay type 1.
+        const TAB2 = 0o0010000;    // Horizontal-tab delay type 2.
+        const TAB3 = 0o0014000;    // Expand tabs to spaces.
+        const BSDLY = 0o0020000;   // Select backspace delays.
+        const BS0 = 0o0000000;     // Backspace-delay type 0.
+        const BS1 = 0o0020000;     // Backspace-delay type 1.
+        const FFDLY = 0o0100000;   // Select form-feed delays.
+        const FF0 = 0o0000000;     // Form-feed delay type 0.
+        const FF1 = 0o0100000;     // Form-feed delay type 1.
+        const VTDLY = 0o0040000;   // Select vertical-tab delays.
+        const VT0 = 0o0000000;     // Vertical-tab delay type 0.
+        const VT1 = 0o0040000;     // Vertical-tab delay type 1.
+    }
+}
+
+bitflags! {
+    /// Control flags for terminal I/O settings.
+    struct CFlag: u32 {
+        const CSIZE = 0o0000060;   // Character size mask.
+        const CS5 = 0o0000000;     // 5-bit characters.
+        const CS6 = 0o0000020;     // 6-bit characters.
+        const CS7 = 0o0000040;     // 7-bit characters.
+        const CS8 = 0o0000060;     // 8-bit characters.
+        const CSTOPB = 0o0000100;  // Send two stop bits, else one.
+        const CREAD = 0o0000200;   // Enable receiver.
+        const PARENB = 0o0000400;  // Enable parity generation and checking.
+        const PARODD = 0o0001000;  // Use odd parity instead of even.
+        const HUPCL = 0o0002000;   // Hang up on last close.
+        const CLOCAL = 0o0004000;  // Ignore modem control lines.
+    }
+}
+
+bitflags! {
+    /// Local flags for terminal I/O settings.
+    struct LFlag: u32 {
+        const ISIG = 0o0000001;    // Enable signals.
+        const ICANON = 0o0000002;  // Canonical input (erase and kill processing).
+        const ECHO = 0o0000010;    // Enable echo.
+        const ECHOE = 0o0000020;   // Echo erase character as error-correcting backspace.
+        const ECHOK = 0o0000040;   // Echo KILL.
+        const ECHONL = 0o0000100;  // Echo NL.
+        const NOFLSH = 0o0000200;  // Disable flush after interrupt or quit.
+        const TOSTOP = 0o0000400;  // Send SIGTTOU for background output.
+        const ECHOCTL = 0o0001000; // Echo control characters as ^X (not in POSIX).
+        const ECHOPRT = 0o0002000; // Echo characters as they are being erased (not in POSIX).
+        const ECHOKE = 0o0004000;  // Echo KILL by erasing each character on the line (not in POSIX).
+        const FLUSHO = 0o0010000;  // Output is being flushed (not in POSIX).
+        const PENDIN = 0o0040000;  // Reprint all characters in the input queue when the next character is read (not in POSIX).
+        const IEXTEN = 0o0100000;  // Enable implementation-defined input processing.
+        const EXTPROC = 0o0200000; // Enable external processing (not in POSIX).
+    }
+}
+
+use core::fmt;
+
+impl fmt::Display for IFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut flags = Vec::new();
+        if self.contains(IFlag::IGNBRK) { flags.push("IGNBRK"); }
+        if self.contains(IFlag::BRKINT) { flags.push("BRKINT"); }
+        if self.contains(IFlag::IGNPAR) { flags.push("IGNPAR"); }
+        if self.contains(IFlag::PARMRK) { flags.push("PARMRK"); }
+        if self.contains(IFlag::INPCK) { flags.push("INPCK"); }
+        if self.contains(IFlag::ISTRIP) { flags.push("ISTRIP"); }
+        if self.contains(IFlag::INLCR) { flags.push("INLCR"); }
+        if self.contains(IFlag::IGNCR) { flags.push("IGNCR"); }
+        if self.contains(IFlag::ICRNL) { flags.push("ICRNL"); }
+        if self.contains(IFlag::IUCLC) { flags.push("IUCLC"); }
+        if self.contains(IFlag::IXON) { flags.push("IXON"); }
+        if self.contains(IFlag::IXANY) { flags.push("IXANY"); }
+        if self.contains(IFlag::IXOFF) { flags.push("IXOFF"); }
+        if self.contains(IFlag::IMAXBEL) { flags.push("IMAXBEL"); }
+        if self.contains(IFlag::IUTF8) { flags.push("IUTF8"); }
+        write!(f, "{}", flags.join(" | "))
+    }
+}
+
+impl fmt::Display for OFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut flags = Vec::new();
+        if self.contains(OFlag::OPOST) { flags.push("OPOST"); }
+        if self.contains(OFlag::OLCUC) { flags.push("OLCUC"); }
+        if self.contains(OFlag::ONLCR) { flags.push("ONLCR"); }
+        if self.contains(OFlag::OCRNL) { flags.push("OCRNL"); }
+        if self.contains(OFlag::ONOCR) { flags.push("ONOCR"); }
+        if self.contains(OFlag::ONLRET) { flags.push("ONLRET"); }
+        if self.contains(OFlag::OFILL) { flags.push("OFILL"); }
+        if self.contains(OFlag::OFDEL) { flags.push("OFDEL"); }
+        if self.contains(OFlag::NLDLY) { flags.push("NLDLY"); }
+        if self.contains(OFlag::CRDLY) { flags.push("CRDLY"); }
+        if self.contains(OFlag::TABDLY) { flags.push("TABDLY"); }
+        if self.contains(OFlag::BSDLY) { flags.push("BSDLY"); }
+        if self.contains(OFlag::FFDLY) { flags.push("FFDLY"); }
+        if self.contains(OFlag::VTDLY) { flags.push("VTDLY"); }
+        write!(f, "{}", flags.join(" | "))
+    }
+}
+
+impl fmt::Display for CFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut flags = Vec::new();
+        if self.contains(CFlag::CSIZE) { flags.push("CSIZE"); }
+        if self.contains(CFlag::CS5) { flags.push("CS5"); }
+        if self.contains(CFlag::CS6) { flags.push("CS6"); }
+        if self.contains(CFlag::CS7) { flags.push("CS7"); }
+        if self.contains(CFlag::CS8) { flags.push("CS8"); }
+        if self.contains(CFlag::CSTOPB) { flags.push("CSTOPB"); }
+        if self.contains(CFlag::CREAD) { flags.push("CREAD"); }
+        if self.contains(CFlag::PARENB) { flags.push("PARENB"); }
+        if self.contains(CFlag::PARODD) { flags.push("PARODD"); }
+        if self.contains(CFlag::HUPCL) { flags.push("HUPCL"); }
+        if self.contains(CFlag::CLOCAL) { flags.push("CLOCAL"); }
+        write!(f, "{}", flags.join(" | "))
+    }
+}
+
+impl fmt::Display for LFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut flags = Vec::new();
+        if self.contains(LFlag::ISIG) { flags.push("ISIG"); }
+        if self.contains(LFlag::ICANON) { flags.push("ICANON"); }
+        if self.contains(LFlag::ECHO) { flags.push("ECHO"); }
+        if self.contains(LFlag::ECHOE) { flags.push("ECHOE"); }
+        if self.contains(LFlag::ECHOK) { flags.push("ECHOK"); }
+        if self.contains(LFlag::ECHONL) { flags.push("ECHONL"); }
+        if self.contains(LFlag::NOFLSH) { flags.push("NOFLSH"); }
+        if self.contains(LFlag::TOSTOP) { flags.push("TOSTOP"); }
+        if self.contains(LFlag::ECHOCTL) { flags.push("ECHOCTL"); }
+        if self.contains(LFlag::ECHOPRT) { flags.push("ECHOPRT"); }
+        if self.contains(LFlag::ECHOKE) { flags.push("ECHOKE"); }
+        if self.contains(LFlag::FLUSHO) { flags.push("FLUSHO"); }
+        if self.contains(LFlag::PENDIN) { flags.push("PENDIN"); }
+        if self.contains(LFlag::IEXTEN) { flags.push("IEXTEN"); }
+        if self.contains(LFlag::EXTPROC) { flags.push("EXTPROC"); }
+        write!(f, "{}", flags.join(" | "))
     }
 }

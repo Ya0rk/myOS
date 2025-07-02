@@ -1,7 +1,7 @@
 use crate::{
     fs::{
         ffi::RenameFlags,
-        stdio::{TtyInode, TTYINODE},
+        stdio::{TtyInode, TTY_INODE},
         Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, Stdout, S_IFCHR,
     },
     mm::{page::Page, UserBuffer},
@@ -24,7 +24,7 @@ pub struct DevTty {
 impl DevTty {
     pub fn new() -> Self {
         Self {
-            inode: TTYINODE.clone(),
+            inode: TTY_INODE.clone(),
         }
     }
 }
