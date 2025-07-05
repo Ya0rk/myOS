@@ -371,10 +371,10 @@ impl WinSize {
 #[derive(Clone, Copy)]
 #[repr(C)]
 struct Termios {
-    pub iflag: u32,
-    pub oflag: u32,
-    pub cflag: u32,
-    pub lflag: u32,
+    pub iflag: IFlag,
+    pub oflag: OFlag,
+    pub cflag: CFlag,
+    pub lflag: LFlag,
     pub line: u8,
     pub cc: [u8; 19],
 }
@@ -382,10 +382,10 @@ struct Termios {
 impl core::fmt::Debug for Termios {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Termios")
-            .field("iflag", &format_args!("{:#o}", self.iflag)) // 打印八进制
-            .field("oflag", &format_args!("{:#o}", self.oflag)) // 打印八进制
-            .field("cflag", &format_args!("{:#o}", self.cflag)) // 打印八进制
-            .field("lflag", &format_args!("{:#o}", self.lflag)) // 打印八进制
+            .field("iflag", &format_args!("{}", self.iflag)) // 打印八进制
+            .field("oflag", &format_args!("{}", self.oflag)) // 打印八进制
+            .field("cflag", &format_args!("{}", self.cflag)) // 打印八进制
+            .field("lflag", &format_args!("{}", self.lflag)) // 打印八进制
             .field("line", &self.line)
             .field("cc", &self.cc)
             .finish()
@@ -396,10 +396,16 @@ impl Termios {
     /// Provides a new `Termios` struct with sane default values.
     fn new() -> Self {
         Self {
-            iflag: 0o66402,   // IMAXBEL | IUTF8 | IXON | IXANY | ICRNL | BRKINT
-            oflag: 0o000005,  // OPOST | ONLCR
-            cflag: 0o002277,  // CREAD | CS8 | HUPCL
-            lflag: 0o0105073, // ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE
+            iflag: IFlag::IMAXBEL | IFlag::IUTF8 | IFlag::IXON | IFlag::ICRNL | IFlag::BRKINT, //0o66402,   // IMAXBEL | IUTF8 | IXON | IXANY | ICRNL | BRKINT
+            oflag: OFlag::OPOST | OFlag::ONLCR, //0o000005,  // OPOST | ONLCR
+            cflag: CFlag::CREAD | CFlag::CS8 | CFlag::HUPCL, // 0o002277,                    // CREAD | CS8 | HUPCL
+            lflag: LFlag::ISIG
+                | LFlag::ICANON
+                | LFlag::ECHO
+                | LFlag::ECHOE
+                | LFlag::ECHOK
+                | LFlag::ECHOKE
+                | LFlag::ECHOCTL, // 0o0105073, // ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE
             line: 0,
             cc: [
                 3,   // 0: VINTR (Ctrl-C)
@@ -426,24 +432,28 @@ impl Termios {
 
     /// Check if ICRNL (translate carriage return to newline on input) is set.
     fn is_icrnl(&self) -> bool {
-        const ICRNL: u32 = 0o000400;
-        self.iflag & ICRNL != 0
+        // const ICRNL: u32 = 0o000400;
+        // self.iflag & ICRNL != 0
+        self.iflag.contains(IFlag::ICRNL)
     }
 
     /// Check if ECHO (echo input characters) is set.
     fn is_echo(&self) -> bool {
-        const ECHO: u32 = 0o000010;
-        self.lflag & ECHO != 0
+        // const ECHO: u32 = 0o000010;
+        // self.lflag & ECHO != 0
+        self.lflag.contains(LFlag::ECHO)
     }
 
     fn is_onlcr(&self) -> bool {
-        const ONLCR: u32 = 0o0000004;
-        self.oflag & ONLCR != 0
+        // const ONLCR: u32 = 0o0000004;
+        // self.oflag & ONLCR != 0
+        self.oflag.contains(OFlag::ONLCR)
     }
 
     fn is_opost(&self) -> bool {
-        const OPOST: u32 = 0o0000001;
-        self.oflag & OPOST != 0
+        // const OPOST: u32 = 0o0000001;
+        // self.oflag & OPOST != 0
+        self.oflag.contains(OFlag::OPOST)
     }
 }
 
@@ -491,6 +501,7 @@ impl TryFrom<usize> for TtyIoctlCmd {
 
 bitflags! {
     /// Input flags for terminal I/O settings.
+    #[derive(Clone, Copy)]
     struct IFlag: u32 {
         const IGNBRK = 0o0000001; // Ignore break condition.
         const BRKINT = 0o0000002; // Signal interrupt on break.
@@ -512,6 +523,7 @@ bitflags! {
 
 bitflags! {
     /// Output flags for terminal I/O settings.
+    #[derive(Clone, Copy)]
     struct OFlag: u32 {
         const OPOST = 0o0000001;   // Post-process output.
         const OLCUC = 0o0000002;   // Map lowercase characters to uppercase on output (not in POSIX).
@@ -548,6 +560,7 @@ bitflags! {
 
 bitflags! {
     /// Control flags for terminal I/O settings.
+    #[derive(Clone, Copy)]
     struct CFlag: u32 {
         const CSIZE = 0o0000060;   // Character size mask.
         const CS5 = 0o0000000;     // 5-bit characters.
@@ -565,6 +578,7 @@ bitflags! {
 
 bitflags! {
     /// Local flags for terminal I/O settings.
+    #[derive(Clone, Copy)]
     struct LFlag: u32 {
         const ISIG = 0o0000001;    // Enable signals.
         const ICANON = 0o0000002;  // Canonical input (erase and kill processing).
