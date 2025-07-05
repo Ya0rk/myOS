@@ -73,7 +73,7 @@ pub fn sfence_vma_vaddr(vaddr: usize) {
 }
 
 pub fn console_putchar(c: usize) {
-    sbi::32 (c);
+    sbi::console_putchar(c);
 }
 
 pub fn console_getchar() -> usize {

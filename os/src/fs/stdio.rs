@@ -45,12 +45,24 @@ impl Stdin {
 
 #[async_trait]
 impl FileTrait for Stdin {
-    fn readable(&self) -> bool { true }
-    fn writable(&self) -> bool { false }
-    fn executable(&self) -> bool { false }
-    fn get_flags(&self) -> OpenFlags { OpenFlags::O_RDONLY }
-    fn is_dir(&self) -> bool { false }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> { self.inode.clone() }
+    fn readable(&self) -> bool {
+        true
+    }
+    fn writable(&self) -> bool {
+        false
+    }
+    fn executable(&self) -> bool {
+        false
+    }
+    fn get_flags(&self) -> OpenFlags {
+        OpenFlags::O_RDONLY
+    }
+    fn is_dir(&self) -> bool {
+        false
+    }
+    fn get_inode(&self) -> Arc<dyn InodeTrait> {
+        self.inode.clone()
+    }
 
     async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
         if user_buf.is_empty() {
@@ -77,7 +89,9 @@ impl FileTrait for Stdin {
         Err(Errno::EPERM)
     }
 
-    async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> { None }
+    async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> {
+        None
+    }
 }
 
 // --- Stdout ---
@@ -96,12 +110,24 @@ impl Stdout {
 
 #[async_trait]
 impl FileTrait for Stdout {
-    fn readable(&self) -> bool { false }
-    fn writable(&self) -> bool { true }
-    fn executable(&self) -> bool { false }
-    fn get_flags(&self) -> OpenFlags { OpenFlags::O_WRONLY }
-    fn is_dir(&self) -> bool { false }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> { self.inode.clone() }
+    fn readable(&self) -> bool {
+        false
+    }
+    fn writable(&self) -> bool {
+        true
+    }
+    fn executable(&self) -> bool {
+        false
+    }
+    fn get_flags(&self) -> OpenFlags {
+        OpenFlags::O_WRONLY
+    }
+    fn is_dir(&self) -> bool {
+        false
+    }
+    fn get_inode(&self) -> Arc<dyn InodeTrait> {
+        self.inode.clone()
+    }
 
     async fn read(&self, _user_buf: &mut [u8]) -> SysResult<usize> {
         Err(Errno::EINVAL)
@@ -116,7 +142,7 @@ impl FileTrait for Stdout {
         // Stdout is a special file, fstat can be a no-op returning Ok.
         Ok(())
     }
-    
+
     fn get_name(&self) -> SysResult<String> {
         Ok("stdout".into())
     }
@@ -124,10 +150,11 @@ impl FileTrait for Stdout {
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         Err(Errno::EPERM)
     }
-    
-    async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> { None }
-}
 
+    async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> {
+        None
+    }
+}
 
 // --- TtyInode ---
 
@@ -153,28 +180,28 @@ impl InodeTrait for TtyInode {
         let vmin = self.inner.lock().termios.cc[5] as usize; // VMIN
 
         // while count < buf.len() {
-            let mut ch = console_getchar() as u8;
+        let mut ch = console_getchar() as u8;
 
-            let termios = self.inner.lock().termios;
+        let termios = self.inner.lock().termios;
 
-            // Handle ICRNL (translate carriage return to newline)
-            if termios.is_icrnl() && ch == b'\r' {
-                ch = b'\n';
-            }
+        // Handle ICRNL (translate carriage return to newline)
+        if termios.is_icrnl() && ch == b'\r' {
+            ch = b'\n';
+        }
 
-            // Handle ECHO
-            if termios.is_echo() {
-                // Here we directly print, a more complex driver might queue this output
-                print!("{}", ch as char);
-            }
+        // Handle ECHO
+        if termios.is_echo() {
+            // Here we directly print, a more complex driver might queue this output
+            print!("{}", ch as char);
+        }
 
-            buf[count] = ch;
-            count += 1;
-            
-            // For raw mode, VMIN is often 1, so we return after one character.
-            // if count >= vmin {
-            //     break;
-            // }
+        buf[count] = ch;
+        count += 1;
+
+        // For raw mode, VMIN is often 1, so we return after one character.
+        // if count >= vmin {
+        //     break;
+        // }
         // }
         count
     }
@@ -200,7 +227,6 @@ impl InodeTrait for TtyInode {
             // 输出后处理被关闭 (vi 的情况)
             // 直接、原始地输出所有字节
             for &byte in buf {
-                
                 console_putchar(byte as usize);
             }
         }
@@ -209,12 +235,10 @@ impl InodeTrait for TtyInode {
         // 在这个实现中，我们总是消耗掉所有字节
         buf.len()
     }
-    
 
-    
     fn ioctl(&self, op: usize, arg: usize) -> SysResult<usize> {
         let cmd = TtyIoctlCmd::try_from(op).map_err(|_| Errno::EINVAL)?;
-        
+
         info!("[TtyInode::ioctl] cmd: {:?}, arg: {:#x}", cmd, arg);
         unsafe {
             match cmd {
@@ -222,7 +246,11 @@ impl InodeTrait for TtyInode {
                 TtyIoctlCmd::TCGETS | TtyIoctlCmd::TCGETA => {
                     debug_point!("he wanto get ================== TCGETS");
                     let mut user_termios_ptr = user_mut_ptr(arg.into())?.ok_or(Errno::EFAULT)?;
-                    info!("get from \n{:?} to \n{:?}", self.inner.lock().termios, *user_termios_ptr);
+                    info!(
+                        "get from \n{:?} to \n{:?}",
+                        self.inner.lock().termios,
+                        *user_termios_ptr
+                    );
                     *user_termios_ptr = self.inner.lock().termios.clone();
                     Ok(0)
                 }
@@ -242,12 +270,16 @@ impl InodeTrait for TtyInode {
                     *user_winsize_ptr = win_size;
                     Ok(0)
                 }
-        
+
                 // --- SET 操作：从用户空间复制到内核 ---
                 TtyIoctlCmd::TCSETS | TtyIoctlCmd::TCSETSW | TtyIoctlCmd::TCSETSF => {
                     debug_point!("he want to set ================== TCSETS");
                     let user_termios_ref: &Termios = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
-                    log::info!("[TtyFile::ioctl] set termios \n{:?} from \n{:?}", user_termios_ref, self.inner.lock().termios);
+                    log::info!(
+                        "[TtyFile::ioctl] set termios \n{:?} from \n{:?}",
+                        user_termios_ref,
+                        self.inner.lock().termios
+                    );
                     self.inner.lock().termios = user_termios_ref.clone();
                     Ok(0)
                 }
@@ -266,7 +298,7 @@ impl InodeTrait for TtyInode {
                     log::info!("[TtyFile::ioctl] set window size {:?}", *user_winsize_ref);
                     Ok(0)
                 }
-        
+
                 // --- 其他操作 ---
                 TtyIoctlCmd::TCSBRK => {
                     // No-op for now, sending a break is UART specific.
@@ -280,11 +312,21 @@ impl InodeTrait for TtyInode {
         }
     }
 
-    fn set_size(&self, _new_size: usize) -> SysResult { Ok(()) }
-    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> { todo!() }
-    fn is_dir(&self) -> bool { false }
-    fn get_page_cache(&self) -> Option<Arc<PageCache>> { None }
-    fn read_dents(&self) -> Option<Vec<Dirent>> { None }
+    fn set_size(&self, _new_size: usize) -> SysResult {
+        Ok(())
+    }
+    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
+        todo!()
+    }
+    fn is_dir(&self) -> bool {
+        false
+    }
+    fn get_page_cache(&self) -> Option<Arc<PageCache>> {
+        None
+    }
+    fn read_dents(&self) -> Option<Vec<Dirent>> {
+        None
+    }
 }
 
 // --- TTY Internals ---
@@ -354,10 +396,10 @@ impl Termios {
     /// Provides a new `Termios` struct with sane default values.
     fn new() -> Self {
         Self {
-            iflag: 0o002402, // BRKINT | IXON
-            oflag: 0o000005, // OPOST | ONLCR
-            cflag: 0o002277, // CREAD | CS8 | HUPCL
-            lflag: 0o0105073,// ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE
+            iflag: 0o66402,   // IMAXBEL | IUTF8 | IXON | IXANY | ICRNL | BRKINT
+            oflag: 0o000005,  // OPOST | ONLCR
+            cflag: 0o002277,  // CREAD | CS8 | HUPCL
+            lflag: 0o0105073, // ISIG | ICANON | ECHO | ECHOE | ECHOK | ECHOCTL | ECHOKE
             line: 0,
             cc: [
                 3,   // 0: VINTR (Ctrl-C)
@@ -371,12 +413,12 @@ impl Termios {
                 17,  // 8: VSTART (Ctrl-Q)
                 19,  // 9: VSTOP (Ctrl-S)
                 26,  // 10: VSUSP (Ctrl-Z)
-                0,   // 11: VEOL
+                255, // 11: VEOL
                 18,  // 12: VREPRINT (Ctrl-R)
                 15,  // 13: VDISCARD (Ctrl-O)
                 23,  // 14: VWERASE (Ctrl-W)
                 22,  // 15: VLNEXT (Ctrl-V)
-                0,   // 16: VEOL2
+                255, // 16: VEOL2
                 0, 0, // 17, 18: Unused
             ],
         }
@@ -547,21 +589,51 @@ use core::fmt;
 impl fmt::Display for IFlag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut flags = Vec::new();
-        if self.contains(IFlag::IGNBRK) { flags.push("IGNBRK"); }
-        if self.contains(IFlag::BRKINT) { flags.push("BRKINT"); }
-        if self.contains(IFlag::IGNPAR) { flags.push("IGNPAR"); }
-        if self.contains(IFlag::PARMRK) { flags.push("PARMRK"); }
-        if self.contains(IFlag::INPCK) { flags.push("INPCK"); }
-        if self.contains(IFlag::ISTRIP) { flags.push("ISTRIP"); }
-        if self.contains(IFlag::INLCR) { flags.push("INLCR"); }
-        if self.contains(IFlag::IGNCR) { flags.push("IGNCR"); }
-        if self.contains(IFlag::ICRNL) { flags.push("ICRNL"); }
-        if self.contains(IFlag::IUCLC) { flags.push("IUCLC"); }
-        if self.contains(IFlag::IXON) { flags.push("IXON"); }
-        if self.contains(IFlag::IXANY) { flags.push("IXANY"); }
-        if self.contains(IFlag::IXOFF) { flags.push("IXOFF"); }
-        if self.contains(IFlag::IMAXBEL) { flags.push("IMAXBEL"); }
-        if self.contains(IFlag::IUTF8) { flags.push("IUTF8"); }
+        if self.contains(IFlag::IGNBRK) {
+            flags.push("IGNBRK");
+        }
+        if self.contains(IFlag::BRKINT) {
+            flags.push("BRKINT");
+        }
+        if self.contains(IFlag::IGNPAR) {
+            flags.push("IGNPAR");
+        }
+        if self.contains(IFlag::PARMRK) {
+            flags.push("PARMRK");
+        }
+        if self.contains(IFlag::INPCK) {
+            flags.push("INPCK");
+        }
+        if self.contains(IFlag::ISTRIP) {
+            flags.push("ISTRIP");
+        }
+        if self.contains(IFlag::INLCR) {
+            flags.push("INLCR");
+        }
+        if self.contains(IFlag::IGNCR) {
+            flags.push("IGNCR");
+        }
+        if self.contains(IFlag::ICRNL) {
+            flags.push("ICRNL");
+        }
+        if self.contains(IFlag::IUCLC) {
+            flags.push("IUCLC");
+        }
+        if self.contains(IFlag::IXON) {
+            flags.push("IXON");
+        }
+        if self.contains(IFlag::IXANY) {
+            flags.push("IXANY");
+        }
+        if self.contains(IFlag::IXOFF) {
+            flags.push("IXOFF");
+        }
+        if self.contains(IFlag::IMAXBEL) {
+            flags.push("IMAXBEL");
+        }
+        if self.contains(IFlag::IUTF8) {
+            flags.push("IUTF8");
+        }
         write!(f, "{}", flags.join(" | "))
     }
 }
@@ -569,20 +641,48 @@ impl fmt::Display for IFlag {
 impl fmt::Display for OFlag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut flags = Vec::new();
-        if self.contains(OFlag::OPOST) { flags.push("OPOST"); }
-        if self.contains(OFlag::OLCUC) { flags.push("OLCUC"); }
-        if self.contains(OFlag::ONLCR) { flags.push("ONLCR"); }
-        if self.contains(OFlag::OCRNL) { flags.push("OCRNL"); }
-        if self.contains(OFlag::ONOCR) { flags.push("ONOCR"); }
-        if self.contains(OFlag::ONLRET) { flags.push("ONLRET"); }
-        if self.contains(OFlag::OFILL) { flags.push("OFILL"); }
-        if self.contains(OFlag::OFDEL) { flags.push("OFDEL"); }
-        if self.contains(OFlag::NLDLY) { flags.push("NLDLY"); }
-        if self.contains(OFlag::CRDLY) { flags.push("CRDLY"); }
-        if self.contains(OFlag::TABDLY) { flags.push("TABDLY"); }
-        if self.contains(OFlag::BSDLY) { flags.push("BSDLY"); }
-        if self.contains(OFlag::FFDLY) { flags.push("FFDLY"); }
-        if self.contains(OFlag::VTDLY) { flags.push("VTDLY"); }
+        if self.contains(OFlag::OPOST) {
+            flags.push("OPOST");
+        }
+        if self.contains(OFlag::OLCUC) {
+            flags.push("OLCUC");
+        }
+        if self.contains(OFlag::ONLCR) {
+            flags.push("ONLCR");
+        }
+        if self.contains(OFlag::OCRNL) {
+            flags.push("OCRNL");
+        }
+        if self.contains(OFlag::ONOCR) {
+            flags.push("ONOCR");
+        }
+        if self.contains(OFlag::ONLRET) {
+            flags.push("ONLRET");
+        }
+        if self.contains(OFlag::OFILL) {
+            flags.push("OFILL");
+        }
+        if self.contains(OFlag::OFDEL) {
+            flags.push("OFDEL");
+        }
+        if self.contains(OFlag::NLDLY) {
+            flags.push("NLDLY");
+        }
+        if self.contains(OFlag::CRDLY) {
+            flags.push("CRDLY");
+        }
+        if self.contains(OFlag::TABDLY) {
+            flags.push("TABDLY");
+        }
+        if self.contains(OFlag::BSDLY) {
+            flags.push("BSDLY");
+        }
+        if self.contains(OFlag::FFDLY) {
+            flags.push("FFDLY");
+        }
+        if self.contains(OFlag::VTDLY) {
+            flags.push("VTDLY");
+        }
         write!(f, "{}", flags.join(" | "))
     }
 }
@@ -590,17 +690,39 @@ impl fmt::Display for OFlag {
 impl fmt::Display for CFlag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut flags = Vec::new();
-        if self.contains(CFlag::CSIZE) { flags.push("CSIZE"); }
-        if self.contains(CFlag::CS5) { flags.push("CS5"); }
-        if self.contains(CFlag::CS6) { flags.push("CS6"); }
-        if self.contains(CFlag::CS7) { flags.push("CS7"); }
-        if self.contains(CFlag::CS8) { flags.push("CS8"); }
-        if self.contains(CFlag::CSTOPB) { flags.push("CSTOPB"); }
-        if self.contains(CFlag::CREAD) { flags.push("CREAD"); }
-        if self.contains(CFlag::PARENB) { flags.push("PARENB"); }
-        if self.contains(CFlag::PARODD) { flags.push("PARODD"); }
-        if self.contains(CFlag::HUPCL) { flags.push("HUPCL"); }
-        if self.contains(CFlag::CLOCAL) { flags.push("CLOCAL"); }
+        if self.contains(CFlag::CSIZE) {
+            flags.push("CSIZE");
+        }
+        if self.contains(CFlag::CS5) {
+            flags.push("CS5");
+        }
+        if self.contains(CFlag::CS6) {
+            flags.push("CS6");
+        }
+        if self.contains(CFlag::CS7) {
+            flags.push("CS7");
+        }
+        if self.contains(CFlag::CS8) {
+            flags.push("CS8");
+        }
+        if self.contains(CFlag::CSTOPB) {
+            flags.push("CSTOPB");
+        }
+        if self.contains(CFlag::CREAD) {
+            flags.push("CREAD");
+        }
+        if self.contains(CFlag::PARENB) {
+            flags.push("PARENB");
+        }
+        if self.contains(CFlag::PARODD) {
+            flags.push("PARODD");
+        }
+        if self.contains(CFlag::HUPCL) {
+            flags.push("HUPCL");
+        }
+        if self.contains(CFlag::CLOCAL) {
+            flags.push("CLOCAL");
+        }
         write!(f, "{}", flags.join(" | "))
     }
 }
@@ -608,21 +730,52 @@ impl fmt::Display for CFlag {
 impl fmt::Display for LFlag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut flags = Vec::new();
-        if self.contains(LFlag::ISIG) { flags.push("ISIG"); }
-        if self.contains(LFlag::ICANON) { flags.push("ICANON"); }
-        if self.contains(LFlag::ECHO) { flags.push("ECHO"); }
-        if self.contains(LFlag::ECHOE) { flags.push("ECHOE"); }
-        if self.contains(LFlag::ECHOK) { flags.push("ECHOK"); }
-        if self.contains(LFlag::ECHONL) { flags.push("ECHONL"); }
-        if self.contains(LFlag::NOFLSH) { flags.push("NOFLSH"); }
-        if self.contains(LFlag::TOSTOP) { flags.push("TOSTOP"); }
-        if self.contains(LFlag::ECHOCTL) { flags.push("ECHOCTL"); }
-        if self.contains(LFlag::ECHOPRT) { flags.push("ECHOPRT"); }
-        if self.contains(LFlag::ECHOKE) { flags.push("ECHOKE"); }
-        if self.contains(LFlag::FLUSHO) { flags.push("FLUSHO"); }
-        if self.contains(LFlag::PENDIN) { flags.push("PENDIN"); }
-        if self.contains(LFlag::IEXTEN) { flags.push("IEXTEN"); }
-        if self.contains(LFlag::EXTPROC) { flags.push("EXTPROC"); }
+        if self.contains(LFlag::ISIG) {
+            flags.push("ISIG");
+        }
+        if self.contains(LFlag::ICANON) {
+            flags.push("ICANON");
+        }
+        if self.contains(LFlag::ECHO) {
+            flags.push("ECHO");
+        }
+        if self.contains(LFlag::ECHOE) {
+            flags.push("ECHOE");
+        }
+        if self.contains(LFlag::ECHOK) {
+            flags.push("ECHOK");
+        }
+        if self.contains(LFlag::ECHONL) {
+            flags.push("ECHONL");
+        }
+        if self.contains(LFlag::NOFLSH) {
+            flags.push("NOFLSH");
+        }
+        if self.contains(LFlag::TOSTOP) {
+            flags.push("TOSTOP");
+        }
+        if self.contains(LFlag::ECHOCTL) {
+            flags.push("ECHOCTL");
+        }
+        if self.contains(LFlag::ECHOPRT) {
+            flags.push("ECHOPRT");
+        }
+        if self.contains(LFlag::ECHOKE) {
+            flags.push("ECHOKE");
+        }
+        if self.contains(LFlag::FLUSHO) {
+            flags.push("FLUSHO");
+        }
+        if self.contains(LFlag::PENDIN) {
+            flags.push("PENDIN");
+        }
+        if self.contains(LFlag::IEXTEN) {
+            flags.push("IEXTEN");
+        }
+        if self.contains(LFlag::EXTPROC) {
+            flags.push("EXTPROC");
+        }
         write!(f, "{}", flags.join(" | "))
     }
 }
+
