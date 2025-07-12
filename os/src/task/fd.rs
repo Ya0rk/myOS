@@ -2,7 +2,7 @@ use core::{cmp::min, fmt::Display, intrinsics::unlikely};
 
 // #![allow(unused)]
 use crate::{
-    fs::{open, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
+    fs::{open, socketfs::{socketfile::SocketFile, socketinode::SocketInode}, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
 };
 use alloc::{collections::binary_heap::BinaryHeap, format, string::String, sync::Arc, vec::Vec};
 use log::info;
@@ -27,9 +27,9 @@ pub struct FdInfo {
 }
 
 impl FdInfo {
-    pub fn new(fd: Arc<dyn FileTrait>, flags: OpenFlags) -> Self {
+    pub fn new(file: Arc<dyn FileTrait>, flags: OpenFlags) -> Self {
         FdInfo {
-            file: Some(fd),
+            file: Some(file),
             flags,
         }
     }
@@ -332,9 +332,12 @@ impl FdTable {
 }
 
 /// 将一个socket加入到fd表中
-pub fn sock_map_fd(socket: Arc<dyn FileTrait>, cloexec_enable: bool) -> SysResult<usize> {
-    let mut flag = OpenFlags::O_RDWR;
-    let fdInfo = FdInfo::new(socket, flag);
+pub fn sock_map_fd(socket: Arc<dyn Socket>, cloexec_enable: bool) -> SysResult<usize> {
+    let mut flag = OpenFlags::O_RDWR; // 这里的flag基本没用
+    let socketinode = Arc::new(SocketInode::new(socket));
+    let socketfile = Arc::new(SocketFile::new(flag, socketinode));
+    
+    let fdInfo = FdInfo::new(socketfile, flag);
     let new_info = fdInfo.off_Ocloexec(!cloexec_enable);
     let task = current_task().expect("no current task");
     let fd = task.alloc_fd(new_info)?;

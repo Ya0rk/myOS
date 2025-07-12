@@ -25,7 +25,7 @@ pub enum SockClass {
 }
 
 impl SockClass {
-    pub fn get(&self) -> Arc<dyn FileTrait> {
+    pub fn get(&self) -> Arc<dyn Socket> {
         match self {
             SockClass::Tcp(tcp) => tcp.clone(),
             SockClass::Udp(udp) => udp.clone(),
