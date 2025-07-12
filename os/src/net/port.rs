@@ -29,7 +29,7 @@ pub struct PortManager {
 impl PortManager {
     pub fn new() -> Self {
         PortManager {
-            start: 32768,
+            start: 49152,
             end: 65535,
             recycled: VecDeque::new(),
             tcp_used_ports: BitVec::from_elem(65536, false),
@@ -58,7 +58,7 @@ impl PortManager {
         }
         Err(Errno::EADDRINUSE)
     }
-    fn dealloc(&mut self, domain: Sock, port: u16) {
+    pub fn dealloc(&mut self, domain: Sock, port: u16) {
         info!("[port dealloc] port: {}", port);
         assert!(
             port >= self.start && port <= self.end,
@@ -107,41 +107,11 @@ impl PortManager {
     }
 }
 
-// #[derive(Clone)]
-// pub struct Port {
-//     pub port: u16,
-//     pub domain: Sock,
-// }
-
-// impl Port {
-//     pub fn new(domain: Sock, port: u16) -> Self {
-//         Port { port, domain }
-//     }
-// }
-
-// impl From<Port> for u16 {
-//     fn from(value: Port) -> Self {
-//         value.port
-//     }
-// }
-
-// impl Drop for Port {
-//     fn drop(&mut self) {
-//         info!("[port drop] port = {}", self.port);
-//         PORT_MANAGER.lock().dealloc(self.domain, self.port);
-//     }
-// }
-
-fn alloc_port(domain: Sock) -> SysResult<u16> {
-    let port = PORT_MANAGER.lock().alloc(domain)?;
-    Ok(port)
-}
-
-/// 检查出入的endpoint的port，分配port，并返回
-pub fn do_port(endpoint: &mut IpEndpoint, port_type: Sock) -> SysResult<u16> {
+/// 检查传入的endpoint的port，分配port，并返回
+pub fn do_port_aloc(endpoint: &mut IpEndpoint, port_type: Sock) -> SysResult<u16> {
     let p: u16;
     if endpoint.port == 0 {
-        p = alloc_port(port_type)?;
+        p = PORT_MANAGER.lock().alloc(port_type)?;
         endpoint.port = p;
     } else {
         let mut port_manager = PORT_MANAGER.lock();
