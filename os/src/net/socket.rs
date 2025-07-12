@@ -1,3 +1,4 @@
+use core::task::Waker;
 use super::{
     addr::{IpType, Sock, SockAddr},
     tcp::TcpSocket,
@@ -44,7 +45,7 @@ impl SockMeta {
 
 #[allow(unused)]
 #[async_trait]
-pub trait Socket: FileTrait {
+pub trait Socket: Send + Sync {
     async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)>;
 
     fn bind(&self, addr: &SockAddr) -> SysResult<()>;
@@ -76,6 +77,10 @@ pub trait Socket: FileTrait {
     fn enable_nagle(&self, action: u32) -> SysResult<()>;
 
     fn get_socktype(&self) -> SysResult<Sock>;
+
+    fn pollin(&self, waker: Waker) -> SysResult<bool>;
+
+    fn pollout(&self, waker: Waker) -> SysResult<bool>;
 }
 
 impl dyn Socket {

@@ -1,3 +1,5 @@
+use core::{error, task::Waker};
+
 use super::{
     addr::{IpType, Sock, SockAddr},
     SockMeta, Socket,
@@ -13,7 +15,8 @@ use crate::{
 use alloc::boxed::Box;
 use alloc::{string::String, sync::Arc};
 use async_trait::async_trait;
-use log::info;
+use log::{info, warn};
+use sbi_spec::pmu::hardware_event::STALLED_CYCLES_FRONTEND;
 use smoltcp::{iface::SocketHandle, wire::IpEndpoint};
 
 /// UnixSocket 是一种本地通信的字节流套接字
@@ -78,46 +81,54 @@ impl Socket for UnixSocket {
     fn get_socktype(&self) -> SysResult<Sock> {
         Ok(Sock::Unix)
     }
+    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+        warn!("UnixSocket::pollin not implemented");
+        todo!()
+    }
+    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+        warn!("UnixSocket::pollout not implemented");
+        todo!()
+    }
 }
 
-#[async_trait]
-impl FileTrait for UnixSocket {
-    fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
-        Ok(self)
-    }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        unimplemented!()
-    }
-    fn readable(&self) -> bool {
-        unimplemented!()
-    }
-    fn writable(&self) -> bool {
-        unimplemented!()
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    async fn read(&self, buf: &mut [u8]) -> SysResult<usize> {
-        let res = self.read_end.read(buf).await?;
-        Ok(res)
-    }
-    async fn write(&self, buf: &[u8]) -> SysResult<usize> {
-        let res = self.write_end.write(buf).await?;
-        Ok(res)
-    }
-    fn get_name(&self) -> SysResult<String> {
-        unimplemented!()
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        unimplemented!()
-    }
-    fn fstat(&self, _stat: &mut Kstat) -> SysResult {
-        unimplemented!()
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> {
-        unimplemented!()
-    }
-}
+// #[async_trait]
+// impl FileTrait for UnixSocket {
+//     fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
+//         Ok(self)
+//     }
+//     fn get_inode(&self) -> Arc<dyn InodeTrait> {
+//         unimplemented!()
+//     }
+//     fn readable(&self) -> bool {
+//         unimplemented!()
+//     }
+//     fn writable(&self) -> bool {
+//         unimplemented!()
+//     }
+//     fn executable(&self) -> bool {
+//         false
+//     }
+//     async fn read(&self, buf: &mut [u8]) -> SysResult<usize> {
+//         let res = self.read_end.read(buf).await?;
+//         Ok(res)
+//     }
+//     async fn write(&self, buf: &[u8]) -> SysResult<usize> {
+//         let res = self.write_end.write(buf).await?;
+//         Ok(res)
+//     }
+//     fn get_name(&self) -> SysResult<String> {
+//         unimplemented!()
+//     }
+//     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
+//         unimplemented!()
+//     }
+//     fn fstat(&self, _stat: &mut Kstat) -> SysResult {
+//         unimplemented!()
+//     }
+//     fn is_dir(&self) -> bool {
+//         false
+//     }
+//     async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> {
+//         unimplemented!()
+//     }
+// }

@@ -309,49 +309,6 @@ impl Socket for UdpSocket {
     fn get_socktype(&self) -> SysResult<Sock> {
         Ok(Sock::Udp)
     }
-}
-
-#[async_trait]
-impl FileTrait for UdpSocket {
-    fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
-        Ok(self)
-    }
-    fn get_inode(&self) -> Arc<dyn crate::fs::InodeTrait> {
-        unimplemented!()
-    }
-    fn readable(&self) -> bool {
-        unimplemented!()
-    }
-    fn writable(&self) -> bool {
-        unimplemented!()
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    async fn read(&self, _buf: &mut [u8]) -> SysResult<usize> {
-        unimplemented!()
-    }
-    async fn write(&self, _buf: &[u8]) -> SysResult<usize> {
-        unimplemented!()
-    }
-    fn get_name(&self) -> SysResult<String> {
-        unimplemented!()
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        unimplemented!()
-    }
-    fn fstat(&self, _stat: &mut crate::fs::Kstat) -> SysResult {
-        unimplemented!()
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    fn get_flags(&self) -> OpenFlags {
-        self.flags
-    }
-    async fn get_page_at(&self, _offset: usize) -> Option<Arc<crate::mm::page::Page>> {
-        unimplemented!()
-    }
     fn pollin(&self, waker: Waker) -> SysResult<bool> {
         NET_DEV.lock().poll();
         let res = self.with_socket(|socket| {

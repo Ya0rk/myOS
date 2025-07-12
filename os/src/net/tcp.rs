@@ -493,52 +493,7 @@ impl Socket for TcpSocket {
     fn get_socktype(&self) -> SysResult<Sock> {
         Ok(Sock::Tcp)
     }
-}
 
-#[async_trait]
-impl FileTrait for TcpSocket {
-    fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
-        Ok(self)
-    }
-    fn get_inode(&self) -> Arc<dyn crate::fs::InodeTrait> {
-        unimplemented!()
-    }
-    fn readable(&self) -> bool {
-        unimplemented!()
-    }
-    fn writable(&self) -> bool {
-        unimplemented!()
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    async fn read(&self, _buf: &mut [u8]) -> SysResult<usize> {
-        unimplemented!()
-    }
-    async fn write(&self, _buf: &[u8]) -> SysResult<usize> {
-        unimplemented!()
-    }
-    fn get_name(&self) -> SysResult<String> {
-        unimplemented!()
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        unimplemented!()
-    }
-    fn fstat(&self, _stat: &mut crate::fs::Kstat) -> SysResult {
-        unimplemented!()
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    fn get_flags(&self) -> OpenFlags {
-        self.flags
-    }
-    async fn get_page_at(&self, _offset: usize) -> Option<Arc<crate::mm::page::Page>> {
-        unimplemented!()
-    }
-    /// TCP Socket 的异步可读性检查方法，
-    /// 用于判断当前 Socket 是否有数据可读或处于特定状态（如连接关闭），
-    /// 并根据情况注册 Waker 以便在数据到达时唤醒异步任务。
     fn pollin(&self, waker: Waker) -> SysResult<bool> {
         info!("[TcpSocket::pollin] start");
         // 调用底层网络接口轮询机制，处理待处理的网络事件, 确保 Socket 状态和数据缓冲区是最新的
@@ -556,6 +511,7 @@ impl FileTrait for TcpSocket {
 
         Ok(false)
     }
+    
     fn pollout(&self, waker: Waker) -> SysResult<bool> {
         info!("[TcpSocket::pollin] start");
         NET_DEV.lock().poll();

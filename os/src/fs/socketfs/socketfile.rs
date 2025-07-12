@@ -1,3 +1,4 @@
+use core::task::Waker;
 use alloc::{string::String, sync::Arc};
 use async_trait::async_trait;
 use crate::{fs::{socketfs::socketinode::SocketInode, FileMeta, FileTrait, InodeTrait, OpenFlags}, net::Socket, utils::{downcast::Downcast, SysResult}};
@@ -45,5 +46,17 @@ impl FileTrait for SocketFile {
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
         let res = socketinode.socket.send_msg(buf, None).await?;
         Ok(res)
+    }
+
+    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+        let inode = self.get_inode();
+        let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
+        socketinode.socket.pollin(waker)
+    }
+
+    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+        let inode = self.get_inode();
+        let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
+        socketinode.socket.pollout(waker)
     }
 }
