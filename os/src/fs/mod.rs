@@ -14,6 +14,7 @@ pub mod vfs;
 // pub mod tmp;
 pub mod ffi;
 pub mod ltp;
+pub mod socketfs;
 
 use core::error;
 pub use dirent::Dirent;
