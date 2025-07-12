@@ -1,7 +1,7 @@
 use super::{AF_INET, AF_INET6, AF_UNIX};
 use crate::utils::{Errno, SysResult};
 use core::{intrinsics::unlikely, ptr::copy_nonoverlapping};
-use log::info;
+use log::{info, trace};
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
 /// 协议簇类型
@@ -9,37 +9,39 @@ use smoltcp::wire::{IpAddress, IpEndpoint};
 pub enum SockAddr {
     Unspec,
     Unix(SockUnix),
-    Inet4(Ipv4),
-    Inet6(Ipv6),
+    Inet4(SockIpv4),
+    Inet6(SockIpv6),
 }
 
 impl SockAddr {
     pub fn write2user(&self, buf: &mut [u8], len: usize) -> SysResult<()> {
+        let len = unsafe { *(len as *const u32) } as usize;
+        trace!("[write2user] len = {}", len);
         match self {
             SockAddr::Inet4(addr) => {
-                if len < core::mem::size_of::<Ipv4>() {
+                if len < core::mem::size_of::<SockIpv4>() {
                     return Err(Errno::EINVAL);
                 }
                 // 安全地拷贝 Ipv4 结构体到 buf
                 unsafe {
                     copy_nonoverlapping(
-                        addr as *const Ipv4 as *const u8,
+                        addr as *const SockIpv4 as *const u8,
                         buf.as_mut_ptr(),
-                        core::mem::size_of::<Ipv4>(),
+                        core::mem::size_of::<SockIpv4>(),
                     );
                 }
                 return Ok(());
             }
             SockAddr::Inet6(addr) => {
-                if len < core::mem::size_of::<Ipv6>() {
+                if len < core::mem::size_of::<SockIpv6>() {
                     return Err(Errno::EINVAL);
                 }
                 // 安全地拷贝 Ipv6 结构体到 buf
                 unsafe {
                     copy_nonoverlapping(
-                        addr as *const Ipv6 as *const u8,
+                        addr as *const SockIpv6 as *const u8,
                         buf.as_mut_ptr(),
-                        core::mem::size_of::<Ipv6>(),
+                        core::mem::size_of::<SockIpv6>(),
                     );
                 }
                 return Ok(());
@@ -65,7 +67,7 @@ pub enum IpType {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct Ipv4 {
+pub struct SockIpv4 {
     /// 地址协议族(AF_INET)
     pub family: u16,
     /// Ipv4 的端口
@@ -76,7 +78,7 @@ pub struct Ipv4 {
     pub zero: [u8; 8],
 }
 
-impl Ipv4 {
+impl SockIpv4 {
     pub fn new(port: u16, addr: [u8; 4]) -> Self {
         Self {
             family: AF_INET,
@@ -89,7 +91,7 @@ impl Ipv4 {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-pub struct Ipv6 {
+pub struct SockIpv6 {
     /// 地址协议族(AF_INET6)
     pub family: u16,
     /// Ipv6 的端口
@@ -102,7 +104,7 @@ pub struct Ipv6 {
     pub scope_id: u32,
 }
 
-impl Ipv6 {
+impl SockIpv6 {
     pub fn new(port: u16, addr: [u8; 16]) -> Self {
         Self {
             family: AF_INET6,
@@ -152,20 +154,20 @@ impl SockAddr {
     }
 
     fn parse_ipv4(addr: usize, addrlen: usize) -> Self {
-        if unlikely(addrlen < core::mem::size_of::<Ipv4>()) {
+        if unlikely(addrlen < core::mem::size_of::<SockIpv4>()) {
             info!("[sockaddr from] IPv4 socket address too short");
             return SockAddr::Unspec;
         }
-        let addr = unsafe { *(addr as *const Ipv4) };
+        let addr = unsafe { *(addr as *const SockIpv4) };
         unsafe { SockAddr::Inet4(addr) }
     }
 
     fn parse_ipv6(addr: usize, addrlen: usize) -> Self {
-        if unlikely(addrlen < core::mem::size_of::<Ipv6>()) {
+        if unlikely(addrlen < core::mem::size_of::<SockIpv6>()) {
             info!("[sockaddr from] IPv6 socket address too short");
             return SockAddr::Unspec;
         }
-        let addr = unsafe { *(addr as *const Ipv6) };
+        let addr = unsafe { *(addr as *const SockIpv6) };
         unsafe { SockAddr::Inet6(addr) }
     }
 }
@@ -207,16 +209,17 @@ impl TryFrom<SockAddr> for IpEndpoint {
     }
 }
 
-pub fn do_addr127(endpoitn: &mut IpEndpoint) {
-    if endpoitn.addr.is_unspecified() {
-        match endpoitn.addr {
+/// 分配地址，这里只涉及到了本地地址
+pub fn do_addr127(endpoint: &mut IpEndpoint) {
+    if endpoint.addr.is_unspecified() {
+        match endpoint.addr {
             IpAddress::Ipv4(_) => {
                 info!("[do_addr127] ipv4 -> 127");
-                endpoitn.addr = IpAddress::v4(127, 0, 0, 1);
+                endpoint.addr = IpAddress::v4(127, 0, 0, 1);
             }
             IpAddress::Ipv6(_) => {
                 info!("[do_addr127] ipv6 -> 127");
-                endpoitn.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1);
+                endpoint.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1);
             }
         }
     }

@@ -6,10 +6,10 @@ use super::ffi::{
 };
 use crate::{
     fs::{FileTrait, OpenFlags, Pipe}, hal::config::USER_SPACE_TOP, mm::user_ptr::check_readable, net::{
-        addr::{IpType, Ipv4, Ipv6, Sock, SockAddr}, Congestion, Protocol, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, HOST_NAME, MAX_HOST_NAME, MAX_NIS_LEN, NIS_DOMAIN_NAME, TCP_MSS
+        addr::{IpType, SockIpv4, SockIpv6, Sock, SockAddr}, Congestion, Protocol, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, HOST_NAME, MAX_HOST_NAME, MAX_NIS_LEN, NIS_DOMAIN_NAME, TCP_MSS
     }, syscall::ffi::{IPPROTO_IP, IPPROTO_TCP, SO_OOBINLINE, SO_RCVTIMEO}, task::{current_task, sock_map_fd, FdInfo}, utils::{Errno, SysResult}
 };
-use log::{info, warn};
+use log::{info, trace, warn};
 use smoltcp::wire::IpAddress;
 
 /// domain：即协议域，又称为协议族（family）, 协议族决定了socket的地址类型
@@ -41,6 +41,7 @@ pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usi
 /// is set to indicate the error.
 pub fn sys_bind(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
     info!("[sys_bind] start, sockfd = {}", sockfd);
+    trace!("[sys_bind] addr = {}, addrlen = {}", addr, addrlen);
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
@@ -124,7 +125,7 @@ pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResul
 }
 
 /// accept函数的第一个参数为服务器的socket描述字，第二个参数为指向struct sockaddr *的指针，
-/// 用于返回客户端的协议地址，第三个参数为协议地址的长度。
+/// 用于返回客户端的协议地址，第三个参数为协议地址的长度指针。
 /// 如果accpet成功，那么其返回值是由内核自动生成的一个全新的描述字，代表与返回客户的TCP连接。
 ///
 /// 注意：accept的第一个参数为服务器的socket描述字，是服务器开始调用socket()函数生成的，称为监听socket描述字；
@@ -153,13 +154,13 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
         IpAddress::Ipv4(addr) => {
             let port = remote_end.port;
             let addr = addr.octets();
-            let temp = SockAddr::Inet4(Ipv4::new(port, addr));
+            let temp = SockAddr::Inet4(SockIpv4::new(port, addr));
             temp
         }
         IpAddress::Ipv6(addr) => {
             let port = remote_end.port;
             let addr = addr.octets();
-            let temp = SockAddr::Inet6(Ipv6::new(port, addr));
+            let temp = SockAddr::Inet6(SockIpv6::new(port, addr));
             temp
         }
     };
@@ -202,13 +203,13 @@ pub async fn sys_accept4(
         IpAddress::Ipv4(addr) => {
             let port = remote_end.port;
             let addr = addr.octets();
-            let temp = SockAddr::Inet4(Ipv4::new(port, addr));
+            let temp = SockAddr::Inet4(SockIpv4::new(port, addr));
             temp
         }
         IpAddress::Ipv6(addr) => {
             let port = remote_end.port;
             let addr = addr.octets();
-            let temp = SockAddr::Inet6(Ipv6::new(port, addr));
+            let temp = SockAddr::Inet6(SockIpv6::new(port, addr));
             temp
         }
     };
