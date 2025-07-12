@@ -355,7 +355,7 @@ impl Socket for TcpSocket {
 
         Ok(())
     }
-    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize> {
+    async fn send_msg(&self, buf: &[u8], dest_addr: Option<SockAddr>) -> SysResult<usize> {
         info!("[Tcp::send_msg] start, dest_addr = {:?}", dest_addr);
         let res = TcpSendFuture::new(buf, self).await?;
         Ok(res)

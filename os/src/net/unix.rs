@@ -63,7 +63,7 @@ impl Socket for UnixSocket {
     fn get_peername(&self) -> SysResult<SockAddr> {
         todo!()
     }
-    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize> {
+    async fn send_msg(&self, buf: &[u8], dest_addr: Option<SockAddr>) -> SysResult<usize> {
         todo!()
     }
     async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)> {

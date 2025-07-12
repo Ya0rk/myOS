@@ -173,7 +173,7 @@ impl Socket for UdpSocket {
         self.sockmeta.lock().remote_end = Some(remote_endpoint);
         Ok(())
     }
-    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize> {
+    async fn send_msg(&self, buf: &[u8], dest_addr: Option<SockAddr>) -> SysResult<usize> {
         // 如果没有远程地址，就先和远程地址建立连接
         // 就算有远程地址，也要覆盖，使用提供的dest_addr
         info!("[Udp::send_msg] start, dest_addr = {:?}", dest_addr);

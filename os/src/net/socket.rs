@@ -53,7 +53,7 @@ pub trait Socket: FileTrait {
 
     fn listen(&self, backlog: usize) -> SysResult<()>;
 
-    async fn send_msg(&self, buf: &[u8], dest_addr: &SockAddr) -> SysResult<usize>;
+    async fn send_msg(&self, buf: &[u8], dest_addr: Option<SockAddr>) -> SysResult<usize>;
 
     async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)>;
 

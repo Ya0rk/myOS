@@ -334,10 +334,10 @@ pub async fn sys_sendto(
     let socket = file.get_socket()?;
 
     let res = match socket.get_socktype()? {
-        Sock::Tcp => socket.send_msg(buf, &dest_sockaddr).await?,
+        Sock::Tcp => socket.send_msg(buf, Some(dest_sockaddr)).await?,
         Sock::Udp => {
             socket.connect(&dest_sockaddr).await;
-            socket.send_msg(buf, &dest_sockaddr).await?
+            socket.send_msg(buf, Some(dest_sockaddr)).await?
         }
         _ => todo!(),
     };
