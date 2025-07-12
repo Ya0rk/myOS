@@ -1,12 +1,12 @@
 use super::{
-    addr::{IpType, Ipv4, Ipv6, Sock, SockAddr},
+    addr::{IpType, SockIpv4, SockIpv6, Sock, SockAddr},
     SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET,
 };
 use crate::fs::FileTrait;
 use crate::mm::UserBuffer;
 use crate::{
     fs::{FileMeta, OpenFlags, RenameFlags},
-    net::{addr::do_addr127, do_port, net_async::UdpSendFuture, MAX_BUFFER_SIZE},
+    net::{addr::do_addr127, do_port_aloc, net_async::UdpSendFuture, MAX_BUFFER_SIZE},
     sync::{get_waker, yield_now, NullFuture, SpinNoIrqLock, TimeoutFuture},
     syscall::ShutHow,
     task::current_task,
@@ -16,7 +16,7 @@ use alloc::boxed::Box;
 use alloc::{string::String, sync::Arc, vec};
 use async_trait::async_trait;
 use core::{net::Ipv4Addr, task::Waker, time::Duration};
-use log::info;
+use log::{info, trace};
 use smoltcp::{
     iface::SocketHandle,
     socket::udp::{self, PacketMetadata, UdpMetadata},
@@ -29,6 +29,22 @@ pub struct UdpSocket {
     pub handle: SocketHandle,
     pub flags: OpenFlags,
     pub sockmeta: SpinNoIrqLock<SockMeta>,
+}
+
+impl Drop for UdpSocket {
+    fn drop(&mut self) {
+        info!("[UdpSocket::drop] start");
+        trace!("[UdpSocket::drop] start");
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<udp::Socket>(self.handle);
+        socket.close();
+        binding.remove(self.handle);
+        drop(binding);
+
+        // 释放端口
+        PORT_MANAGER.lock().dealloc(Sock::Udp, self.sockmeta.lock().port.unwrap());
+        NET_DEV.lock().poll();
+    }
 }
 
 impl UdpSocket {
@@ -71,7 +87,7 @@ impl UdpSocket {
         if sockmeta.local_end.is_none() {
             match sockmeta.iptype {
                 IpType::Ipv4 => {
-                    let addr = SockAddr::Inet4(Ipv4 {
+                    let addr = SockAddr::Inet4(SockIpv4 {
                         family: AF_INET,
                         port: 0,
                         addr: [127, 0, 0, 1],
@@ -81,7 +97,7 @@ impl UdpSocket {
                     self.bind(&addr);
                 }
                 IpType::Ipv6 => {
-                    let addr = SockAddr::Inet6(Ipv6 {
+                    let addr = SockAddr::Inet6(SockIpv6 {
                         family: AF_INET,
                         port: 0,
                         flowinfo: 0,
@@ -123,7 +139,7 @@ impl Socket for UdpSocket {
         // addr == 0.0.0.0代表本地广播
         do_addr127(&mut endpoint);
         // 分配port
-        p = do_port(&mut endpoint, Sock::Udp)?;
+        p = do_port_aloc(&mut endpoint, sockmeta.domain)?;
         // 记录port
         sockmeta.port = Some(p);
 
@@ -195,10 +211,10 @@ impl Socket for UdpSocket {
                         let addr = remote.addr;
                         let res = match addr {
                             IpAddress::Ipv4(addr) => {
-                                SockAddr::Inet4(Ipv4::new(port, addr.octets()))
+                                SockAddr::Inet4(SockIpv4::new(port, addr.octets()))
                             }
                             IpAddress::Ipv6(addr) => {
-                                SockAddr::Inet6(Ipv6::new(port, addr.octets()))
+                                SockAddr::Inet6(SockIpv6::new(port, addr.octets()))
                             }
                         };
 
@@ -254,11 +270,11 @@ impl Socket for UdpSocket {
         );
         match addr {
             IpAddress::Ipv4(addr) => {
-                let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));
+                let res = SockAddr::Inet4(SockIpv4::new(port, addr.octets()));
                 return Ok(res);
             }
             IpAddress::Ipv6(addr) => {
-                let res = SockAddr::Inet6(Ipv6::new(port, addr.octets()));
+                let res = SockAddr::Inet6(SockIpv6::new(port, addr.octets()));
                 return Ok(res);
             }
         }
@@ -274,11 +290,11 @@ impl Socket for UdpSocket {
         );
         match addr {
             IpAddress::Ipv4(addr) => {
-                let res = SockAddr::Inet4(Ipv4::new(port, addr.octets()));
+                let res = SockAddr::Inet4(SockIpv4::new(port, addr.octets()));
                 return Ok(res);
             }
             IpAddress::Ipv6(addr) => {
-                let res = SockAddr::Inet6(Ipv6::new(port, addr.octets()));
+                let res = SockAddr::Inet6(SockIpv6::new(port, addr.octets()));
                 return Ok(res);
             }
         }
