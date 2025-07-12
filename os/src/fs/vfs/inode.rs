@@ -1,10 +1,10 @@
-use core::sync::atomic::AtomicUsize;
+use core::{any::Any, sync::atomic::AtomicUsize};
 use crate::{
     fs::{
         ext4::NormalFile, ffi::InodeType, page_cache::PageCache, vfs::alloc_ino, AbsPath, Dentry, Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END
     },
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
-    utils::{Errno, SysResult},
+    utils::{downcast::Downcast, Errno, SysResult},
 };
 use alloc::boxed::Box;
 use alloc::{
@@ -50,7 +50,7 @@ impl InodeMeta {
 /// in the virtual file system. An inode represents either a file, directory, or
 /// other file system object.
 #[async_trait]
-pub trait InodeTrait: Send + Sync {
+pub trait InodeTrait: Any + Send + Sync {
     fn is_valid(&self) -> bool {
         true
     }
@@ -231,5 +231,11 @@ impl dyn InodeTrait {
     pub fn set_timestamps(&self, timestamp: TimeStamp) -> SysResult<usize> {
         self.get_timestamp().lock().set(timestamp);
         Ok(0)
+    }
+}
+
+impl Downcast for dyn InodeTrait {
+    fn as_any(self: Arc<Self>) -> Arc<dyn Any> {
+        self
     }
 }

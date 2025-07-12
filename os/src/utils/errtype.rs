@@ -137,6 +137,7 @@ pub enum Errno {
     ENOTRECOVERABLE = 131,
     ERFKILL = 132,
     EHWPOISON = 133,
+    ENOIMPL = 999,
 }
 
 impl Errno {
@@ -185,6 +186,7 @@ impl Errno {
             ENOTEMPTY => "Directory not empty",
             ENOTCONN => "Transport endpoint is not connected",
             ECONNREFUSED => "Connection refused",
+            ENOIMPL => "Function not implemented, use default implementation",
             _ => "Unknown error",
         }
     }

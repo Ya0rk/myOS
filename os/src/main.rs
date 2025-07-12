@@ -14,6 +14,7 @@
 #![feature(const_ops)]
 #![feature(const_trait_impl)]
 #![feature(core_intrinsics)]
+#![feature(trait_upcasting)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]
 #![feature(map_try_insert)]

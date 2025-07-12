@@ -7,6 +7,7 @@ pub mod logger;
 // pub mod flags;
 pub mod cache;
 pub mod container;
+pub mod downcast;
 
 use crate::{
     hal::arch::{fp_read, ra_read},
