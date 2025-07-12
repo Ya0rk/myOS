@@ -13,7 +13,7 @@ use core::{
     task::Waker,
     any::Any
 };
-use log::info;
+use log::{info, warn};
 use spin::RwLock;
 
 use super::InodeTrait;
@@ -52,17 +52,22 @@ impl FileMeta {
 #[async_trait]
 pub trait FileTrait: Any + Send + Sync + DowncastSync {
     fn get_inode(&self) -> Arc<dyn InodeTrait>;
+
+    // ======== 权限相关 ========
     fn readable(&self) -> bool;
     fn writable(&self) -> bool;
     fn executable(&self) -> bool;
 
+    // ======== 文件类型相关 ========
     /// 这里是临时机制，主要在splice中使用，后序可以通过inodetype实现判断
     fn is_pipe(&self) -> bool {
         false
     }
-
     /// 临时机制, 为了在ioctl中判断
     fn is_deivce(&self) -> bool {
+        false
+    }
+    fn is_dir(&self) -> bool {
         false
     }
 
@@ -115,23 +120,34 @@ pub trait FileTrait: Any + Send + Sync + DowncastSync {
     // fn poll(&self, events: PollEvents) -> PollEvents;
 
     /// 获取文件路径，这里是绝对路径
-    fn get_name(&self) -> SysResult<String>;
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize>;
-    fn fstat(&self, stat: &mut Kstat) -> SysResult;
-    fn is_dir(&self) -> bool;
+    fn get_name(&self) -> SysResult<String> {
+        warn!("[FileTrait::get_name] not implemented for this file type");
+        Err(Errno::ENOIMPL)
+    }
+    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
+        warn!("[FileTrait::rename] not implemented for this file type");
+        Err(Errno::ENOIMPL)
+    }
+    fn fstat(&self, stat: &mut Kstat) -> SysResult {
+        warn!("[FileTrait::fstat] not implemented for this file type");
+        Err(Errno::ENOIMPL)
+    }
 
     fn read_dents(&self, mut ub: usize, len: usize) -> usize {
         unimplemented!("File Trait read_dents");
     }
 
     // TODO: 缓存未命中处理
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>>;
+    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
+        warn!("[FileTrait::get_page_at] not implemented for this file type");
+        None
+    }
 
     fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
         Err(Errno::ENOTSOCK)
     }
     fn set_flags(&self, flags: OpenFlags) {
-        // unimplemented!("not support!");
+        warn!("[FileTrait::set_flags] not implemented for this file type");
     }
     fn get_flags(&self) -> OpenFlags {
         // unimplemented!("not support!");

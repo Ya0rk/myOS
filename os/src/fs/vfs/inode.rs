@@ -13,6 +13,7 @@ use alloc::{
     vec::Vec,
 };
 use async_trait::async_trait;
+use log::warn;
 use lwext4_rust::{Ext4File, InodeTypes};
 use spin::Mutex;
 
@@ -63,7 +64,10 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// 设置大小
-    fn set_size(&self, new_size: usize) -> SysResult;
+    fn set_size(&self, new_size: usize) -> SysResult{
+        warn!("[InodeTrait::set_size] not implemented for this inode type");
+        Err(Errno::ENOIMPL)
+    }
 
     /// Returns the type of the inode (file, directory, etc.).
     ///
@@ -117,7 +121,9 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// 绕过cache，直接从磁盘读
-    async fn read_dirctly(&self, _offset: usize, _buf: &mut [u8]) -> usize;
+    async fn read_dirctly(&self, _offset: usize, _buf: &mut [u8]) -> usize {
+        todo!()
+    }
 
     /// Writes data to the file at the specified offset.
     ///
@@ -134,7 +140,9 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// 直接写
-    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize;
+    async fn write_directly(&self, _offset: usize, _buf: &[u8]) -> usize {
+        todo!()
+    }
 
     /// 将文件设置新的size，这里用于将文件size为0
     ///
@@ -185,15 +193,22 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// 获取时间戳，用于修改或访问
-    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp>;
+    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
+        todo!()
+    }
 
     // /// 获取lwext4的ext4file
     // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
 
-    fn is_dir(&self) -> bool;
+    fn is_dir(&self) -> bool {
+        false
+    }
 
     /// get page cache from ext4 file
-    fn get_page_cache(&self) -> Option<Arc<PageCache>>;
+    fn get_page_cache(&self) -> Option<Arc<PageCache>> {
+        warn!("[InodeTrait::get_page_cache] not implemented for this inode type");
+        None
+    }
 
     /// 更改名字
     fn rename(&self, old_path: Arc<Dentry>, new_path: Arc<Dentry>) -> SysResult<usize> {
@@ -201,7 +216,10 @@ pub trait InodeTrait: Send + Sync {
     }
 
     /// 获得目录项
-    fn read_dents(&self) -> Option<Vec<Dirent>>;
+    fn read_dents(&self) -> Option<Vec<Dirent>> {
+        warn!("[InodeTrait::read_dents] not implemented for this inode type");
+        None
+    }
 
     /// io操作, 被sys_ioctl系统调用调用, 默认不支持这个操作
     fn ioctl(&self, op: usize, arg: usize) -> SysResult<usize> {
