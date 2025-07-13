@@ -99,7 +99,6 @@ impl FrameAllocator for StackFrameAllocator {
     fn frame_free(&self) -> usize {
         self.end - self.current + self.recycled.len()
     }
-    
 }
 
 /// 硬编码释放ltp文件的pagecache

@@ -34,15 +34,15 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_SETDOMINNAME => sys_setdominname(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SPLICE => {
             sys_splice(
-                args[0] as usize, 
-                args[1] as usize, 
-                args[2] as usize, 
-                args[3] as usize, 
-                args[4] as usize, 
-                args[5] as u32
+                args[0] as usize,
+                args[1] as usize,
+                args[2] as usize,
+                args[3] as usize,
+                args[4] as usize,
+                args[5] as u32,
             )
             .await
-        },
+        }
         SysCode::SYSCALL_SCHED_GETPARAM => sys_sched_getparam(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SCHED_SETPARAM => sys_sched_setparam(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SETRESUID => sys_setresuid(),

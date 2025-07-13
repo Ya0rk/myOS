@@ -46,29 +46,29 @@ fn run_cmd(cmd: &str) {
 #[no_mangle]
 fn main() -> i32 {
     run_cmd("/musl/busybox --install /bin\0");
-    // 拷贝动态库到指定位置,这里是musl的动态库
-    #[cfg(target_arch = "loongarch64")]
-    {
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0");
-    }
-    #[cfg(target_arch = "riscv64")]
-    {
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0");
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0");
-        run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0");
-        run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0");
-    }
-    #[cfg(target_arch = "loongarch64")]
-    {
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0");
-    }
-    #[cfg(target_arch = "riscv64")]
-    {
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0");
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0");
-        run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0");
-        run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0");
-    }
+    // // 拷贝动态库到指定位置,这里是musl的动态库
+    // #[cfg(target_arch = "loongarch64")]
+    // {
+    //     run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0");
+    // }
+    // #[cfg(target_arch = "riscv64")]
+    // {
+    //     run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0");
+    //     run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0");
+    //     run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0");
+    //     run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0");
+    // }
+    // #[cfg(target_arch = "loongarch64")]
+    // {
+    //     run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0");
+    // }
+    // #[cfg(target_arch = "riscv64")]
+    // {
+    //     run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0");
+    //     run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0");
+    //     run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0");
+    //     run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0");
+    // }
     if fork() == 0 {
         println!("main run sh");
         run_cmd("/bin/sh\0");
@@ -90,6 +90,6 @@ const ENV: &[&str] = &[
                 "PATH=/bin:/musl/basic:/musl/ltp:/musl:/\0",
                 "HOME=/\0",
                 "LD_LIBRARY_PATH=/lib\0",
-                "TERM=screen\0",
+                "TERM=xterm\0",
                 "LTPROOT=Ya0rk\0",
             ];

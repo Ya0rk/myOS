@@ -115,7 +115,6 @@ impl InodeTrait for DevNullInode {
         stat
     }
 
-
     fn look_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         None // /dev/null 不支持路径解析
     }
@@ -143,7 +142,6 @@ impl InodeTrait for DevNullInode {
     async fn sync(&self) {
         // /dev/null 不需要同步操作
     }
-
 
     async fn read_all(&self) -> SysResult<Vec<u8>> {
         Ok(Vec::new()) // /dev/null 的读取始终返回空内容

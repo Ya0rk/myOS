@@ -227,7 +227,6 @@ impl TaskQueue {
     pub fn normal_len(&self) -> usize {
         self.normal.lock().len()
     }
-
 }
 
 /// 将任务加入队列

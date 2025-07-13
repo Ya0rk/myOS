@@ -155,7 +155,8 @@ impl InodeTrait for Ext4Inode {
 
         let nf = Ext4Inode::new(path, types.clone().into(), page_cache.clone());
         bare_dentry.bind(nf.clone());
-        if nf.is_valid() { // 这里的判断没用
+        if nf.is_valid() {
+            // 这里的判断没用
             info!("[do_create] succe {}", path);
         } else {
             info!("[do_create] faild {}", path);
@@ -352,9 +353,7 @@ impl InodeTrait for Ext4Inode {
     }
 
     fn link(&self, bare_dentry: Arc<Dentry>) -> SysResult<usize> {
-        let types = {
-            self.node_type().into()
-        };
+        let types = { self.node_type().into() };
         let mut file = self.file.lock();
         if bare_dentry.is_valid() {
             return Err(Errno::EEXIST);
@@ -365,12 +364,11 @@ impl InodeTrait for Ext4Inode {
             file.file_path.to_str().unwrap(),
             new_path
         );
-        
+
         match file.link(new_path) {
             Ok(_) => {
                 debug_point!("[ext4_link]");
-                let inode =
-                    Ext4Inode::new(&new_path, types, self.get_page_cache());
+                let inode = Ext4Inode::new(&new_path, types, self.get_page_cache());
                 debug_point!("[ext4_link]");
                 bare_dentry.bind(inode);
                 debug_point!("[ext4_link]");

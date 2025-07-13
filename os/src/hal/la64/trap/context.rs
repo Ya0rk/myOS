@@ -1,5 +1,5 @@
-use core::{arch::asm, fmt::Debug};
 use super::super::arch::sstatus::{self, Sstatus, FS, SPP};
+use core::{arch::asm, fmt::Debug};
 use log::info;
 use loongarch64::register::*;
 

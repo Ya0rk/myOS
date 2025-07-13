@@ -19,7 +19,8 @@ use crate::sync::{
     NullFuture, TimeSpec, TimeVal, TimeoutFuture, Tms, CLOCK_MANAGER,
 };
 use crate::syscall::ffi::{
-    CloneArgs, CloneFlags, RlimResource, Rusage, Sysinfo, SyslogCmd, Utsname, WaitOptions, CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD
+    CloneArgs, CloneFlags, RlimResource, Rusage, Sysinfo, SyslogCmd, Utsname, WaitOptions,
+    CPUSET_LEN, LOGINFO, RUSAGE_CHILDREN, RUSAGE_SELF, RUSAGE_THREAD,
 };
 use crate::syscall::io::SigMaskGuard;
 use crate::syscall::{CpuSet, RLimit64, SchedParam};
@@ -272,15 +273,22 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
 
     info!("[sys_execve]: path: {:?}, cwd: {:?}", path, cwd);
     // #[cfg(target_arch = "loongarch64")]
-    if unlikely(cwd == "/glibc" && argv.iter().any(|s| s == "pthread_cancel" || s == "pthread_robust_detach" || s == "sem_init")) {
+    if unlikely(
+        cwd == "/glibc"
+            && argv
+                .iter()
+                .any(|s| s == "pthread_cancel" || s == "pthread_robust_detach" || s == "sem_init"),
+    ) {
         // 跳过这个测例libctest
         // task.set_zombie();
         return Ok(0);
     }
 
-    if unlikely( cwd == "/glibc" && 
-        argv.iter()
-            .any(|s| s == "setvbuf_unget" || s == "pthread_condattr_setclock")
+    if unlikely(
+        cwd == "/glibc"
+            && argv
+                .iter()
+                .any(|s| s == "setvbuf_unget" || s == "pthread_condattr_setclock"),
     ) {
         // 跳过这个测例libctest
         // task.set_zombie();
@@ -440,8 +448,11 @@ pub async fn sys_wait4(
                         }
                     }
                     None => {
-                        info!("[sys_wait4] task {} is waiting for child process to exit.", task.get_pid());
-                        return Err(Errno::EINTR)
+                        info!(
+                            "[sys_wait4] task {} is waiting for child process to exit.",
+                            task.get_pid()
+                        );
+                        return Err(Errno::EINTR);
                     }
                 }
             };
@@ -886,19 +897,13 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
                 signum,
                 SigCode::User,
                 SigErr::empty(),
-                SigDetails::Kill {
-                    pid: 0,
-                    uid: 0,
-                },
+                SigDetails::Kill { pid: 0, uid: 0 },
             );
             let manager = MANAGER.task_manager.lock();
             for (pid, weak_task) in manager.0.iter().filter(|&(pid, _)| *pid != INITPROC_PID) {
                 let task = weak_task.upgrade().unwrap();
                 if task.is_leader() {
-                    siginfo.sifields = SigDetails::Kill {
-                        pid: *pid,
-                        uid: 0,
-                    };
+                    siginfo.sifields = SigDetails::Kill { pid: *pid, uid: 0 };
                     task.proc_recv_siginfo(siginfo);
                 }
             }
@@ -911,10 +916,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
                 signum,
                 SigCode::User,
                 SigErr::empty(),
-                SigDetails::Kill {
-                    pid: p,
-                    uid: 0,
-                },
+                SigDetails::Kill { pid: p, uid: 0 },
             );
             for target_pid in target_group {
                 let recv_task = get_task_by_pid(target_pid).ok_or(Errno::ESRCH)?;
@@ -1175,7 +1177,12 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
         "[sys_setitimer] start, which = {}, new_value = {:#x}, old_value = {:#x}",
         which, new_value, old_value
     );
-    if unlikely(new_value == 0 || new_value > USER_SPACE_TOP || old_value > USER_SPACE_TOP || old_value == 0) {
+    if unlikely(
+        new_value == 0
+            || new_value > USER_SPACE_TOP
+            || old_value > USER_SPACE_TOP
+            || old_value == 0,
+    ) {
         info!("[sys_setitimer] new_value is null.");
         return Err(Errno::EFAULT);
     }
@@ -1241,7 +1248,6 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
     }
 
     Ok(0)
-    
 }
 /// TODO(YJJ): 这个和getitimer是适配cyclic测例的，分数较低，最后实现。
 pub fn sys_getitimer(which: usize, curr_value: usize) -> SysResult<usize> {
@@ -1430,4 +1436,3 @@ pub fn sys_sched_getparam(pid: usize, param: usize) -> SysResult<usize> {
 
     Ok(0)
 }
-

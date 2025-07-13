@@ -180,9 +180,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if unlikely(
-            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE
-        ) {
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -274,7 +272,9 @@ pub fn sys_statx(
 ) -> SysResult<usize> {
     info!("[sys_statx] start");
     // println!("[sys_statx] start, dirfd = {}, pathname = {}, statxbuf = {}, maks = {}, flags = {}", dirfd, pathname, statxbuf, mask, flags);
-    if unlikely(statxbuf == 0 || pathname == 0 || pathname > USER_SPACE_TOP || statxbuf > USER_SPACE_TOP) {
+    if unlikely(
+        statxbuf == 0 || pathname == 0 || pathname > USER_SPACE_TOP || statxbuf > USER_SPACE_TOP,
+    ) {
         info!("[sys_statx] pathname or statxbuf is null, fault.");
         return Err(Errno::EFAULT);
     }
@@ -614,9 +614,7 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if unlikely(
-            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE
-        ) {
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -714,7 +712,7 @@ pub fn sys_chdir(path: usize) -> SysResult<usize> {
     info!("[sys_chdir] start, path = {:#x}", path);
     match check_readable(path.into(), 1) {
         Ok(_) => {}
-        Err(_) => return Err(Errno::EFAULT)
+        Err(_) => return Err(Errno::EFAULT),
     }
 
     let token = current_user_token();
@@ -924,15 +922,12 @@ pub async fn sys_sendfile(
         if src.is_pipe() {
             src.clone()
                 .downcast_arc::<Pipe>()
-                .map_err( |_| Errno::EINVAL )?
-                .with_mut_buffer( | buffer | {
-                    buffer.buf.len()
-                } )
-        }
-        else if src.is_deivce() {
+                .map_err(|_| Errno::EINVAL)?
+                .with_mut_buffer(|buffer| buffer.buf.len())
+        } else if src.is_deivce() {
             todo!()
-        }
-        else { // file on disk
+        } else {
+            // file on disk
             src.get_inode().get_size()
         }
     };
@@ -989,9 +984,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
-        let inode = task
-            .get_file_by_fd(dirfd as usize)
-            .ok_or(Errno::EBADF)?;
+        let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         if unlikely(!inode.is_dir()) {
             log::error!("[sys_faccessat] dirfd = {} is not a dir.", dirfd);
             return Err(Errno::ENOTDIR);
@@ -1386,8 +1379,18 @@ pub fn sys_fchdir(fd: usize) -> SysResult<usize> {
 /// up to size bytes of data from the file descriptor fd_in to the
 /// file descriptor fd_out, where one of the file descriptors must
 /// refer to a pipe.
-pub async fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usize, size: usize, _flags: u32) -> SysResult<usize> {
-    info!("[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}", fd_in, off_in, fd_out, off_out, size);
+pub async fn sys_splice(
+    fd_in: usize,
+    off_in: usize,
+    fd_out: usize,
+    off_out: usize,
+    size: usize,
+    _flags: u32,
+) -> SysResult<usize> {
+    info!(
+        "[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}",
+        fd_in, off_in, fd_out, off_out, size
+    );
 
     if unlikely(fd_in == fd_out) {
         info!("[sys_splice] fd_in and fd_out are the same, return EINVAL");
@@ -1432,7 +1435,7 @@ pub async fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usi
     // 开辟一个内核缓冲区承载数据
     let mut buffer = vec![0u8; size];
     let read_size = match file_in.is_pipe() {
-        true  => file_in.read(&mut buffer).await?,
+        true => file_in.read(&mut buffer).await?,
         false => file_in.read_at(in_offset, &mut buffer).await?,
     };
     if unlikely(read_size == 0) {
@@ -1441,7 +1444,7 @@ pub async fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usi
     }
 
     let write_size = match file_out.is_pipe() {
-        true  => file_out.write(&buffer).await?,
+        true => file_out.write(&buffer).await?,
         false => file_out.write_at(out_offet, &buffer).await?,
     };
     if unlikely(write_size == 0) {
@@ -1450,13 +1453,13 @@ pub async fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usi
     }
 
     match off_in {
-        0 => {},
-        _ => unsafe{ core::ptr::write(off_in as *mut usize, in_offset + read_size) },
+        0 => {}
+        _ => unsafe { core::ptr::write(off_in as *mut usize, in_offset + read_size) },
     }
 
     match off_out {
-        0 => {},
-        _ => unsafe{ core::ptr::write(off_out as *mut usize, out_offet + write_size) },
+        0 => {}
+        _ => unsafe { core::ptr::write(off_out as *mut usize, out_offet + write_size) },
     }
 
     Ok(0)

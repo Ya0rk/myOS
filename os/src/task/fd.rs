@@ -1,14 +1,19 @@
 use core::{cmp::min, fmt::Display, intrinsics::unlikely};
 
 // #![allow(unused)]
+use super::current_task;
 use crate::{
-    fs::{open, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
+    fs::{open, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout},
+    hal::config::RLIMIT_NOFILE,
+    mm::memory_space::{MmapFlags, MmapProt},
+    net::Socket,
+    sync::time_duration,
+    syscall::RLimit64,
+    utils::{Errno, SysResult},
 };
 use alloc::{collections::binary_heap::BinaryHeap, format, string::String, sync::Arc, vec::Vec};
 use log::info;
 use lwext4_rust::bindings::O_WRONLY;
-use super::current_task;
-
 
 const BITS_PER_BLOCK: usize = 64; // 每个位图块64位
 #[derive(Clone)]
@@ -93,10 +98,10 @@ impl FdTable {
         if fd < self.table_len() - 1 {
             self.freed_stack.push(fd);
         }
-        
+
         // 更新位图 (标记为空闲)
         self.update_bitmap(fd, true);
-        
+
         // 更新快速查找起点
         if fd < self.next_free {
             self.next_free = fd;
@@ -107,7 +112,7 @@ impl FdTable {
         let block_idx = fd / BITS_PER_BLOCK;
         let bit_offset = fd % BITS_PER_BLOCK;
         let mask = 1 << bit_offset;
-        
+
         if block_idx < self.free_bitmap.len() {
             if is_free {
                 // 设置位 (标记为空闲)
@@ -122,24 +127,24 @@ impl FdTable {
     fn find_free_by_bitmap(&mut self) -> Option<usize> {
         // 从next_free开始查找
         let start_block = self.next_free / BITS_PER_BLOCK;
-        
+
         for block_idx in start_block..self.free_bitmap.len() {
             let bits = self.free_bitmap[block_idx];
             if bits == 0 {
                 continue; // 该块无空闲位
             }
-            
+
             // 找到第一个空闲位
             let offset = bits.trailing_zeros() as usize;
             let fd = block_idx * BITS_PER_BLOCK + offset;
-            
+
             // 确保FD在表范围内
             if fd < self.table_len() {
                 self.next_free = fd + 1; // 更新查找起点
                 return Some(fd);
             }
         }
-        
+
         // 没有找到空闲位
         self.next_free = self.table_len(); // 重置查找起点
         None
@@ -158,9 +163,9 @@ impl FdTable {
 impl FdTable {
     pub fn new() -> Self {
         // 自带三个文件描述符，分别是标准输入、标准输出、标准错误
-        let stdin = FdInfo::new(Arc::new(Stdin), OpenFlags::O_RDONLY);
-        let stdout = FdInfo::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
-        let stderr = FdInfo::new(Arc::new(Stdout), OpenFlags::O_WRONLY);
+        let stdin = FdInfo::new(Arc::new(Stdin::new()), OpenFlags::O_RDONLY);
+        let stdout = FdInfo::new(Arc::new(Stdout::new()), OpenFlags::O_WRONLY);
+        let stderr = FdInfo::new(Arc::new(Stdout::new()), OpenFlags::O_WRONLY);
         let mut fd_table = Vec::new();
         fd_table.push(stdin);
         fd_table.push(stdout);
@@ -221,7 +226,7 @@ impl FdTable {
         if new_fd >= self.rlimit.rlim_cur as usize {
             return Err(Errno::EMFILE);
         }
-        
+
         self.ensure_bitmap_size(new_fd);
         self.update_bitmap(new_fd, false); // 新FD标记为已使用
         self.put_in(info, new_fd)?;
@@ -346,18 +351,23 @@ pub fn test_fd_performance() {
     use core::time::Duration;
 
     println!("Starting FD table performance tests...");
-    let testfile = open("/aaa".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR).unwrap().file().unwrap();
+    let testfile = open("/aaa".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR)
+        .unwrap()
+        .file()
+        .unwrap();
 
     // 测试1: 顺序分配性能
     let test_sequential_allocation = |size: usize| -> (Duration, Duration) {
         let start = time_duration();
         let mut table = FdTable::new();
         table.rlimit.rlim_cur = size + 3; // 标准输入/输出/错误占3个
-        
+
         for _ in 0..size {
-            table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap();
+            table
+                .alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty()))
+                .unwrap();
         }
-        
+
         (start, time_duration())
     };
 
@@ -365,23 +375,29 @@ pub fn test_fd_performance() {
     let test_random_reuse = |size: usize| -> (Duration, Duration) {
         let mut table = FdTable::new();
         table.rlimit.rlim_cur = size + 3;
-        
+
         // 先分配所有FD
         let mut fds: Vec<usize> = (0..size)
-            .map(|_| table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap())
+            .map(|_| {
+                table
+                    .alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty()))
+                    .unwrap()
+            })
             .collect();
-        
+
         // 随机释放一半FD
         for i in (0..size).step_by(2) {
             table.remove(fds[i]).unwrap();
         }
-        
+
         let start = time_duration();
         // 重新分配释放的FD
-        for _ in 0..size/2 {
-            table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap();
+        for _ in 0..size / 2 {
+            table
+                .alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty()))
+                .unwrap();
         }
-        
+
         (start, time_duration())
     };
 
@@ -389,20 +405,24 @@ pub fn test_fd_performance() {
     let test_high_turnover = |cycles: usize, batch: usize| -> (Duration, Duration) {
         let mut table = FdTable::new();
         table.rlimit.rlim_cur = (batch * 2) + 3;
-        
+
         let start = time_duration();
         for _ in 0..cycles {
             let mut fds = Vec::with_capacity(batch);
             // 分配一批FD
             for _ in 0..batch {
-                fds.push(table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap());
+                fds.push(
+                    table
+                        .alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty()))
+                        .unwrap(),
+                );
             }
             // 立即释放这批FD
             for fd in fds {
                 table.remove(fd).unwrap();
             }
         }
-        
+
         (start, time_duration())
     };
 
@@ -410,17 +430,21 @@ pub fn test_fd_performance() {
     let test_alloc_than = |size: usize| -> (Duration, Duration) {
         let mut table = FdTable::new();
         table.rlimit.rlim_cur = size + 20;
-        
+
         // 预先分配一些低FD
         for _ in 0..10 {
-            table.alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty())).unwrap();
+            table
+                .alloc_fd(FdInfo::new(testfile.clone(), OpenFlags::empty()))
+                .unwrap();
         }
-        
+
         let start = time_duration();
         for _ in 0..size {
-            table.alloc_fd_than(FdInfo::new(testfile.clone(), OpenFlags::empty()), 11).unwrap();
+            table
+                .alloc_fd_than(FdInfo::new(testfile.clone(), OpenFlags::empty()), 11)
+                .unwrap();
         }
-        
+
         (start, time_duration())
     };
 
@@ -428,33 +452,56 @@ pub fn test_fd_performance() {
     const TEST_SIZE: usize = 10_000;
     println!("\n[Test 1] Sequential allocation ({} FD)", TEST_SIZE);
     let (start, end) = test_sequential_allocation(TEST_SIZE);
-    println!("Time: start: {:?}, end: {:?}, usetime = {:?}", start, end, end - start);
+    println!(
+        "Time: start: {:?}, end: {:?}, usetime = {:?}",
+        start,
+        end,
+        end - start
+    );
 
     println!("\n[Test 2] Random reuse ({} FD, 50% reuse)", TEST_SIZE);
     let (start, end) = test_random_reuse(TEST_SIZE);
-    println!("Time: start: {:?}, end: {:?}, usetime = {:?}", start, end, end - start);
+    println!(
+        "Time: start: {:?}, end: {:?}, usetime = {:?}",
+        start,
+        end,
+        end - start
+    );
 
     const TURNOVER_CYCLES: usize = 1_000;
     const BATCH_SIZE: usize = 1000;
-    println!("\n[Test 3] High turnover ({} cycles × {} FD)", TURNOVER_CYCLES, BATCH_SIZE);
+    println!(
+        "\n[Test 3] High turnover ({} cycles × {} FD)",
+        TURNOVER_CYCLES, BATCH_SIZE
+    );
     let (start, end) = test_high_turnover(TURNOVER_CYCLES, BATCH_SIZE);
-    println!("Time: start: {:?}, end: {:?}, usetime = {:?}", start, end, end - start);
+    println!(
+        "Time: start: {:?}, end: {:?}, usetime = {:?}",
+        start,
+        end,
+        end - start
+    );
 
     println!("\n[Test 4] Allocate FD > 10 ({} FD)", TEST_SIZE);
     let (start, end) = test_alloc_than(TEST_SIZE);
-    println!("Time: start: {:?}, end: {:?}, usetime = {:?}", start, end, end - start);
+    println!(
+        "Time: start: {:?}, end: {:?}, usetime = {:?}",
+        start,
+        end,
+        end - start
+    );
 
     // 内存使用分析
     println!("\nMemory usage analysis:");
     let table = FdTable::new();
     let base_size = core::mem::size_of::<FdTable>();
     println!("- Empty FD table: {} bytes", base_size);
-    
+
     let mut large_table = FdTable::new();
     large_table.rlimit.rlim_cur = 10_000;
     large_table.table.resize(10_000, FdInfo::new_bare());
     let full_size = core::mem::size_of_val(&large_table);
     println!("- 10,000 FD table: {} bytes", full_size);
-    
+
     println!("\nPerformance tests completed!");
 }

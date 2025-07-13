@@ -125,11 +125,10 @@ pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
     }
     // Ok(0)
     if let Some(file) = task.get_file_by_fd(fd) {
-        if file.is_deivce() {
-            file.get_inode().ioctl(op, arg)
-        } else {
+        if file.is_pipe() {
             return Ok(0);
         }
+        file.get_inode().ioctl(op, arg)
     } else {
         Err(Errno::EBADF)
     }
@@ -228,6 +227,8 @@ pub async fn sys_pselect(
         SigMaskGuard::new(task.clone(), new_sigmask)
     };
 
+    // println!("[sys_pselect] readfds: {:#x}, writefds: {:#x}, exceptfds: {:#x}",
+    // readfds_ptr, writefds_ptr, exceptfds_ptr);
     let iofuture = IoFutrue::new(
         file_events,
         UptrFmt::Pselect([readfds_ptr, writefds_ptr, exceptfds_ptr]),

@@ -1,11 +1,11 @@
 
 mod heap_allocator;
 pub mod address;
+pub mod frame_allocator;
 pub mod memory_space;
 pub mod page;
 pub mod page_table;
 pub mod user_ptr;
-pub mod frame_allocator;
 
 use alloc::sync::Arc;
 pub use frame_allocator::FrameTracker;

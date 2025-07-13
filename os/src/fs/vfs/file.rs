@@ -7,12 +7,12 @@ use crate::{
 use alloc::boxed::Box;
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
-use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use core::{
+    any::Any,
     sync::atomic::{AtomicUsize, Ordering},
     task::Waker,
-    any::Any
 };
+use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use log::info;
 use spin::RwLock;
 

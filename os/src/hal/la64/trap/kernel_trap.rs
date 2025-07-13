@@ -7,7 +7,7 @@ use loongarch64::register::*;
 
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{set_next_trigger, TIMER_QUEUE};
-use crate::task::{current_task, set_ktrap_ret, get_current_cpu};
+use crate::task::{current_task, get_current_cpu, set_ktrap_ret};
 use crate::utils::SysResult;
 
 #[no_mangle]
@@ -36,14 +36,17 @@ pub fn kernel_trap_handler() {
         }
         Trap::Exception(e) => {
             match e {
-                Exception::LoadPageFault |
-                Exception::StorePageFault |
-                Exception::FetchPageFault |
-                Exception::PageModifyFault |
-                Exception::PageNonReadableFault |
-                Exception::PageNonExecutableFault => {
-                    let va = badv::read().vaddr();  
-                    info!("[kernel_trap_handler] meet a pagefault {:?} at {:#x}", e, va);
+                Exception::LoadPageFault
+                | Exception::StorePageFault
+                | Exception::FetchPageFault
+                | Exception::PageModifyFault
+                | Exception::PageNonReadableFault
+                | Exception::PageNonExecutableFault => {
+                    let va = badv::read().vaddr();
+                    info!(
+                        "[kernel_trap_handler] meet a pagefault {:?} at {:#x}",
+                        e, va
+                    );
                     let access_type = match e {
                         Exception::LoadPageFault | Exception::PageNonReadableFault => {
                             PageFaultAccessType::RO
@@ -54,15 +57,14 @@ pub fn kernel_trap_handler() {
                         Exception::FetchPageFault | Exception::PageNonExecutableFault => {
                             PageFaultAccessType::RX
                         }
-                        _=> {
+                        _ => {
                             unreachable!()
                         }
                     };
-                    
+
                     let task = current_task().unwrap();
-                    result = task.with_mut_memory_space(|m| {
-                        m.handle_page_fault(va.into(), access_type)
-                    });
+                    result =
+                        task.with_mut_memory_space(|m| m.handle_page_fault(va.into(), access_type));
 
                     result.is_err().then(|| {
                         use crate::hal::arch::current_inst_len;

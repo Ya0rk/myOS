@@ -3,9 +3,9 @@ use crate::{
         dirent::build_dirents, ffi::MEMINFO, open, AbsPath, Dirent, FileClass, InodeTrait,
         InodeType, Kstat, OpenFlags,
     },
+    mm::frame_allocator::{FrameAllocator, StackFrameAllocator, FRAME_ALLOCATOR},
     sync::{SpinNoIrqLock, TimeStamp},
     utils::SysResult,
-    mm::frame_allocator::{FRAME_ALLOCATOR, StackFrameAllocator, FrameAllocator},
 };
 use alloc::{boxed::Box, format};
 use alloc::{
@@ -115,11 +115,10 @@ impl InodeTrait for ProcFsInode {
                         frame_allocator.frame_free() * 4,
                     )
                 };
-                
 
-// TODO: 要补充
+                // TODO: 要补充
                 let meminfo = format!(
-r"MemTotal:     {mem_total:>10} kB
+                    r"MemTotal:     {mem_total:>10} kB
 MemFree:      {mem_free:>10} kB
 MemAvailable: {mem_available:>10} kB
 ",
@@ -187,11 +186,9 @@ MemAvailable: {mem_available:>10} kB
                         frame_allocator.frame_free() * 4,
                     )
                 };
-                
-
 
                 let meminfo = format!(
-r"MemTotal:     {mem_total:>10} kB
+                    r"MemTotal:     {mem_total:>10} kB
 MemFree:      {mem_free:>10} kB
 MemAvailable: {mem_available:>10} kB
 ",

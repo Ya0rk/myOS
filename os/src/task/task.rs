@@ -350,7 +350,7 @@ impl TaskControlBlock {
         };
 
         let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
-            true => SyncUnsafeCell::new(self.get_memory_space().clone()), 
+            true => SyncUnsafeCell::new(self.get_memory_space().clone()),
             false => {
                 let child_memory_space =
                     MemorySpace::from_user_lazily(&mut self.get_memory_space().lock());
@@ -799,10 +799,10 @@ impl TaskControlBlock {
         unsafe { &mut *(self.trap_cx.get() as *mut TrapContext) }
     }
     pub fn get_memory_space(&self) -> &Shared<MemorySpace> {
-        unsafe{ & *self.memory_space.get() }
+        unsafe { &*self.memory_space.get() }
     }
     pub fn get_memory_space_mut(&self) -> &mut Shared<MemorySpace> {
-        unsafe{ &mut *self.memory_space.get() }
+        unsafe { &mut *self.memory_space.get() }
     }
 
     /// 刷新TLB
@@ -885,9 +885,7 @@ impl TaskControlBlock {
     }
     /// 在指定位置设置fd
     pub fn put_fd_in(&self, fd: FdInfo, idx: usize) -> SysResult {
-        self.fd_table
-            .lock()
-            .put_in(fd, idx)
+        self.fd_table.lock().put_in(fd, idx)
     }
     /// 清空fd_table
     pub fn clear_fd_table(&self) {
