@@ -143,7 +143,7 @@ pub trait FileTrait: Any + Send + Sync + DowncastSync {
         None
     }
 
-    fn get_socket(self: Arc<Self>) -> SysResult<Arc<dyn Socket>> {
+    fn get_socket(&self) -> SysResult<Arc<dyn Socket>> {
         Err(Errno::ENOTSOCK)
     }
     fn set_flags(&self, flags: OpenFlags) {

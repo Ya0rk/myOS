@@ -59,4 +59,16 @@ impl FileTrait for SocketFile {
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
         socketinode.socket.pollout(waker)
     }
+
+    fn get_socket(&self) -> SysResult<Arc<dyn Socket>> {
+        let inode = self.get_inode();
+        let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
+        Ok(socketinode.socket.clone())
+    }
+
+    fn get_flags(&self) -> OpenFlags {
+        let inode = self.get_inode();
+        let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
+        socketinode.socket.get_flags().unwrap_or(OpenFlags::empty())
+    }
 }

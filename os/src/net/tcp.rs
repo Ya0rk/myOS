@@ -26,6 +26,7 @@ use crate::net::do_port_aloc;
 use crate::net::net_async::TcpAcceptFuture;
 use crate::net::net_async::TcpRecvFuture;
 use crate::net::PORT_MANAGER;
+use crate::net::PORT_START;
 use crate::net::SOCKET_SET;
 use crate::sync::get_waker;
 use crate::sync::yield_now;
@@ -54,7 +55,6 @@ use spin::Spin;
 /// TCP 是一种面向连接的字节流套接字
 pub struct TcpSocket {
     pub handle: SocketHandle,
-    pub flags: OpenFlags,
     pub sockmeta: SpinNoIrqLock<SockMeta>,
     pub state: SpinNoIrqLock<TcpState>,
 }
@@ -73,10 +73,10 @@ impl Drop for TcpSocket {
 
         // 释放端口
         self.with_sockmeta(|sockmeta| {
-            if let Some(port) = sockmeta.port {
-                info!("[TcpSocket::drop] dealloc port: {}", port);
-                PORT_MANAGER.lock().dealloc(sockmeta.domain, port);
-            }
+            sockmeta.port
+            .filter(|&port| port >= PORT_START)  // 仅处理 port >= 49152 的情况
+            .inspect(|port| info!("[TcpSocket::drop] dealloc port: {}", port))
+            .map(|port| PORT_MANAGER.lock().dealloc(sockmeta.domain, port));
         });
 
         NET_DEV.lock().poll();
@@ -89,12 +89,11 @@ impl TcpSocket {
     pub fn new(iptype: IpType, flags: OpenFlags) -> Self {
         let socket = Self::new_sock();
         let handle = SOCKET_SET.lock().add(socket);
-        let sockmeta = SpinNoIrqLock::new(SockMeta::new(Sock::Tcp, iptype, BUFF_SIZE, BUFF_SIZE));
+        let sockmeta = SpinNoIrqLock::new(SockMeta::new(Sock::Tcp, iptype, BUFF_SIZE, BUFF_SIZE, flags));
         // TODO(YJJ): maybe bug
         // NET_DEV.lock().poll();
         Self {
             handle,
-            flags,
             sockmeta,
             state: SpinNoIrqLock::new(TcpState::Closed),
         }
@@ -315,8 +314,8 @@ impl Socket for TcpSocket {
             newsock.sockmeta.lock().local_end = Some(local_end);
         }
         // newsock.do_bind(local_end)?;
-        // newsock.listen(10)?;
-        newsock.set_state(TcpState::Established);
+        newsock.listen(0)?;
+        // newsock.set_state(TcpState::Established);
         let newsock = Arc::new(newsock);
         let newfd = sock_map_fd(newsock, cloexec_enable).map_err(|_| Errno::EAFNOSUPPORT)?;
 
@@ -524,5 +523,9 @@ impl Socket for TcpSocket {
             return false;
         });
         Ok(res)
+    }
+
+    fn get_flags(&self) -> SysResult<OpenFlags> {
+        Ok(self.sockmeta.lock().flags)
     }
 }

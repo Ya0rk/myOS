@@ -40,7 +40,7 @@ pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usi
 /// On success, zero is returned.  On error, -1 is returned, and errno
 /// is set to indicate the error.
 pub fn sys_bind(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
-    info!("[sys_bind] start, sockfd = {}", sockfd);
+    info!("[sys_bind] start, sockfd = {}, addr = {:?}", sockfd, addr);
     trace!("[sys_bind] addr = {}, addrlen = {}", addr, addrlen);
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
@@ -142,7 +142,7 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
     let flags = file.get_flags();
     let socket = file.get_socket()?;
 
-    let (remote_end, newfd) = socket.accept(OpenFlags::empty()).await?;
+    let (remote_end, newfd) = socket.accept(flags).await?;
     // 将remote_end保存在addr中
     let ptr = addr as *mut u8;
     if unlikely(addr == 0) {
@@ -214,7 +214,7 @@ pub async fn sys_accept4(
         }
     };
     user_sockaddr.write2user(buf, addrlen)?;
-    info!("[sys_accept] new sockfd: {}", newfd);
+    info!("[sys_accept4] new sockfd: {}", newfd);
 
     Ok(newfd)
 }

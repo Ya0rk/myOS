@@ -1,18 +1,17 @@
 use super::{tcp::TcpSocket, udp::UdpSocket, TcpState, NET_DEV};
 use crate::{
     fs::OpenFlags,
-    net::SOCKET_SET,
+    net::{Socket, SOCKET_SET},
     utils::{Errno, SysResult},
 };
 use core::{future::Future, task::Poll};
 use log::info;
 use smoltcp::{
     socket::{
-        tcp::{self, Socket},
+        tcp::{self},
         udp::{self, UdpMetadata},
-    },
-    wire::IpEndpoint,
-};
+    }, wire::IpEndpoint}
+;
 
 pub struct TcpAcceptFuture<'a> {
     /// 正在阻塞等待accept的socket
@@ -48,7 +47,7 @@ impl<'a> Future for TcpAcceptFuture<'a> {
                 }
                 _ => {
                     // The socket is marked nonblocking and no connections are present to be accepted.
-                    if self.socket.flags.contains(OpenFlags::O_NONBLOCK) {
+                    if self.socket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
                         return Poll::Ready(Err(Errno::EAGAIN));
                     }
                     // 注册waker，当socket状态改变时会重新唤醒任务执行，执行poll，直到返回Ready
@@ -87,10 +86,11 @@ impl<'a> Future for TcpSendFuture<'a> {
         NET_DEV.lock().poll();
         let ret = self.tcpsocket.with_socket(|socket| {
             if !socket.is_open() {
+                info!("[TcpSendFuture] socket state {:?}", socket.state());
                 return Poll::Ready(Err(Errno::ENOTCONN));
             }
             if !socket.can_send() {
-                if self.tcpsocket.flags.contains(OpenFlags::O_NONBLOCK) {
+                if self.tcpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
                     return Poll::Ready(Err(Errno::EAGAIN));
                 }
                 socket.register_send_waker(cx.waker());
@@ -99,12 +99,12 @@ impl<'a> Future for TcpSendFuture<'a> {
 
             match socket.send_slice(self.msg_buf) {
                 Ok(size) => {
-                    NET_DEV.lock().poll();
                     return Poll::Ready(Ok(size));
                 }
                 Err(_) => return Poll::Ready(Err(Errno::ENOBUFS)),
             };
         });
+        NET_DEV.lock().poll();
         ret
     }
 }
@@ -137,7 +137,7 @@ impl<'a> Future for UdpSendFuture<'a> {
         let socket = binding.get_mut::<udp::Socket>(self.udpsocket.handle);
         let ret = {
             if !socket.can_send() {
-                if self.udpsocket.flags.contains(OpenFlags::O_NONBLOCK) {
+                if self.udpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
                     return Poll::Ready(Err(Errno::EAGAIN));
                 }
                 socket.register_send_waker(cx.waker());
@@ -182,7 +182,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
                 return Poll::Ready(Ok(0));
             }
             if !socket.may_recv() {
-                if self.tcpsocket.flags.contains(OpenFlags::O_NONBLOCK) {
+                if self.tcpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
                     return Poll::Ready(Err(Errno::EAGAIN));
                 }
                 return Poll::Ready(Err(Errno::ENOTCONN));

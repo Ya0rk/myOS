@@ -2,7 +2,7 @@ use super::{
     addr::{IpType, SockIpv4, SockIpv6, Sock, SockAddr},
     SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET,
 };
-use crate::fs::FileTrait;
+use crate::{fs::FileTrait, net::PORT_START};
 use crate::mm::UserBuffer;
 use crate::{
     fs::{FileMeta, OpenFlags, RenameFlags},
@@ -27,7 +27,6 @@ use smoltcp::{
 /// UDP 是一种无连接的报文套接字
 pub struct UdpSocket {
     pub handle: SocketHandle,
-    pub flags: OpenFlags,
     pub sockmeta: SpinNoIrqLock<SockMeta>,
 }
 
@@ -42,7 +41,12 @@ impl Drop for UdpSocket {
         drop(binding);
 
         // 释放端口
-        PORT_MANAGER.lock().dealloc(Sock::Udp, self.sockmeta.lock().port.unwrap());
+        self.with_sockmeta(|sockmeta| {
+            sockmeta.port
+            .filter(|&port| port >= PORT_START)  // 仅处理 port >= 49152 的情况
+            .inspect(|port| info!("[UdpSocket::drop] dealloc port: {}", port))
+            .map(|port| PORT_MANAGER.lock().dealloc(sockmeta.domain, port));
+        });
         NET_DEV.lock().poll();
     }
 }
@@ -51,12 +55,11 @@ impl UdpSocket {
     pub fn new(iptype: IpType) -> Self {
         let socket = Self::new_socket();
         let handle = SOCKET_SET.lock().add(socket);
-        let sockmeta = SpinNoIrqLock::new(SockMeta::new(Sock::Udp, iptype, BUFF_SIZE, BUFF_SIZE));
+        let sockmeta = SpinNoIrqLock::new(SockMeta::new(Sock::Udp, iptype, BUFF_SIZE, BUFF_SIZE, OpenFlags::O_RDWR));
         // TODO(YJJ): maybe bug
         NET_DEV.lock().poll();
         Self {
             handle,
-            flags: OpenFlags::O_RDWR,
             sockmeta,
         }
     }
@@ -122,6 +125,14 @@ impl UdpSocket {
         let mut binding = SOCKET_SET.lock();
         let socket = binding.get_mut::<udp::Socket>(self.handle);
         f(socket)
+    }
+    
+    fn with_sockmeta<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut SockMeta) -> R,
+    {
+        let mut sockmeta = self.sockmeta.lock();
+        f(&mut sockmeta)
     }
 }
 
@@ -334,5 +345,8 @@ impl Socket for UdpSocket {
             return Ok(false);
         });
         res
+    }
+    fn get_flags(&self) -> SysResult<OpenFlags> {
+        Ok(self.sockmeta.lock().flags)
     }
 }

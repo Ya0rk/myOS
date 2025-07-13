@@ -89,6 +89,9 @@ impl Socket for UnixSocket {
         warn!("UnixSocket::pollout not implemented");
         todo!()
     }
+    fn get_flags(&self) -> SysResult<OpenFlags> {
+        todo!()
+    }
 }
 
 // #[async_trait]

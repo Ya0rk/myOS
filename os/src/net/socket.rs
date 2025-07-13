@@ -22,6 +22,7 @@ pub struct SockMeta {
     pub iptype: IpType,
     pub recv_buf_size: usize,
     pub send_buf_size: usize,
+    pub flags: OpenFlags,
     pub port: Option<u16>,
     pub shuthow: Option<ShutHow>,
     pub local_end: Option<IpEndpoint>,
@@ -29,12 +30,13 @@ pub struct SockMeta {
 }
 
 impl SockMeta {
-    pub fn new(domain: Sock, iptype: IpType, recv_buf_size: usize, send_buf_size: usize) -> Self {
+    pub fn new(domain: Sock, iptype: IpType, recv_buf_size: usize, send_buf_size: usize, flags: OpenFlags) -> Self {
         Self {
             domain,
             iptype,
             recv_buf_size,
             send_buf_size,
+            flags,
             port: None,
             shuthow: None,
             local_end: None,
@@ -81,6 +83,8 @@ pub trait Socket: Send + Sync {
     fn pollin(&self, waker: Waker) -> SysResult<bool>;
 
     fn pollout(&self, waker: Waker) -> SysResult<bool>;
+
+    fn get_flags(&self) -> SysResult<OpenFlags>;
 }
 
 impl dyn Socket {
