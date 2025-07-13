@@ -11,7 +11,7 @@ mod sched;
 mod task;
 mod thread_group;
 
-pub use fd::{sock_map_fd, FdInfo, FdTable};
+pub use fd::{sock_map_fd, exchange_sock_fdinfo, FdInfo, FdTable};
 pub use futex::*;
 pub use ipc::ShmidTable;
 pub use manager::{

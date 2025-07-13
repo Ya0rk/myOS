@@ -142,7 +142,7 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
     let flags = file.get_flags();
     let socket = file.get_socket()?;
 
-    let (remote_end, newfd) = socket.accept(flags).await?;
+    let (remote_end, newfd) = socket.accept(sockfd, flags).await?;
     // 将remote_end保存在addr中
     let ptr = addr as *mut u8;
     if unlikely(addr == 0) {
@@ -191,7 +191,7 @@ pub async fn sys_accept4(
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
 
-    let (remote_end, newfd) = socket.accept(flags).await?;
+    let (remote_end, newfd) = socket.accept(sockfd, flags).await?;
     let ptr = addr as *mut u8;
     if unlikely(addr == 0) {
         return Err(Errno::EFAULT);

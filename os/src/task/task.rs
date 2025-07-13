@@ -865,7 +865,7 @@ impl TaskControlBlock {
     }
     /// 将fd作为index获取文件描述符
     pub fn get_fd(&self, fd: usize) -> SysResult<FdInfo> {
-        self.fd_table.lock().get_fd(fd)
+        self.fd_table.lock().get_fdinfo(fd)
     }
     /// 分配fd
     pub fn alloc_fd(&self, fd: FdInfo) -> SysResult<usize> {

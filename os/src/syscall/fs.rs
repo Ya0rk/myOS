@@ -1099,7 +1099,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
         FcntlFlags::F_SETFD => {
             // Set the file descriptor flags to the value specified by arg.
             let mut table = task.fd_table.lock();
-            let mut fd_info = table.get_mut_fd(fd)?;
+            let mut fd_info = table.get_mut_fdinfo(fd)?;
             if arg == 1 {
                 fd_info.flags = OpenFlags::O_CLOEXEC;
             } else {

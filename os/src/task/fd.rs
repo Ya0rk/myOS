@@ -311,7 +311,7 @@ impl FdTable {
         Ok(self.table[idx].file.as_ref().map(|fd| fd.clone()))
     }
 
-    pub fn get_fd(&self, idx: usize) -> SysResult<FdInfo> {
+    pub fn get_fdinfo(&self, idx: usize) -> SysResult<FdInfo> {
         if idx >= self.table_len() {
             return Err(Errno::EBADF);
         }
@@ -319,7 +319,7 @@ impl FdTable {
     }
 
     /// 获取fdinfo的可变引用，修改里面的数据
-    pub fn get_mut_fd(&mut self, idx: usize) -> SysResult<&mut FdInfo> {
+    pub fn get_mut_fdinfo(&mut self, idx: usize) -> SysResult<&mut FdInfo> {
         if idx >= self.table_len() {
             return Err(Errno::EBADF);
         }
@@ -342,6 +342,21 @@ pub fn sock_map_fd(socket: Arc<dyn Socket>, cloexec_enable: bool) -> SysResult<u
     let task = current_task().expect("no current task");
     let fd = task.alloc_fd(new_info)?;
     Ok(fd)
+}
+
+pub fn exchange_sock_fdinfo(oldfd: usize, newfd: usize) -> SysResult<()> {
+    let task = current_task().unwrap();
+    if unlikely(oldfd >= task.fd_table_len() || newfd >= task.fd_table_len()) {
+        info!("[exchange_sock_fdinfo] out of range: oldfd = {}, newfd = {}, fdtable len = {}", 
+            oldfd, 
+            newfd, 
+            task.fd_table_len()
+        );
+        return Err(Errno::EBADF);
+    }
+    let mut fdtable = task.fd_table.lock();
+    fdtable.table.swap(oldfd, newfd);
+    Ok(())
 }
 
 pub fn test_fd_performance() {

@@ -32,6 +32,7 @@ use crate::sync::get_waker;
 use crate::sync::yield_now;
 use crate::sync::SpinNoIrqLock;
 use crate::syscall::ShutHow;
+use crate::task::exchange_sock_fdinfo;
 use crate::task::sock_map_fd;
 use crate::utils::Errno;
 use crate::utils::SysResult;
@@ -292,7 +293,7 @@ impl Socket for TcpSocket {
 
         res
     }
-    async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
+    async fn accept(&self, sockfd: usize, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
         info!("[TcpSocket::accept] flags: {:?}", flags);
         if self.check_stat()? != TcpState::Listen {
             return Err(Errno::EINVAL);
@@ -318,6 +319,11 @@ impl Socket for TcpSocket {
         // newsock.set_state(TcpState::Established);
         let newsock = Arc::new(newsock);
         let newfd = sock_map_fd(newsock, cloexec_enable).map_err(|_| Errno::EAFNOSUPPORT)?;
+        // 在accept成功后，oldsock的状态会转化为established，我们后面只能用oldsock来进行数据传输
+        // 然后服务器端任然需要一个socket来监听，所以使用newsock来监听
+        // 所以这里需要将oldsock对应fd的file和newsock对应的file进行交换
+        // 这样，我们返回newfd回去后，用户通过newfd可以访问到oldfile，通过oldfile获取到oldsock
+        exchange_sock_fdinfo(sockfd, newfd)?;
 
         Ok((remote_end, newfd))
     }

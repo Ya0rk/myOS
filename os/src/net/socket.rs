@@ -48,7 +48,7 @@ impl SockMeta {
 #[allow(unused)]
 #[async_trait]
 pub trait Socket: Send + Sync {
-    async fn accept(&self, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)>;
+    async fn accept(&self, sockfd: usize, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)>;
 
     fn bind(&self, addr: &SockAddr) -> SysResult<()>;
 
