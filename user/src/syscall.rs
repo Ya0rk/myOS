@@ -39,6 +39,25 @@ fn syscall(id: usize, args: [usize; 6]) -> isize {
     }
     ret
 }
+pub fn sys_socket(domain: usize, ty: usize, protocol: usize) -> isize {
+    syscall(SYSCALL_SOCKET, [domain, ty, protocol, 0, 0, 0])
+}
+
+pub fn sys_bind(sockfd: usize, addr: usize, addrlen: usize) -> isize {
+    syscall(SYSCALL_BIND, [sockfd, addr, addrlen, 0, 0, 0])
+}
+
+pub fn sys_listen(sockfd: usize, backlog: usize) -> isize {
+    syscall(SYSCALL_LISTEN, [sockfd, backlog, 0, 0, 0, 0])
+}
+
+pub fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> isize {
+    syscall(SYSCALL_CONNECT, [sockfd, addr, addrlen, 0, 0, 0])
+}
+
+pub fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> isize {
+    syscall(SYSCALL_ACCEPT, [sockfd, addr, addrlen, 0, 0, 0])
+}
 
 pub fn sys_unlinkat(dirfd: isize, path: &str, flags: u32) -> isize {
     syscall(SYSCALL_UNLINKAT,[dirfd as usize, path.as_ptr() as usize, flags as usize, 0, 0, 0])

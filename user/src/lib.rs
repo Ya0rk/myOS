@@ -58,6 +58,70 @@ bitflags! {
     }
 }
 
+/// 地址协议簇类型
+pub const AF_INET: u16 = 2;
+pub const AF_INET6: u16 = 10;
+
+/// 套接字类型
+pub const SOCK_STREAM: i32 = 1;
+
+/// 协议类型
+pub const IPPROTO_TCP: i32 = 6;
+
+#[repr(C)]
+pub struct SockIpv4 {
+    /// 地址协议族(AF_INET)
+    pub family: u16,
+    /// Ipv4 的端口
+    pub port: u16,
+    /// Ipv4 的地址
+    pub addr: [u8; 4],
+    /// 零位，用于后续扩展
+    pub zero: [u8; 8],
+}
+
+impl SockIpv4 {
+    /// 创建一个默认的 SockIpv4，地址为本地回环
+    pub fn new_ipv4(port: u16) -> Self {
+        Self {
+            family: AF_INET,
+            port,
+            addr: [127, 0, 0, 1], // 默认地址为本地回环
+            zero: [0u8; 8],
+        }
+    }
+    /// 创建一个指定地址的 SockIpv4
+    pub fn new_ipv4_withaddr(port: u16, addr: [u8; 4]) -> Self {
+        Self {
+            family: AF_INET,
+            port,
+            addr,
+            zero: [0u8; 8],
+        }
+    }
+}
+
+
+pub fn socket(domain: usize, ty: usize, protocol: usize) -> isize {
+    sys_socket(domain, ty, protocol)
+}
+
+pub fn bind(sockfd: usize, addr: usize, addrlen: usize) -> isize {
+    sys_bind(sockfd, addr, addrlen)
+}
+
+pub fn listen(sockfd: usize, backlog: usize) -> isize {
+    sys_listen(sockfd, backlog)
+}
+
+pub fn accept(sockfd: usize, addr: usize, addrlen: usize) -> isize {
+    sys_accept(sockfd, addr, addrlen)
+}
+
+pub fn connect(sockfd: usize, addr: usize, addrlen: usize) -> isize {
+    sys_connect(sockfd, addr, addrlen)
+}
+
 pub fn unlink(dirfd: isize, path: &str, flags: OpenFlags) -> isize {
     sys_unlinkat(dirfd, path, flags.bits())
 }

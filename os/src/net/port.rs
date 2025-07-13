@@ -18,6 +18,9 @@ lazy_static! {
         SpinNoIrqLock::new(SocketSet::new(vec![]));
 }
 
+pub const PORT_START: u16 = 49152;
+pub const PORT_END: u16 = 65535;
+
 pub struct PortManager {
     pub start: u16,
     pub end: u16,
@@ -29,8 +32,8 @@ pub struct PortManager {
 impl PortManager {
     pub fn new() -> Self {
         PortManager {
-            start: 49152,
-            end: 65535,
+            start: PORT_START,
+            end: PORT_END,
             recycled: VecDeque::new(),
             tcp_used_ports: BitVec::from_elem(65536, false),
             udp_used_ports: BitVec::from_elem(65536, false),
