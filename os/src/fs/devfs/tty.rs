@@ -4,7 +4,7 @@ use crate::{
         stdio::{TtyInode, TTY_INODE},
         Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, Stdout, S_IFCHR,
     },
-    mm::{page::Page, UserBuffer},
+    mm::{page::Page},
     sync::{SpinNoIrqLock, TimeStamp},
     task::get_init_proc,
     utils::SysResult,
