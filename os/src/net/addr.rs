@@ -135,7 +135,9 @@ impl SockAddr {
             return SockAddr::Unspec;
         }
 
+        let addr = addr as *const u8;
         let family = unsafe { *(addr as *const u16) };
+        info!("[sockaddr from] family: {}", family);
         match family {
             AF_UNIX => Self::parse_unix(addr, addrlen),
             AF_INET => Self::parse_ipv4(addr, addrlen),
@@ -144,7 +146,7 @@ impl SockAddr {
         }
     }
 
-    fn parse_unix(addr: usize, addrlen: usize) -> Self {
+    fn parse_unix(addr: *const u8, addrlen: usize) -> Self {
         if unlikely(addrlen < core::mem::size_of::<SockUnix>()) {
             info!("[sockaddr from] UNIX socket address too short");
             return SockAddr::Unspec;
@@ -153,7 +155,7 @@ impl SockAddr {
         unsafe { SockAddr::Unix(addr) }
     }
 
-    fn parse_ipv4(addr: usize, addrlen: usize) -> Self {
+    fn parse_ipv4(addr: *const u8, addrlen: usize) -> Self {
         if unlikely(addrlen < core::mem::size_of::<SockIpv4>()) {
             info!("[sockaddr from] IPv4 socket address too short");
             return SockAddr::Unspec;
@@ -162,7 +164,7 @@ impl SockAddr {
         unsafe { SockAddr::Inet4(addr) }
     }
 
-    fn parse_ipv6(addr: usize, addrlen: usize) -> Self {
+    fn parse_ipv6(addr: *const u8, addrlen: usize) -> Self {
         if unlikely(addrlen < core::mem::size_of::<SockIpv6>()) {
             info!("[sockaddr from] IPv6 socket address too short");
             return SockAddr::Unspec;
