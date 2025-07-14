@@ -59,6 +59,14 @@ pub fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> isize {
     syscall(SYSCALL_ACCEPT, [sockfd, addr, addrlen, 0, 0, 0])
 }
 
+pub fn sys_sendto(sockfd: usize, msg: usize, msglen: usize, flags: usize, dest_addr: usize, addrlen: usize) -> isize {
+    syscall(SYSCALL_SENDTO, [sockfd, msg, msglen, flags, dest_addr, addrlen])
+}
+
+pub fn sys_recvfrom(sockfd: usize, buf: usize, buflen: usize, flags: usize, src_addr: usize, addrlen: usize) -> isize {
+    syscall(SYSCALL_RECVFROM, [sockfd, buf, buflen, flags, src_addr, addrlen])
+}
+
 pub fn sys_unlinkat(dirfd: isize, path: &str, flags: u32) -> isize {
     syscall(SYSCALL_UNLINKAT,[dirfd as usize, path.as_ptr() as usize, flags as usize, 0, 0, 0])
 }

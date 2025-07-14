@@ -64,9 +64,11 @@ pub const AF_INET6: u16 = 10;
 
 /// 套接字类型
 pub const SOCK_STREAM: i32 = 1;
+pub const SOCK_DGRAM: i32  = 2;
 
 /// 协议类型
 pub const IPPROTO_TCP: i32 = 6;
+pub const IPPROTO_UDP: i32 = 17;
 
 #[repr(C)]
 pub struct SockIpv4 {
@@ -120,6 +122,14 @@ pub fn accept(sockfd: usize, addr: usize, addrlen: usize) -> isize {
 
 pub fn connect(sockfd: usize, addr: usize, addrlen: usize) -> isize {
     sys_connect(sockfd, addr, addrlen)
+}
+
+pub fn sendto(sockfd: usize, buf: &[u8], buflen: usize, flags: u32, dest_addr: *const SockIpv4, addrlen: usize) -> isize {
+    sys_sendto(sockfd, buf.as_ptr() as usize, buflen, flags as usize, dest_addr as usize, addrlen)
+}
+
+pub fn recvfrom(sockfd: usize, buf: &mut [u8], buflen: usize, flags: u32, src_addr: *mut SockIpv4, addrlen: *const u32) -> isize {
+    sys_recvfrom(sockfd, buf.as_mut_ptr() as usize, buflen, flags as usize, src_addr as usize, addrlen as usize)
 }
 
 pub fn unlink(dirfd: isize, path: &str, flags: OpenFlags) -> isize {
