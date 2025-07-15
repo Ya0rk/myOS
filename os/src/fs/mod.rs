@@ -112,6 +112,7 @@ pub async fn create_init_files() -> SysResult {
     //注册设备/dev/zero
     register_device("/dev/zero");
     register_device("/dev/loop0");
+    register_device("/dev/urandom");
     //注册设备/dev/null
     // register_device("/dev/null");
     //注册设备/dev/misc/rtc
@@ -126,10 +127,14 @@ pub async fn create_init_files() -> SysResult {
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     );
     //创建./etc/localtime记录时区
-    open(
+    if let Ok(FileClass::File(file)) = open(
         "/etc/localtime".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
-    );
+    )
+    {
+        let buf = "/etc/localtime  Fri Jul 19 12:34:56 2024 CST\0".as_bytes(); // 这里是提前往里面写数据
+        file.write(&buf).await;
+    };
     
     if let Ok(FileClass::File(file) ) = open(
         "/ltp_testcode_musl.sh".into(),

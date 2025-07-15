@@ -50,7 +50,7 @@ pub fn open_device_file(abs_path: &str) -> Option<Arc<dyn FileTrait>> {
         Some(Arc::new(DevNull::new()))
     } else if abs_path == "/dev/rtc" || abs_path == "/dev/rtc0" || abs_path == "/dev/misc/rtc" {
         Some(Arc::new(DevRtc::new()))
-    } else if abs_path == "/dev/random" {
+    } else if abs_path == "/dev/urandom" {
         Some(Arc::new(DevRandom::new()))
     } else if abs_path == "/dev/tty" {
         Some(Arc::new(DevTty::new()))
