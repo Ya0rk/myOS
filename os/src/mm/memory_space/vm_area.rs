@@ -1,4 +1,6 @@
 use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
+use core::fmt::Display;
+use core::hash::{Hash, Hasher};
 use core::ops::{Range, RangeBounds};
 use log::{error, info};
 
@@ -473,3 +475,27 @@ impl VmArea {
         Ok(())
     }
 }
+
+
+// #[derive(Debug, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+// struct VmAreaPtr(*mut VmArea);
+
+
+// impl VmAreaPtr {
+//     pub fn new(vma: *mut VmArea) -> Self {
+//         Self(vma)
+//     }
+    
+//     pub fn get(&self) -> &VmArea {
+//         unsafe { &*self.0 }
+//     }
+
+//     pub fn get_mut(&self) -> &mut VmArea {
+//         unsafe { &mut *self.0 }
+//     }
+
+//     pub fn from_ref(vma: &VmArea) -> Self {
+//         unsafe { Self(vma as *const VmArea as *mut VmArea) }
+//     }
+
+// }

@@ -146,6 +146,43 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             //     let ins = *p;
             //     error!("[TEST_ADDR] {:#x}", ins);
             // }
+            // let arc_page = Page::new();
+            // use alloc::sync::{Arc, Weak};
+            // use core::{hash::{BuildHasher, BuildHasherDefault, Hash, Hasher}, panic};
+            // use hashbrown::DefaultHashBuilder;
+            // struct WeakPage(Weak<Page>);
+            // impl Hash for WeakPage {
+            //     fn hash<H: Hasher>(&self, state: &mut H) {
+            //         // self.0.hash(state);
+
+            //         use core::error;
+            //         let p_page = self.0.as_ptr();
+            //         error!("[hash] weak as_ptr: S{:#x}", p_page as u64);
+            //         p_page.hash(state);
+            //     }
+                
+            // }
+            // impl From<Weak<Page>> for WeakPage {
+            //     fn from(w: Weak<Page>) -> Self {
+            //         WeakPage(w)
+            //     }
+            // }
+
+            // use crate::fs::Page;
+            // // Weak::new(*arc_page)
+            // let w_a: WeakPage = Arc::<mm::page::Page>::downgrade(&arc_page).into();
+            // let w_b: WeakPage = Arc::<mm::page::Page>::downgrade(&arc_page).into();
+            // // let hasher = BuildHasherDefault::default();
+            // let build_hasher = DefaultHashBuilder::default();
+            // let mut hasher = build_hasher.build_hasher();
+            // w_a.hash(&mut hasher);
+            // let h_a = hasher.finish();
+            // let mut hasher = build_hasher.build_hasher();
+            // w_b.hash(&mut hasher);
+            // let h_b = hasher.finish();
+            // error!("[hash] {:#x} {:#x}", h_a, h_b);
+            // panic!();
+            
         }
         crate::utils::container::lru::Lru::<i32, usize>::test_lru();
 

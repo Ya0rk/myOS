@@ -22,7 +22,7 @@ pub use ext4::{ls, root_inode};
 pub use ffi::*;
 use lwext4_rust::bindings::{self, true_, O_CREAT, O_RDWR, O_TRUNC};
 use lwext4_rust::{Ext4File, InodeTypes};
-use page_cache::PageCache;
+// use page_cache::PageCache;
 pub use path::{path_test, resolve_path, AbsPath};
 // pub use inode_cache::*;
 pub use mount::MNT_TABLE;
@@ -46,6 +46,7 @@ pub use stat::Kstat;
 pub use stat::Statx;
 pub use stdio::{Stdin, Stdout};
 pub use vfs::*;
+pub use page_cache::PageCache;
 
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;

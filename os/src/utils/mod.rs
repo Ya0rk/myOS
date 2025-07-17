@@ -7,6 +7,7 @@ pub mod elf;
 // pub mod flags;
 pub mod cache;
 pub mod container;
+pub mod raw_ptr;
 
 use crate::{
     hal::arch::{fp_read, ra_read},
