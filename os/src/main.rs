@@ -147,6 +147,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             //     error!("[TEST_ADDR] {:#x}", ins);
             // }
         }
+        crate::utils::container::lru::LinkedList::<usize>::test();
 
         task::init_processors();
         spawn_kernel_task(async move { task::add_initproc().await });

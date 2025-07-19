@@ -228,3 +228,9 @@ impl<T> LinkedList<T> {
         println!("--- All remove_by_ptr tests passed! ---");
     }
 }
+
+impl<T> Drop for LinkedList<T> {
+    fn drop(&mut self) {
+        while self.pop_front().is_some() {}
+    }
+}
