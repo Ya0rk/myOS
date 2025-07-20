@@ -128,6 +128,9 @@ pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
         if file.is_pipe() {
             return Ok(0);
         }
+        if !file.is_deivce() {
+            return Ok(0);
+        }
         file.get_inode().ioctl(op, arg)
     } else {
         Err(Errno::EBADF)
@@ -149,11 +152,9 @@ pub async fn sys_pselect(
     sigmask: usize,
 ) -> SysResult<usize> {
     info!("[sys_pselect] start.");
-    let mut get_fdset = |ptr: usize| {
-        match ptr {
-            0 => None,
-            _ => Some(unsafe { &mut *(ptr as *mut FdSet) }),
-        }
+    let mut get_fdset = |ptr: usize| match ptr {
+        0 => None,
+        _ => Some(unsafe { &mut *(ptr as *mut FdSet) }),
     };
     let mut readfds = get_fdset(readfds_ptr);
     let mut writefds = get_fdset(writefds_ptr);
