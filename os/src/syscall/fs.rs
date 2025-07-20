@@ -185,7 +185,11 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
-        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") || other_cwd == String::from("Stdin")) {
+        if unlikely(
+            other_cwd.contains("is pipe file")
+                || other_cwd == String::from("Stdout")
+                || other_cwd == String::from("Stdin"),
+        ) {
             return Ok(0);
         }
         resolve_path(other_cwd, path)
@@ -305,7 +309,11 @@ pub fn sys_statx(
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
-        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") || other_cwd == String::from("Stdin")) {
+        if unlikely(
+            other_cwd.contains("is pipe file")
+                || other_cwd == String::from("Stdout")
+                || other_cwd == String::from("Stdin"),
+        ) {
             return Ok(0);
         }
         resolve_path(other_cwd, path)
@@ -1387,6 +1395,7 @@ pub async fn sys_splice(
     size: usize,
     _flags: u32,
 ) -> SysResult<usize> {
+    // INFO: 决赛系统调用
     info!(
         "[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}",
         fd_in, off_in, fd_out, off_out, size
@@ -1462,5 +1471,17 @@ pub async fn sys_splice(
         _ => unsafe { core::ptr::write(off_out as *mut usize, out_offet + write_size) },
     }
 
+    Ok(0)
+}
+
+pub fn sys_copy_file_range(
+    fd_int: u32,
+    off_in: *const u8,
+    fd_out: u32,
+    off_out: *const u8,
+    len: usize,
+    flags: usize,
+) -> SysResult<usize> {
+    // TODO: 决赛系统调用
     Ok(0)
 }

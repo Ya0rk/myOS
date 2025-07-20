@@ -183,6 +183,7 @@ pub enum SysCode {
     SYSCALL_PRLIMIT64 = 261,
     GETRANDOM = 278,
     MEMEBARRIER = 283,
+    SYSCALL_COPY_FILE_RANGE = 285,
     SYS_STATX = 291,
     SYSCALL_CLONE3 = 435,
     #[num_enum(default)]
@@ -323,6 +324,7 @@ impl SysCode {
             Self::SYSCALL_SHMAT => "shmat",
             Self::SYSCALL_SHMDT => "shmdt",
             Self::SYSCALL_SHMCTL => "shmctl",
+            Self::SYSCALL_COPY_FILE_RANGE => "copy_file_range",
         }
     }
 }
