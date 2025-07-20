@@ -8,6 +8,7 @@ pub mod elf;
 pub mod cache;
 pub mod container;
 pub mod raw_ptr;
+pub mod user_backtrace;
 
 use crate::{
     hal::arch::{fp_read, ra_read},

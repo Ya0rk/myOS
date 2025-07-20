@@ -262,6 +262,9 @@ impl TrapContext {
     pub fn set_kernel_sp(&mut self, kernel_sp: usize) {
         self.kernel_sp = kernel_sp;
     }
+    pub fn get_fp(&self) -> usize {
+        self.user_gp.fp
+    }
     /// 在do_signal信号处理中,重新设置trap context
     /// 返回到用户自定义函数
     ///
