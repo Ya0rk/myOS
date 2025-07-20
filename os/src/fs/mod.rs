@@ -264,7 +264,8 @@ pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<FileClass> {
     debug_point!("    [open]");
     // info!("[open] abspath = {}", abs_path.get());
     if !path.is_absolute() {
-        panic!("    [fs_open] path = {} is not absolte path.", path.get());
+        // panic!("    [fs_open] path = {} is not absolte path.", path.get());
+        return Err(Errno::ENOENT);
     }
 
     // 临时保存这个机制,后期应当使用设备文件系统去代替
