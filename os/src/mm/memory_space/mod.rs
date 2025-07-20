@@ -380,11 +380,11 @@ impl MemorySpace {
 
         if is_dl {
             // adapted from phoenix
-            log::error!("[load_dl] encounter a dl elf");
+            log::info!("[load_dl] encounter a dl elf");
             let section = elf.find_section_by_name(".interp").unwrap();
             let mut interp_path = String::from_utf8(section.raw_data(&elf).to_vec()).unwrap();
             interp_path = interp_path.strip_suffix("\0").unwrap_or(&interp_path).to_string();
-            log::error!("[load_dl] interp {}", interp_path);
+            log::info!("[load_dl] interp {}", interp_path);
 
 
             let cwd = current_task().unwrap().get_current_path();
