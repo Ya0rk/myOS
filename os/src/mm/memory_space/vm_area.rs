@@ -409,8 +409,8 @@ impl VmArea {
                 sfence_vma_vaddr(vpn.to_vaddr().into());
             } else {
                 pte_flags.set_COW(false)
-                    .set_W(true)
-                    .set_D(true);
+                         .set_W(true)
+                         .set_D(true);
                 pte.set_flags(pte_flags);
                 sfence_vma_vaddr(vpn.to_vaddr().into());
             }
@@ -447,8 +447,11 @@ impl VmArea {
                             } else {
                                 let (pte_flags, ppn) = {
                                     let mut new_flags: PTEFlags = self.map_perm.into();
-                                    new_flags |= PTEFlags::COW;
-                                    new_flags.remove(PTEFlags::W);
+                                    // new_flags |= PTEFlags::COW;
+                                    // new_flags.remove(PTEFlags::W);
+                                    new_flags.set_COW(new_flags.is_W())
+                                             .set_W(false)
+                                             .set_D(false);
                                     (new_flags, page.ppn())
                                 };
                                 page_table.map_leaf(vpn, ppn, pte_flags);
