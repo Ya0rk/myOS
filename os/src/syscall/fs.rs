@@ -21,6 +21,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::SyncUnsafeCell;
 use core::cmp::{max, min};
+use num_traits::Zero;
 // use core::error;
 use core::intrinsics::unlikely;
 use core::ops::Add;
@@ -1474,14 +1475,69 @@ pub async fn sys_splice(
     Ok(0)
 }
 
-pub fn sys_copy_file_range(
-    fd_int: u32,
-    off_in: *const u8,
+pub async fn sys_copy_file_range(
+    fd_in: u32,
+    off_in: usize,
     fd_out: u32,
-    off_out: *const u8,
+    off_out: usize,
     len: usize,
-    flags: usize,
+    _flags: usize,
 ) -> SysResult<usize> {
-    // TODO: 决赛系统调用
-    Ok(0)
+    // INFO: 决赛系统调用
+    let task = current_task().unwrap();
+
+    let file_in = task.get_file_by_fd(fd_in as usize).ok_or(Errno::EBADF)?;
+    let file_out = task.get_file_by_fd(fd_out as usize).ok_or(Errno::EBADF)?;
+
+    let off_in = off_in as *mut usize;
+    let off_out = off_out as *mut usize;
+
+    let offset_in = unsafe { off_in.as_ref().map_or(0, |x| *x) };
+    let offset_out = unsafe { off_out.as_ref().map_or(0, |x| *x) };
+
+    info!(
+        "[sys_copy_file_range] fd_in: {}, off_in: {}, fd_out: {}, off_out: {}, len: {}",
+        fd_in, offset_in, fd_out, offset_out, len,
+    );
+
+    let mut buffer = vec![0u8; len];
+
+    let read_size = match file_in.is_pipe() {
+        true => file_in.read(&mut buffer).await?,
+        false => file_in.read_at(offset_in, &mut buffer).await?,
+    };
+
+    // 如果读取的字节数为 0（没有成功读取），则直接返回
+    if unlikely(read_size == 0) {
+        return Ok(0);
+    }
+
+    let write_size = match file_out.is_pipe() {
+        true => file_out.write(&buffer).await?,
+        false => file_out.write_at(offset_out, &buffer).await?,
+    };
+
+    if unlikely(write_size == 0) {
+        return Ok(0);
+    }
+
+    match off_in.is_null() {
+        true => {
+            file_in.lseek(read_size as isize, SEEK_CUR);
+        }
+        false => unsafe {
+            core::ptr::write(off_in, offset_in + read_size);
+        },
+    };
+
+    match off_out.is_null() {
+        true => {
+            file_out.lseek(write_size as isize, SEEK_CUR);
+        }
+        false => unsafe {
+            core::ptr::write(off_out, offset_out + write_size);
+        },
+    };
+
+    Ok(write_size)
 }
