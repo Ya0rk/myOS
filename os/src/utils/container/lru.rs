@@ -453,5 +453,156 @@ impl<K: Eq + Hash + Clone, V> Lru<K, V> {
         println!("Test clear: OK");
 
         println!("--- All Lru tests passed! ---");
+        println!("\n--- Running Advanced Lru Tests ---");
+
+        // --- Scenario 1: Capacity 1 Cache ---
+        println!("\n[Test Scenario 1: Capacity 1]");
+        let mut lru_cap1 = Lru::new(1);
+        lru_cap1.insert(1, "a");
+        assert_eq!(lru_cap1.get(&1), Some(&"a"));
+        assert_eq!(lru_cap1.len(), 1);
+        println!("  - Inserted 1:'a'");
+
+        // Inserting a new element should evict the old one
+        lru_cap1.insert(2, "b");
+        assert_eq!(lru_cap1.len(), 1);
+        assert_eq!(lru_cap1.contains(&1), false);
+        assert_eq!(lru_cap1.get(&2), Some(&"b"));
+        println!("  - Inserted 2:'b', evicted 1:'a'");
+
+        // Accessing should not change anything
+        lru_cap1.access(&2);
+        assert_eq!(lru_cap1.len(), 1);
+        assert_eq!(lru_cap1.get(&2), Some(&"b"));
+        println!("  - Accessed 2:'b'");
+
+        // Updating the value
+        assert_eq!(lru_cap1.insert(2, "B"), Some("b"));
+        assert_eq!(lru_cap1.len(), 1);
+        assert_eq!(lru_cap1.get(&2), Some(&"B"));
+        println!("  - Updated 2:'B'");
+        println!("[Scenario 1: OK]");
+
+        // --- Scenario 2: Accessing LRU item makes it MRU ---
+        println!("\n[Test Scenario 2: Access LRU item]");
+        let mut lru = Lru::new(3);
+        lru.insert(1, "a"); // State: [1:a]
+        lru.insert(2, "b"); // State: [2:b, 1:a]
+        lru.insert(3, "c"); // State: [3:c, 2:b, 1:a]
+        assert_eq!(lru.pop(), Some("a")); // Confirm 1 is LRU by popping it
+        lru.insert(1, "a"); // Re-add it. State: [1:a, 3:c, 2:b]
+        println!("  - Initial state: [1:a, 3:c, 2:b] (MRU to LRU)");
+
+        // Access the LRU item '2'
+        lru.access(&2); // State should now be [2:b, 1:a, 3:c]
+        println!("  - Accessed key 2");
+
+        // Insert a new item, '3' should be evicted
+        lru.insert(4, "d"); // State: [4:d, 2:b, 1:a]
+        assert_eq!(lru.len(), 3);
+        assert_eq!(lru.contains(&3), false);
+        assert_eq!(lru.get(&1), Some(&"a"));
+        assert_eq!(lru.get(&2), Some(&"b"));
+        assert_eq!(lru.get(&4), Some(&"d"));
+        println!("  - Inserted 4:'d', evicted 3:'c'");
+        println!("[Scenario 2: OK]");
+
+        // --- Scenario 3: Evict and Re-insert ---
+        println!("\n[Test Scenario 3: Evict and Re-insert]");
+        let mut lru = Lru::new(2);
+        lru.insert(1, "a");
+        lru.insert(2, "b"); // State: [2:b, 1:a]
+        lru.insert(3, "c"); // Evicts 1. State: [3:c, 2:b]
+        assert_eq!(lru.get(&1), None);
+        println!("  - Inserted 3:'c', evicted 1:'a'");
+
+        // Re-insert '1'
+        lru.insert(1, "A"); // Evicts 2. State: [1:A, 3:c]
+        assert_eq!(lru.len(), 2);
+        assert_eq!(lru.get(&2), None);
+        assert_eq!(lru.get(&1), Some(&"A"));
+        assert_eq!(lru.get(&3), Some(&"c"));
+        println!("  - Re-inserted 1:'A', evicted 2:'b'");
+        println!("[Scenario 3: OK]");
+
+        // --- Scenario 4: Interleaved Operations (Remove, Access, Insert) ---
+        println!("\n[Test Scenario 4: Interleaved Operations]");
+        let mut lru = Lru::new(4);
+        lru.insert(1, "a");
+        lru.insert(2, "b");
+        lru.insert(3, "c");
+        lru.insert(4, "d"); // State: [4:d, 3:c, 2:b, 1:a]
+        println!("  - Initial state: [4:d, 3:c, 2:b, 1:a]");
+
+        // Remove a middle item
+        assert_eq!(lru.remove(&3), Some("c")); // State: [4:d, 2:b, 1:a]
+        assert_eq!(lru.len(), 3);
+        assert_eq!(lru.contains(&3), false);
+        println!("  - Removed key 3");
+
+        // Access LRU item
+        lru.access(&1); // State: [1:a, 4:d, 2:b]
+        println!("  - Accessed key 1");
+
+        // Insert two items, causing one eviction
+        lru.insert(5, "e"); // State: [5:e, 1:a, 4:d, 2:b]
+        lru.insert(6, "f"); // Evicts 2. State: [6:f, 5:e, 1:a, 4:d]
+        assert_eq!(lru.len(), 4);
+        assert_eq!(lru.contains(&2), false);
+        assert_eq!(lru.get(&6), Some(&"f"));
+        println!("  - Inserted 5:'e' and 6:'f', evicted 2:'b'");
+        println!("[Scenario 4: OK]");
+
+        // --- Scenario 5: Popping until empty ---
+        println!("\n[Test Scenario 5: Popping until empty]");
+        let mut lru = Lru::new(3);
+        lru.insert(1, "a");
+        lru.insert(2, "b");
+        lru.insert(3, "c"); // State: [3:c, 2:b, 1:a]
+        assert_eq!(lru.len(), 3);
+        println!("  - Initial state: [3:c, 2:b, 1:a]");
+
+        assert_eq!(lru.pop(), Some("a"));
+        assert_eq!(lru.len(), 2);
+        assert!(!lru.contains(&1));
+        println!("  - Popped 1:'a'");
+
+        assert_eq!(lru.pop(), Some("b"));
+        assert_eq!(lru.len(), 1);
+        assert!(!lru.contains(&2));
+        println!("  - Popped 2:'b'");
+
+        assert_eq!(lru.pop(), Some("c"));
+        assert_eq!(lru.len(), 0);
+        assert!(!lru.contains(&3));
+        println!("  - Popped 3:'c'");
+
+        assert_eq!(lru.pop(), None);
+        assert_eq!(lru.len(), 0);
+        println!("  - Popped from empty cache");
+        println!("[Scenario 5: OK]");
+
+        // --- Scenario 6: Clear and Reuse ---
+        println!("\n[Test Scenario 6: Clear and Reuse]");
+        let mut lru = Lru::new(2);
+        lru.insert(10, "x");
+        lru.insert(20, "y");
+        assert_eq!(lru.len(), 2);
+
+        lru.clear();
+        assert_eq!(lru.len(), 0);
+        assert!(!lru.contains(&10));
+        assert!(!lru.contains(&20));
+        assert!(lru.map.is_empty());
+        assert!(lru.list.front.is_none());
+        println!("  - Cache cleared");
+
+        lru.insert(30, "z");
+        assert_eq!(lru.len(), 1);
+        assert_eq!(lru.get(&30), Some(&"z"));
+        println!("  - Re-inserted 30:'z' after clear");
+        println!("[Scenario 6: OK]");
+
+        println!("\n--- All Advanced Lru tests passed! ---");
     }
 }
