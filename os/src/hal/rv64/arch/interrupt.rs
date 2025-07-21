@@ -67,7 +67,10 @@ pub fn device_init() {
     }
     // 设置S-Mode CPU使能中断
     unsafe {
+        // sstatus::set_sie();
         sie::set_sext();
+        // 临时启动uart设备的中断功能
+        ((0xffff_ffc0_0000_0000 as usize + 0x1000_0001) as *mut u8).write_volatile(0x01);
     }
 }
 
