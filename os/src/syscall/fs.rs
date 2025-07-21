@@ -1483,61 +1483,55 @@ pub async fn sys_copy_file_range(
     len: usize,
     _flags: usize,
 ) -> SysResult<usize> {
-    // INFO: 决赛系统调用
+    // INFO: 决赛测试用例
+    // TODO: 需要检查范围，如果两个 fd 是同一个文件的话应当检查范围不应当重叠，这个逻辑没有被实现
     let task = current_task().unwrap();
-
     let file_in = task.get_file_by_fd(fd_in as usize).ok_or(Errno::EBADF)?;
     let file_out = task.get_file_by_fd(fd_out as usize).ok_or(Errno::EBADF)?;
-
-    let off_in = off_in as *mut usize;
-    let off_out = off_out as *mut usize;
-
-    let offset_in = unsafe { off_in.as_ref().map_or(0, |x| *x) };
-    let offset_out = unsafe { off_out.as_ref().map_or(0, |x| *x) };
-
+    let offset_in = if off_in == 0 {
+        0
+    } else {
+        unsafe { *(off_in as *const usize) }
+    };
+    let offset_out = if off_out == 0 {
+        0
+    } else {
+        unsafe { *(off_out as *const usize) }
+    };
     info!(
         "[sys_copy_file_range] fd_in: {}, off_in: {}, fd_out: {}, off_out: {}, len: {}",
         fd_in, offset_in, fd_out, offset_out, len,
     );
-
     let mut buffer = vec![0u8; len];
-
     let read_size = match file_in.is_pipe() {
         true => file_in.read(&mut buffer).await?,
         false => file_in.read_at(offset_in, &mut buffer).await?,
     };
-
-    // 如果读取的字节数为 0（没有成功读取），则直接返回
     if unlikely(read_size == 0) {
         return Ok(0);
     }
-
     let write_size = match file_out.is_pipe() {
         true => file_out.write(&buffer).await?,
         false => file_out.write_at(offset_out, &buffer).await?,
     };
-
     if unlikely(write_size == 0) {
         return Ok(0);
     }
-
-    match off_in.is_null() {
-        true => {
+    match off_in {
+        0 => {
             file_in.lseek(read_size as isize, SEEK_CUR);
         }
-        false => unsafe {
-            core::ptr::write(off_in, offset_in + read_size);
+        _ => unsafe {
+            core::ptr::write(off_in as *mut usize, offset_in + read_size);
         },
-    };
-
-    match off_out.is_null() {
-        true => {
+    }
+    match off_out {
+        0 => {
             file_out.lseek(write_size as isize, SEEK_CUR);
         }
-        false => unsafe {
-            core::ptr::write(off_out, offset_out + write_size);
+        _ => unsafe {
+            core::ptr::write(off_out as *mut usize, offset_out + write_size);
         },
-    };
-
+    }
     Ok(write_size)
 }
