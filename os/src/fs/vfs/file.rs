@@ -1,6 +1,6 @@
 use crate::{
     fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags},
-    mm::{page::Page},
+    mm::page::Page,
     net::Socket,
     utils::{Errno, SysResult},
 };
@@ -62,7 +62,7 @@ pub trait FileTrait: Any + Send + Sync + DowncastSync {
     }
 
     /// 临时机制, 为了在ioctl中判断
-    fn is_deivce(&self) -> bool {
+    fn is_device(&self) -> bool {
         false
     }
 

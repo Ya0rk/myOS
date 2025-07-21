@@ -92,6 +92,9 @@ impl FileTrait for Stdin {
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> {
         None
     }
+    fn is_device(&self) -> bool {
+        true
+    }
 }
 
 // --- Stdout ---

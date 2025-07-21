@@ -4,7 +4,7 @@ use crate::{
         stdio::{TtyInode, TTY_INODE},
         Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, Stdout, S_IFCHR,
     },
-    mm::{page::Page},
+    mm::page::Page,
     sync::{SpinNoIrqLock, TimeStamp},
     task::get_init_proc,
     utils::SysResult,
@@ -79,8 +79,8 @@ impl FileTrait for DevTty {
         // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
         todo!()
     }
-    fn is_deivce(&self) -> bool {
-        false
+    fn is_device(&self) -> bool {
+        true
     }
 }
 

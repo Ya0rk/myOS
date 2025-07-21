@@ -933,7 +933,7 @@ pub async fn sys_sendfile(
                 .downcast_arc::<Pipe>()
                 .map_err(|_| Errno::EINVAL)?
                 .with_mut_buffer(|buffer| buffer.buf.len())
-        } else if src.is_deivce() {
+        } else if src.is_device() {
             todo!()
         } else {
             // file on disk
