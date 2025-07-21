@@ -2,17 +2,17 @@ pub mod context;
 pub mod kernel_trap;
 pub mod user_trap;
 
-use alloc::sync::Arc;
-use core::arch::global_asm;
-use core::fmt::Display;
-use log::info;
-use user_trap::{user_trap_handler, user_trap_return};
 use crate::hal::arch::shutdown;
 use crate::signal::do_signal;
 use crate::sync::{get_waker, suspend_now};
 use crate::task::{TaskControlBlock, TaskStatus};
+use alloc::sync::Arc;
 pub use context::TrapContext;
 pub use context::UserFloatRegs;
+use core::arch::global_asm;
+use core::fmt::Display;
+use log::info;
+use user_trap::{user_trap_handler, user_trap_return};
 // riscv架构有关
 #[cfg(target_arch = "riscv64")]
 use riscv::register::mtvec::TrapMode;
@@ -59,7 +59,17 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
             _ => {}
         }
 
+        // debug_point!("before enable sext");
+        unsafe {
+            crate::hal::rv64::arch::interrupt::device_init();
+        };
+        // debug_point!("after enable sext");
+
         user_trap_return();
+
+        unsafe {
+            crate::hal::rv64::arch::interrupt::disenable_supervisor_extern_interrupt();
+        }
 
         match task.get_status() {
             TaskStatus::Zombie => break,

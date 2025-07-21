@@ -9,18 +9,11 @@ use alloc::vec::Vec;
 use user_lib::{chdir, execve, exit, fork, wait, waitpid, yield_};
 
 // 可能会造成动态链接库冲突的测试
-const TEST: &[&str] = &[
-    "./basic_testcode.sh\0",
-    "./busybox_testcode.sh\0",
-];
+const TEST: &[&str] = &["./basic_testcode.sh\0", "./busybox_testcode.sh\0"];
 
-const MUSL_LTP: &[&str] = &[
-    "/ltp_testcode_musl.sh\0",
-];
+const MUSL_LTP: &[&str] = &["/ltp_testcode_musl.sh\0"];
 
-const GLIBC_LTP: &[&str] = &[
-    "/ltp_testcode_glibc.sh\0"
-];
+const GLIBC_LTP: &[&str] = &["/ltp_testcode_glibc.sh\0"];
 
 const TESTCASES: &[&str] = &[
     "./libctest_testcode.sh\0",
@@ -46,11 +39,15 @@ fn run_cmd(cmd: &str, pwd: &str) {
         let path = [pwd, "busybox\0"].concat();
         execve(
             &path,
-            &[ &path, "sh\0", "-c\0", cmd],
+            &[&path, "sh\0", "-c\0", cmd],
             &[
-                ["PATH=", "/bin:", pwd.strip_suffix("/").unwrap(), ].concat().as_str(),
+                ["PATH=", "/bin:", pwd.strip_suffix("/").unwrap()]
+                    .concat()
+                    .as_str(),
                 "HOME=/\0",
-                ["LD_LIBRARY_PATH=", pwd.strip_suffix("/").unwrap(), "/lib\0"].concat().as_str(),
+                ["LD_LIBRARY_PATH=", pwd.strip_suffix("/").unwrap(), "/lib\0"]
+                    .concat()
+                    .as_str(),
                 "TERM=screen\0",
             ],
         );
@@ -65,6 +62,8 @@ fn run_cmd(cmd: &str, pwd: &str) {
 
 #[no_mangle]
 fn main() -> i32 {
+    println!("start loop");
+    loop {}
     let child_pid = fork();
     if child_pid == 0 {
         let cd = "/glibc/";
@@ -82,8 +81,10 @@ fn main() -> i32 {
         {
             run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
             run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
-            run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0", "/glibc/");
-            
+            run_cmd(
+                "/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0",
+                "/glibc/",
+            );
         }
 
         // 除去busybox和basic
@@ -93,7 +94,7 @@ fn main() -> i32 {
 
         run_cmd("/glibc/busybox rm -rf /lib/*\0", "/glibc/"); // 删除glibc的动态库，避免影响musl的basic测试
         run_cmd("/glibc/busybox rm -rf /lib64/*\0", "/glibc/");
-        exit(0); 
+        exit(0);
     } else {
         println!("main parent");
         loop {
@@ -112,18 +113,33 @@ fn main() -> i32 {
         for test in TEST {
             run_cmd(test, cd);
         }
-        
+
         // 拷贝动态库到指定位置,这里是musl的动态库
         #[cfg(target_arch = "loongarch64")]
         {
-            run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0", "/musl/");
+            run_cmd(
+                "/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0",
+                "/musl/",
+            );
         }
         #[cfg(target_arch = "riscv64")]
         {
-            run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0", "/musl/");
-            run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0", "/musl/");
-            run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0", "/musl/");
-            run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0", "/musl/");
+            run_cmd(
+                "/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0",
+                "/musl/",
+            );
+            run_cmd(
+                "/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0",
+                "/musl/",
+            );
+            run_cmd(
+                "/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0",
+                "/musl/",
+            );
+            run_cmd(
+                "/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0",
+                "/musl/",
+            );
         }
 
         run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
@@ -134,7 +150,7 @@ fn main() -> i32 {
 
         run_cmd("/musl/busybox rm -rf /lib/*\0", "/musl/");
         run_cmd("/musl/busybox rm -rf /lib64/*\0", "/musl/");
-        
+
         exit(0);
     } else {
         println!("main parent");
@@ -180,7 +196,6 @@ fn main() -> i32 {
     0
 }
 
-
 fn glibc_ltp() {
     let cd = "/glibc/";
     chdir(&conert_str2byte(cd));
@@ -193,7 +208,10 @@ fn glibc_ltp() {
     {
         run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /lib/ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
         run_cmd("/glibc/busybox cp /glibc/lib/ld-linux-riscv64-lp64d.so.1 /ld-linux-riscv64-lp64d.so.1\0", "/glibc/");
-        run_cmd("/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0", "/glibc/");
+        run_cmd(
+            "/glibc/busybox cp /glibc/lib/libc.so.6 /lib/libc.so.6\0",
+            "/glibc/",
+        );
     }
 
     for test in GLIBC_LTP {
@@ -206,16 +224,32 @@ fn musl_ltp() {
     chdir(&conert_str2byte(cd));
     #[cfg(target_arch = "loongarch64")]
     {
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0", "/musl/");
+        run_cmd(
+            "/musl/busybox cp /musl/lib/libc.so /lib64/ld-musl-loongarch-lp64d.so.1\0",
+            "/musl/",
+        );
     }
     #[cfg(target_arch = "riscv64")]
     {
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0", "/musl/");
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0", "/musl/");
-        run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0", "/musl/");
-        run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0", "/musl/");
+        run_cmd(
+            "/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0",
+            "/musl/",
+        );
+        run_cmd(
+            "/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0",
+            "/musl/",
+        );
+        run_cmd(
+            "/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0",
+            "/musl/",
+        );
+        run_cmd(
+            "/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0",
+            "/musl/",
+        );
     }
     for test in MUSL_LTP {
         run_cmd(test, cd);
     }
 }
+

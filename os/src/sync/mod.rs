@@ -17,8 +17,8 @@ use spin::Lazy;
 use time::{CLOCK_MONOTONIC, CLOCK_REALTIME};
 
 pub use crate::hal::arch::interrupt::{
-    disable_supervisor_interrupt, enable_supervisor_interrupt, enable_supervisor_timer_interrupt,
-    supervisor_interrupt_is_enabled,
+    disable_supervisor_interrupt, enable_supervisor_extern_interrupt, enable_supervisor_interrupt,
+    enable_supervisor_timer_interrupt, supervisor_interrupt_is_enabled,
 };
 pub use misc::{get_waker, suspend_now, yield_now};
 pub use mutex::{new_shared, new_sleep_shared};

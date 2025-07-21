@@ -34,6 +34,43 @@ pub unsafe fn enable_supervisor_timer_interrupt() {
     }
 }
 
+#[inline(always)]
+pub unsafe fn enable_supervisor_extern_interrupt() {
+    unsafe {
+        sie::set_sext();
+    }
+}
+
+#[inline(always)]
+pub unsafe fn disenable_supervisor_extern_interrupt() {
+    unsafe {
+        sie::clear_sext();
+    }
+}
+
+pub fn device_init() {
+    use crate::hal::arch::plic::*;
+    use riscv::register::sie;
+    const VIRT_PLIC: usize = 0xffff_ffc0_0000_0000 + 0xC00_0000;
+    let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
+    let hart_id: usize = 0;
+    let supervisor = IntrTargetPriority::Supervisor;
+    let machine = IntrTargetPriority::Machine;
+    // 设置PLIC中外设中断的阈值
+    plic.set_threshold(hart_id, supervisor, 0);
+    plic.set_threshold(hart_id, machine, 1);
+    // 使能PLIC在CPU处于S-Mode下传递键盘/鼠标/块设备/串口外设中断
+    // irq nums: 5 keyboard, 6 mouse, 8 block, 10 uart
+    for intr_src_id in [5usize, 6, 8, 10] {
+        plic.enable(hart_id, supervisor, intr_src_id);
+        plic.set_priority(intr_src_id, 1);
+    }
+    // 设置S-Mode CPU使能中断
+    unsafe {
+        sie::set_sext();
+    }
+}
+
 /// A guard that disable interrupt when it is created and enable interrupt when it is dropped.
 pub struct InterruptGuard {
     interrupt_before: bool,
