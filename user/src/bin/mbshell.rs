@@ -8,7 +8,6 @@ extern crate user_lib;
 use alloc::vec::Vec;
 use user_lib::{chdir, execve, fork, getpid, mkdir, wait, yield_};
 
-
 /// 传入str引用转换为C风格字符串，使其可以被用作系统调用
 pub fn conert_str2byte(input: &str) -> Vec<u8> {
     let mut bytes: Vec<u8> = input.as_bytes().to_vec();
@@ -24,12 +23,7 @@ fn run_cmd(cmd: &str) {
         println!("task run cmd child: {}, pid: {}", cmd, getpid());
         execve(
             "/musl/busybox\0",
-            &[
-                "/musl/busybox\0",
-                "sh\0",
-                "-c\0",
-                cmd,
-            ],
+            &["/musl/busybox\0", "sh\0", "-c\0", cmd],
             ENV,
         );
     } else {
@@ -75,6 +69,7 @@ fn main() -> i32 {
     } else {
         println!("main parent");
         loop {
+            println!("back is in front");
             let mut exit_code: i32 = 0;
             let pid = wait(&mut exit_code);
             if pid < 0 {
@@ -85,11 +80,11 @@ fn main() -> i32 {
     0
 }
 
-
 const ENV: &[&str] = &[
-                "PATH=/bin:/musl/basic:/musl/ltp:/musl:/\0",
-                "HOME=/\0",
-                "LD_LIBRARY_PATH=/lib\0",
-                "TERM=xterm\0",
-                "LTPROOT=Ya0rk\0",
-            ];
+    "PATH=/bin:/musl/basic:/musl/ltp:/musl:/\0",
+    "HOME=/\0",
+    "LD_LIBRARY_PATH=/lib\0",
+    "TERM=xterm\0",
+    "LTPROOT=Ya0rk\0",
+];
+

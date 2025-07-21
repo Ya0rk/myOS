@@ -340,7 +340,7 @@ struct TtyInodeInner {
 impl TtyInodeInner {
     fn new() -> Self {
         Self {
-            fg_pgid: 0,
+            fg_pgid: 1,
             win_size: WinSize::new(),
             termios: Termios::new(),
         }
@@ -792,4 +792,3 @@ impl fmt::Display for LFlag {
         write!(f, "{}", flags.join(" | "))
     }
 }
-

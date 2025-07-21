@@ -2,12 +2,11 @@
 #![allow(unused)]
 use super::{__return_to_user, set_trap_handler, IndertifyMode};
 use crate::hal::arch::sstatus::SPP;
-use crate::sync::{disable_interrupt, set_next_trigger, yield_now};
+use crate::sync::{disable_supervisor_interrupt, set_next_trigger, yield_now};
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, executor, get_current_hart_id};
 use core::arch::asm;
 use log::info;
-
 
 #[cfg(target_arch = "loongarch64")]
 #[no_mangle]
