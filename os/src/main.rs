@@ -160,7 +160,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             //         error!("[hash] weak as_ptr: S{:#x}", p_page as u64);
             //         p_page.hash(state);
             //     }
-                
+
             // }
             // impl From<Weak<Page>> for WeakPage {
             //     fn from(w: Weak<Page>) -> Self {
@@ -182,7 +182,6 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // let h_b = hasher.finish();
             // error!("[hash] {:#x} {:#x}", h_a, h_b);
             // panic!();
-            
         }
         crate::utils::container::lru::Lru::<i32, usize>::test_lru();
 
@@ -197,7 +196,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         mm::init(false);
     }
 
-    unsafe { sync::enable_timer_interrupt() };
+    unsafe { sync::enable_supervisor_timer_interrupt() };
     timer::set_next_trigger();
     executor::run();
     panic!("Unreachable in rust_main!");
