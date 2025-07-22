@@ -2,7 +2,7 @@ mod dev_loop;
 mod null;
 mod root;
 mod rtc;
-mod tty;
+pub mod tty;
 mod urandom;
 mod zero;
 

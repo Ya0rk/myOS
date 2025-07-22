@@ -1,3 +1,4 @@
+pub mod uart;
 /// 对应着一个设备的实例
 use alloc::sync::Arc;
 #[derive(Clone)]

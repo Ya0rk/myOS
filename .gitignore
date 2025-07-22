@@ -63,6 +63,7 @@ vendor/**
 *.json
 test/*
 py
+GEMINI.md
 
 kernel-rv
 kernel-la
