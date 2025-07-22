@@ -1,6 +1,8 @@
 #[cfg(target_arch = "riscv64")]
 use riscv::register::{sie, sstatus};
 
+const VIRT_PLIC: usize = 0xffff_ffc0_0000_0000 + 0xC00_0000;
+
 #[cfg(target_arch = "riscv64")]
 #[inline(always)]
 /// 打开 supervisor 模式的中断
@@ -51,7 +53,6 @@ pub unsafe fn disenable_supervisor_extern_interrupt() {
 pub fn device_init() {
     use crate::hal::arch::plic::*;
     use riscv::register::sie;
-    const VIRT_PLIC: usize = 0xffff_ffc0_0000_0000 + 0xC00_0000;
     let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
     let hart_id: usize = 0;
     let supervisor = IntrTargetPriority::Supervisor;
@@ -72,6 +73,21 @@ pub fn device_init() {
         // 临时启动uart设备的中断功能
         ((0xffff_ffc0_0000_0000 as usize + 0x1000_0001) as *mut u8).write_volatile(0x01);
     }
+}
+pub fn irq_handler() {
+    use crate::hal::arch::plic::*;
+    use riscv::register::sie;
+    let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
+    let intr_src_id = plic.claim(0, IntrTargetPriority::Supervisor);
+    use log::info;
+    match intr_src_id {
+        5 => info!("[irq_handler] extern irq from keyboard"),
+        6 => info!("[irq_handle] extern irq from mouse"),
+        8 => info!("[irq_handle] extern irq from blockd evice"),
+        10 => info!("[irq_handler] extern irq from uart"),
+        _ => panic!("unsupported IRQ {}", intr_src_id),
+    }
+    plic.complete(0, IntrTargetPriority::Supervisor, intr_src_id);
 }
 
 /// A guard that disable interrupt when it is created and enable interrupt when it is dropped.

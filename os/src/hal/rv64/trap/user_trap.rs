@@ -112,6 +112,11 @@ pub async fn user_trap_handler() {
             set_next_trigger();
             yield_now().await;
         }
+        Trap::Interrupt(Interrupt::SupervisorExternal) => {
+            use log::error;
+            info!("got a supervisor external interrupt. do nothing");
+            crate::hal::arch::interrupt::irq_handler();
+        }
         _ => {
             panic!(
                 "hart_id = {:?}, Unsupported trap {:?}, stval = {:#x}!",
