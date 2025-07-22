@@ -17,15 +17,11 @@ pub fn conert_str2byte(input: &str) -> Vec<u8> {
 
 fn run_cmd(cmd: &str) {
     println!("task run cmd: {}", cmd);
-    let cd = "/musl/";
-    chdir(&conert_str2byte(cd));
+    // let cd = "/musl/";
+    // chdir(&conert_str2byte(cd));
     if fork() == 0 {
         println!("task run cmd child: {}, pid: {}", cmd, getpid());
-        execve(
-            "/musl/busybox\0",
-            &["/musl/busybox\0", "sh\0", "-c\0", cmd],
-            ENV,
-        );
+        execve("/busybox\0", &["/busybox\0", "sh\0", "-c\0", cmd], ENV);
     } else {
         println!("task run cmd parent: {}", cmd);
         let mut exit_code: i32 = 0;
@@ -39,7 +35,8 @@ fn run_cmd(cmd: &str) {
 
 #[no_mangle]
 fn main() -> i32 {
-    run_cmd("/musl/busybox --install /bin\0");
+    run_cmd("/busybox --install /bin\0");
+    println!("finish install");
     // // 拷贝动态库到指定位置,这里是musl的动态库
     // #[cfg(target_arch = "loongarch64")]
     // {
@@ -87,4 +84,3 @@ const ENV: &[&str] = &[
     "TERM=xterm\0",
     "LTPROOT=Ya0rk\0",
 ];
-

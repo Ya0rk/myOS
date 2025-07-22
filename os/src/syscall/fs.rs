@@ -1314,7 +1314,7 @@ pub fn sys_readlinkat(
             } else {
                 return Err(Errno::EFAULT);
             };
-            let path_bytes = "/musl/busybox\0".as_bytes();
+            let path_bytes = "/busybox\0".as_bytes();
             if path_bytes.len() > bufsiz {
                 ub[0..bufsiz].copy_from_slice(&path_bytes[0..bufsiz]);
                 return Ok(bufsiz);
