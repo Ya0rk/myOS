@@ -16,12 +16,14 @@ pub enum SockAddr {
 impl SockAddr {
     pub fn write2user(&self, buf: &mut [u8], len: usize) -> SysResult<()> {
         let len = unsafe { *(len as *const u32) } as usize;
-        trace!("[write2user] len = {}", len);
-        match self {
+        info!("[write2user] len = {}, littleend addr {:?}", len, self);
+        let bigend_addr = &self.little2big();
+        match bigend_addr {
             SockAddr::Inet4(addr) => {
                 if len < core::mem::size_of::<SockIpv4>() {
                     return Err(Errno::EINVAL);
                 }
+                info!("[write2user] write IPv4 address to user, {:?}", addr);
                 // 安全地拷贝 Ipv4 结构体到 buf
                 unsafe {
                     copy_nonoverlapping(
@@ -36,6 +38,7 @@ impl SockAddr {
                 if len < core::mem::size_of::<SockIpv6>() {
                     return Err(Errno::EINVAL);
                 }
+                info!("[write2user] write IPv6 address to user, {:?}", addr);
                 // 安全地拷贝 Ipv6 结构体到 buf
                 unsafe {
                     copy_nonoverlapping(
@@ -51,7 +54,7 @@ impl SockAddr {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Sock {
     Tcp,
     Udp,
@@ -59,7 +62,7 @@ pub enum Sock {
     Unspec,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum IpType {
     Ipv4,
     Ipv6,
@@ -152,7 +155,7 @@ impl SockAddr {
             return SockAddr::Unspec;
         }
         let addr = unsafe { *(addr as *const SockUnix) };
-        unsafe { SockAddr::Unix(addr) }
+        unsafe { SockAddr::Unix(addr).big2little() }
     }
 
     fn parse_ipv4(addr: *const u8, addrlen: usize) -> Self {
@@ -161,7 +164,7 @@ impl SockAddr {
             return SockAddr::Unspec;
         }
         let addr = unsafe { *(addr as *const SockIpv4) };
-        unsafe { SockAddr::Inet4(addr) }
+        unsafe { SockAddr::Inet4(addr).big2little() }
     }
 
     fn parse_ipv6(addr: *const u8, addrlen: usize) -> Self {
@@ -170,7 +173,74 @@ impl SockAddr {
             return SockAddr::Unspec;
         }
         let addr = unsafe { *(addr as *const SockIpv6) };
-        unsafe { SockAddr::Inet6(addr) }
+        unsafe { SockAddr::Inet6(addr).big2little() }
+    }
+
+    /// 需要注意传入的addr *const u8，如果直接强转为SocketIpv6或者SocketIpv4
+    /// 那么里面字段是大端序的数据，需要转化为小端序，然后保存在SockAddr中
+    fn big2little(&self) -> Self {
+        match self {
+            SockAddr::Inet4(addr) => {
+                let addr = SockIpv4 {
+                    family: addr.family,
+                    port: u16::from_be(addr.port),
+                    addr: addr.addr,
+                    zero: addr.zero,
+                };
+                SockAddr::Inet4(addr)
+            }
+            SockAddr::Inet6(addr) => {
+                let addr = SockIpv6 {
+                    family: addr.family,
+                    port: u16::from_be(addr.port),
+                    flowinfo: u32::from_be(addr.flowinfo),
+                    addr: addr.addr,
+                    scope_id: u32::from_be(addr.scope_id),
+                };
+                SockAddr::Inet6(addr)
+            }
+            SockAddr::Unix(addr) => {
+                let addr = SockUnix {
+                    family: addr.family,
+                    path: addr.path,
+                };
+                SockAddr::Unix(addr)
+            }
+            _ => SockAddr::Unspec,
+        }
+    }
+
+    /// 在write2user前需要将port转化为大端
+    fn little2big(&self) -> Self {
+        match self {
+            SockAddr::Inet4(addr) => {
+                let addr = SockIpv4 {
+                    family: addr.family,
+                    port: addr.port.to_be(),
+                    addr: addr.addr,
+                    zero: addr.zero,
+                };
+                SockAddr::Inet4(addr)
+            }
+            SockAddr::Inet6(addr) => {
+                let addr = SockIpv6 {
+                    family: addr.family,
+                    port: addr.port.to_be(),
+                    flowinfo: addr.flowinfo.to_be(),
+                    addr: addr.addr,
+                    scope_id: addr.scope_id.to_be(),
+                };
+                SockAddr::Inet6(addr)
+            }
+            SockAddr::Unix(addr) => {
+                let addr = SockUnix {
+                    family: addr.family,
+                    path: addr.path,
+                };
+                SockAddr::Unix(addr)
+            }
+            _ => SockAddr::Unspec,
+        }
     }
 }
 
@@ -211,18 +281,32 @@ impl TryFrom<SockAddr> for IpEndpoint {
     }
 }
 
+impl From<IpEndpoint> for SockAddr {
+    fn from(value: IpEndpoint) -> Self {
+        match value.addr {
+            IpAddress::Ipv4(addr) => {
+                Self::Inet4(SockIpv4::new(value.port, addr.octets()))
+            }
+            IpAddress::Ipv6(addr) => {
+                Self::Inet6(SockIpv6::new(value.port, addr.octets()))
+            }
+        }
+    }
+}
+
+
 /// 分配地址，这里只涉及到了本地地址
 pub fn do_addr127(endpoint: &mut IpEndpoint) {
     if endpoint.addr.is_unspecified() {
-        match endpoint.addr {
-            IpAddress::Ipv4(_) => {
-                info!("[do_addr127] ipv4 -> 127");
-                endpoint.addr = IpAddress::v4(127, 0, 0, 1);
-            }
-            IpAddress::Ipv6(_) => {
-                info!("[do_addr127] ipv6 -> 127");
-                endpoint.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1);
-            }
-        }
+        // match endpoint.addr {
+        //     IpAddress::Ipv4(_) => {
+        //         info!("[do_addr127] ipv4 -> 127");
+        //         endpoint.addr = IpAddress::v4(127, 0, 0, 1);
+        //     }
+        //     IpAddress::Ipv6(_) => {
+        //         info!("[do_addr127] ipv6 -> 127");
+        //         endpoint.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1);
+        //     }
+        // }
     }
 }
