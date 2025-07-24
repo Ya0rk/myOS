@@ -261,13 +261,20 @@ impl InodeTrait for Ext4Inode {
     /// 改变文件size
     fn truncate(&self, size: usize) -> usize {
         let mut file = self.file.lock();
-
-        // let r = file.file_truncate(size as u64);  // 暂时注释
+        info!("[inode truncate] size = {}", size);
+        // TODO added by lsz: 这里必须打开
+        // TODO 暫時先這麼用著，後面改
+        let path = file.get_path();
+        file.file_open(path.clone().to_str().unwrap(), O_RDWR);
+        // info!("[ext4file state] desc:{:?} path:{:?}, type:{:?}", file.file_desc, file.get_path(), file.get_type());
+        let r = file.file_truncate(size as u64);  // 暂时注释
+        info!("lw successfully truncate");
+        file.file_close();
+        self.get_page_cache().unwrap().truncate(size);
         self.set_size(size).expect("[truncate]: set size fail!");
 
-        // file.file_close();
-        // r.map_or_else(|_| Errno::EIO.into(), |_| 0) //暂时注释
-        0
+        r.map_or_else(|_| Errno::EIO.into(), |_| 0) //暂时注释
+        
     }
     /// 同步文件
     async fn sync(&self) {
