@@ -1,6 +1,7 @@
 use core::cmp::min;
 
 use super::InodeTrait;
+use crate::hal::config::align_down_by_page;
 use crate::mm::page::*;
 use crate::{
     hal::config::{BLOCK_SIZE, PAGE_SIZE},
@@ -16,6 +17,7 @@ use alloc::{
 use hashbrown::HashSet;
 use log::info;
 use spin::RwLock;
+use virtio_drivers::device::console::Size;
 
 /// 使用对齐的地址作为key
 pub struct PageCache {
@@ -47,40 +49,26 @@ impl PageCache {
         let offset_aligned = offset & !(PAGE_SIZE - 1);
         // 从cache中寻找
         let page = self.pages.read().get(&offset_aligned).cloned();
-        let is_new_page = page.is_none();
-        let page = match page {
-            Some(page) => page,
-            None => self.insert_page(offset_aligned)
-        };
-        let inode = self.inode
-            .read()
-            .as_ref()
-            .unwrap()
-            .upgrade()
-            .unwrap();
-        let size = inode.get_size();
-        let mut len = PAGE_SIZE.min(size - offset_aligned);
-        let buf = &mut page.frame.ppn.get_bytes_array()[..len];
-
-        if is_new_page {
-            len = inode.read_dirctly(offset_aligned, buf).await;
+        match page {
+            Some(_) => page,
+            None => {
+                let new_page = self.insert_page(offset_aligned);
+                let buf = new_page.frame.ppn.get_bytes_array();
+                let len = self.inode
+                    .read()
+                    .as_ref()
+                    .unwrap()
+                    .upgrade()
+                    .unwrap()
+                    .read_dirctly(offset_aligned, buf)
+                    .await;
+                if len < PAGE_SIZE {
+                    buf[len..].fill(0);
+                }
+                // info!("[get_page] read page {:?}", buf);
+                Some(new_page)
+            }
         }
-        buf[len..].fill(0);
-        Some(page)
-        // let len = self.inode
-        //     .read()
-        //     .as_ref()
-        //     .unwrap()
-        //     .upgrade()
-        //     .unwrap()
-        //     .read_dirctly(offset_aligned, buf)
-        //     .await;
-        // if len < PAGE_SIZE {
-        //     buf[len..].fill(0);
-        // }
-        // // info!("[get_page] read page {:?}", buf);
-
-        
     }
 
     /// 将page插入cache
@@ -164,5 +152,25 @@ impl PageCache {
         }
 
         buf_cur
+    }
+    
+    pub fn truncate(&self, new_size: usize) {
+        let old_size = self.inode
+            .read()
+            .as_ref()
+            .unwrap()
+            .upgrade()
+            .unwrap()
+            .get_size();
+        if new_size < old_size {
+            let split_page_offset = align_down_by_page(new_size);
+            let split_page = self.pages.read().get(&split_page_offset).cloned();
+            if let Some(page) = split_page {
+                page.ppn().get_bytes_array()[(new_size - split_page_offset)..].fill(0);
+            }
+            for page_offset in (split_page_offset + PAGE_SIZE..old_size).step_by(PAGE_SIZE) {
+                self.pages.write().remove(&page_offset);
+            }
+        }
     }
 }
