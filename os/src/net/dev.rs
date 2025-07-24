@@ -34,6 +34,9 @@ impl NetDev {
             ip_addrs
                 .push(IpCidr::new(IpAddress::v4(127, 0, 0, 1), 24))
                 .unwrap();
+            ip_addrs
+                .push(IpCidr::new(IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1), 128))
+                .unwrap();
         });
         let gateway = IpAddress::v4(127, 0, 0, 1);
         let device = NetDevType::Loopback(loopback);
