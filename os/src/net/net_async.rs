@@ -1,6 +1,6 @@
 use super::{tcp::TcpSocket, udp::UdpSocket, TcpState, NET_DEV};
 use crate::{
-    fs::OpenFlags, net::{addr::SockAddr, Socket, SOCKET_SET}, sync::yield_now, utils::{Errno, SysResult}
+    console::print, fs::OpenFlags, net::{addr::SockAddr, Socket, MAX_BUFFER_SIZE, SOCKET_SET}, sync::yield_now, utils::{Errno, SysResult}
 };
 use core::{future::Future, task::Poll};
 use log::info;
@@ -118,15 +118,15 @@ impl<'a> Future for TcpSendFuture<'a> {
 pub struct UdpSendFuture<'a> {
     pub msg_buf: &'a [u8],
     pub udpsocket: &'a UdpSocket,
-    pub meta: &'a UdpMetadata,
+    pub remote_end: IpEndpoint,
 }
 
 impl<'a> UdpSendFuture<'a> {
-    pub fn new(msg_buf: &'a [u8], socket: &'a UdpSocket, meta: &'a UdpMetadata) -> Self {
+    pub fn new(msg_buf: &'a [u8], socket: &'a UdpSocket, remote_end: IpEndpoint) -> Self {
         Self {
             msg_buf,
             udpsocket: socket,
-            meta,
+            remote_end,
         }
     }
 }
@@ -141,26 +141,25 @@ impl<'a> Future for UdpSendFuture<'a> {
         NET_DEV.lock().poll();
         let mut binding = SOCKET_SET.lock();
         let socket = binding.get_mut::<udp::Socket>(self.udpsocket.handle);
-        let ret = {
-            if !socket.can_send() {
-                if self.udpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
-                    return Poll::Ready(Err(Errno::EAGAIN));
-                }
-                socket.register_send_waker(cx.waker());
-                return Poll::Pending;
-            }
-            match socket.send_slice(self.msg_buf, *self.meta) {
-                Ok(_) => {
-                    // drop(binding);
-                    info!("[UdpSendFuture] finish, msg = {:?}", self.msg_buf);
-                    return Poll::Ready(Ok(self.msg_buf.len()));
-                }
-                Err(_) => return Poll::Ready(Err(Errno::ENOBUFS)),
-            }
-        };
 
-        NET_DEV.lock().poll();
-        ret
+        if !socket.can_send() {
+            if self.udpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
+                return Poll::Ready(Err(Errno::EAGAIN));
+            }
+            // socket.register_send_waker(cx.waker());
+            info!("[UdpSendFuture] socket can't send");
+            return Poll::Ready(Err(Errno::ENOBUFS));
+            // return Poll::Pending;
+        }
+        match socket.send_slice(self.msg_buf, self.remote_end) {
+            Ok(_) => {
+                drop(binding);
+                info!("[UdpSendFuture] finish, msg = {:?}", self.msg_buf);
+                NET_DEV.lock().poll();
+                return Poll::Ready(Ok(self.msg_buf.len()));
+            }
+            Err(_) => return Poll::Ready(Err(Errno::ENOBUFS)),
+        }
     }
 }
 
@@ -221,6 +220,59 @@ impl<'a> Future for TcpRecvFuture<'a> {
             Err(tcp::RecvError::InvalidState) => {
                 return Poll::Ready(Err(Errno::ENOTCONN));
             }
+        }
+
+    }
+}
+
+pub struct UdpRecvFuture<'a> {
+    pub msg_buf: &'a mut [u8],
+    pub udpsocket: &'a UdpSocket,
+}
+
+impl<'a> UdpRecvFuture<'a> {
+    pub fn new(msg_buf: &'a mut [u8], udpsocket: &'a UdpSocket) -> Self {
+        Self {
+            msg_buf,
+            udpsocket
+        }
+    }
+}
+
+impl<'a> Future for UdpRecvFuture<'a> {
+    type Output = SysResult<(usize, SockAddr)>;
+
+    fn poll(
+        mut self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>
+    )-> Poll<Self::Output> {
+        NET_DEV.lock().poll();
+
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<udp::Socket>(self.udpsocket.handle);
+
+        if !socket.can_recv() {
+            let flags = self.udpsocket.get_flags()?;
+            if flags.contains(OpenFlags::O_NONBLOCK) {
+                info!("[UdpRecvFuture] can't recv, flag = {:?}", flags);
+                return Poll::Ready(Err(Errno::EAGAIN));
+            }
+            socket.register_recv_waker(cx.waker());
+            drop(binding);
+            NET_DEV.lock().poll();
+            cx.waker().clone().wake();
+            return Poll::Pending;
+        }
+
+        if let Ok((size, metadata)) = socket.recv_slice(self.msg_buf) {
+            if size > (MAX_BUFFER_SIZE / 2) as usize {
+                // need to impl null sleep
+            }
+            drop(binding);
+            NET_DEV.lock().poll();
+            return Poll::Ready(Ok((size, metadata.endpoint.into())));
+        } else {
+            return Poll::Ready(Err(Errno::ENOTCONN));
         }
 
     }
