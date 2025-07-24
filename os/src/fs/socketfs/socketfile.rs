@@ -1,5 +1,5 @@
 use core::task::Waker;
-use alloc::{string::String, sync::Arc};
+use alloc::{string::{String, ToString}, sync::Arc};
 use async_trait::async_trait;
 use crate::{fs::{socketfs::socketinode::SocketInode, FileMeta, FileTrait, InodeTrait, OpenFlags}, net::Socket, utils::{downcast::Downcast, SysResult}};
 use alloc::boxed::Box;
@@ -70,5 +70,9 @@ impl FileTrait for SocketFile {
         let inode = self.get_inode();
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
         socketinode.socket.get_flags().unwrap_or(OpenFlags::empty())
+    }
+
+    fn get_name(&self) -> SysResult<String> {
+        Ok("SocketFile".to_string())
     }
 }
