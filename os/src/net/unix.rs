@@ -33,10 +33,10 @@ impl Socket for UnixSocket {
     async fn accept(&self, sockfd: usize, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
         unimplemented!()
     }
-    fn bind(&self, _addr: &SockAddr) -> SysResult<()> {
+    fn bind(&self, sockfd: usize, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
-    async fn connect(&self, _addr: &SockAddr) -> SysResult<()> {
+    async fn connect(&self, sockfd: usize, _addr: &SockAddr) -> SysResult<()> {
         unimplemented!()
     }
     fn listen(&self, _backlog: usize) -> SysResult<()> {

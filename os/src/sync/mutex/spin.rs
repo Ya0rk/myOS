@@ -13,8 +13,8 @@ pub struct MutexGuard<'a, T: ?Sized, S: MutexOperations> {
 }
 
 // Forbid Mutex step over `await` and lead to dead lock
-impl<'a, T: ?Sized, S: MutexOperations> !Sync for MutexGuard<'a, T, S> {}
-impl<'a, T: ?Sized, S: MutexOperations> !Send for MutexGuard<'a, T, S> {}
+unsafe impl<'a, T: ?Sized, S: MutexOperations> Sync for MutexGuard<'a, T, S> {}
+unsafe impl<'a, T: ?Sized, S: MutexOperations> Send for MutexGuard<'a, T, S> {}
 
 pub struct SpinMutex<T: ?Sized, L: MutexOperations> {
     _marker: core::marker::PhantomData<L>,
