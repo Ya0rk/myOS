@@ -61,8 +61,10 @@ pub async fn user_trap_handler() {
                     if (err as isize) < 0 {
                         cx.user_gp.a0 = err as usize;
                     } else {
+                        use log::error;
+
                         cx.user_gp.a0 = (-(err as isize)) as usize;
-                        info!("[syscall ret] sysID = {}, errmsg: {}", syscall_id, err.get_info());
+                        error!("[syscall ret] sysID = {}, err: {:?}, errmsg: {}", syscall_id, err, err.get_info());
                     }
                 }
             }

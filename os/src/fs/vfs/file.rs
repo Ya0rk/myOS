@@ -4,7 +4,7 @@ use crate::{
     net::Socket,
     utils::{Errno, SysResult},
 };
-use alloc::boxed::Box;
+use alloc::{boxed::Box, string::ToString};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use downcast_rs::{impl_downcast, Downcast, DowncastSync};
@@ -122,7 +122,7 @@ pub trait FileTrait: Any + Send + Sync + DowncastSync {
     /// 获取文件路径，这里是绝对路径
     fn get_name(&self) -> SysResult<String> {
         warn!("[FileTrait::get_name] not implemented for this file type");
-        Err(Errno::ENOIMPL)
+        Ok("Normal".to_string())
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
         warn!("[FileTrait::rename] not implemented for this file type");
