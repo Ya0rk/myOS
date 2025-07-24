@@ -14,6 +14,7 @@ use crate::mm::address::VirtAddr;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::memory_space::{init_stack, vm_area::MapPerm, MemorySpace};
 use crate::mm::{memory_space, translated_refmut, MapPermission};
+use crate::net::PORT_FD_MANAMER;
 use crate::signal::{
     SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom,
     SigPending, SigStruct, SignalStack,
@@ -480,6 +481,7 @@ impl TaskControlBlock {
         self.clear_fd_table();
         self.detach_all_shm();
         self.recycle_data_pages();
+        PORT_FD_MANAMER.lock().remove_pid(self.get_pid());
     }
 
     /// 向父进程发送信号通知

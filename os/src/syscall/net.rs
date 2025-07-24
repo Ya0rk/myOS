@@ -1,4 +1,4 @@
-use core::intrinsics::unlikely;
+use core::{intrinsics::unlikely, sync::atomic::Ordering};
 
 use super::ffi::{
     ShutHow, CONGESTION, MAXSEGMENT, NODELAY, SOL_SOCKET, SOL_TCP, SO_KEEPALIVE, SO_RCVBUF,
@@ -6,7 +6,7 @@ use super::ffi::{
 };
 use crate::{
     fs::{FileTrait, OpenFlags, Pipe}, hal::config::USER_SPACE_TOP, mm::user_ptr::check_readable, net::{
-        addr::{IpType, SockIpv4, SockIpv6, Sock, SockAddr}, Congestion, Protocol, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, HOST_NAME, MAX_HOST_NAME, MAX_NIS_LEN, NIS_DOMAIN_NAME, TCP_MSS
+        addr::{IpType, Sock, SockAddr, SockIpv4, SockIpv6}, Congestion, Protocol, Socket, SocketType, TcpSocket, AF_INET, AF_INET6, AF_UNIX, PORT_FD_MANAMER, HOST_NAME, MAX_HOST_NAME, MAX_NIS_LEN, NIS_DOMAIN_NAME, TCP_MSS
     }, syscall::ffi::{IPPROTO_IP, IPPROTO_TCP, SO_OOBINLINE, SO_RCVTIMEO}, task::{current_task, sock_map_fd, FdInfo}, utils::{Errno, SysResult}
 };
 use log::{info, trace, warn};
@@ -22,9 +22,9 @@ pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usi
     let type_ = SocketType::from_bits(type_ as u32).ok_or(Errno::EINVAL)?;
     let protocol = protocol as u8;
     let cloexec_enable = type_.contains(SocketType::SOCK_CLOEXEC);
-    if unlikely(domain == AF_UNIX.into()) {
-        return Ok(4);
-    } // 这里是特殊处理，通过musl libctest的网络测例，后序要修改
+    // if unlikely(domain == AF_UNIX.into()) {
+    //     return Ok(4);
+    // } // 这里是特殊处理，通过musl libctest的网络测例，后序要修改
 
     // 根据协议族、套口类型、传输层协议创建套口
     let socket = <dyn Socket>::new(domain as u16, type_).map_err(|_| Errno::EAFNOSUPPORT)?;
@@ -46,6 +46,7 @@ pub fn sys_bind(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> 
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
     let sockaddr = SockAddr::from(addr, addrlen);
+    info!("[sys_bind] sockaddr = {:?}", sockaddr);
     match sockaddr {
         SockAddr::Unspec => {
             info!("[sys_bind] invalid sockaddr");
@@ -53,7 +54,26 @@ pub fn sys_bind(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> 
         }
         _ => {}
     }
-    socket.bind(&sockaddr)?;
+    if socket.get_socktype()? == Sock::Udp {
+        let mut port;
+        match sockaddr {
+            SockAddr::Inet4(addr) => port = addr.port,
+            SockAddr::Inet6(addr) => port = addr.port,
+            _ => port = 0,
+        }
+        if port != 0 {
+            let binding = PORT_FD_MANAMER.lock();
+            if let Some(fds) = binding.get(task.get_pid(), port) {
+                let fd = fds[0];
+                let old_fdinfo = task.get_fd(fd)?;
+                task.fd_table.lock().put_in(old_fdinfo, sockfd);
+                drop(binding);
+                PORT_FD_MANAMER.lock().insert(task.get_pid(), port, sockfd);
+                return Ok(0);
+            }
+        }
+    }
+    socket.bind(sockfd, &sockaddr)?;
 
     Ok(0)
 }
@@ -119,7 +139,7 @@ pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResul
         }
         _ => {}
     }
-    socket.connect(&sockaddr).await?;
+    socket.connect(sockfd, &sockaddr).await?;
 
     Ok(0)
 }
@@ -238,7 +258,7 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
     if unlikely(addrlen == 0 || addrlen == 1) {
         return Err(Errno::EFAULT);
     }
-    let len = unsafe { *(addrlen as *const i32) };
+    let len = unsafe { *(addrlen as *const u32) };
     if unlikely(len < 0) {
         return Err(Errno::EINVAL);
     }
@@ -261,7 +281,7 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
     };
 
     let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len as usize) };
-    sockname.write2user(buf, len as usize)?;
+    sockname.write2user(buf, addrlen)?;
     Ok(0)
 }
 
@@ -298,7 +318,7 @@ pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
     };
 
     let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len) };
-    peername.write2user(buf, len)?;
+    peername.write2user(buf, addrlen)?;
     Ok(0)
 }
 
@@ -320,24 +340,29 @@ pub async fn sys_sendto(
 ) -> SysResult<usize> {
     info!("[sys_sendto] start, sockfd = {}, flags = {}", sockfd, flags);
     let task = current_task().unwrap();
-    let dest_sockaddr = SockAddr::from(dest_addr, addrlen);
-    match dest_sockaddr {
-        SockAddr::Unspec => {
-            info!("[sys_sendto] invalid dest_addr");
-            return Err(Errno::EINVAL);
-        }
-        _ => {}
-    }
+    let dest_sockaddr = match dest_addr {
+        0 => None,
+        _ => {
+            let res = SockAddr::from(dest_addr, addrlen);
+            match res {
+                SockAddr::Unspec => {
+                    info!("[sys_sendto] invalid dest_addr");
+                    return Err(Errno::EINVAL);
+                }
+                _ => Some(res)
+            }
+        },
+    };
 
     let buf = unsafe { core::slice::from_raw_parts(message as *const u8, msg_len) };
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
 
     let res = match socket.get_socktype()? {
-        Sock::Tcp => socket.send_msg(buf, Some(dest_sockaddr)).await?,
+        Sock::Tcp => socket.send_msg(buf, dest_sockaddr).await?,
         Sock::Udp => {
-            socket.connect(&dest_sockaddr).await;
-            socket.send_msg(buf, Some(dest_sockaddr)).await?
+            socket.connect(sockfd, &dest_sockaddr.unwrap()).await;
+            socket.send_msg(buf, dest_sockaddr).await?
         }
         _ => todo!(),
     };
@@ -493,7 +518,7 @@ pub fn sys_getsockopt(
         (SOL_TCP, MAXSEGMENT) => {
             // 返回TCP最大段大小 MSS
             unsafe {
-                *(optval_ptr as *mut u32) = TCP_MSS;
+                *(optval_ptr as *mut u32) = TCP_MSS.load(Ordering::Relaxed);
                 *(optlen as *mut u32) = core::mem::size_of::<u32>() as u32;
             }
         }
@@ -505,15 +530,7 @@ pub fn sys_getsockopt(
             buf.copy_from_slice(bytes);
             unsafe { *(optlen as *mut u32) = name_len as u32 };
         }
-        _ => {
-            warn!("[sys_getsockopt] sockfd: {:?}, level: {:?}, optname: {:?}, optval_ptr: {:?}, optlen: {:?}",
-            sockfd,
-            level,
-            optname,
-            optval_ptr,
-            optlen);
-            return Err(Errno::EOPNOTSUPP);
-        }
+        _ => {}
     }
 
     Ok(0)
@@ -554,6 +571,11 @@ pub fn sys_setsockopt(
             let action = unsafe { *(optval_ptr as *const u32) };
             socket.set_keep_alive(action)?;
         }
+        (SOL_SOCKET, MAXSEGMENT) => {
+            // 设置TCP最大段大小 MSS
+            let new_mss = unsafe { *(optval_ptr as *const u32) };
+            TCP_MSS.store(new_mss, Ordering::Relaxed);
+        }
         (SOL_TCP, NODELAY) => {
             let action = unsafe { *(optval_ptr as *const u32) };
             socket.enable_nagle(action);
@@ -562,7 +584,7 @@ pub fn sys_setsockopt(
             // 设置超时时间暂时未实现
             return Ok(0);
         }
-        _ => return Err(Errno::ENOPROTOOPT),
+        _ => return Ok(0),
     }
 
     Ok(0)

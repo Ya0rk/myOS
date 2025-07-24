@@ -8,6 +8,7 @@ use crate::fs::{
 use crate::hal::config::{AT_FDCWD, PAGE_SIZE, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
 use crate::mm::user_ptr::{check_readable, user_cstr, user_ref_mut, user_slice, user_slice_mut};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
+use crate::net::PORT_FD_MANAMER;
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
 use crate::syscall::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, IoVec, StatFs, AT_REMOVEDIR};
@@ -31,6 +32,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len()) {
+        info!("[write] fd more than len, fd = {}", fd);
         return Err(Errno::EBADF);
     }
     match task.get_file_by_fd(fd) {
@@ -46,7 +48,10 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
             let buf = unsafe { core::slice::from_raw_parts(buf as *mut u8, size) };
             Ok(file.write(buf).await? as usize)
         }
-        _ => Err(Errno::EBADF),
+        _ => {
+            info!("[sys_write] do not get file, fd = {}", fd);
+            Err(Errno::EBADF)
+        },
     }
 }
 
@@ -540,18 +545,21 @@ pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
 pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     info!("[sys_dup] pid = {}, oldfd = {}", task.get_pid(), oldfd);
-    // let mut inner = task.inner_lock();
 
-    let old_temp_fd = task.get_fd(oldfd)?;
+    let old_temp_fdinfo = task.get_fd(oldfd)?;
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.off_Ocloexec(true);
-    let new_fd = task.alloc_fd(new_temp_fd)?;
-    // drop(inner);
-    if new_fd > RLIMIT_NOFILE {
+    let new_temp_fdinfo = old_temp_fdinfo.off_Ocloexec(true);
+    let newfd = task.alloc_fd(new_temp_fdinfo)?;
+    if newfd > RLIMIT_NOFILE {
         return Err(Errno::EBADF);
     }
 
-    Ok(new_fd)
+    let file = task.get_file_by_fd(oldfd).unwrap();
+    if file.get_name()? == "SocketFile" {
+        PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), oldfd, newfd);
+    }
+
+    Ok(newfd)
 }
 
 /// 将一个现有的文件描述符oldfd复制到一个新的文件描述符newfd上，newfd是用户指定的：https://man7.org/linux/man-pages/man2/dup.2.html
@@ -584,15 +592,20 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
         return Err(Errno::EBADF);
     }
 
-    let old_temp_fd = task.get_fd(oldfd)?;
-    if old_temp_fd.is_none() {
+    let old_temp_fdinfo = task.get_fd(oldfd)?;
+    if old_temp_fdinfo.is_none() {
         return Err(Errno::EBADF);
     }
     // 关闭 new fd 的close-on-exec flag (FD_CLOEXEC; see fcntl(2))
-    let new_temp_fd = old_temp_fd.clone().off_Ocloexec(!cloexec);
+    let new_temp_fdinfo = old_temp_fdinfo.clone().off_Ocloexec(!cloexec);
     // info!("[sys_dup3] old file name = {}, oldfd = {}", old_temp_fd.clone().file.unwrap().get_name()?, oldfd);
     // 将newfd 放到指定位置
-    task.put_fd_in(new_temp_fd, newfd)?;
+    task.put_fd_in(new_temp_fdinfo, newfd)?;
+
+    let file = task.get_file_by_fd(oldfd).unwrap();
+    if file.get_name()? == "SocketFile" {
+        PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), oldfd, newfd);
+    }
 
     Ok(newfd)
 }
@@ -1113,7 +1126,10 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
         FcntlFlags::F_DUPFD => {
             if let Some(file) = task.get_file_by_fd(fd) {
                 let flags = file.get_flags();
-                let newfd = task.alloc_fd_than(FdInfo::new(file, flags), arg as usize);
+                let newfd = task.alloc_fd_than(FdInfo::new(file.clone(), flags), arg as usize);
+                if file.get_name()? == "SocketFile" {
+                    PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), fd, newfd);
+                }
                 return Ok(newfd);
             }
             return Err(Errno::EBADF);
@@ -1124,9 +1140,12 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
             if let Some(file) = task.get_file_by_fd(fd) {
                 let flags = file.get_flags();
                 let newfd = task.alloc_fd_than(
-                    FdInfo::new(file, flags | OpenFlags::O_CLOEXEC),
+                    FdInfo::new(file.clone(), flags | OpenFlags::O_CLOEXEC),
                     arg as usize,
                 );
+                if file.get_name()? == "SocketFile" {
+                    PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), fd, newfd);
+                }
                 return Ok(newfd);
             }
             return Err(Errno::EBADF);

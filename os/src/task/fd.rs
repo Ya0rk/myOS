@@ -2,7 +2,7 @@ use core::{cmp::min, fmt::Display, intrinsics::unlikely};
 
 // #![allow(unused)]
 use crate::{
-    fs::{open, socketfs::{socketfile::SocketFile, socketinode::SocketInode}, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::Socket, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
+    fs::{open, socketfs::{socketfile::SocketFile, socketinode::SocketInode}, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::{Socket, PORT_FD_MANAMER}, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
 };
 use alloc::{collections::binary_heap::BinaryHeap, format, string::String, sync::Arc, vec::Vec};
 use log::info;
@@ -290,8 +290,16 @@ impl FdTable {
     }
 
     pub fn remove(&mut self, fd: usize) -> SysResult {
-        if fd >= self.table_len() || self.table[fd].is_none() {
+        if self.table[fd].is_none() {
+            return Ok(());
+        }
+        if fd >= self.table_len() {
             return Err(Errno::EBADF);
+        }
+        let file = self.table[fd].file.as_ref().unwrap();
+        if file.get_name()? == "SocketFile" {
+            let pid = current_task().unwrap().get_pid();
+            PORT_FD_MANAMER.lock().remove_all_fds_by_pid_and_fd(pid, fd);
         }
         self.table[fd].clear();
         self.free_fd_slot(fd); // 释放fd槽位

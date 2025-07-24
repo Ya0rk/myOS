@@ -182,6 +182,7 @@ pub async fn sys_pselect(
 
         let mut find_and_push = |set: &FdSet, event: PollEvents| {
             if set.isset(fd_slot, offset) {
+                info!("[sys_pselect] fd = {}", fd);
                 if let Some(pollfd) = file_events.last_mut()
                     && pollfd.fd as usize == fd
                 {
