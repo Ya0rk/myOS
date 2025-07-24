@@ -170,6 +170,12 @@ impl InodeTrait for Ext4Inode {
     }
     /// 读取文件
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
+        info!(
+            "[ext_inode read_at] file: {}, offset: {} size: {}",
+            &self.metadata.path,
+            offset,
+            buf.len()
+        );
         let file_size = self.get_size();
         if file_size == 0 || offset >= file_size {
             return 0;
@@ -207,6 +213,12 @@ impl InodeTrait for Ext4Inode {
 
     /// 写入文件
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
+        info!(
+            "[ext4_inode write_at] file: {}, offset: {}, len: {}",
+            self.metadata.path,
+            offset,
+            buf.len()
+        );
         let write_size = match &self.page_cache {
             None => {
                 // info!("    [write_at] no cache");

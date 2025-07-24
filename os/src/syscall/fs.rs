@@ -30,6 +30,9 @@ use lwext4_rust::file;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
+    if fd != 0 && fd != 1 && fd != 2 {
+        info!("[sys_write] fd: {}, buf: {}, len: {}", fd, buf, len);
+    }
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len()) {
         return Err(Errno::EBADF);
@@ -52,6 +55,9 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 }
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
+    if fd != 0 && fd != 1 && fd != 2 {
+        info!("[sys_read] fd: {}, buf: {:x}, len: {}", fd, buf, len);
+    }
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len()) {
         // info!("[sys_read] task pid = {}", task.get_pid());
@@ -169,7 +175,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
 pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let path = user_cstr(pathname.into())?.ok_or(Errno::EINVAL)?;
-    debug!("[sys_fsstatat] pathname {},", path);
+    debug!("[sys_fsstatat] pathname {:?},", path);
     let cwd = task.get_current_path();
     info!(
         "[sys_fstatat] start cwd: {}, pathname: {}, flags: {}, dirfd = {}",
@@ -206,6 +212,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
                 return Err(Errno::ENOENT);
             }
             file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] res: {:?}", &tempstat);
             unsafe {
                 core::ptr::write(ptr, tempstat);
             }
@@ -213,6 +220,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         }
         Ok(FileClass::Abs(file)) => {
             file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] res: {:?}", &tempstat);
             unsafe {
                 core::ptr::write(ptr, tempstat);
             }
@@ -363,11 +371,11 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     let path = user_cstr(path.into())?.unwrap();
     let flags = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
-    info!("[sys_openat] path = {}, flags = {:?}", path, flags);
+    // info!("[sys_openat] path = {}, flags = {:?}", path, flags);
 
     // 计算目标路径
     let target_path = if fd == AT_FDCWD {
-        resolve_path(cwd, path)
+        resolve_path(cwd, path.clone())
     } else {
         // 相对路径，以 fd 对应的目录为起点
         if unlikely(fd < 0 || fd as usize > RLIMIT_NOFILE) {
@@ -379,8 +387,8 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
             return Err(Errno::ENOTDIR);
         }
         let other_cwd = inode.get_name()?;
-        info!("[sys_openat] other cwd = {}", other_cwd);
-        resolve_path(other_cwd, path)
+        // info!("[sys_openat] other cwd = {}", other_cwd);
+        resolve_path(other_cwd, path.clone())
     };
 
     // 检查路径是否有效并打开文件
@@ -393,8 +401,9 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
                     unreachable!()
                 }
             };
+            info!("[sys_openat] finished path = {}, flags = {:?}", path, flags);
             info!(
-                "[sys_openat] taskid = {}, alloc fd finished, new fd = {}",
+                "[sys_openat] finished taskid = {}, alloc fd finished, new fd = {}",
                 task.get_pid(),
                 fd
             );
@@ -1027,7 +1036,16 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
 /// associated with the file descriptor fd to the argument offset
 /// according to the directive whence as follows
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
-    info!("[sys_lseek] start");
+    let whence_name = match whence {
+        SEEK_SET => "SEEK_SET",
+        SEEK_CUR => "SEEK_CUR",
+        SEEK_END => "SEEK_END",
+        _ => return Err(Errno::EINVAL),
+    };
+    info!(
+        "[sys_lseek] start fd: {}, off: {}, whence: {}",
+        fd, offset, whence_name
+    );
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
@@ -1139,7 +1157,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
 /// 改变文件大小
 /// 返回值：0、-1
 pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
-    info!("[sys_ftruncate64] start");
+    info!("[sys_ftruncate64] start fd: {}, len: {}", fd, length);
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
@@ -1452,6 +1470,9 @@ pub async fn sys_splice(
         info!("[sys_splice] read_size is 0, return 0");
         return Ok(0);
     }
+    // BUG: 这里应当判断 off_in 为 0 的逻辑
+    // 当 off_in 为 0 的时候应当采用文件的偏移，而不是像这样子采用输入的偏移
+    // 这里也应当是一样的
 
     let write_size = match file_out.is_pipe() {
         true => file_out.write(&buffer).await?,
@@ -1503,15 +1524,28 @@ pub async fn sys_copy_file_range(
         fd_in, offset_in, fd_out, offset_out, len,
     );
     let mut buffer = vec![0u8; len];
-    let read_size = match file_in.is_pipe() {
-        true => file_in.read(&mut buffer).await?,
-        false => file_in.read_at(offset_in, &mut buffer).await?,
+
+    // BUG: 这里应当判断 off_in 为 0 的逻辑
+    // 当 off_in 为 0 的时候应当采用文件的偏移，而不是像这样子采用输入的偏移
+
+    let read_size = match file_in.is_pipe() | (off_in == 0) {
+        true => {
+            debug_point!("read by file's off");
+            file_in.read(&mut buffer).await?
+        }
+        false => {
+            debug_point!("read by offset sended");
+            file_in.read_at(offset_in, &mut buffer).await?
+        }
     };
     if unlikely(read_size == 0) {
         return Ok(0);
     }
-    let write_size = match file_out.is_pipe() {
-        true => file_out.write(&buffer).await?,
+    let write_size = match file_out.is_pipe() | (off_in == 0) {
+        true => {
+            debug_point!("write by file's off");
+            file_out.write(&buffer).await?
+        }
         false => file_out.write_at(offset_out, &buffer).await?,
     };
     if unlikely(write_size == 0) {

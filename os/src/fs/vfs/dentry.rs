@@ -62,7 +62,7 @@ pub struct Dentry {
 
 impl Dentry {
     pub fn with_children<F, R>(&self, f: F) -> R
-    where 
+    where
         F: FnOnce(&mut RwLockWriteGuard<'_, HashMap<String, Arc<Dentry>>>) -> R,
     {
         let mut children = self.children.write();
@@ -101,9 +101,9 @@ impl CacheStatus for Arc<Dentry> {
 impl Dentry {
     /// 初始化dentry系统,将根节点和ext4文件系统绑定
     pub fn init_dentry_sys() {
-        info!("[dentry init]");
+        // info!("[dentry init]");
         Self::bind(&DENTRY_ROOT, crate::fs::ext4::SUPER_BLOCK.root_inode());
-        info!("list root dir");
+        // info!("list root dir");
         {
             DENTRY_ROOT
                 .children
@@ -111,7 +111,7 @@ impl Dentry {
                 .iter()
                 .for_each(|x| println!("{}", x.0));
         };
-        info!("mount ProcFs");
+        // info!("mount ProcFs");
         mkdir("/proc".into(), 0);
         let procFs = Self::get_dentry_from_path("/proc").unwrap();
         procFs.mount(PROCFS_SUPER_BLOCK.clone());
@@ -149,7 +149,7 @@ impl Dentry {
     }
     /// 创建一个儿子节点
     fn new(self: &Arc<Self>, name: &str, inode: Arc<dyn InodeTrait>) -> Arc<Self> {
-        info!("[dentry::new] {}: {}", self.get_abs_path(), name);
+        // info!("[dentry::new] {}: {}", self.get_abs_path(), name);
         let mut inodes = Vec::new();
         let res = Self {
             name: RwLock::new(String::from(name)),
@@ -233,7 +233,7 @@ impl Dentry {
         };
         if pattern.ends_with("..") {
             // 有点多于，这里的路径都是系统调用传来的，.. 和 . 已经处理了
-            info!("return parent");
+            // info!("return parent");
             return self.parent();
         } else if pattern.ends_with("/") || pattern.ends_with(".") || pattern == "" {
             // 多余判断，并且好像pattern不会是/,因为上层是用/分割
@@ -251,11 +251,11 @@ impl Dentry {
     }
     /// 当且仅当 pattern 这个文件无效或者不存在的时候会返回
     pub fn bare_child(self: Arc<Self>, pattern: &str) -> Option<Arc<Self>> {
-        info!(
-            "[get_bare_child] {} try to create {}",
-            self.get_abs_path(),
-            pattern
-        );
+        // info!(
+        //     "[get_bare_child] {} try to create {}",
+        //     self.get_abs_path(),
+        //     pattern
+        // );
         match self.get_status() {
             DentryStatus::Valid => {}
             DentryStatus::Unint => {
@@ -284,7 +284,9 @@ impl Dentry {
         parent_children.remove(&child_name);
         self.set_status(DentryStatus::Negtive);
         self.set_status(DentryStatus::Negtive);
-        DENTRY_CACHE.remove(&self.get_abs_path()).expect("failed to remove dentry from cache");
+        DENTRY_CACHE
+            .remove(&self.get_abs_path())
+            .expect("failed to remove dentry from cache");
         // error!("[release_self] release dentry {}, ref count: {}", self.get_abs_path(), Arc::strong_count(&self));
         Ok(0)
     }
@@ -292,17 +294,17 @@ impl Dentry {
     /// 将一个dentry和inode绑定,如果inode是一个文件夹,就把为他的儿子创建一个新的dentry
     pub fn bind(self: &Arc<Self>, inode: Arc<dyn InodeTrait>) {
         //将inodepush进inode栈,然后flush,注意到这里需要用大括号包裹,不然会死锁
-        info!("dentry bind {}", self.get_abs_path());
+        // info!("dentry bind {}", self.get_abs_path());
         {
             self.inode.write().push(inode);
         }
         self.set_status(DentryStatus::Unint);
         self.init();
-        info!("finished bind");
+        // info!("finished bind");
     }
 
     fn init(self: &Arc<Self>) -> SysResult<()> {
-        info!("dentry init {}", self.get_abs_path());
+        // info!("dentry init {}", self.get_abs_path());
         {
             // 查看当前状态， 如果已经初始化成功就返回， 如果是无效的也直接返回
             match self.get_status() {
@@ -342,12 +344,12 @@ impl Dentry {
     /// 将一个dentry和一个superblock绑定
     fn mount(self: &Arc<Self>, sb: Arc<dyn SuperBlockTrait>) {
         if sb.root_inode().node_type() != InodeType::Dir {
-            info!("you can't mount a inode which is not TYPE DIR");
+            // info!("you can't mount a inode which is not TYPE DIR");
             return;
         }
         Dentry::bind(self, sb.root_inode());
         self.init();
-        info!("bind a superblock to dentry!");
+        // info!("bind a superblock to dentry!");
     }
     /// 从一个dentry上获取inode
     ///
@@ -392,7 +394,7 @@ impl Dentry {
 
     /// 根据绝对路径获取对应的inode
     pub fn get_inode_from_path(path: &str) -> SysResult<Arc<dyn InodeTrait>> {
-        info!("[get_inode_from_path] {}", path);
+        // info!("[get_inode_from_path] {}", path);
         Dentry::get_dentry_from_path(path)?
             .get_inode()
             .ok_or(Errno::ENOENT)
@@ -401,7 +403,7 @@ impl Dentry {
     /// 根据绝对路径找到dentry
     /// path： 绝对路径
     pub fn get_dentry_from_path(path: &str) -> SysResult<Arc<Self>> {
-        info!("[get_dentry_from_path] {}", path);
+        // info!("[get_dentry_from_path] {}", path);
         {
             if let Some(dentry) = DENTRY_CACHE.get(path) {
                 return Ok(dentry);
