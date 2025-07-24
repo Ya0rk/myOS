@@ -47,26 +47,40 @@ impl PageCache {
         let offset_aligned = offset & !(PAGE_SIZE - 1);
         // 从cache中寻找
         let page = self.pages.read().get(&offset_aligned).cloned();
-        match page {
-            Some(_) => page,
-            None => {
-                let new_page = self.insert_page(offset_aligned);
-                let buf = new_page.frame.ppn.get_bytes_array();
-                let len = self.inode
-                    .read()
-                    .as_ref()
-                    .unwrap()
-                    .upgrade()
-                    .unwrap()
-                    .read_dirctly(offset_aligned, buf)
-                    .await;
-                if len < PAGE_SIZE {
-                    buf[len..].fill(0);
-                }
-                // info!("[get_page] read page {:?}", buf);
-                Some(new_page)
-            }
+        let is_new_page = page.is_none();
+        let page = match page {
+            Some(page) => page,
+            None => self.insert_page(offset_aligned)
+        };
+        let inode = self.inode
+            .read()
+            .as_ref()
+            .unwrap()
+            .upgrade()
+            .unwrap();
+        let size = inode.get_size();
+        let mut len = PAGE_SIZE.min(size - offset_aligned);
+        let buf = &mut page.frame.ppn.get_bytes_array()[..len];
+
+        if is_new_page {
+            len = inode.read_dirctly(offset_aligned, buf).await;
         }
+        buf[len..].fill(0);
+        Some(page)
+        // let len = self.inode
+        //     .read()
+        //     .as_ref()
+        //     .unwrap()
+        //     .upgrade()
+        //     .unwrap()
+        //     .read_dirctly(offset_aligned, buf)
+        //     .await;
+        // if len < PAGE_SIZE {
+        //     buf[len..].fill(0);
+        // }
+        // // info!("[get_page] read page {:?}", buf);
+
+        
     }
 
     /// 将page插入cache
