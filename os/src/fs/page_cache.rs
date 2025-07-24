@@ -52,7 +52,7 @@ impl PageCache {
             None => {
                 let new_page = self.insert_page(offset_aligned);
                 let buf = new_page.frame.ppn.get_bytes_array();
-                self.inode
+                let len = self.inode
                     .read()
                     .as_ref()
                     .unwrap()
@@ -60,6 +60,9 @@ impl PageCache {
                     .unwrap()
                     .read_dirctly(offset_aligned, buf)
                     .await;
+                if len < PAGE_SIZE {
+                    buf[len..].fill(0);
+                }
                 // info!("[get_page] read page {:?}", buf);
                 Some(new_page)
             }
