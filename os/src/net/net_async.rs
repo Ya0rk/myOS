@@ -1,8 +1,6 @@
 use super::{tcp::TcpSocket, udp::UdpSocket, TcpState, NET_DEV};
 use crate::{
-    fs::OpenFlags,
-    net::{Socket, SOCKET_SET},
-    utils::{Errno, SysResult},
+    fs::OpenFlags, net::{addr::SockAddr, Socket, SOCKET_SET}, sync::yield_now, utils::{Errno, SysResult}
 };
 use core::{future::Future, task::Poll};
 use log::info;
@@ -32,32 +30,35 @@ impl<'a> Future for TcpAcceptFuture<'a> {
         cx: &mut core::task::Context<'_>,
     ) -> core::task::Poll<Self::Output> {
         NET_DEV.lock().poll();
-        let ret = self.socket.with_socket(|socket| {
-            let cur_state = socket.state();
-            match cur_state {
-                TcpState::Closed => return Poll::Ready(Err(Errno::EINVAL)),
-                TcpState::TimeWait => return Poll::Ready(Err(Errno::EINVAL)),
-                TcpState::Established | TcpState::SynReceived => {
-                    // 代表已经建立好链接，此时服务器知道了远端链接的地址，可以返回远端
-                    self.socket.set_state(cur_state);
-                    let remote_end = socket
-                        .remote_endpoint()
-                        .expect("[tcpacceptFuture] poll fail: remote is none.");
-                    return Poll::Ready(Ok(remote_end));
-                }
-                _ => {
-                    // The socket is marked nonblocking and no connections are present to be accepted.
-                    if self.socket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
-                        return Poll::Ready(Err(Errno::EAGAIN));
-                    }
-                    // 注册waker，当socket状态改变时会重新唤醒任务执行，执行poll，直到返回Ready
-                    socket.register_recv_waker(cx.waker());
-                    return Poll::Pending;
-                }
+
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<tcp::Socket>(self.socket.handle);
+        let cur_state = socket.state();
+        match cur_state {
+            TcpState::Closed => return Poll::Ready(Err(Errno::EINVAL)),
+            TcpState::TimeWait => return Poll::Ready(Err(Errno::EINVAL)),
+            TcpState::Established | TcpState::SynReceived => {
+                // 代表已经建立好链接，此时服务器知道了远端链接的地址，可以返回远端
+                self.socket.set_state(cur_state);
+                let remote_end = socket
+                    .remote_endpoint()
+                    .expect("[tcpacceptFuture] poll fail: remote is none.");
+                return Poll::Ready(Ok(remote_end));
             }
-        });
-        NET_DEV.lock().poll();
-        ret
+            _ => {
+                // The socket is marked nonblocking and no connections are present to be accepted.
+                if self.socket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
+                    return Poll::Ready(Err(Errno::EAGAIN));
+                }
+                // 注册waker，当socket状态改变时会重新唤醒任务执行，执行poll，直到返回Ready
+                socket.register_recv_waker(cx.waker());
+                drop(binding);
+                NET_DEV.lock().poll();
+                cx.waker().clone().wake();
+
+                return Poll::Pending;
+            }
+        }
     }
 }
 
@@ -84,28 +85,33 @@ impl<'a> Future for TcpSendFuture<'a> {
     ) -> Poll<Self::Output> {
         info!("[TcpSendFuture] start");
         NET_DEV.lock().poll();
-        let ret = self.tcpsocket.with_socket(|socket| {
-            if !socket.is_open() {
-                info!("[TcpSendFuture] socket state {:?}", socket.state());
-                return Poll::Ready(Err(Errno::ENOTCONN));
-            }
-            if !socket.can_send() {
-                if self.tcpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
-                    return Poll::Ready(Err(Errno::EAGAIN));
-                }
-                socket.register_send_waker(cx.waker());
-                return Poll::Pending;
-            }
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<tcp::Socket>(self.tcpsocket.handle);
 
-            match socket.send_slice(self.msg_buf) {
-                Ok(size) => {
-                    return Poll::Ready(Ok(size));
-                }
-                Err(_) => return Poll::Ready(Err(Errno::ENOBUFS)),
-            };
-        });
-        NET_DEV.lock().poll();
-        ret
+        if !socket.is_open() {
+            info!("[TcpSendFuture] socket state {:?}", socket.state());
+            return Poll::Ready(Err(Errno::ENOTCONN));
+        }
+        if !socket.can_send() {
+            if self.tcpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
+                return Poll::Ready(Err(Errno::EAGAIN));
+            }
+            socket.register_send_waker(cx.waker());
+            drop(binding);
+            NET_DEV.lock().poll();
+            cx.waker().clone().wake();
+
+            return Poll::Pending;
+        }
+
+        info!("[TcpSendFuture] can send");
+        match socket.send_slice(self.msg_buf) {
+            Ok(size) => {
+                return Poll::Ready(Ok(size));
+            }
+            Err(_) => return Poll::Ready(Err(Errno::ENOBUFS)),
+        };
+        
     }
 }
 
@@ -145,8 +151,7 @@ impl<'a> Future for UdpSendFuture<'a> {
             }
             match socket.send_slice(self.msg_buf, *self.meta) {
                 Ok(_) => {
-                    drop(binding);
-                    NET_DEV.lock().poll();
+                    // drop(binding);
                     info!("[UdpSendFuture] finish, msg = {:?}", self.msg_buf);
                     return Poll::Ready(Ok(self.msg_buf.len()));
                 }
@@ -154,6 +159,7 @@ impl<'a> Future for UdpSendFuture<'a> {
             }
         };
 
+        NET_DEV.lock().poll();
         ret
     }
 }
@@ -170,40 +176,52 @@ impl<'a> TcpRecvFuture<'a> {
 }
 
 impl<'a> Future for TcpRecvFuture<'a> {
-    type Output = SysResult<usize>;
+    type Output = SysResult<(usize, SockAddr)>;
 
     fn poll(
         mut self: core::pin::Pin<&mut Self>,
         cx: &mut core::task::Context<'_>,
     ) -> Poll<Self::Output> {
         NET_DEV.lock().poll();
-        let res = self.tcpsocket.with_socket(|socket| {
-            if socket.state() == TcpState::CloseWait || socket.state() == TcpState::TimeWait {
-                return Poll::Ready(Ok(0));
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<tcp::Socket>(self.tcpsocket.handle);
+        
+        if socket.state() == TcpState::CloseWait || socket.state() == TcpState::TimeWait {
+            return Poll::Ready(Ok((0, SockAddr::Unspec)));
+        }
+        
+        if !socket.may_recv() {
+            if self.tcpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
+                return Poll::Ready(Err(Errno::EAGAIN));
             }
-            if !socket.may_recv() {
-                if self.tcpsocket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
-                    return Poll::Ready(Err(Errno::EAGAIN));
+            return Poll::Ready(Err(Errno::ENOTCONN));
+        }
+
+        match socket.recv_slice(self.msg_buf) {
+            Ok(size) => {
+                if size > 0 {
+                    let Some(remote_end) = socket.remote_endpoint() else {
+                        // 如果 remote_endpoint() 返回 None，则执行这里的代码
+                        return Poll::Ready(Err(Errno::ENOTCONN));
+                    };
+                    info!("[TcpRecvFuture] success recv msg, remote end is {:?}", remote_end);
+
+                    return Poll::Ready(Ok((size, remote_end.into())));
                 }
+                socket.register_recv_waker(cx.waker());
+                drop(binding);
+                NET_DEV.lock().poll();
+                cx.waker().clone().wake();
+
+                return Poll::Pending;
+            }
+            Err(tcp::RecvError::Finished) => {
                 return Poll::Ready(Err(Errno::ENOTCONN));
             }
-
-            match socket.recv_slice(self.msg_buf) {
-                Ok(size) => {
-                    if size > 0 {
-                        return Poll::Ready(Ok(size));
-                    }
-                    return Poll::Pending;
-                }
-                Err(tcp::RecvError::Finished) => {
-                    return Poll::Ready(Err(Errno::ENOTCONN));
-                }
-                Err(tcp::RecvError::InvalidState) => {
-                    return Poll::Ready(Err(Errno::ENOTCONN));
-                }
+            Err(tcp::RecvError::InvalidState) => {
+                return Poll::Ready(Err(Errno::ENOTCONN));
             }
-        });
+        }
 
-        res
     }
 }

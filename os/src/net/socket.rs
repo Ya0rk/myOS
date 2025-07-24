@@ -14,7 +14,8 @@ use crate::{
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use async_trait::async_trait;
-use smoltcp::{socket::tcp, wire::IpEndpoint};
+use log::info;
+use smoltcp::{socket::tcp, wire::{IpEndpoint, IpListenEndpoint}};
 pub type TcpState = tcp::State;
 
 pub struct SockMeta {
@@ -25,7 +26,7 @@ pub struct SockMeta {
     pub flags: OpenFlags,
     pub port: Option<u16>,
     pub shuthow: Option<ShutHow>,
-    pub local_end: Option<IpEndpoint>,
+    pub local_end: Option<IpListenEndpoint>,
     pub remote_end: Option<IpEndpoint>,
 }
 
@@ -50,9 +51,9 @@ impl SockMeta {
 pub trait Socket: Send + Sync {
     async fn accept(&self, sockfd: usize, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)>;
 
-    fn bind(&self, addr: &SockAddr) -> SysResult<()>;
+    fn bind(&self, sockfd:usize, addr: &SockAddr) -> SysResult<()>;
 
-    async fn connect(&self, addr: &SockAddr) -> SysResult<()>;
+    async fn connect(&self, sockfd: usize, addr: &SockAddr) -> SysResult<()>;
 
     fn listen(&self, backlog: usize) -> SysResult<()>;
 
@@ -92,6 +93,7 @@ impl dyn Socket {
         match family {
             AF_INET => Self::new_socket(IpType::Ipv4, socket_type),
             AF_INET6 => Self::new_socket(IpType::Ipv6, socket_type),
+            // AF_INET6 => Self::new_socket(IpType::Ipv4, socket_type), // 需要恢复
             AF_UNIX => return Err(Errno::EAFNOSUPPORT),
             _ => return Err(Errno::EAFNOSUPPORT),
         }
@@ -107,9 +109,11 @@ impl dyn Socket {
                 if socket_type.contains(SocketType::SOCK_CLOEXEC) {
                     flags.insert(OpenFlags::O_CLOEXEC);
                 }
+                info!("[new_socket] new Tcp socket, iptype = {:?}", ip_type);
                 Ok(SockClass::Tcp(Arc::new(TcpSocket::new(ip_type, flags))))
             }
             ty if ty.contains(SocketType::SOCK_DGRAM) => {
+                info!("[new_socket] new Udp socket, iptype = {:?}", ip_type);
                 Ok(SockClass::Udp(Arc::new(UdpSocket::new(ip_type))))
             }
             _ => Err(Errno::EINVAL),
