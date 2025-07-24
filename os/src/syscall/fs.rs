@@ -1037,9 +1037,9 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
 /// according to the directive whence as follows
 pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     let whence_name = match whence {
-        SEEK_SET => "SEEK_SET",
-        SEEK_CUR => "SEEK_CUR",
-        SEEK_END => "SEEK_END",
+        0 => "SEEK_SET",
+        1 => "SEEK_CUR",
+        2 => "SEEK_END",
         _ => return Err(Errno::EINVAL),
     };
     info!(
@@ -1053,6 +1053,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
     let res = file.lseek(offset, whence)?;
 
+    info!("[sys_lseek] return {}", res);
     Ok(res)
 }
 
@@ -1525,12 +1526,10 @@ pub async fn sys_copy_file_range(
     );
     let mut buffer = vec![0u8; len];
 
-    // BUG: 这里应当判断 off_in 为 0 的逻辑
-    // 当 off_in 为 0 的时候应当采用文件的偏移，而不是像这样子采用输入的偏移
-
     let read_size = match file_in.is_pipe() | (off_in == 0) {
         true => {
             debug_point!("read by file's off");
+            info!("fd_in: fd={}", fd_in);
             file_in.read(&mut buffer).await?
         }
         false => {
@@ -1541,31 +1540,29 @@ pub async fn sys_copy_file_range(
     if unlikely(read_size == 0) {
         return Ok(0);
     }
-    let write_size = match file_out.is_pipe() | (off_in == 0) {
+    buffer.truncate(read_size);
+    let write_size = match file_out.is_pipe() | (off_out == 0) {
         true => {
             debug_point!("write by file's off");
             file_out.write(&buffer).await?
         }
-        false => file_out.write_at(offset_out, &buffer).await?,
+        false => {
+            debug_point!("write by offset sended");
+            file_out.write_at(offset_out, &buffer).await?
+        }
     };
     if unlikely(write_size == 0) {
         return Ok(0);
     }
-    match off_in {
-        0 => {
-            file_in.lseek(read_size as isize, SEEK_CUR);
-        }
-        _ => unsafe {
+    if off_in != 0 {
+        unsafe {
             core::ptr::write(off_in as *mut usize, offset_in + read_size);
-        },
-    }
-    match off_out {
-        0 => {
-            file_out.lseek(write_size as isize, SEEK_CUR);
         }
-        _ => unsafe {
+    }
+    if off_out != 0 {
+        unsafe {
             core::ptr::write(off_out as *mut usize, offset_out + write_size);
-        },
+        }
     }
     Ok(write_size)
 }
