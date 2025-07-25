@@ -23,7 +23,7 @@ impl SockAddr {
                 if len < core::mem::size_of::<SockIpv4>() {
                     return Err(Errno::EINVAL);
                 }
-                info!("[write2user] write IPv4 address to user, {:?}", addr);
+                info!("[write2user] write little IPv4 address to user, {:?}", addr);
                 // 安全地拷贝 Ipv4 结构体到 buf
                 unsafe {
                     copy_nonoverlapping(
@@ -38,7 +38,7 @@ impl SockAddr {
                 if len < core::mem::size_of::<SockIpv6>() {
                     return Err(Errno::EINVAL);
                 }
-                info!("[write2user] write IPv6 address to user, {:?}", addr);
+                info!("[write2user] write little IPv6 address to user, {:?}", addr);
                 // 安全地拷贝 Ipv6 结构体到 buf
                 unsafe {
                     copy_nonoverlapping(

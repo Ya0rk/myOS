@@ -185,6 +185,7 @@ impl Socket for UdpSocket {
         info!("[Udp::connect] start, connect to remote_addr = {:?}", addr);
         /// 与TCP不同，UDP的connect函数不会引发三次握手，而是将目标IP和端口记录下来
         let remote_endpoint = IpEndpoint::try_from(addr.clone())?;
+        info!("[Udp::connect] now remote end = {:?}", remote_endpoint);
         self.check_addr(sockfd, remote_endpoint);
         self.sockmeta.lock().remote_end = Some(remote_endpoint);
         NET_DEV.lock().poll();
@@ -201,6 +202,7 @@ impl Socket for UdpSocket {
                 remote_end
             }
         };
+        info!("[Udp::send_msg] remote_addr = {:?}", remote_endpoint);
 
         UdpSendFuture::new(buf, self, remote_endpoint).await
 

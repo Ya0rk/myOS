@@ -170,20 +170,9 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
     }
 
     let buf = unsafe { core::slice::from_raw_parts_mut(ptr, addrlen) };
-    let user_sockaddr = match remote_end.addr {
-        IpAddress::Ipv4(addr) => {
-            let port = remote_end.port;
-            let addr = addr.octets();
-            let temp = SockAddr::Inet4(SockIpv4::new(port, addr));
-            temp
-        }
-        IpAddress::Ipv6(addr) => {
-            let port = remote_end.port;
-            let addr = addr.octets();
-            let temp = SockAddr::Inet6(SockIpv6::new(port, addr));
-            temp
-        }
-    };
+    info!("[sys_accept] server get user, remote end {:?}", remote_end);
+    let user_sockaddr: SockAddr = remote_end.into();
+    info!("[sys_accept] server get user, after remote end {:?}", user_sockaddr);
 
     user_sockaddr.write2user(buf, addrlen)?;
     info!("[sys_accept] new sockfd: {}", newfd);
@@ -219,20 +208,8 @@ pub async fn sys_accept4(
 
     // maybe bug: 需要检查懒分配
     let buf = unsafe { core::slice::from_raw_parts_mut(ptr, addrlen) };
-    let user_sockaddr = match remote_end.addr {
-        IpAddress::Ipv4(addr) => {
-            let port = remote_end.port;
-            let addr = addr.octets();
-            let temp = SockAddr::Inet4(SockIpv4::new(port, addr));
-            temp
-        }
-        IpAddress::Ipv6(addr) => {
-            let port = remote_end.port;
-            let addr = addr.octets();
-            let temp = SockAddr::Inet6(SockIpv6::new(port, addr));
-            temp
-        }
-    };
+    let user_sockaddr: SockAddr = remote_end.into();
+
     user_sockaddr.write2user(buf, addrlen)?;
     info!("[sys_accept4] new sockfd: {}", newfd);
 

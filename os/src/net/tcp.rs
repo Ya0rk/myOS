@@ -531,24 +531,29 @@ impl Socket for TcpSocket {
     }
     fn get_peername(&self) -> SysResult<SockAddr> {
         // 获取远程连接节点
-        let remote_end = self.sockmeta.lock().remote_end.ok_or(Errno::ENOTCONN)?;
-        let port = remote_end.port;
-        let addr = remote_end.addr;
-        info!(
-            "[tcp]get_peername local end port: {}, addr = {}",
-            port, addr
-        );
-        match addr {
-            IpAddress::Ipv4(addr) => {
-                let res = SockAddr::Inet4(SockIpv4::new(port, addr.octets()));
-                return Ok(res);
-            }
-            IpAddress::Ipv6(addr) => {
-                let res = SockAddr::Inet6(SockIpv6::new(port, addr.octets()));
-                return Ok(res);
-            }
-        }
-        Ok(SockAddr::Unspec)
+        NET_DEV.lock().poll();
+        let mut binding = SOCKET_SET.lock();
+        let socket = binding.get_mut::<tcp::Socket>(self.handle);
+        let remote_end: SockAddr = socket.remote_endpoint().unwrap().into();
+        Ok(remote_end)
+        // let remote_end = self.sockmeta.lock().remote_end.ok_or(Errno::ENOTCONN)?;
+        // let port = remote_end.port;
+        // let addr = remote_end.addr;
+        // info!(
+        //     "[tcp]get_peername local end port: {}, addr = {}",
+        //     port, addr
+        // );
+        // match addr {
+        //     IpAddress::Ipv4(addr) => {
+        //         let res = SockAddr::Inet4(SockIpv4::new(port, addr.octets()));
+        //         return Ok(res);
+        //     }
+        //     IpAddress::Ipv6(addr) => {
+        //         let res = SockAddr::Inet6(SockIpv6::new(port, addr.octets()));
+        //         return Ok(res);
+        //     }
+        // }
+        // Ok(SockAddr::Unspec)
     }
     fn set_keep_alive(&self, action: u32) -> SysResult<()> {
         match action {

@@ -91,6 +91,7 @@ impl FdTable {
     fn free_fd_slot(&mut self, fd: usize) {
         // 只缓存非末尾的FD (末尾FD在扩展时会自动重用)
         if fd < self.table_len() - 1 {
+            info!("push to freed stask, fd = {}", fd);
             self.freed_stack.push(fd);
         }
         
@@ -203,9 +204,11 @@ impl FdTable {
     /// 找到一个空位分配fd，返回数组下标就是新fd
     pub fn alloc_fd(&mut self, info: FdInfo) -> SysResult<usize> {
         // 1. 优先使用最近释放的缓存
+        info!("freed stask {:?}", self.freed_stack);
         if let Some(fd) = self.freed_stack.pop() {
             self.update_bitmap(fd, false); // 标记为已使用
             self.put_in(info, fd)?;
+            info!("from freed stask, fd = {}", fd);
             return Ok(fd);
         }
 
@@ -213,6 +216,7 @@ impl FdTable {
         if let Some(fd) = self.find_free_by_bitmap() {
             self.update_bitmap(fd, false); // 标记为已使用
             self.put_in(info, fd)?;
+            info!("from bitmap, fd = {}", fd);
             return Ok(fd);
         }
 

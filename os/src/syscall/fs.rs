@@ -155,6 +155,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
         let write_len = file.write(buffer).await?;
         res += write_len;
     }
+    info!("[sys_writev] write len = {}", res);
     Ok(res)
 }
 
@@ -558,6 +559,7 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
     if file.get_name()? == "SocketFile" {
         PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), oldfd, newfd);
     }
+    info!("[sys_dup] get new fd = {}", newfd);
 
     Ok(newfd)
 }

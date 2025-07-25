@@ -205,6 +205,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
                     };
                     info!("[TcpRecvFuture] success recv msg, remote end is {:?}", remote_end);
 
+                    NET_DEV.lock().poll();
                     return Poll::Ready(Ok((size, remote_end.into())));
                 }
                 socket.register_recv_waker(cx.waker());

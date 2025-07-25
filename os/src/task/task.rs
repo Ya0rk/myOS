@@ -221,8 +221,14 @@ impl TaskControlBlock {
         let futex_list = new_shared(FutexBucket::new());
         let itimers = new_shared([ITimerVal::default(); 3]);
         let fd_table = match flag.contains(CloneFlags::CLONE_FILES) {
-            true => self.fd_table.clone(),
-            false => new_shared(self.fd_table.lock().clone()),
+            true => {
+                info!("[process_fork] share fdtable");
+                self.fd_table.clone()
+            }
+            false => {
+                info!("[process_fork] own fdtable");
+                new_shared(self.fd_table.lock().clone())
+            }
         };
         let sig = match flag.contains(CloneFlags::CLONE_SIGHAND) {
             // 修改这里的致命判断错误
