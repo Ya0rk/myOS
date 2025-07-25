@@ -107,6 +107,8 @@ impl<'a> Future for TcpSendFuture<'a> {
         info!("[TcpSendFuture] can send");
         match socket.send_slice(self.msg_buf) {
             Ok(size) => {
+                drop(binding);
+                NET_DEV.lock().poll();
                 return Poll::Ready(Ok(size));
             }
             Err(_) => return Poll::Ready(Err(Errno::ENOBUFS)),
@@ -204,7 +206,7 @@ impl<'a> Future for TcpRecvFuture<'a> {
                         return Poll::Ready(Err(Errno::ENOTCONN));
                     };
                     info!("[TcpRecvFuture] success recv msg, remote end is {:?}", remote_end);
-
+                    drop(binding);
                     NET_DEV.lock().poll();
                     return Poll::Ready(Ok((size, remote_end.into())));
                 }
