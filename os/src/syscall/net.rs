@@ -32,7 +32,7 @@ pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usi
     // 将socket和一个fd绑定
     let fd = sock_map_fd(socket.get(), cloexec_enable).map_err(|_| Errno::EMFILE)?;
 
-    info!("[sys_socket] finished, fd = {}", fd);
+    info!("[sys_socket] finished, create socket fd = {}", fd);
     Ok(fd)
 }
 
@@ -41,7 +41,6 @@ pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usi
 /// is set to indicate the error.
 pub fn sys_bind(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
     info!("[sys_bind] start, sockfd = {}, addr = {:?}", sockfd, addr);
-    trace!("[sys_bind] addr = {}, addrlen = {}", addr, addrlen);
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
     let socket = file.get_socket()?;
@@ -152,10 +151,10 @@ pub async fn sys_connect(sockfd: usize, addr: usize, addrlen: usize) -> SysResul
 /// 而accept函数返回的是 已连接的socket描述字。一个服务器通常通常仅仅只创建一个监听socket描述字，
 /// 它在该服务器的生命周期内一直存在。内核为每个由服务器进程接受的客户连接创建了一个已连接socket描述字，
 /// 当服务器完成了对某个客户的服务，相应的已连接socket描述字就被关闭.
-pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
+pub async fn sys_accept(sockfd: usize, addr: usize, addrlen_ptr: usize) -> SysResult<usize> {
     info!(
         "[sys_accept] start, sockfd = {}, addr = {}, addrlen = {}",
-        sockfd, addr, addrlen
+        sockfd, addr, addrlen_ptr
     );
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
@@ -169,12 +168,13 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
         return Err(Errno::EFAULT);
     }
 
-    let buf = unsafe { core::slice::from_raw_parts_mut(ptr, addrlen) };
+    let len = unsafe{ *(addrlen_ptr as *const u32) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len as usize) };
     info!("[sys_accept] server get user, remote end {:?}", remote_end);
     let user_sockaddr: SockAddr = remote_end.into();
     info!("[sys_accept] server get user, after remote end {:?}", user_sockaddr);
 
-    user_sockaddr.write2user(buf, addrlen)?;
+    user_sockaddr.write2user(buf, len as usize)?;
     info!("[sys_accept] new sockfd: {}", newfd);
 
     Ok(newfd)
@@ -185,15 +185,15 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen: usize) -> SysResult
 pub async fn sys_accept4(
     sockfd: usize,
     addr: usize,
-    addrlen: usize,
+    addrlen_ptr: usize,
     flags: u32,
 ) -> SysResult<usize> {
     info!(
         "[sys_accept4] start, sockfd = {}, addr = {}, addrlen = {}, flags = {}",
-        sockfd, addr, addrlen, flags
+        sockfd, addr, addrlen_ptr, flags
     );
     if flags == 0 {
-        return sys_accept(sockfd, addr, addrlen).await;
+        return sys_accept(sockfd, addr, addrlen_ptr).await;
     }
     let flags = OpenFlags::from_bits(flags as i32).expect("[sys_accept4] flag parse fail");
     let task = current_task().unwrap();
@@ -207,10 +207,11 @@ pub async fn sys_accept4(
     }
 
     // maybe bug: 需要检查懒分配
-    let buf = unsafe { core::slice::from_raw_parts_mut(ptr, addrlen) };
+    let len = unsafe{ *(addrlen_ptr as *const u32) };
+    let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len as usize) };
     let user_sockaddr: SockAddr = remote_end.into();
 
-    user_sockaddr.write2user(buf, addrlen)?;
+    user_sockaddr.write2user(buf, len as usize)?;
     info!("[sys_accept4] new sockfd: {}", newfd);
 
     Ok(newfd)
@@ -223,19 +224,19 @@ pub async fn sys_accept4(
 ///
 /// The returned address is truncated if the buffer provided is too small;
 /// in this case, addrlen will return a value greater than was supplied to the call.
-pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
+pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen_ptr: usize) -> SysResult<usize> {
     info!(
         "[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}",
-        sockfd, addr, addrlen
+        sockfd, addr, addrlen_ptr
     );
     // println!(
     //     "[sys_getsockname] start, sockfd = {}, addr = {}, addrlen = {}",
     //     sockfd, addr, addrlen
     // );
-    if unlikely(addrlen == 0 || addrlen == 1) {
+    if unlikely(addrlen_ptr == 0 || addrlen_ptr == 1) {
         return Err(Errno::EFAULT);
     }
-    let len = unsafe { *(addrlen as *const u32) };
+    let len = unsafe { *(addrlen_ptr as *const u32) };
     if unlikely(len < 0) {
         return Err(Errno::EINVAL);
     }
@@ -258,20 +259,20 @@ pub fn sys_getsockname(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
     };
 
     let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len as usize) };
-    sockname.write2user(buf, addrlen)?;
+    sockname.write2user(buf, len as usize)?;
     Ok(0)
 }
 
-pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<usize> {
+pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen_ptr: usize) -> SysResult<usize> {
     info!(
         "[sys_sockpeername] start, sockfd = {}, addr = {}, addrlen = {}",
-        sockfd, addr, addrlen
+        sockfd, addr, addrlen_ptr
     );
     // println!("addr = {}, addrlen = {}", addr, addrlen);
-    if unlikely(addr > USER_SPACE_TOP || addrlen == 0) {
+    if unlikely(addr > USER_SPACE_TOP || addrlen_ptr == 0) {
         return Err(Errno::EFAULT);
     }
-    let len = unsafe { *(addrlen as *const usize) };
+    let len = unsafe { *(addrlen_ptr as *const u32) };
     if unlikely((len as isize) < 0) {
         return Err(Errno::EINVAL);
     }
@@ -294,8 +295,8 @@ pub fn sys_getpeername(sockfd: usize, addr: usize, addrlen: usize) -> SysResult<
         }
     };
 
-    let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len) };
-    peername.write2user(buf, addrlen)?;
+    let buf = unsafe { core::slice::from_raw_parts_mut(ptr, len as usize) };
+    peername.write2user(buf, len as usize)?;
     Ok(0)
 }
 
@@ -357,7 +358,7 @@ pub async fn sys_recvfrom(
     buflen: usize,
     flags: u32,
     src_addr: usize,
-    addrlen: usize,
+    addrlen_ptr: usize,
 ) -> SysResult<usize> {
     info!(
         "[sys_recvfrom] start, sockfd = {}, flags = {}",
@@ -372,8 +373,9 @@ pub async fn sys_recvfrom(
     if src_addr != 0 {
         // 将远程地址写到用户空间
         // maybe bug: 需要检查懒分配
-        let buf = unsafe { core::slice::from_raw_parts_mut(src_addr as *mut u8, addrlen) };
-        remote_end.write2user(buf, addrlen)?;
+        let len = unsafe{ *(addrlen_ptr as *const u32) };
+        let buf = unsafe { core::slice::from_raw_parts_mut(src_addr as *mut u8, len as usize) };
+        remote_end.write2user(buf, len as usize)?;
     }
 
     Ok(size)

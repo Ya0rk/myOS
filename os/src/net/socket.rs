@@ -93,7 +93,6 @@ impl dyn Socket {
         match family {
             AF_INET => Self::new_socket(IpType::Ipv4, socket_type),
             AF_INET6 => Self::new_socket(IpType::Ipv6, socket_type),
-            // AF_INET6 => Self::new_socket(IpType::Ipv4, socket_type), // 需要恢复
             AF_UNIX => return Err(Errno::EAFNOSUPPORT),
             _ => return Err(Errno::EAFNOSUPPORT),
         }

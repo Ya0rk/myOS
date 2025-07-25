@@ -15,12 +15,12 @@ pub enum SockAddr {
 
 impl SockAddr {
     pub fn write2user(&self, buf: &mut [u8], len: usize) -> SysResult<()> {
-        let len = unsafe { *(len as *const u32) } as usize;
+        // let len = unsafe { *(len as *const u32) } as usize;
         info!("[write2user] len = {}, littleend addr {:?}", len, self);
         let bigend_addr = &self.little2big();
         match bigend_addr {
             SockAddr::Inet4(addr) => {
-                if len < core::mem::size_of::<SockIpv4>() {
+                if unlikely(len < core::mem::size_of::<SockIpv4>()) {
                     return Err(Errno::EINVAL);
                 }
                 info!("[write2user] write little IPv4 address to user, {:?}", addr);
@@ -29,13 +29,13 @@ impl SockAddr {
                     copy_nonoverlapping(
                         addr as *const SockIpv4 as *const u8,
                         buf.as_mut_ptr(),
-                        core::mem::size_of::<SockIpv4>(),
+                        len,
                     );
                 }
                 return Ok(());
             }
             SockAddr::Inet6(addr) => {
-                if len < core::mem::size_of::<SockIpv6>() {
+                if unlikely(len < core::mem::size_of::<SockIpv6>()) {
                     return Err(Errno::EINVAL);
                 }
                 info!("[write2user] write little IPv6 address to user, {:?}", addr);
@@ -44,7 +44,7 @@ impl SockAddr {
                     copy_nonoverlapping(
                         addr as *const SockIpv6 as *const u8,
                         buf.as_mut_ptr(),
-                        core::mem::size_of::<SockIpv6>(),
+                        len,
                     );
                 }
                 return Ok(());
@@ -294,19 +294,3 @@ impl From<IpEndpoint> for SockAddr {
     }
 }
 
-
-/// 分配地址，这里只涉及到了本地地址
-pub fn do_addr127(endpoint: &mut IpEndpoint) {
-    if endpoint.addr.is_unspecified() {
-        // match endpoint.addr {
-        //     IpAddress::Ipv4(_) => {
-        //         info!("[do_addr127] ipv4 -> 127");
-        //         endpoint.addr = IpAddress::v4(127, 0, 0, 1);
-        //     }
-        //     IpAddress::Ipv6(_) => {
-        //         info!("[do_addr127] ipv6 -> 127");
-        //         endpoint.addr = IpAddress::v6(0, 0, 0, 0, 0, 0, 0, 1);
-        //     }
-        // }
-    }
-}
