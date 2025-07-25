@@ -1454,18 +1454,23 @@ pub async fn sys_splice(
 
     let in_offset = match off_in {
         0 => 0,
-        _ => unsafe { *(off_in as *const usize) },
+        _ => unsafe { *(off_in as *const isize) },
     };
     let out_offet = match off_out {
         0 => 0,
-        _ => unsafe { *(off_out as *const usize) },
+        _ => unsafe { *(off_out as *const isize) },
     };
+
+    if in_offset < 0 || out_offet < 0 {
+        info!("[sys_splice] in_offset = {}, out_offset = {}", in_offset, out_offet);
+        return Err(Errno::EINVAL);
+    }
 
     // 开辟一个内核缓冲区承载数据
     let mut buffer = vec![0u8; size];
     let read_size = match file_in.is_pipe() {
         true => file_in.read(&mut buffer).await?,
-        false => file_in.read_at(in_offset, &mut buffer).await?,
+        false => file_in.read_at(in_offset as usize, &mut buffer).await?,
     };
     if unlikely(read_size == 0) {
         info!("[sys_splice] read_size is 0, return 0");
@@ -1475,9 +1480,10 @@ pub async fn sys_splice(
     // 当 off_in 为 0 的时候应当采用文件的偏移，而不是像这样子采用输入的偏移
     // 这里也应当是一样的
 
+    let len = min(size, read_size);
     let write_size = match file_out.is_pipe() {
-        true => file_out.write(&buffer).await?,
-        false => file_out.write_at(out_offet, &buffer).await?,
+        true => file_out.write(&buffer[..len]).await?,
+        false => file_out.write_at(out_offet as usize, &buffer[..len]).await?,
     };
     if unlikely(write_size == 0) {
         info!("[sys_splice] write_size is 0, return 0");
@@ -1486,12 +1492,18 @@ pub async fn sys_splice(
 
     match off_in {
         0 => {}
-        _ => unsafe { core::ptr::write(off_in as *mut usize, in_offset + read_size) },
+        _ => {
+            unsafe { core::ptr::write(off_in as *mut usize, in_offset as usize + read_size) };
+            return Ok(read_size);
+        }
     }
 
     match off_out {
         0 => {}
-        _ => unsafe { core::ptr::write(off_out as *mut usize, out_offet + write_size) },
+        _ => {
+            unsafe { core::ptr::write(off_out as *mut usize, out_offet as usize + write_size) };
+            return Ok(write_size);
+        }
     }
 
     Ok(0)
