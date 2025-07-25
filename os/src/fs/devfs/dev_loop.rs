@@ -6,7 +6,6 @@ use crate::{
     mm::{
         page::Page,
         user_ptr::{user_ref_mut, user_slice_mut},
-
     },
     sync::{SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult},
@@ -88,7 +87,7 @@ impl FileTrait for DevLoop {
         // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
         Some(Page::new())
     }
-    fn is_deivce(&self) -> bool {
+    fn is_device(&self) -> bool {
         true
     }
 }

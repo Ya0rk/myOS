@@ -11,9 +11,9 @@ use crate::hal::trap::TrapContext;
 use crate::ipc::shm::SHARED_MEMORY_MANAGER;
 use crate::ipc::IPCKey;
 use crate::mm::address::VirtAddr;
+use crate::mm::memory_space;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
 use crate::mm::memory_space::{create_elf_tables, vm_area::MapPerm, MemorySpace};
-use crate::mm::{memory_space};
 use crate::signal::{
     SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom,
     SigPending, SigStruct, SignalStack,
@@ -87,7 +87,9 @@ impl TaskControlBlock {
     /// 创建新task,只有initproc会调用
     pub async fn new(elf_file: Arc<dyn FileTrait>) -> Arc<Self> {
         let (mut memory_space, entry_point, sp_init, auxv) =
-            MemorySpace::new_user_from_elf(elf_file).await.expect("Failed on mapping initproc");
+            MemorySpace::new_user_from_elf(elf_file)
+                .await
+                .expect("Failed on mapping initproc");
         info!("entry point: {:#x}", entry_point);
 
         unsafe { memory_space.switch_page_table() };
@@ -105,7 +107,7 @@ impl TaskControlBlock {
             pid: pid_handle,
 
             // Shared
-            pgid: AtomicUsize::new(0),
+            pgid: AtomicUsize::new(1),
             tgid: AtomicUsize::new(tgid),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             thread_group: new_shared(ThreadGroup::new()),
@@ -155,8 +157,9 @@ impl TaskControlBlock {
         info!("execve start");
         // info!("[execve] argv:{:?}, env:{:?}", argv, env);
         let (mut memory_space, entry_point, sp_init, auxv) =
-            MemorySpace::new_user_from_elf_lazily(elf_file).await
-            .expect("[execve] Failed on mapping elf file");
+            MemorySpace::new_user_from_elf_lazily(elf_file)
+                .await
+                .expect("[execve] Failed on mapping elf file");
 
         // info!("execve memory_set created");
 

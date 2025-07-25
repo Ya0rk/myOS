@@ -54,6 +54,7 @@ pub fn sys_mmap(
     fd: usize,
     offset: usize,
 ) -> SysResult<usize> {
+    info!("[sys_mmap] fd: {}, offset: {}", fd, offset);
     let addr = addr as usize;
     let flags = MmapFlags::from_bits_truncate(flags);
     let prot = MmapProt::from_bits_truncate(prot);
@@ -86,9 +87,7 @@ pub fn sys_mmap(
         // TODO: merge branches
         let start_va = task
             .with_mut_memory_space(|m| match flags.intersection(MmapFlags::MAP_TYPE_MASK) {
-                MmapFlags::MAP_SHARED => {
-                    m.alloc_mmap_anon(addr.into(), length, perm, flags)
-                }
+                MmapFlags::MAP_SHARED => m.alloc_mmap_anon(addr.into(), length, perm, flags),
                 MmapFlags::MAP_PRIVATE => m.alloc_mmap_anon(addr.into(), length, perm, flags),
                 _ => {
                     unimplemented!()

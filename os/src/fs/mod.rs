@@ -40,13 +40,13 @@ use devfs::{find_device, open_device_file, register_device, DevNull, DevZero};
 use ext4::file::NormalFile;
 use ffi::{MEMINFO, MOUNTS};
 use log::{debug, error, info};
+pub use page_cache::PageCache;
 pub use pre_data::*;
 use sbi_spec::pmu::cache_event::NODE;
 pub use stat::Kstat;
 pub use stat::Statx;
 pub use stdio::{Stdin, Stdout};
 pub use vfs::*;
-pub use page_cache::PageCache;
 
 pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
@@ -81,6 +81,58 @@ pub async fn init() {
     println!("[Del0n1x] init fs start ...");
     Dentry::init_dentry_sys();
     create_init_files().await;
+
+    // Test case for file hole created by truncate and write
+    println!("[fs test] start test file hole (truncate scenario)");
+    let test_file_path = "/hole_test_truncate".into();
+    if let Ok(FileClass::File(file)) = open(test_file_path, OpenFlags::O_CREAT | OpenFlags::O_RDWR)
+    {
+        // 1. Write initial data
+        let initial_data = "initial data".as_bytes();
+        file.write(initial_data).await.unwrap();
+        println!("[fs test] wrote initial data");
+
+        // 2. Truncate to 0
+        let inode = file.get_inode();
+        inode.truncate(0);
+        println!("[fs test] truncated file to 0");
+
+        // 3. Seek to a position > 0 to create a hole
+        let hole_size = 10;
+        file.lseek(hole_size as isize, SEEK_SET).unwrap();
+        println!("[fs test] seeked to {}", hole_size);
+
+        // 4. Write new data, creating a hole from 0 to 9
+        let new_data = "new data".as_bytes();
+        file.write(new_data).await.unwrap();
+        println!("[fs test] wrote new data after hole");
+
+        // 5. Seek back to the beginning to verify the hole
+        file.lseek(0, SEEK_SET).unwrap();
+        println!("[fs test] seeked to 0");
+
+        // 6. Read from the hole and verify it's all zeros
+        let mut hole_buf = [1u8; 10]; // Pre-fill with non-zero to be sure
+        let read_len = file.read(&mut hole_buf).await.unwrap();
+        assert_eq!(read_len, hole_size);
+        for &byte in hole_buf.iter() {
+            assert_eq!(byte, 0, "Byte in hole is not zero!");
+        }
+        println!("[fs test] hole content is verified to be zero");
+
+        // 7. Verify the data written after the hole
+        // The offset is now at the end of the hole (10)
+        let mut data_buf = [0u8; 8];
+        let read_len_data = file.read(&mut data_buf).await.unwrap();
+        assert_eq!(read_len_data, new_data.len());
+        assert_eq!(&data_buf[..read_len_data], new_data);
+        println!("[fs test] data after hole is verified");
+
+        println!("[fs test] file hole (truncate scenario) test pass");
+    } else {
+        println!("[fs test] file hole test fail: cannot create file");
+    }
+    // panic!("temp test");
 }
 
 pub async fn create_init_files() -> SysResult {
@@ -130,18 +182,18 @@ pub async fn create_init_files() -> SysResult {
         "/etc/localtime".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     );
-    
-    if let Ok(FileClass::File(file) ) = open(
+
+    if let Ok(FileClass::File(file)) = open(
         "/ltp_testcode_musl.sh".into(),
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
         let buf = ltp::MUSL_LTP_testcode.as_bytes();
         file.write(&buf).await;
     }
-    
-    if let Ok(FileClass::File(file) ) = open(
+
+    if let Ok(FileClass::File(file)) = open(
         "/ltp_testcode_glibc.sh".into(),
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
         let buf = ltp::GLIBC_LTP_testcode.as_bytes();
         file.write(&buf).await;
