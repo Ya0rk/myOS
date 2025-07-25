@@ -29,7 +29,7 @@ pub struct PortManager {
     pub end: u16,
     pub recycled: VecDeque<u16>,
     pub tcp_used_ports: BitVec,
-    pub udp_used_ports: BitVec,
+    // pub udp_used_ports: BitVec,
 }
 
 impl PortManager {
@@ -39,7 +39,7 @@ impl PortManager {
             end: PORT_END,
             recycled: VecDeque::new(),
             tcp_used_ports: BitVec::from_elem(65536, false),
-            udp_used_ports: BitVec::from_elem(65536, false),
+            // udp_used_ports: BitVec::from_elem(65536, false),
         }
     }
     fn alloc(&mut self, domain: Sock) -> SysResult<u16> {
@@ -75,40 +75,40 @@ impl PortManager {
             self.recycled.push_back(port);
         }
         match domain {
-            Sock::Tcp => {
+            Sock::Tcp | Sock::Udp => {
                 self.tcp_used_ports.set(port as usize, false);
             }
-            Sock::Udp => {
-                self.udp_used_ports.set(port as usize, false);
-            }
+            // Sock::Udp => {
+            //     self.udp_used_ports.set(port as usize, false);
+            // }
             _ => {}
         }
     }
     fn mark_used(&mut self, domain: Sock, port: u16) {
         match domain {
-            Sock::Tcp => {
+            Sock::Tcp | Sock::Udp => {
                 self.tcp_used_ports.set(port as usize, true);
             }
-            Sock::Udp => {
-                self.udp_used_ports.set(port as usize, true);
-            }
+            // Sock::Udp => {
+            //     self.udp_used_ports.set(port as usize, true);
+            // }
             _ => {}
         }
     }
     fn try_mark_used(&mut self, domain: &Sock, port: u16) -> bool {
         match domain {
-            Sock::Tcp => {
+            Sock::Tcp | Sock::Udp => {
                 if !self.tcp_used_ports[port as usize] {
                     self.tcp_used_ports.set(port as usize, true);
                     return true;
                 }
             }
-            Sock::Udp => {
-                if !self.udp_used_ports[port as usize] {
-                    self.udp_used_ports.set(port as usize, true);
-                    return true;
-                }
-            }
+            // Sock::Udp => {
+            //     if !self.udp_used_ports[port as usize] {
+            //         self.udp_used_ports.set(port as usize, true);
+            //         return true;
+            //     }
+            // }
             _ => {}
         }
         false
