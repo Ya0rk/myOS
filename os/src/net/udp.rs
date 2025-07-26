@@ -6,7 +6,7 @@ use crate::{fs::FileTrait, net::{net_async::UdpRecvFuture, PORT_FD_MANAMER, PORT
 use crate::mm::UserBuffer;
 use crate::{
     fs::{FileMeta, OpenFlags, RenameFlags},
-    net::{addr::do_addr127, do_port_aloc, net_async::UdpSendFuture, MAX_BUFFER_SIZE},
+    net::{do_port_aloc, net_async::UdpSendFuture, MAX_BUFFER_SIZE},
     sync::{get_waker, yield_now, NullFuture, SpinNoIrqLock, TimeoutFuture},
     syscall::ShutHow,
     task::current_task,
@@ -34,20 +34,28 @@ impl Drop for UdpSocket {
     fn drop(&mut self) {
         info!("[UdpSocket::drop] start");
         NET_DEV.lock().poll();
-        let mut binding = SOCKET_SET.lock();
-        let socket = binding.get_mut::<udp::Socket>(self.handle);
-        socket.close();
-        binding.remove(self.handle);
-        drop(binding);
-
-        // 释放端口
-        self.with_sockmeta(|sockmeta| {
-            sockmeta.port
-            .filter(|&port| port > 0)  // 仅处理 port > 0 的情况
-            .inspect(|port| info!("[UdpSocket::drop] dealloc port: {}", port))
-            .map(|port| PORT_MANAGER.lock().dealloc(sockmeta.domain, port));
+        self.with_socket(|socket| {
+            if socket.is_open() {
+                socket.close();
+            }
         });
         NET_DEV.lock().poll();
+
+        // 从socketset中删除对应的handle
+        let mut binding = SOCKET_SET.lock();
+        let sock = binding.remove(self.handle);
+        drop(sock);
+        drop(binding);
+
+        // 释放端口，同时释放在端口复用中的port
+        self.with_sockmeta(|sockmeta| {
+            if let Some(port) = sockmeta.port.filter(|&port| port > 0) {
+                info!("[UdpSocket::drop] dealloc port: {}", port);
+                PORT_MANAGER.lock().dealloc(sockmeta.domain, port);
+                let task = current_task().unwrap();
+                PORT_FD_MANAMER.lock().remove(task.get_pid(), port);
+            }
+        });
     }
 }
 
@@ -205,93 +213,10 @@ impl Socket for UdpSocket {
         info!("[Udp::send_msg] remote_addr = {:?}", remote_endpoint);
 
         UdpSendFuture::new(buf, self, remote_endpoint).await
-
-        // let remote_endpoint = match dest_addr{
-        //     Some(addr) => IpEndpoint::try_from(addr)?,
-        //     None => {
-        //         let remote_end = self.sockmeta.lock().remote_end.ok_or(Errno::ENOTCONN)?;
-        //         remote_end
-        //     }
-        // };
-
-        // NET_DEV.lock().poll();
-        // let mut sockets = SOCKET_SET.lock();
-        // let handle = self.handle;
-        // let socket = sockets.get_mut::<udp::Socket>(handle);
-        // let flags = self.get_flags()?;
-        // // todo:maybe要完善查看bind的端口是否为0，Tanix
-        // if socket.can_send() {
-        //     info!("[UdpSocket::write] UdpSocket::write: can send");
-        //     match socket.send_slice(buf, remote_endpoint) {
-        //         Ok(()) => {
-        //             info!("[UdpSocket::write] UdpSocket::write: send slice");
-        //             drop(sockets);
-        //             // yield_now().await;
-        //             NET_DEV.lock().poll();
-        //             info!(
-        //                 "[UdpSocket::write] UdpSocket::write: send slice ok,size:{}",
-        //                 buf.len()
-        //             );
-        //             return Ok(buf.len());
-        //         }
-        //         Err(_) => {
-        //             info!("[UdpSocket::write] UdpSocket::write: send error");
-        //             // debug!("udp write: send err");
-        //             return Err(Errno::ENOBUFS);
-        //         }
-        //     }
-        // } else {
-        //     if flags.contains(OpenFlags::O_NONBLOCK) {
-        //         info!("[UdpSendFuture::poll] already set nonblock");
-        //         return Err(Errno::EAGAIN);
-        //     }
-        //     info!("[UdpSocket::write] UdpSocket::write: cant send");
-        //     return Err(Errno::ENOBUFS);
-        // };
-
     }
     async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)> {
         info!("[Udp::recv_msg] start");
         UdpRecvFuture::new(buf, self).await
-
-        // loop {
-        //     NET_DEV.lock().poll();
-        //     let mut sockets = SOCKET_SET.lock();
-        //     let handle = self.handle;
-        //     let socket = sockets.get_mut::<udp::Socket>(handle);
-        //     if socket.can_recv() {
-        //         info!("[UdpSocket::read] UdpSocket::read can_recv");
-        //         if let Ok((size, metadata)) = socket.recv_slice(buf) {
-        //             info!("UdpSocket::read recv_slice,size:{}", size);
-        //             drop(sockets);
-        //             if size > (MAX_BUFFER_SIZE / 2) as usize {
-        //                 // need to be slow
-        //                 // ksleep(Duration::from_millis(2)).await;
-        //             }
-        //             match metadata.endpoint.addr {
-        //                 IpAddress::Ipv4(addr) => {
-        //                     let res = SockAddr::Inet4(SockIpv4::new(metadata.endpoint.port, addr.octets()));
-        //                     return Ok((size, res));
-        //                 }
-        //                 IpAddress::Ipv6(addr) => {
-        //                     let res = SockAddr::Inet6(SockIpv6::new(metadata.endpoint.port, addr.octets()));
-        //                     return Ok((size, res));
-        //                 }
-        //             }
-        //         }
-        //         info!("[UdpSocket::read] UdpSocket::read dont recv_slice");
-        //     } else {
-        //         let flags = self.get_flags()?;
-        //         if flags.contains(OpenFlags::O_NONBLOCK) {
-        //             return Err(Errno::EAGAIN);
-        //         }
-        //     }
-        //     drop(sockets);
-        //     info!("[UdpSocket::read] UdpSocket::read dont can_recv,entering yiled_now");
-        //     yield_now().await;
-        // }
-
-
     }
     fn set_recv_buf_size(&self, size: u32) -> SysResult<()> {
         self.sockmeta.lock().recv_buf_size = size as usize;

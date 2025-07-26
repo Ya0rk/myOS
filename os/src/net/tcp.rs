@@ -17,7 +17,6 @@ use crate::fs::FileTrait;
 use crate::fs::OpenFlags;
 use crate::fs::RenameFlags;
 use crate::mm::UserBuffer;
-use crate::net::addr::do_addr127;
 use crate::net::addr::SockIpv4;
 use crate::net::addr::SockIpv6;
 use crate::net::addr::Sock;
@@ -32,6 +31,7 @@ use crate::sync::get_waker;
 use crate::sync::yield_now;
 use crate::sync::SpinNoIrqLock;
 use crate::syscall::ShutHow;
+use crate::task::current_task;
 use crate::task::exchange_sock_fdinfo;
 use crate::task::sock_map_fd;
 use crate::utils::Errno;
@@ -66,23 +66,30 @@ impl Drop for TcpSocket {
         info!("[TcpSocket::drop] start");
         NET_DEV.lock().poll();
         self.with_socket(|socket| {
-            if socket.state() == TcpState::Established {
-                socket.close();
+            info!("[TcoSocket::drop] brfore state is {:?}", socket.state());
+            if socket.is_open() {
+                socket.close();    
             }
+            info!("[TcpSocket::drop] after drop, state = {:?}", socket.state());
         });
+        
+        NET_DEV.lock().poll();
+
+        // 从socketset中删除对应的handle
         let mut binding = SOCKET_SET.lock();
-        binding.remove(self.handle);
+        let sock = binding.remove(self.handle);
+        drop(sock);
         drop(binding);
 
-        // 释放端口
+        // 释放端口，同时释放端口复用的port
         self.with_sockmeta(|sockmeta| {
-            sockmeta.port
-            .filter(|&port| port > 0)  // 仅处理 port > 0 的情况
-            .inspect(|port| info!("[TcpSocket::drop] dealloc port: {}", port))
-            .map(|port| PORT_MANAGER.lock().dealloc(sockmeta.domain, port));
+            if let Some(port) = sockmeta.port.filter(|&port| port > 0) {
+                info!("[UdpSocket::drop] dealloc port: {}", port);
+                PORT_MANAGER.lock().dealloc(sockmeta.domain, port);
+                let task = current_task().unwrap();
+                PORT_FD_MANAMER.lock().remove(task.get_pid(), port);
+            }
         });
-
-        NET_DEV.lock().poll();
     }
 }
 
@@ -109,24 +116,22 @@ impl TcpSocket {
     }
 
     ///根据参数 local_point 绑定 self->sockmeta->local_end
-    pub fn do_bind(&self, mut local_point: IpEndpoint) -> SysResult<()> {
+    pub fn do_bind(&self, local_point: &mut IpEndpoint) -> SysResult<()> {
         info!("[do_bind]");
         self.with_sockmeta(|sockmeta| -> SysResult<()> {
             let mut p: u16;
 
-            // addr = 0.0.0.0代表本地
-            do_addr127(&mut local_point);
             // 分配port
             // 存在问题? 有的情况下不需要做这个动作?或者说do_port不够满足要求?
             // 因为同一时间可能会有多个socket在使用某个local end?只是remote end不一样而已
             // 特别是在accept中会产生多个同一local end的socket
-            p = do_port_aloc(&mut local_point, sockmeta.domain)?;
+            p = do_port_aloc(local_point, sockmeta.domain)?;
 
             let mut listen_point;
             if local_point.addr.is_unspecified() {
                 listen_point = IpListenEndpoint::from(local_point.port);
             } else {
-                listen_point = IpListenEndpoint::from(local_point);
+                listen_point = IpListenEndpoint::from(*local_point);
             }
 
             sockmeta.local_end = Some(listen_point);
@@ -135,7 +140,6 @@ impl TcpSocket {
             return Ok(())
         })?;
 
-        trace!("[do_bind] addr: port = {}", local_point);
         info!("[TCP::do_bind] bind to port: {}", local_point.port);
         Ok(())
     }
@@ -173,6 +177,9 @@ impl TcpSocket {
     }
 
     /// 和udp的check addr相同
+    /// 主要是预防为调用bind就直接connect的情况
+    /// 这种情况主要发生在客户端
+    /// 此时为客户端local end分配一个随机端口
     fn check_addr(&self, sockfd: usize, mut endpoint: IpEndpoint) -> SysResult<()> {
         let mut sockmeta = self.sockmeta.lock();
         match sockmeta.domain {
@@ -190,15 +197,10 @@ impl TcpSocket {
         if sockmeta.local_end.is_none() {
             match sockmeta.iptype {
                 IpType::Ipv4 => {
-                    let addr = SockAddr::Inet4(SockIpv4 {
-                        family: AF_INET,
-                        port: 0,
-                        addr: [0, 0, 0, 0],
-                        zero: [0u8; 8],
-                    });
+                    let mut local_point = IpEndpoint::new(IpAddress::v4(0, 0, 0, 0), 0);
                     drop(sockmeta);
                     info!("[check_addr] call bind");
-                    self.bind(sockfd, &addr);
+                    self.do_bind(&mut local_point);
                 }
                 IpType::Ipv6 => todo!(),
             };
@@ -284,8 +286,8 @@ impl Socket for TcpSocket {
             Ok(())
         })?;
         info!("[TcpSocket::bind] before bind, local_end = {:?}", local_end);
-        self.do_bind(local_end)?;
-        // FD_PORT_MANAMER.lock().insert(local_end.port, sockfd);
+        self.do_bind(&mut local_end)?;
+        // PORT_FD_MANAMER.lock().insert(local_end.port, sockfd);
         Ok(())
     }
     fn listen(&self, backlog: usize) -> SysResult<()> {
@@ -311,10 +313,10 @@ impl Socket for TcpSocket {
     }
     async fn accept(&self, sockfd: usize, flags: OpenFlags) -> SysResult<(IpEndpoint, usize)> {
         info!("[TcpSocket::accept] flags: {:?}", flags);
-        if self.state.lock().clone() != TcpState::Listen {
-            info!("[TcpSocket::accept] Socket is not in listening state");
-            return Err(Errno::EINVAL);
-        }
+        // if self.state.lock().clone() != TcpState::Listen {
+        //     info!("[TcpSocket::accept] Socket is not in listening state");
+        //     return Err(Errno::EINVAL);
+        // }
 
         let cloexec_enable = flags.contains(OpenFlags::O_CLOEXEC);
         let remote_end = TcpAcceptFuture::new(self).await?; // 这里的remote end是客户端
@@ -379,89 +381,12 @@ impl Socket for TcpSocket {
     }
     async fn send_msg(&self, buf: &[u8], dest_addr: Option<SockAddr>) -> SysResult<usize> {
         info!("[Tcp::send_msg] start, dest_addr = {:?}", dest_addr);
-        let res = TcpSendFuture::new(buf, self).await?;
-        Ok(res)
-
-        // NET_DEV.lock().poll();
-        // let mut binding = SOCKET_SET.lock();
-        // let mut socket = binding.get_mut::<tcp::Socket>(self.handle);
-
-        // if socket.can_send() {
-        //     info!("[TcpSocket::send_msg] TcpSocket can send");
-        //     match socket.send_slice(buf) {
-        //         Ok(size) => {
-        //             info!("[TcpSocket::send_msg] TcpSocket is send slice,size:{}", size);
-        //             drop(binding);
-        //             NET_DEV.lock().poll();
-        //             yield_now().await;
-        //             return Ok(size);
-        //         }
-        //         Err(e) => {
-        //             info!("[TcpSocket::send_msg] Tcp Socket Write Error {e:?}");
-        //             println!("aaa");
-        //             return Err(Errno::ENOBUFS);
-        //         }
-        //     }
-        // }
-
-        // if self.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
-        //     info!("[TcpSendFuture::poll] already set nonblock");
-        //     return Err(Errno::EAGAIN);
-        // }
-        // info!("[TcpSocket::send_msg] TcpSocket can not send, state = {:?}", socket.state());
-        // return Err(Errno::ENOBUFS);
+        TcpSendFuture::new(buf, self).await
+        // Ok(res)
     }
     async fn recv_msg(&self, buf: &mut [u8]) -> SysResult<(usize, SockAddr)> {
         self.set_remote_point();
         TcpRecvFuture::new(buf, self).await
-
-        // self.set_remote_point();
-        // loop {
-        //     NET_DEV.lock().poll();
-        //     let mut sockets = SOCKET_SET.lock();
-        //     let socket = sockets.get_mut::<tcp::Socket>(self.handle);
-        //     info!("[TcpSocket::read] state become {:?}", socket.state());
-        //     if socket.state() == tcp::State::CloseWait || socket.state() == tcp::State::TimeWait
-        //     {
-        //         return Ok((0, SockAddr::Unspec));
-        //     }
-        //     // 使用may_recv()检查是否可以接收数据，和recv_slice()接收数据
-        //     if socket.may_recv() {
-        //         info!("[TcpSocket::read] Tcp Socket Read, may_recv");
-        //         match socket.recv_slice(buf) {
-        //             Ok(size) => {
-        //                 info!("[TcpSocket::read] Tcp Socket recv_slice, size:{}", size);
-        //                 if size > 0 {
-        //                     // 将远端的地址返回
-        //                     let Some(remote_end) = socket.remote_endpoint() else {
-        //                         // 如果 remote_endpoint() 返回 None
-        //                         return Err(Errno::ENOTCONN);
-        //                     };
-        //                     info!("[TcpRecvFuture] success recv msg, remote end is {:?}", remote_end);
-        //                     return Ok((size, remote_end.into()));
-        //                 } else {
-        //                     drop(sockets);
-        //                     yield_now().await;
-        //                 }
-        //             }
-        //             Err(tcp::RecvError::InvalidState) => {
-        //                 return Err(Errno::ENOTCONN);
-        //             }
-        //             Err(tcp::RecvError::Finished) => {
-        //                 return Err(Errno::ENOTCONN);
-        //             }
-        //         }
-        //     } else {
-        //         let flags = self.get_flags()?;
-        //         if flags.contains(OpenFlags::O_NONBLOCK) {
-        //             info!("[TcpRecvFuture::poll] already set nonblock");
-        //             return Err(Errno::EAGAIN);
-        //         }
-        //         info!("[TcpSocket::read] Tcp Socket Read, dont may_recv,retrun error");
-        //         drop(sockets);
-        //         return Err(Errno::ENOTCONN);
-        //     }
-        // }
     }
 
     fn set_recv_buf_size(&self, size: u32) -> SysResult<()> {
@@ -482,9 +407,9 @@ impl Socket for TcpSocket {
     }
     fn shutdown(&self, how: ShutHow) -> SysResult<()> {
         let mut sockmeta = self.sockmeta.lock();
-        if *self.state.lock() == TcpState::Closed {
-            return Err(Errno::ENOTCONN);
-        }
+        // if *self.state.lock() == TcpState::Closed {
+        //     return Err(Errno::ENOTCONN);
+        // }
         let mut binding = SOCKET_SET.lock();
         let socket = binding.get_mut::<tcp::Socket>(self.handle);
         let cur_shuthow = sockmeta.shuthow;
@@ -536,24 +461,6 @@ impl Socket for TcpSocket {
         let socket = binding.get_mut::<tcp::Socket>(self.handle);
         let remote_end: SockAddr = socket.remote_endpoint().unwrap().into();
         Ok(remote_end)
-        // let remote_end = self.sockmeta.lock().remote_end.ok_or(Errno::ENOTCONN)?;
-        // let port = remote_end.port;
-        // let addr = remote_end.addr;
-        // info!(
-        //     "[tcp]get_peername local end port: {}, addr = {}",
-        //     port, addr
-        // );
-        // match addr {
-        //     IpAddress::Ipv4(addr) => {
-        //         let res = SockAddr::Inet4(SockIpv4::new(port, addr.octets()));
-        //         return Ok(res);
-        //     }
-        //     IpAddress::Ipv6(addr) => {
-        //         let res = SockAddr::Inet6(SockIpv6::new(port, addr.octets()));
-        //         return Ok(res);
-        //     }
-        // }
-        // Ok(SockAddr::Unspec)
     }
     fn set_keep_alive(&self, action: u32) -> SysResult<()> {
         match action {
