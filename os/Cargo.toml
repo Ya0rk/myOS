@@ -34,7 +34,6 @@ smoltcp = { path = "../vendor/smoltcp-0.12.0", version = "0.12.0", default-featu
     "socket-tcp",
     "socket-dhcpv4",
     "async",
-    "log",
 ] }
 bitvec-rs = { path = "../vendor/bitvec-rs", version="0.2.1", default-features = false }
 cfg-if = { path = "../vendor/cfg-if", version = "1.0.0", default-features = false }
@@ -50,7 +49,7 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 board_qemu = []
-default = ["error", "test", "qemu_riscv", "test_initproc"]
+default = ["error", "test", "qemu_riscv", "autorun"]
 error = []
 timewhell = []
 warn = []
