@@ -300,7 +300,7 @@ impl FdTable {
         if fd >= self.table_len() {
             return Err(Errno::EBADF);
         }
-        let file = self.table[fd].file.as_ref().unwrap();
+        let file = self.table[fd].file.take().unwrap();
         if file.get_name()? == "SocketFile" {
             let pid = current_task().unwrap().get_pid();
             PORT_FD_MANAMER.lock().remove_all_fds_by_pid_and_fd(pid, fd);

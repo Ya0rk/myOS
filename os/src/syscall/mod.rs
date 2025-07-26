@@ -30,6 +30,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
     let syscode = SysCode::from(syscall_id);
     // info!("syscode = {}", syscode);
     match syscode {
+        SysCode::SYSCALL_SHUTDOWN => sys_shutdown(args[0] as usize, args[1] as u8),
         SysCode::SYSCALL_SETHOSTNAME => sys_sethostname(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SETDOMINNAME => sys_setdominname(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SPLICE => {

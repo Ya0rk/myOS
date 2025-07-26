@@ -2,7 +2,7 @@ pub mod addr;
 pub mod dev;
 pub mod ffi;
 mod net_async;
-mod port;
+mod manager;
 pub mod socket;
 pub mod tcp;
 mod udp;
@@ -11,7 +11,7 @@ mod unix;
 pub use dev::*;
 pub use ffi::*;
 use net_async::*;
-pub use port::*;
+pub use manager::*;
 pub use socket::*;
 pub use tcp::*;
 

@@ -29,7 +29,7 @@ pub struct PortManager {
     pub end: u16,
     pub recycled: VecDeque<u16>,
     pub tcp_used_ports: BitVec,
-    // pub udp_used_ports: BitVec,
+    pub udp_used_ports: BitVec,
 }
 
 impl PortManager {
@@ -39,7 +39,7 @@ impl PortManager {
             end: PORT_END,
             recycled: VecDeque::new(),
             tcp_used_ports: BitVec::from_elem(65536, false),
-            // udp_used_ports: BitVec::from_elem(65536, false),
+            udp_used_ports: BitVec::from_elem(65536, false),
         }
     }
     fn alloc(&mut self, domain: Sock) -> SysResult<u16> {
@@ -78,9 +78,9 @@ impl PortManager {
             Sock::Tcp | Sock::Udp => {
                 self.tcp_used_ports.set(port as usize, false);
             }
-            // Sock::Udp => {
-            //     self.udp_used_ports.set(port as usize, false);
-            // }
+            Sock::Udp => {
+                self.udp_used_ports.set(port as usize, false);
+            }
             _ => {}
         }
     }
@@ -89,9 +89,9 @@ impl PortManager {
             Sock::Tcp | Sock::Udp => {
                 self.tcp_used_ports.set(port as usize, true);
             }
-            // Sock::Udp => {
-            //     self.udp_used_ports.set(port as usize, true);
-            // }
+            Sock::Udp => {
+                self.udp_used_ports.set(port as usize, true);
+            }
             _ => {}
         }
     }
@@ -103,12 +103,12 @@ impl PortManager {
                     return true;
                 }
             }
-            // Sock::Udp => {
-            //     if !self.udp_used_ports[port as usize] {
-            //         self.udp_used_ports.set(port as usize, true);
-            //         return true;
-            //     }
-            // }
+            Sock::Udp => {
+                if !self.udp_used_ports[port as usize] {
+                    self.udp_used_ports.set(port as usize, true);
+                    return true;
+                }
+            }
             _ => {}
         }
         false
@@ -171,15 +171,6 @@ impl PortFdMap {
         }
     }
 
-    /// 检查指定 PID 的 port 是否存在
-    pub fn contains(&self, pid: usize, port: u16) -> bool {
-        if let Some(port_fd_map) = self.0.get(&pid) {
-            port_fd_map.contains_key(&port)
-        } else {
-            false
-        }
-    }
-
     /// 获取指定 PID 的 port 对应的 fds（如果存在）
     pub fn get(&self, pid: usize, port: u16) -> Option<&Vec<usize>> {
         if let Some(port_fd_map) = self.0.get(&pid) {
@@ -187,48 +178,6 @@ impl PortFdMap {
         } else {
             None
         }
-    }
-
-    /// 检查指定的 PID、port 和 fd 组合是否存在
-    pub fn contains_fd(&self, pid: usize, port: u16, fd: usize) -> bool {
-        if let Some(port_fd_map) = self.0.get(&pid) {
-            if let Some(fds) = port_fd_map.get(&port) {
-                fds.contains(&fd)
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-
-    /// 删除指定的 PID、port 和 fd 组合
-    /// 如果删除后 port 的 fds 为空，则删除整个 port
-    /// 返回是否成功删除
-    pub fn remove_fd(&mut self, pid: usize, port: u16, fd: usize) -> bool {
-        if let Some(port_fd_map) = self.0.get_mut(&pid) {
-            if let Some(fds) = port_fd_map.get_mut(&port) {
-                if let Some(pos) = fds.iter().position(|&f| f == fd) {
-                    fds.remove(pos);
-                    // 如果 fds 为空，则删除整个 port
-                    if fds.is_empty() {
-                        port_fd_map.remove(&port);
-                    }
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    /// 获取所有管理的 PID（可选）
-    pub fn pids(&self) -> impl Iterator<Item = &usize> {
-        self.0.keys()
-    }
-
-    /// 获取指定 PID 的所有 port 映射（可选）
-    pub fn ports(&self, pid: usize) -> Option<&BTreeMap<u16, Vec<usize>>> {
-        self.0.get(&pid)
     }
 
     /// 移除指定 PID 及其所有关联的 port -> [fd] 映射

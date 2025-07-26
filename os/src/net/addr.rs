@@ -1,6 +1,6 @@
 use super::{AF_INET, AF_INET6, AF_UNIX};
 use crate::utils::{Errno, SysResult};
-use core::{intrinsics::unlikely, ptr::copy_nonoverlapping};
+use core::{cmp::min, intrinsics::unlikely, ptr::copy_nonoverlapping};
 use log::{info, trace};
 use smoltcp::wire::{IpAddress, IpEndpoint};
 
@@ -23,7 +23,8 @@ impl SockAddr {
                 if unlikely(len < core::mem::size_of::<SockIpv4>()) {
                     return Err(Errno::EINVAL);
                 }
-                info!("[write2user] write little IPv4 address to user, {:?}", addr);
+                let len = min(len, core::mem::size_of::<SockIpv4>());
+                info!("[write2user] write little IPv4 address to user, {:?}, len = {}", addr, len);
                 // 安全地拷贝 Ipv4 结构体到 buf
                 unsafe {
                     copy_nonoverlapping(
@@ -38,7 +39,8 @@ impl SockAddr {
                 if unlikely(len < core::mem::size_of::<SockIpv6>()) {
                     return Err(Errno::EINVAL);
                 }
-                info!("[write2user] write little IPv6 address to user, {:?}", addr);
+                let len = min(len, core::mem::size_of::<SockIpv6>());
+                info!("[write2user] write little IPv6 address to user, {:?}, len = {}", addr, len);
                 // 安全地拷贝 Ipv6 结构体到 buf
                 unsafe {
                     copy_nonoverlapping(
