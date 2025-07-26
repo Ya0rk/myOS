@@ -1,6 +1,6 @@
 use super::{tcp::TcpSocket, udp::UdpSocket, TcpState, NET_DEV};
 use crate::{
-    console::print, fs::OpenFlags, net::{addr::SockAddr, Socket, MAX_BUFFER_SIZE, SOCKET_SET}, sync::yield_now, utils::{Errno, SysResult}
+    console::print, fs::OpenFlags, net::{addr::SockAddr, Socket, MAX_BUFFER_SIZE, SOCKET_SET}, signal::{SigMask, SigNom}, sync::yield_now, task::current_task, utils::{Errno, SysResult}
 };
 use core::{future::Future, task::Poll};
 use log::info;
@@ -50,12 +50,18 @@ impl<'a> Future for TcpAcceptFuture<'a> {
                 if self.socket.get_flags()?.contains(OpenFlags::O_NONBLOCK) {
                     return Poll::Ready(Err(Errno::EAGAIN));
                 }
+                info!("[TcpAcceptFuture] now state is {:?}", socket.state());
                 // 注册waker，当socket状态改变时会重新唤醒任务执行，执行poll，直到返回Ready
                 socket.register_recv_waker(cx.waker());
                 drop(binding);
                 NET_DEV.lock().poll();
                 cx.waker().clone().wake();
 
+                let task = current_task().unwrap();
+                let sig_pending = task.sig_pending.lock();
+                if sig_pending.has_expected(SigMask::SIGALRM).0 {
+                    return Poll::Ready(Err(Errno::EINTR));
+                }
                 return Poll::Pending;
             }
         }
