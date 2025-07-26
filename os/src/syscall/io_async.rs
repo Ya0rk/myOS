@@ -42,35 +42,37 @@ impl Future for IoFutrue {
                 }
             };
 
-            let mut poll_func = |event: PollEvents| {
-                let res = if pollfd.events.contains(PollEvents::POLLIN) {
-                    file.pollin(cx.waker().clone())
-                } else if pollfd.events.contains(PollEvents::POLLOUT) {
-                    file.pollout(cx.waker().clone())
-                } else {
-                    Err(Errno::EINVAL)
-                };
-
-                match res {
+            info!("[iofuture] fd = {}", pollfd.fd);
+            if pollfd.events.contains(PollEvents::POLLIN) {
+                match file.pollin(cx.waker().clone()) {
                     Ok(ok) => {
                         if ok {
-                            let mut revent = event;
-                            pollfd.revents |= revent;
-                            res_vec.push(revent);
+                            pollfd.revents |= PollEvents::POLLIN;
+                            res_vec.push(PollEvents::POLLIN);
                         }
-                        Ok(())
                     }
                     Err(_) => {
-                        let mut revent = PollEvents::POLLERR;
-                        pollfd.revents |= revent;
-                        res_vec.push(revent);
-                        Ok(())
+                        pollfd.revents |= PollEvents::POLLERR;
+                        res_vec.push(PollEvents::POLLERR);
                     }
                 }
-            };
+            }
+            if pollfd.events.contains(PollEvents::POLLOUT) {
+                match file.pollout(cx.waker().clone()) {
+                    Ok(ok) => {
+                        if ok {
+                            pollfd.revents |= PollEvents::POLLOUT;
+                            res_vec.push(PollEvents::POLLOUT);
+                        }
+                    }
+                    Err(_) => {
+                        pollfd.revents |= PollEvents::POLLERR;
+                        res_vec.push(PollEvents::POLLERR);
+                    }
+                }
+            }
 
-            poll_func(PollEvents::POLLIN)?;
-            poll_func(PollEvents::POLLOUT)?;
+            
         }
 
         if res_vec.len() > 0 {
