@@ -3,11 +3,13 @@ mod random;
 // pub mod boot;
 pub mod errtype;
 pub mod logger;
-// pub mod elf;
+pub mod elf;
 // pub mod flags;
 pub mod cache;
 pub mod container;
 pub mod downcast;
+pub mod raw_ptr;
+pub mod user_backtrace;
 
 use crate::{
     hal::arch::{fp_read, ra_read},

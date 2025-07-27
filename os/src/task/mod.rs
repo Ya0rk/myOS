@@ -11,6 +11,7 @@ mod sched;
 mod task;
 mod thread_group;
 
+pub use fd::test_fd_performance;
 pub use fd::{sock_map_fd, exchange_sock_fdinfo, FdInfo, FdTable};
 pub use futex::*;
 pub use ipc::ShmidTable;
@@ -24,16 +25,14 @@ pub use pid::{Pid, PidAllocator};
 pub use processor::CPU;
 pub use processor::{
     current_kernel_token, current_task, current_trap_cx, current_user_token, get_current_cpu,
-    get_current_hart_id, init_processors, take_current_task,
-    take_ktrap_ret, set_ktrap_ret
+    get_current_hart_id, init_processors, set_ktrap_ret, take_current_task, take_ktrap_ret,
 };
 pub use sched::TaskFuture;
 pub use sched::{spawn_kernel_task, spawn_user_task};
 pub use task::{TaskControlBlock, TaskStatus};
-pub use fd::test_fd_performance;
 
-use crate::fs::{test_initproc, OpenFlags};
 use crate::fs::{autorun, gbshell, initproc, mbshell};
+use crate::fs::{test_initproc, OpenFlags};
 use crate::{fs::FileClass, sync::block_on};
 use async_task::Task;
 use cfg_if::cfg_if;

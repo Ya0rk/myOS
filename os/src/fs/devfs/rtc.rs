@@ -1,6 +1,6 @@
 use crate::{
     fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags, S_IFCHR},
-    mm::{page::Page, UserBuffer},
+    mm::{page::Page},
     utils::SysResult,
 };
 use alloc::boxed::Box;
@@ -144,7 +144,6 @@ impl InodeTrait for DevRtc {
         Ok(())
     }
 
-
     fn node_type(&self) -> crate::fs::InodeType {
         crate::fs::InodeType::CharDevice
     }
@@ -196,7 +195,6 @@ impl InodeTrait for DevRtc {
         stat.st_size = 0;
         stat
     }
-
 
     fn get_timestamp(&self) -> &crate::sync::SpinNoIrqLock<crate::sync::TimeStamp> {
         // 如果需要返回一个实际值，需要给 DevRtc 加 timestamp 字段

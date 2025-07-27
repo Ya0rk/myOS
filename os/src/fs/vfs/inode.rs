@@ -1,7 +1,8 @@
 use core::{any::Any, sync::atomic::AtomicUsize};
 use crate::{
     fs::{
-        ext4::NormalFile, ffi::InodeType, page_cache::PageCache, vfs::alloc_ino, AbsPath, Dentry, Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END
+        ext4::NormalFile, ffi::InodeType, page_cache::PageCache, vfs::alloc_ino, AbsPath, Dentry,
+        Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END,
     },
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
     utils::{downcast::Downcast, Errno, SysResult},
@@ -102,7 +103,7 @@ pub trait InodeTrait: Any + Send + Sync {
         None
     }
     /// 确实应当剥夺walk去创造Inode的权利
-    fn look_up(&self, _path: &str) ->  Option<Arc<dyn InodeTrait>>{
+    fn look_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
         todo!()
     }
 

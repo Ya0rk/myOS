@@ -1,6 +1,7 @@
 pub mod interrupt;
-pub mod sstatus;
+pub mod plic;
 mod sbi;
+pub mod sstatus;
 
 use core::arch::asm;
 use log::info;

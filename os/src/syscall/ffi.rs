@@ -3,7 +3,9 @@ use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
 use crate::{
-    hal::config::{BLOCK_SIZE, PATH_MAX}, net::{HOST_NAME, NIS_DOMAIN_NAME}, sync::{timer::get_time_s, TimeSpec, TimeVal}
+    hal::config::{BLOCK_SIZE, PATH_MAX},
+    net::{HOST_NAME, NIS_DOMAIN_NAME},
+    sync::{timer::get_time_s, TimeSpec, TimeVal},
 };
 
 #[derive(IntoBytes, Immutable)]
@@ -28,7 +30,7 @@ impl Utsname {
     pub fn new() -> Self {
         let mut domainname = [0; 65];
         let mut nodename = [0; 65];
-        if unsafe { HOST_NAME }[0] == 0  {
+        if unsafe { HOST_NAME }[0] == 0 {
             nodename = Self::copy_bytes("Ya0rk");
         } else {
             nodename.copy_from_slice(unsafe { &HOST_NAME })
@@ -181,6 +183,7 @@ pub enum SysCode {
     SYSCALL_PRLIMIT64 = 261,
     GETRANDOM = 278,
     MEMEBARRIER = 283,
+    SYSCALL_COPY_FILE_RANGE = 285,
     SYS_STATX = 291,
     SYSCALL_CLONE3 = 435,
     #[num_enum(default)]
@@ -321,6 +324,7 @@ impl SysCode {
             Self::SYSCALL_SHMAT => "shmat",
             Self::SYSCALL_SHMDT => "shmdt",
             Self::SYSCALL_SHMCTL => "shmctl",
+            Self::SYSCALL_COPY_FILE_RANGE => "copy_file_range",
         }
     }
 }

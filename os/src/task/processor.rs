@@ -5,8 +5,8 @@ use crate::utils::SysResult;
 use core::cell::UnsafeCell;
 // use crate::mm::switch_to_kernel_pgtable;
 use crate::hal::trap::TrapContext;
-use crate::sync::disable_interrupt;
-use crate::sync::enable_interrupt;
+use crate::sync::disable_supervisor_interrupt;
+use crate::sync::enable_supervisor_interrupt;
 use crate::utils::backtrace;
 use alloc::sync::Arc;
 
@@ -22,10 +22,8 @@ pub struct CPU {
     timer_irq_cnt: usize,
     hart_id: usize,
 
-
     // k_int_cnt: usize,
     // k_int_mask: bool,
-
     /// return value of kernel trap
     kernel_trap_ret_value: Option<SysResult<()>>,
     // 模拟寄存器传参，改为使用全局变量实现
@@ -73,9 +71,7 @@ impl CPU {
     }
 
     pub fn take_ktrap_ret(&mut self) -> Option<SysResult<()>> {
-        
         self.kernel_trap_ret_value.take()
-        
     }
 
     pub fn set_ktrap_ret(&mut self, ret: SysResult<()>) {
@@ -99,7 +95,7 @@ impl CPU {
 impl CPU {
     /// 将task装载进处理器
     pub fn user_task_checkin(&mut self, task: &mut Arc<TaskControlBlock>) {
-        disable_interrupt();
+        disable_supervisor_interrupt();
         //TODO:完善TIME_STAT
         task.get_time_data_mut().set_sched_in_time();
         self.set_cpu_task(task.clone());
@@ -116,7 +112,7 @@ impl CPU {
         current_trap_cx().float_regs.sched_out_do_with_freg();
         self.clear_cpu_task();
         task.get_time_data_mut().set_sched_out_time();
-        enable_interrupt();
+        enable_supervisor_interrupt();
     }
 }
 

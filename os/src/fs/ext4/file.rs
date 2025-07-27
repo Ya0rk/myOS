@@ -7,7 +7,7 @@ use crate::{
         SEEK_SET, S_IFCHR,
     },
     hal::config::PATH_MAX,
-    mm::{page::Page, user_ptr::user_slice_mut, UserBuffer},
+    mm::{page::Page, user_ptr::user_slice_mut},
     utils::{Errno, SysResult},
 };
 use alloc::boxed::Box;
@@ -97,6 +97,7 @@ impl FileTrait for NormalFile {
             self.metadata.offset()
         );
 
+        let old_offset = self.metadata.offset();
         let mut new_offset = self.metadata.offset();
 
         // 这边要使用 iter_mut()，因为要将数据写入
@@ -104,6 +105,10 @@ impl FileTrait for NormalFile {
         new_offset += read_size;
         total_read_size += read_size;
         self.metadata.set_offset(new_offset);
+        info!(
+            "read file: {}, old_offset: {}, new_offset: {}",
+            self.path, old_offset, new_offset
+        );
 
         Ok(total_read_size)
     }
@@ -160,6 +165,10 @@ impl FileTrait for NormalFile {
     fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {
         let offset: usize = offset as usize;
         let old_offset = self.metadata.offset();
+        info!(
+            "[ext4_file] lseek offset {}, old_offset: {}, whence: {}",
+            offset, old_offset, whence,
+        );
         let res = match whence {
             SEEK_SET => offset,
             SEEK_CUR => old_offset + offset,
@@ -167,6 +176,7 @@ impl FileTrait for NormalFile {
             _ => return Err(Errno::EINVAL),
         };
         self.metadata.set_offset(res);
+        info!("[ext4_file] lseek return: {}", res);
         Ok(res)
     }
 

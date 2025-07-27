@@ -55,18 +55,20 @@ use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use fs::{dentry_test, Dentry};
-#[cfg(target_arch = "loongarch64")]
-use hal::mem::{
-    mmu_init,
-    tlb::{self, tlb_fill},
-    tlb_init,
-};
-#[cfg(target_arch = "riscv64")]
-use hal::mem::{mmu_init, tlb_init};
+// #[cfg(target_arch = "loongarch64")]
+// use hal::mem::{
+//     mmu_init,
+//     tlb::{self, tlb_fill},
+//     tlb_init,
+// };
+// #[cfg(target_arch = "riscv64")]
+// use hal::mem::{mmu_init, tlb_init};
 use log::{error, info};
 use mm::memory_space::test_la_memory_space;
 use sync::{block_on, time_init, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
+
+use crate::hal::entry::boot::arch_init;
 
 #[macro_use]
 extern crate lazy_static;
@@ -91,11 +93,12 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     // 载入用户进程
     // 设置时钟中断
     // 开始调度执行
-    #[cfg(target_arch = "loongarch64")]
-    {
-        mmu_init();
-        tlb_init(tlb_fill as usize);
-    }
+    // #[cfg(target_arch = "loongarch64")]
+    // {
+    //     mmu_init();
+    //     tlb_init(tlb_fill as usize);
+    // }
+    arch_init();
     println!("hello world!");
     println!("hart id is {:#X}, dt_root is {:#x}", hart_id, dt_root);
 
@@ -138,14 +141,50 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // test_la_memory_space();
             // use crate::task::test_fd_performance;
             // test_fd_performance();
-            
 
             // unsafe  {
             //     let p = 0x9000_0000_0020_1000 as (*const usize);
             //     let ins = *p;
             //     error!("[TEST_ADDR] {:#x}", ins);
             // }
+            // let arc_page = Page::new();
+            // use alloc::sync::{Arc, Weak};
+            // use core::{hash::{BuildHasher, BuildHasherDefault, Hash, Hasher}, panic};
+            // use hashbrown::DefaultHashBuilder;
+            // struct WeakPage(Weak<Page>);
+            // impl Hash for WeakPage {
+            //     fn hash<H: Hasher>(&self, state: &mut H) {
+            //         // self.0.hash(state);
+
+            //         use core::error;
+            //         let p_page = self.0.as_ptr();
+            //         error!("[hash] weak as_ptr: S{:#x}", p_page as u64);
+            //         p_page.hash(state);
+            //     }
+
+            // }
+            // impl From<Weak<Page>> for WeakPage {
+            //     fn from(w: Weak<Page>) -> Self {
+            //         WeakPage(w)
+            //     }
+            // }
+
+            // use crate::fs::Page;
+            // // Weak::new(*arc_page)
+            // let w_a: WeakPage = Arc::<mm::page::Page>::downgrade(&arc_page).into();
+            // let w_b: WeakPage = Arc::<mm::page::Page>::downgrade(&arc_page).into();
+            // // let hasher = BuildHasherDefault::default();
+            // let build_hasher = DefaultHashBuilder::default();
+            // let mut hasher = build_hasher.build_hasher();
+            // w_a.hash(&mut hasher);
+            // let h_a = hasher.finish();
+            // let mut hasher = build_hasher.build_hasher();
+            // w_b.hash(&mut hasher);
+            // let h_b = hasher.finish();
+            // error!("[hash] {:#x} {:#x}", h_a, h_b);
+            // panic!();
         }
+        crate::utils::container::lru::Lru::<i32, usize>::test_lru();
 
         task::init_processors();
         spawn_kernel_task(async move { task::add_initproc().await });
@@ -158,7 +197,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         mm::init(false);
     }
 
-    unsafe { sync::enable_timer_interrupt() };
+    unsafe { sync::enable_supervisor_timer_interrupt() };
     timer::set_next_trigger();
     executor::run();
     panic!("Unreachable in rust_main!");

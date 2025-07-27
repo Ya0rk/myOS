@@ -1,7 +1,7 @@
 use super::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags};
 use crate::{
     hal::config::PIPE_BUFFER_SIZE,
-    mm::{page::Page, UserBuffer},
+    mm::{page::Page},
     sync::{get_waker, once::LateInit, SpinNoIrqLock},
     utils::{Errno, SysResult},
 };
@@ -138,9 +138,7 @@ impl PipeInner {
 
 #[async_trait]
 impl FileTrait for Pipe {
-    fn set_flags(&self, _flags: OpenFlags) {
-        
-    }
+    fn set_flags(&self, _flags: OpenFlags) {}
     fn get_flags(&self) -> OpenFlags {
         self.flags
     }

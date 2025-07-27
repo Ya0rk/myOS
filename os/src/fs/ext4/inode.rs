@@ -155,7 +155,8 @@ impl InodeTrait for Ext4Inode {
 
         let nf = Ext4Inode::new(path, types.clone().into(), page_cache.clone());
         bare_dentry.bind(nf.clone());
-        if nf.is_valid() { // 这里的判断没用
+        if nf.is_valid() {
+            // 这里的判断没用
             info!("[do_create] succe {}", path);
         } else {
             info!("[do_create] faild {}", path);
@@ -169,6 +170,12 @@ impl InodeTrait for Ext4Inode {
     }
     /// 读取文件
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
+        info!(
+            "[ext_inode read_at] file: {}, offset: {} size: {}",
+            &self.metadata.path,
+            offset,
+            buf.len()
+        );
         let file_size = self.get_size();
         if file_size == 0 || offset >= file_size {
             return 0;
@@ -206,6 +213,12 @@ impl InodeTrait for Ext4Inode {
 
     /// 写入文件
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
+        info!(
+            "[ext4_inode write_at] file: {}, offset: {}, len: {}",
+            self.metadata.path,
+            offset,
+            buf.len()
+        );
         let write_size = match &self.page_cache {
             None => {
                 // info!("    [write_at] no cache");
@@ -248,13 +261,20 @@ impl InodeTrait for Ext4Inode {
     /// 改变文件size
     fn truncate(&self, size: usize) -> usize {
         let mut file = self.file.lock();
-
-        // let r = file.file_truncate(size as u64);  // 暂时注释
+        info!("[inode truncate] size = {}", size);
+        // TODO added by lsz: 这里必须打开
+        // TODO 暫時先這麼用著，後面改
+        let path = file.get_path();
+        file.file_open(path.clone().to_str().unwrap(), O_RDWR);
+        // info!("[ext4file state] desc:{:?} path:{:?}, type:{:?}", file.file_desc, file.get_path(), file.get_type());
+        let r = file.file_truncate(size as u64);  // 暂时注释
+        info!("lw successfully truncate");
+        file.file_close();
+        self.get_page_cache().unwrap().truncate(size);
         self.set_size(size).expect("[truncate]: set size fail!");
 
-        // file.file_close();
-        // r.map_or_else(|_| Errno::EIO.into(), |_| 0) //暂时注释
-        0
+        r.map_or_else(|_| Errno::EIO.into(), |_| 0) //暂时注释
+        
     }
     /// 同步文件
     async fn sync(&self) {
@@ -352,9 +372,7 @@ impl InodeTrait for Ext4Inode {
     }
 
     fn link(&self, bare_dentry: Arc<Dentry>) -> SysResult<usize> {
-        let types = {
-            self.node_type().into()
-        };
+        let types = { self.node_type().into() };
         let mut file = self.file.lock();
         if bare_dentry.is_valid() {
             return Err(Errno::EEXIST);
@@ -365,12 +383,11 @@ impl InodeTrait for Ext4Inode {
             file.file_path.to_str().unwrap(),
             new_path
         );
-        
+
         match file.link(new_path) {
             Ok(_) => {
                 debug_point!("[ext4_link]");
-                let inode =
-                    Ext4Inode::new(&new_path, types, self.get_page_cache());
+                let inode = Ext4Inode::new(&new_path, types, self.get_page_cache());
                 debug_point!("[ext4_link]");
                 bare_dentry.bind(inode);
                 debug_point!("[ext4_link]");

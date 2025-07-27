@@ -11,6 +11,7 @@
 *.diff
 
 *.log
+log/*
 
 os/src/link_app.S
 os/src/linker.ld
@@ -25,6 +26,7 @@ easy-fs/Cargo.lock
 easy-fs/target/*
 easy-fs-fuse/Cargo.lock
 easy-fs-fuse/target/*
+doc/main.pdf
 tools/
 pushall.sh
 **/CMakeFiles/
@@ -41,11 +43,10 @@ CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
 
-lwext4_rust/c/lwext4/compile_commands.json
-lwext4_rust/c/lwext4/CPackConfig.cmake
-lwext4_rust/c/lwext4/CPackSourceConfig.cmake
-lwext4_rust/c/lwext4/blockdev/cmake_install.cmake
-lwext4_rust/c_old/lwext4/include/generated/ext4_config.h
+lwext4_rust/** 
+cty/**
+vendor/**
+
 
 
 *.dtb
@@ -62,6 +63,7 @@ lwext4_rust/c_old/lwext4/include/generated/ext4_config.h
 *.json
 test/*
 py
+GEMINI.md
 
 kernel-rv
 kernel-la

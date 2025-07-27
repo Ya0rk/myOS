@@ -23,7 +23,7 @@ pub use ext4::{ls, root_inode};
 pub use ffi::*;
 use lwext4_rust::bindings::{self, true_, O_CREAT, O_RDWR, O_TRUNC};
 use lwext4_rust::{Ext4File, InodeTypes};
-use page_cache::PageCache;
+// use page_cache::PageCache;
 pub use path::{path_test, resolve_path, AbsPath};
 // pub use inode_cache::*;
 pub use mount::MNT_TABLE;
@@ -32,7 +32,7 @@ use procfs::{inode, PROCFS_SUPER_BLOCK};
 // use sbi_rt::NonRetentive;
 pub use crate::mm::page::Page;
 use crate::mm::page::PageType;
-use crate::mm::UserBuffer;
+// use crate::mm::UserBuffer;
 use crate::net::dev;
 use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
@@ -41,6 +41,7 @@ use devfs::{find_device, open_device_file, register_device, DevNull, DevZero};
 use ext4::file::NormalFile;
 use ffi::{MEMINFO, MOUNTS};
 use log::{debug, error, info};
+pub use page_cache::PageCache;
 pub use pre_data::*;
 use sbi_spec::pmu::cache_event::NODE;
 pub use stat::Kstat;
@@ -81,6 +82,58 @@ pub async fn init() {
     println!("[Del0n1x] init fs start ...");
     Dentry::init_dentry_sys();
     create_init_files().await;
+
+    // Test case for file hole created by truncate and write
+    println!("[fs test] start test file hole (truncate scenario)");
+    let test_file_path = "/hole_test_truncate".into();
+    if let Ok(FileClass::File(file)) = open(test_file_path, OpenFlags::O_CREAT | OpenFlags::O_RDWR)
+    {
+        // 1. Write initial data
+        let initial_data = "initial data".as_bytes();
+        file.write(initial_data).await.unwrap();
+        println!("[fs test] wrote initial data");
+
+        // 2. Truncate to 0
+        let inode = file.get_inode();
+        inode.truncate(0);
+        println!("[fs test] truncated file to 0");
+
+        // 3. Seek to a position > 0 to create a hole
+        let hole_size = 10;
+        file.lseek(hole_size as isize, SEEK_SET).unwrap();
+        println!("[fs test] seeked to {}", hole_size);
+
+        // 4. Write new data, creating a hole from 0 to 9
+        let new_data = "new data".as_bytes();
+        file.write(new_data).await.unwrap();
+        println!("[fs test] wrote new data after hole");
+
+        // 5. Seek back to the beginning to verify the hole
+        file.lseek(0, SEEK_SET).unwrap();
+        println!("[fs test] seeked to 0");
+
+        // 6. Read from the hole and verify it's all zeros
+        let mut hole_buf = [1u8; 10]; // Pre-fill with non-zero to be sure
+        let read_len = file.read(&mut hole_buf).await.unwrap();
+        assert_eq!(read_len, hole_size);
+        for &byte in hole_buf.iter() {
+            assert_eq!(byte, 0, "Byte in hole is not zero!");
+        }
+        println!("[fs test] hole content is verified to be zero");
+
+        // 7. Verify the data written after the hole
+        // The offset is now at the end of the hole (10)
+        let mut data_buf = [0u8; 8];
+        let read_len_data = file.read(&mut data_buf).await.unwrap();
+        assert_eq!(read_len_data, new_data.len());
+        assert_eq!(&data_buf[..read_len_data], new_data);
+        println!("[fs test] data after hole is verified");
+
+        println!("[fs test] file hole (truncate scenario) test pass");
+    } else {
+        println!("[fs test] file hole test fail: cannot create file");
+    }
+    // panic!("temp test");
 }
 
 pub async fn create_init_files() -> SysResult {
@@ -148,6 +201,7 @@ pub async fn create_init_files() -> SysResult {
         "/ltp_testcode_glibc.sh".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR
     ) {
+        let buf = ltp::GLIBC_LTP_testcode.as_bytes();
         let buf = ltp::GLIBC_LTP_testcode.as_bytes();
         file.write(&buf).await;
     }
@@ -269,7 +323,8 @@ pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<FileClass> {
     debug_point!("    [open]");
     // info!("[open] abspath = {}", abs_path.get());
     if !path.is_absolute() {
-        panic!("    [fs_open] path = {} is not absolte path.", path.get());
+        // panic!("    [fs_open] path = {} is not absolte path.", path.get());
+        return Err(Errno::ENOENT);
     }
 
     // 临时保存这个机制,后期应当使用设备文件系统去代替

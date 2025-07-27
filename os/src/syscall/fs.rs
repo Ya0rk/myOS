@@ -7,7 +7,7 @@ use crate::fs::{
 };
 use crate::hal::config::{AT_FDCWD, PAGE_SIZE, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
 use crate::mm::user_ptr::{check_readable, user_cstr, user_ref_mut, user_slice, user_slice_mut};
-use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
+// use crate::mm::{translated_byte_buffer, translated_refmut, translated_str};
 use crate::net::PORT_FD_MANAMER;
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
@@ -22,6 +22,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::SyncUnsafeCell;
 use core::cmp::{max, min};
+use num_traits::Zero;
 // use core::error;
 use core::intrinsics::unlikely;
 use core::ops::Add;
@@ -30,6 +31,9 @@ use lwext4_rust::file;
 
 pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
     // info!("[sys_write] start");
+    if fd != 0 && fd != 1 && fd != 2 {
+        info!("[sys_write] fd: {}, buf: {}, len: {}", fd, buf, len);
+    }
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len()) {
         info!("[write] fd more than len, fd = {}", fd);
@@ -56,6 +60,9 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 }
 
 pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
+    if fd != 0 && fd != 1 && fd != 2 {
+        info!("[sys_read] fd: {}, buf: {:x}, len: {}", fd, buf, len);
+    }
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len()) {
         // info!("[sys_read] task pid = {}", task.get_pid());
@@ -174,7 +181,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
 pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let path = user_cstr(pathname.into())?.ok_or(Errno::EINVAL)?;
-    debug!("[sys_fsstatat] pathname {},", path);
+    debug!("[sys_fsstatat] pathname {:?},", path);
     let cwd = task.get_current_path();
     info!(
         "[sys_fstatat] start cwd: {}, pathname: {}, flags: {}, dirfd = {}",
@@ -186,14 +193,16 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if unlikely(
-            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE
-        ) {
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
-        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") || other_cwd == String::from("Stdin")) {
+        if unlikely(
+            other_cwd.contains("is pipe file")
+                || other_cwd == String::from("Stdout")
+                || other_cwd == String::from("Stdin"),
+        ) {
             return Ok(0);
         }
         resolve_path(other_cwd, path)
@@ -209,6 +218,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
                 return Err(Errno::ENOENT);
             }
             file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] res: {:?}", &tempstat);
             unsafe {
                 core::ptr::write(ptr, tempstat);
             }
@@ -216,6 +226,7 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         }
         Ok(FileClass::Abs(file)) => {
             file.fstat(&mut tempstat)?;
+            info!("[sys_fstatat] res: {:?}", &tempstat);
             unsafe {
                 core::ptr::write(ptr, tempstat);
             }
@@ -280,7 +291,9 @@ pub fn sys_statx(
 ) -> SysResult<usize> {
     info!("[sys_statx] start");
     // println!("[sys_statx] start, dirfd = {}, pathname = {}, statxbuf = {}, maks = {}, flags = {}", dirfd, pathname, statxbuf, mask, flags);
-    if unlikely(statxbuf == 0 || pathname == 0 || pathname > USER_SPACE_TOP || statxbuf > USER_SPACE_TOP) {
+    if unlikely(
+        statxbuf == 0 || pathname == 0 || pathname > USER_SPACE_TOP || statxbuf > USER_SPACE_TOP,
+    ) {
         info!("[sys_statx] pathname or statxbuf is null, fault.");
         return Err(Errno::EFAULT);
     }
@@ -311,7 +324,11 @@ pub fn sys_statx(
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         let other_cwd = inode.get_name()?;
-        if unlikely(other_cwd.contains("is pipe file") || other_cwd == String::from("Stdout") || other_cwd == String::from("Stdin")) {
+        if unlikely(
+            other_cwd.contains("is pipe file")
+                || other_cwd == String::from("Stdout")
+                || other_cwd == String::from("Stdin"),
+        ) {
             return Ok(0);
         }
         resolve_path(other_cwd, path)
@@ -360,11 +377,11 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     let path = user_cstr(path.into())?.unwrap();
     let flags = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
-    info!("[sys_openat] path = {}, flags = {:?}", path, flags);
+    // info!("[sys_openat] path = {}, flags = {:?}", path, flags);
 
     // 计算目标路径
     let target_path = if fd == AT_FDCWD {
-        resolve_path(cwd, path)
+        resolve_path(cwd, path.clone())
     } else {
         // 相对路径，以 fd 对应的目录为起点
         if unlikely(fd < 0 || fd as usize > RLIMIT_NOFILE) {
@@ -376,8 +393,8 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
             return Err(Errno::ENOTDIR);
         }
         let other_cwd = inode.get_name()?;
-        info!("[sys_openat] other cwd = {}", other_cwd);
-        resolve_path(other_cwd, path)
+        // info!("[sys_openat] other cwd = {}", other_cwd);
+        resolve_path(other_cwd, path.clone())
     };
 
     // 检查路径是否有效并打开文件
@@ -390,8 +407,9 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
                     unreachable!()
                 }
             };
+            info!("[sys_openat] finished path = {}, flags = {:?}", path, flags);
             info!(
-                "[sys_openat] taskid = {}, alloc fd finished, new fd = {}",
+                "[sys_openat] finished taskid = {}, alloc fd finished, new fd = {}",
                 task.get_pid(),
                 fd
             );
@@ -629,9 +647,7 @@ pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
         resolve_path(cwd, path)
     } else {
         // 相对路径，以 dirfd 对应的目录为起点
-        if unlikely(
-            dirfd < 0 || dirfd as usize > RLIMIT_NOFILE
-        ) {
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -729,7 +745,7 @@ pub fn sys_chdir(path: usize) -> SysResult<usize> {
     info!("[sys_chdir] start, path = {:#x}", path);
     match check_readable(path.into(), 1) {
         Ok(_) => {}
-        Err(_) => return Err(Errno::EFAULT)
+        Err(_) => return Err(Errno::EFAULT),
     }
 
     let token = current_user_token();
@@ -934,6 +950,7 @@ pub async fn sys_sendfile(
     if !src.readable() || !dest.writable() {
         return Err(Errno::EPERM);
     }
+    // 可能可能有问题，我注释了，原来是打开的
 
     // let file_size = {
     //     if src.is_pipe() {
@@ -1005,9 +1022,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
-        let inode = task
-            .get_file_by_fd(dirfd as usize)
-            .ok_or(Errno::EBADF)?;
+        let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         if unlikely(!inode.is_dir()) {
             log::error!("[sys_faccessat] dirfd = {} is not a dir.", dirfd);
             return Err(Errno::ENOTDIR);
@@ -1049,6 +1064,7 @@ pub fn sys_lseek(fd: usize, offset: isize, whence: usize) -> SysResult<usize> {
     let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
     let res = file.lseek(offset, whence)?;
 
+    info!("[sys_lseek] return {}", res);
     Ok(res)
 }
 
@@ -1159,7 +1175,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
 /// 改变文件大小
 /// 返回值：0、-1
 pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
-    info!("[sys_ftruncate64] start");
+    info!("[sys_ftruncate64] start fd: {}, len: {}", fd, length);
     let task = current_task().unwrap();
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
         return Err(Errno::EBADF);
@@ -1334,7 +1350,7 @@ pub fn sys_readlinkat(
             } else {
                 return Err(Errno::EFAULT);
             };
-            let path_bytes = "/musl/busybox\0".as_bytes();
+            let path_bytes = "/busybox\0".as_bytes();
             if path_bytes.len() > bufsiz {
                 ub[0..bufsiz].copy_from_slice(&path_bytes[0..bufsiz]);
                 return Ok(bufsiz);
@@ -1408,8 +1424,19 @@ pub fn sys_fchdir(fd: usize) -> SysResult<usize> {
 /// up to size bytes of data from the file descriptor fd_in to the
 /// file descriptor fd_out, where one of the file descriptors must
 /// refer to a pipe.
-pub async fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usize, size: usize, _flags: u32) -> SysResult<usize> {
-    info!("[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}", fd_in, off_in, fd_out, off_out, size);
+pub async fn sys_splice(
+    fd_in: usize,
+    off_in: usize,
+    fd_out: usize,
+    off_out: usize,
+    size: usize,
+    _flags: u32,
+) -> SysResult<usize> {
+    // INFO: 决赛系统调用
+    info!(
+        "[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}",
+        fd_in, off_in, fd_out, off_out, size
+    );
 
     if unlikely(fd_in == fd_out) {
         info!("[sys_splice] fd_in and fd_out are the same, return EINVAL");
@@ -1444,27 +1471,36 @@ pub async fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usi
 
     let in_offset = match off_in {
         0 => 0,
-        _ => unsafe { *(off_in as *const usize) },
+        _ => unsafe { *(off_in as *const isize) },
     };
     let out_offet = match off_out {
         0 => 0,
-        _ => unsafe { *(off_out as *const usize) },
+        _ => unsafe { *(off_out as *const isize) },
     };
+
+    if in_offset < 0 || out_offet < 0 {
+        info!("[sys_splice] in_offset = {}, out_offset = {}", in_offset, out_offet);
+        return Err(Errno::EINVAL);
+    }
 
     // 开辟一个内核缓冲区承载数据
     let mut buffer = vec![0u8; size];
     let read_size = match file_in.is_pipe() {
-        true  => file_in.read(&mut buffer).await?,
-        false => file_in.read_at(in_offset, &mut buffer).await?,
+        true => file_in.read(&mut buffer).await?,
+        false => file_in.read_at(in_offset as usize, &mut buffer).await?,
     };
     if unlikely(read_size == 0) {
         info!("[sys_splice] read_size is 0, return 0");
         return Ok(0);
     }
+    // BUG: 这里应当判断 off_in 为 0 的逻辑
+    // 当 off_in 为 0 的时候应当采用文件的偏移，而不是像这样子采用输入的偏移
+    // 这里也应当是一样的
 
+    let len = min(size, read_size);
     let write_size = match file_out.is_pipe() {
-        true  => file_out.write(&buffer).await?,
-        false => file_out.write_at(out_offet, &buffer).await?,
+        true => file_out.write(&buffer[..len]).await?,
+        false => file_out.write_at(out_offet as usize, &buffer[..len]).await?,
     };
     if unlikely(write_size == 0) {
         info!("[sys_splice] write_size is 0, return 0");
@@ -1472,14 +1508,90 @@ pub async fn sys_splice(fd_in: usize, off_in: usize, fd_out: usize, off_out: usi
     }
 
     match off_in {
-        0 => {},
-        _ => unsafe{ core::ptr::write(off_in as *mut usize, in_offset + read_size) },
+        0 => {}
+        _ => {
+            unsafe { core::ptr::write(off_in as *mut usize, in_offset as usize + read_size) };
+            return Ok(read_size);
+        }
     }
 
     match off_out {
-        0 => {},
-        _ => unsafe{ core::ptr::write(off_out as *mut usize, out_offet + write_size) },
+        0 => {}
+        _ => {
+            unsafe { core::ptr::write(off_out as *mut usize, out_offet as usize + write_size) };
+            return Ok(write_size);
+        }
     }
 
     Ok(0)
+}
+
+pub async fn sys_copy_file_range(
+    fd_in: u32,
+    off_in: usize,
+    fd_out: u32,
+    off_out: usize,
+    len: usize,
+    _flags: usize,
+) -> SysResult<usize> {
+    // INFO: 决赛测试用例
+    // TODO: 需要检查范围，如果两个 fd 是同一个文件的话应当检查范围不应当重叠，这个逻辑没有被实现
+    let task = current_task().unwrap();
+    let file_in = task.get_file_by_fd(fd_in as usize).ok_or(Errno::EBADF)?;
+    let file_out = task.get_file_by_fd(fd_out as usize).ok_or(Errno::EBADF)?;
+    let offset_in = if off_in == 0 {
+        0
+    } else {
+        unsafe { *(off_in as *const usize) }
+    };
+    let offset_out = if off_out == 0 {
+        0
+    } else {
+        unsafe { *(off_out as *const usize) }
+    };
+    info!(
+        "[sys_copy_file_range] fd_in: {}, off_in: {}, fd_out: {}, off_out: {}, len: {}",
+        fd_in, offset_in, fd_out, offset_out, len,
+    );
+    let mut buffer = vec![0u8; len];
+
+    let read_size = match file_in.is_pipe() | (off_in == 0) {
+        true => {
+            debug_point!("read by file's off");
+            info!("fd_in: fd={}", fd_in);
+            file_in.read(&mut buffer).await?
+        }
+        false => {
+            debug_point!("read by offset sended");
+            file_in.read_at(offset_in, &mut buffer).await?
+        }
+    };
+    if unlikely(read_size == 0) {
+        return Ok(0);
+    }
+    buffer.truncate(read_size);
+    let write_size = match file_out.is_pipe() | (off_out == 0) {
+        true => {
+            debug_point!("write by file's off");
+            file_out.write(&buffer).await?
+        }
+        false => {
+            debug_point!("write by offset sended");
+            file_out.write_at(offset_out, &buffer).await?
+        }
+    };
+    if unlikely(write_size == 0) {
+        return Ok(0);
+    }
+    if off_in != 0 {
+        unsafe {
+            core::ptr::write(off_in as *mut usize, offset_in + read_size);
+        }
+    }
+    if off_out != 0 {
+        unsafe {
+            core::ptr::write(off_out as *mut usize, offset_out + write_size);
+        }
+    }
+    Ok(write_size)
 }

@@ -11,9 +11,9 @@ use crate::hal::trap::TrapContext;
 use crate::ipc::shm::SHARED_MEMORY_MANAGER;
 use crate::ipc::IPCKey;
 use crate::mm::address::VirtAddr;
+use crate::mm::memory_space;
 use crate::mm::memory_space::vm_area::{VmArea, VmAreaType};
-use crate::mm::memory_space::{init_stack, vm_area::MapPerm, MemorySpace};
-use crate::mm::{memory_space, translated_refmut, MapPermission};
+use crate::mm::memory_space::{create_elf_tables, vm_area::MapPerm, MemorySpace};
 use crate::net::PORT_FD_MANAMER;
 use crate::signal::{
     SigActionFlag, SigCode, SigDetails, SigErr, SigHandlerType, SigInfo, SigMask, SigNom,
@@ -88,14 +88,16 @@ impl TaskControlBlock {
     /// 创建新task,只有initproc会调用
     pub async fn new(elf_file: Arc<dyn FileTrait>) -> Arc<Self> {
         let (mut memory_space, entry_point, sp_init, auxv) =
-            MemorySpace::new_user_from_elf(elf_file).await;
+            MemorySpace::new_user_from_elf(elf_file)
+                .await
+                .expect("Failed on mapping initproc");
         info!("entry point: {:#x}", entry_point);
 
         unsafe { memory_space.switch_page_table() };
         crate::hal::arch::set_sum();
         // unsafe{riscv::register::sstatus::set_sum();}
         let (user_sp, argc, argv_p, env_p) =
-            init_stack(sp_init.into(), Vec::new(), Vec::new(), auxv);
+            create_elf_tables(sp_init.into(), Vec::new(), Vec::new(), auxv);
         let trap_cx = TrapContext::app_init_context(entry_point, user_sp);
         // alloc a pid and a kernel stack in kernel space
         let pid_handle = pid_alloc();
@@ -106,7 +108,7 @@ impl TaskControlBlock {
             pid: pid_handle,
 
             // Shared
-            pgid: AtomicUsize::new(0),
+            pgid: AtomicUsize::new(1),
             tgid: AtomicUsize::new(tgid),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             thread_group: new_shared(ThreadGroup::new()),
@@ -156,7 +158,9 @@ impl TaskControlBlock {
         info!("execve start");
         // info!("[execve] argv:{:?}, env:{:?}", argv, env);
         let (mut memory_space, entry_point, sp_init, auxv) =
-            MemorySpace::new_user_from_elf_lazily(elf_file).await;
+            MemorySpace::new_user_from_elf_lazily(elf_file)
+                .await
+                .expect("[execve] Failed on mapping elf file");
 
         // info!("execve memory_set created");
 
@@ -176,7 +180,7 @@ impl TaskControlBlock {
         // *mem = memory_space;
         *self.get_memory_space_mut() = new_shared(memory_space);
         self.detach_all_shm();
-        let (user_sp, argc, argv_p, env_p) = init_stack(sp_init.into(), argv, env, auxv);
+        let (user_sp, argc, argv_p, env_p) = create_elf_tables(sp_init.into(), argv, env, auxv);
 
         // set trap cx
         let trap_cx = self.get_trap_cx_mut();
@@ -356,7 +360,7 @@ impl TaskControlBlock {
         };
 
         let memory_space = match flag.contains(CloneFlags::CLONE_VM) {
-            true => SyncUnsafeCell::new(self.get_memory_space().clone()), 
+            true => SyncUnsafeCell::new(self.get_memory_space().clone()),
             false => {
                 let child_memory_space =
                     MemorySpace::from_user_lazily(&mut self.get_memory_space().lock());
@@ -475,7 +479,24 @@ impl TaskControlBlock {
                     parent.get_pid(),
                     self.get_exit_code()
                 );
-                self.exit_notify(&parent);
+                // println!(
+                //     "[do_exit] task to info parent pid = {}, exit code = {}",
+                //     parent.get_pid(),
+                //     self.get_exit_code()
+                // );
+                let sig_info = SigInfo::new(
+                    SigNom::SIGCHLD,
+                    SigCode::CLD_EXITED,
+                    SigErr::empty(),
+                    SigDetails::Chld {
+                        pid,
+                        status: self.get_status(),
+                        // 这里需要将exitcode移回去，因为在sys_exit中位移过
+                        // exit_code: (self.get_exit_code() & 0xff00) >> 8
+                        exit_code: self.get_exit_code(),
+                    },
+                );
+                parent.proc_recv_siginfo(sig_info);
             }
             None => {
                 use log::error;
@@ -806,10 +827,10 @@ impl TaskControlBlock {
         unsafe { &mut *(self.trap_cx.get() as *mut TrapContext) }
     }
     pub fn get_memory_space(&self) -> &Shared<MemorySpace> {
-        unsafe{ & *self.memory_space.get() }
+        unsafe { &*self.memory_space.get() }
     }
     pub fn get_memory_space_mut(&self) -> &mut Shared<MemorySpace> {
-        unsafe{ &mut *self.memory_space.get() }
+        unsafe { &mut *self.memory_space.get() }
     }
 
     /// 刷新TLB
@@ -892,9 +913,7 @@ impl TaskControlBlock {
     }
     /// 在指定位置设置fd
     pub fn put_fd_in(&self, fd: FdInfo, idx: usize) -> SysResult {
-        self.fd_table
-            .lock()
-            .put_in(fd, idx)
+        self.fd_table.lock().put_in(fd, idx)
     }
     /// 清空fd_table
     pub fn clear_fd_table(&self) {

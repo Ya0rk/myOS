@@ -27,7 +27,6 @@ pub fn mmu_init() {
     pwch::set_dir3_width(PAGE_SIZE_SHIFT - 3);
 
     // tmp
-    euen::set_fpe(true);
 }
 
 pub fn tlb_init(tlbrentry: usize) {

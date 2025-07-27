@@ -3,7 +3,6 @@ use super::{
     SockMeta, Socket, AF_INET, BUFF_SIZE, META_SIZE, NET_DEV, PORT_MANAGER, SOCKET_SET,
 };
 use crate::{fs::FileTrait, net::{net_async::UdpRecvFuture, PORT_FD_MANAMER, PORT_START}};
-use crate::mm::UserBuffer;
 use crate::{
     fs::{FileMeta, OpenFlags, RenameFlags},
     net::{do_port_aloc, net_async::UdpSendFuture, MAX_BUFFER_SIZE},

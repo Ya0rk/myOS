@@ -1,5 +1,7 @@
 use core::{
-    borrow::Borrow, hash::Hash, ops::{Deref, DerefMut}
+    borrow::Borrow,
+    hash::Hash,
+    ops::{Deref, DerefMut},
 };
 
 use alloc::sync::Arc;
@@ -32,10 +34,8 @@ impl<T: Eq + Hash + Clone, U: Clone + CacheStatus> Cache<T, U> {
         Q: ?Sized + Hash + Eq,
         T: Borrow<Q>,
     {
-
         let map = self.read();
         match map.get(key) {
-            
             Some(value) if value.is_valid() => Some(value.clone()),
             Some(_) => {
                 drop(map);
@@ -56,7 +56,7 @@ impl<T: Eq + Hash + Clone, U: Clone + CacheStatus> Cache<T, U> {
     {
         self.write().remove(key)
     }
-    
+
     /// unavailable
     pub fn peek(&self) -> Option<U> {
         todo!()
@@ -92,4 +92,3 @@ impl<T: Eq + Hash + Clone, U: Clone + CacheStatus> DerefMut for Cache<T, U> {
         &mut self.map
     }
 }
-

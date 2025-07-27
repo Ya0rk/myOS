@@ -1,6 +1,6 @@
 use crate::{
     fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
-    mm::{page::Page, UserBuffer},
+    mm::{page::Page},
     sync::{SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult},
 };
@@ -88,7 +88,6 @@ impl InodeTrait for DevZero {
         Ok(())
     }
 
-
     fn node_type(&self) -> InodeType {
         InodeType::CharDevice
     }
@@ -125,7 +124,6 @@ impl InodeTrait for DevZero {
         stat.st_mode = S_IFCHR;
         stat
     }
-
 
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         // 你可以给 DevZero 加一个 timestamp 字段并返回它

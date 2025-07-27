@@ -1,18 +1,18 @@
 use crate::{
     fs::{ffi::RenameFlags, Dirent, Kstat, OpenFlags},
-    mm::{page::Page, UserBuffer},
+    mm::page::Page,
     net::Socket,
     utils::{Errno, SysResult},
 };
 use alloc::{boxed::Box, string::ToString};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
-use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use core::{
+    any::Any,
     sync::atomic::{AtomicUsize, Ordering},
     task::Waker,
-    any::Any
 };
+use downcast_rs::{impl_downcast, Downcast, DowncastSync};
 use log::{info, warn};
 use spin::RwLock;
 
@@ -64,9 +64,10 @@ pub trait FileTrait: Any + Send + Sync + DowncastSync {
         false
     }
     /// 临时机制, 为了在ioctl中判断
-    fn is_deivce(&self) -> bool {
+    fn is_device(&self) -> bool {
         false
     }
+    
     fn is_dir(&self) -> bool {
         false
     }

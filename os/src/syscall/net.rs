@@ -402,10 +402,8 @@ pub fn sys_socketpair(domain: usize, _type: usize, protocol: usize, sv: usize) -
     let task = current_task().unwrap();
     let length = core::mem::size_of::<i32>();
     let sv = unsafe { core::slice::from_raw_parts_mut(sv as *mut i32, length) };
-    let proto = Protocol::from_bits(protocol as u32)
-        .ok_or(Errno::EPROTONOSUPPORT)?;
-    let _type = SocketType::from_bits(_type as u32)
-        .ok_or(Errno::EINVAL)?;
+    let proto = Protocol::from_bits(protocol as u32).ok_or(Errno::EPROTONOSUPPORT)?;
+    let _type = SocketType::from_bits(_type as u32).ok_or(Errno::EINVAL)?;
     let flags = if _type.contains(SocketType::SOCK_CLOEXEC) {
         OpenFlags::O_CLOEXEC
     } else if _type.contains(SocketType::SOCK_NONBLOCK) {
@@ -570,7 +568,10 @@ pub fn sys_setsockopt(
 }
 
 pub fn sys_setdominname(name: usize, size: usize) -> SysResult<usize> {
-    info!("[sys_setdominname] start, name = {:#x}, size = {:#x}", name, size);
+    info!(
+        "[sys_setdominname] start, name = {:#x}, size = {:#x}",
+        name, size
+    );
     if unlikely((size as isize) < 0) || unlikely(size > MAX_NIS_LEN) {
         return Err(Errno::EINVAL);
     }
@@ -578,17 +579,20 @@ pub fn sys_setdominname(name: usize, size: usize) -> SysResult<usize> {
         return Err(Errno::EFAULT);
     }
 
-    let new_name = unsafe {
-        core::slice::from_raw_parts(name as *const u8, size)
-    };
+    let new_name = unsafe { core::slice::from_raw_parts(name as *const u8, size) };
 
-    unsafe { NIS_DOMAIN_NAME [..size].copy_from_slice(new_name);}
+    unsafe {
+        NIS_DOMAIN_NAME[..size].copy_from_slice(new_name);
+    }
 
     Ok(0)
 }
 
 pub fn sys_sethostname(name: usize, size: usize) -> SysResult<usize> {
-    info!("[sys_sethostname] start, name = {:#x}, size = {:#x}", name, size);
+    info!(
+        "[sys_sethostname] start, name = {:#x}, size = {:#x}",
+        name, size
+    );
     if unlikely((size as isize) < 0) || unlikely(size > MAX_HOST_NAME) {
         return Err(Errno::EINVAL);
     }
@@ -596,11 +600,11 @@ pub fn sys_sethostname(name: usize, size: usize) -> SysResult<usize> {
         return Err(Errno::EFAULT);
     }
 
-    let new_name = unsafe {
-        core::slice::from_raw_parts(name as *const u8, size)
-    };
+    let new_name = unsafe { core::slice::from_raw_parts(name as *const u8, size) };
 
-    unsafe { HOST_NAME [..size].copy_from_slice(new_name);}
+    unsafe {
+        HOST_NAME[..size].copy_from_slice(new_name);
+    }
 
     Ok(0)
 }

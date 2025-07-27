@@ -3,7 +3,6 @@ use log::info;
 // use virtio_drivers::transport::pci::bus;
 use crate::{
     fs::{open, FileClass, FileTrait, OpenFlags},
-    mm::UserBuffer,
 };
 
 use super::ext4::NormalFile;
@@ -110,7 +109,6 @@ pub async fn initproc() -> Arc<NormalFile> {
         panic!("[flush_preload] open initproc failed");
     }
 }
-
 
 pub async fn test_initproc() -> Arc<NormalFile> {
     extern "C" {

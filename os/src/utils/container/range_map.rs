@@ -1,4 +1,4 @@
-//! Adapted from MankorOS
+//! Adapted from Phoenix
 
 use alloc::collections::BTreeMap;
 use core::ops::{Add, Range};
