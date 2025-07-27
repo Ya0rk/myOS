@@ -56,7 +56,7 @@ pub async fn sys_write(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
         _ => {
             info!("[sys_write] do not get file, fd = {}", fd);
             Err(Errno::EBADF)
-        },
+        }
     }
 }
 
@@ -576,7 +576,9 @@ pub fn sys_dup(oldfd: usize) -> SysResult<usize> {
 
     let file = task.get_file_by_fd(oldfd).unwrap();
     if file.get_name()? == "SocketFile" {
-        PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), oldfd, newfd);
+        PORT_FD_MANAMER
+            .lock()
+            .insert_newfd_by_oldfd(task.get_pid(), oldfd, newfd);
     }
     info!("[sys_dup] get new fd = {}", newfd);
 
@@ -625,7 +627,9 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 
     let file = task.get_file_by_fd(oldfd).unwrap();
     if file.get_name()? == "SocketFile" {
-        PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), oldfd, newfd);
+        PORT_FD_MANAMER
+            .lock()
+            .insert_newfd_by_oldfd(task.get_pid(), oldfd, newfd);
     }
 
     Ok(newfd)
@@ -1147,7 +1151,9 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
                 let flags = file.get_flags();
                 let newfd = task.alloc_fd_than(FdInfo::new(file.clone(), flags), arg as usize);
                 if file.get_name()? == "SocketFile" {
-                    PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), fd, newfd);
+                    PORT_FD_MANAMER
+                        .lock()
+                        .insert_newfd_by_oldfd(task.get_pid(), fd, newfd);
                 }
                 return Ok(newfd);
             }
@@ -1163,7 +1169,9 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
                     arg as usize,
                 );
                 if file.get_name()? == "SocketFile" {
-                    PORT_FD_MANAMER.lock().insert_newfd_by_oldfd(task.get_pid(), fd, newfd);
+                    PORT_FD_MANAMER
+                        .lock()
+                        .insert_newfd_by_oldfd(task.get_pid(), fd, newfd);
                 }
                 return Ok(newfd);
             }
@@ -1351,7 +1359,7 @@ pub fn sys_readlinkat(
             } else {
                 return Err(Errno::EFAULT);
             };
-            let path_bytes = "/busybox\0".as_bytes();
+            let path_bytes = "/musl/busybox\0".as_bytes();
             if path_bytes.len() > bufsiz {
                 ub[0..bufsiz].copy_from_slice(&path_bytes[0..bufsiz]);
                 return Ok(bufsiz);
@@ -1480,7 +1488,10 @@ pub async fn sys_splice(
     };
 
     if in_offset < 0 || out_offet < 0 {
-        info!("[sys_splice] in_offset = {}, out_offset = {}", in_offset, out_offet);
+        info!(
+            "[sys_splice] in_offset = {}, out_offset = {}",
+            in_offset, out_offet
+        );
         return Err(Errno::EINVAL);
     }
 
@@ -1501,7 +1512,11 @@ pub async fn sys_splice(
     let len = min(size, read_size);
     let write_size = match file_out.is_pipe() {
         true => file_out.write(&buffer[..len]).await?,
-        false => file_out.write_at(out_offet as usize, &buffer[..len]).await?,
+        false => {
+            file_out
+                .write_at(out_offet as usize, &buffer[..len])
+                .await?
+        }
     };
     if unlikely(write_size == 0) {
         info!("[sys_splice] write_size is 0, return 0");
