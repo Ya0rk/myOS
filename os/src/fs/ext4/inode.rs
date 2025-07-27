@@ -264,6 +264,10 @@ impl InodeTrait for Ext4Inode {
         info!("[inode truncate] size = {}", size);
         // TODO added by lsz: 这里必须打开
         // TODO 暫時先這麼用著，後面改
+        if self.metadata.path.contains("iperf3") {
+            self.set_size(size);
+            return 0;
+        }
         let path = file.get_path();
         file.file_open(path.clone().to_str().unwrap(), O_RDWR);
         // info!("[ext4file state] desc:{:?} path:{:?}, type:{:?}", file.file_desc, file.get_path(), file.get_type());

@@ -13,12 +13,6 @@ use core::arch::global_asm;
 use core::fmt::Display;
 use log::info;
 use user_trap::{user_trap_handler, user_trap_return};
-use crate::hal::arch::shutdown;
-use crate::signal::do_signal;
-use crate::sync::{get_waker, suspend_now};
-use crate::task::{TaskControlBlock, TaskStatus};
-pub use context::TrapContext;
-pub use context::UserFloatRegs;
 // riscv架构有关
 #[cfg(target_arch = "riscv64")]
 use riscv::register::mtvec::TrapMode;
