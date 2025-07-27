@@ -22,6 +22,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::SyncUnsafeCell;
 use core::cmp::{max, min};
+use core::mem::offset_of;
 use num_traits::Zero;
 // use core::error;
 use core::intrinsics::unlikely;
@@ -1539,16 +1540,15 @@ pub async fn sys_copy_file_range(
     let task = current_task().unwrap();
     let file_in = task.get_file_by_fd(fd_in as usize).ok_or(Errno::EBADF)?;
     let file_out = task.get_file_by_fd(fd_out as usize).ok_or(Errno::EBADF)?;
-    let offset_in = if off_in == 0 {
-        0
-    } else {
-        unsafe { *(off_in as *const usize) }
-    };
-    let offset_out = if off_out == 0 {
-        0
-    } else {
-        unsafe { *(off_out as *const usize) }
-    };
+
+    let offset_in = (off_in != 0)
+        .then(|| unsafe { *(off_in as *const usize) })
+        .unwrap_or(0);
+
+    let offset_out = (off_out != 0)
+        .then(|| unsafe { *(off_out as *const usize) })
+        .unwrap_or(0);
+
     info!(
         "[sys_copy_file_range] fd_in: {}, off_in: {}, fd_out: {}, off_out: {}, len: {}",
         fd_in, offset_in, fd_out, offset_out, len,
@@ -1558,7 +1558,6 @@ pub async fn sys_copy_file_range(
     let read_size = match file_in.is_pipe() | (off_in == 0) {
         true => {
             debug_point!("read by file's off");
-            info!("fd_in: fd={}", fd_in);
             file_in.read(&mut buffer).await?
         }
         false => {
@@ -1569,7 +1568,10 @@ pub async fn sys_copy_file_range(
     if unlikely(read_size == 0) {
         return Ok(0);
     }
+
+    // INFO: 关键步骤，读多少就应该写多少
     buffer.truncate(read_size);
+
     let write_size = match file_out.is_pipe() | (off_out == 0) {
         true => {
             debug_point!("write by file's off");

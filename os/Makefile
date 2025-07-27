@@ -100,8 +100,8 @@ ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS += -L /opt/qemu-9.2.1/pc-bios  # 这里是YJJ需要指定
 
 
-	FS_IMG := ../sdcard-la.img
-	FS_IMG_BAK = ../sdcard-la-copy.img
+	FS_IMG := ../final-la.img
+	FS_IMG_BAK = ../final-la-copy.img
 endif
 
 # 加入另一个块设备

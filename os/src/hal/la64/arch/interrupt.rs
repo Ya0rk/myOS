@@ -40,6 +40,13 @@ pub unsafe fn enable_supervisor_timer_interrupt() {
     }
 }
 
+#[inline(always)]
+pub unsafe fn enable_supervisor_extern_interrupt() {
+    // unsafe {
+    //     sie::set_sext();
+    // }
+}
+
 /// A guard that disable interrupt when it is created and enable interrupt when it is dropped.
 pub struct InterruptGuard {
     interrupt_before: bool,
