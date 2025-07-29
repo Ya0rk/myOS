@@ -1,5 +1,8 @@
 pub mod device;
+pub mod device_new;
 pub mod disk;
+pub mod tty;
+// pub mod dev_core;
 pub mod virtio_driver;
 
 use crate::hal::config::KERNEL_ADDR_OFFSET;

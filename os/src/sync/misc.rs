@@ -6,7 +6,10 @@ use core::{
     task::{Context, Poll, Waker},
 };
 
+use alloc::sync::Arc;
 use log::info;
+
+use crate::{signal::SigMask, task::TaskControlBlock};
 
 struct GetWakerFuture;
 
@@ -82,3 +85,30 @@ pub async fn yield_now() {
 pub async fn suspend_now() {
     ControlFuture::new(ControlBehavior::SuspendFuture).await
 }
+
+
+pub struct IntrBySignalFuture {
+    pub task: Arc<TaskControlBlock>,
+    pub sig_mask: SigMask,
+}
+
+impl IntrBySignalFuture {
+    pub fn new(task: Arc<TaskControlBlock>, sig_mask: SigMask) -> Self {
+        Self { task, sig_mask }
+    }
+}
+
+impl Future for IntrBySignalFuture {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let sig_received = self.task.sig_pending.lock().has_expected(self.sig_mask).0;
+        if sig_received {
+            Poll::Ready(())
+        }
+        else {
+            Poll::Pending
+        }
+    }
+}
+

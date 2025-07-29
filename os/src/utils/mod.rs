@@ -10,6 +10,7 @@ pub mod container;
 pub mod downcast;
 pub mod raw_ptr;
 pub mod user_backtrace;
+pub mod ascii;
 
 use crate::{
     hal::arch::{fp_read, ra_read},
