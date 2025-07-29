@@ -3,7 +3,7 @@ use core::{cell::{SyncUnsafeCell, UnsafeCell}, fmt::write, marker::PhantomData};
 use async_trait::async_trait;
 use alloc::{boxed::Box, sync::Arc};
 use spin::RwLock;
-use crate::{drivers::{device_new::{dev_number::MajorNumber, Device, DeviceType}, tty::{self,  termios}}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, SysResult}};
+use crate::{drivers::{device_new::{dev_number::MajorNumber, Device, DeviceType}, tty::{self, serial::SERIAL_DRIVER, termios}}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, SysResult}};
 
 #[async_trait]
 pub trait CharDevice : Device + Send + Sync + 'static {
@@ -16,9 +16,9 @@ pub trait CharDevice : Device + Send + Sync + 'static {
     // async fn poll_out(&self) -> bool;
 }
 
-// lazy_static! {
-//     pub static ref TTY: Arc<TtyBase> = Arc::new(TtyBase::new(SERIAL_DRIVER.clone(), MajorNumber::Serial, 64));
-// }
+lazy_static! {
+    pub static ref TTY: Arc<TtyBase> = Arc::new(TtyBase::new(SERIAL_DRIVER.clone(), MajorNumber::Serial, 64));
+}
 
 
 #[async_trait]

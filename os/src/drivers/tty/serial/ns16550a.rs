@@ -1,4 +1,4 @@
-use log::info;
+use log::{error, info};
 use riscv::addr::PhysAddr;
 
 use crate::{drivers::{device_new::dev_core::{PhysDevice, PhysDriver}, tty::serial::UartDriver}, utils::SysResult};
@@ -74,14 +74,17 @@ impl Uart16550Driver {
         reg_shift: usize,
         is_snps: bool,
     ) -> Self {
-        Self {
+        // TODO: init in probe
+        let mut ret = Self {
             mmio_base_vaddr,
             clock_frequency: clock_frequency as u32,
             baud_rate: baud_rate as u32,
             reg_io_width,
             reg_shift,
             is_snps,
-        }
+        };
+        ret.init();
+        ret
     }
 
     /// Initializes the memory-mapped UART.
@@ -115,18 +118,18 @@ impl Uart16550Driver {
 
             // Enable DLAB
             // Enter a setting mode to set baud rate
-            reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
+            // reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
 
             // Set baud rate
-            let divisor = self.clock_frequency / (16 * self.baud_rate);
-            reg.byte_add(0 << self.reg_shift)
-                .write_volatile(divisor as u8);
-            reg.byte_add(1 << self.reg_shift)
-                .write_volatile((divisor >> 8) as u8);
+            // let divisor = self.clock_frequency / (16 * self.baud_rate);
+            // reg.byte_add(0 << self.reg_shift)
+            //     .write_volatile(divisor as u8);
+            // reg.byte_add(1 << self.reg_shift)
+            //     .write_volatile((divisor >> 8) as u8);
 
             // Disable DLAB and set data word length to 8 bits
             // Leave setting mode
-            reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);
+            // reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);
 
             // // Enable FIFO
             // reg.byte_add(FCR << self.reg_shift).write_volatile(0x01);
@@ -137,6 +140,7 @@ impl Uart16550Driver {
             // Enable interrupts now
             reg.byte_add(IER << self.reg_shift).write_volatile(0x01);
         }
+        error!("UART initialized");
     }
 
     fn init_u32(&self) {

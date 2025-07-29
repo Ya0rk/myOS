@@ -5,7 +5,7 @@ mod rtc;
 pub mod tty;
 mod urandom;
 mod zero;
-mod char;
+pub mod char;
 
 use dev_loop::{DevLoop, DEVLOOP};
 use log::info;

@@ -1,11 +1,11 @@
 use alloc::{sync::Arc, vec::Vec, boxed::Box};
 use async_trait::async_trait;
 
-use crate::{drivers::tty::{tty_core::{CharDevice}}, fs::{Dirent, InodeTrait, InodeType, PageCache}, sync::{SpinNoIrqLock, TimeStamp}, utils::SysResult};
+use crate::{drivers::tty::tty_core::{CharDevice, TTY}, fs::{Dirent, InodeTrait, InodeType, PageCache}, sync::{SpinNoIrqLock, TimeStamp}, utils::SysResult};
 
 
 lazy_static!{
-    // pub static ref TTY_INODE1: Arc<CharDevInode> = Arc::new(CharDevInode::new(TTY.clone()));
+    pub static ref TTY_INODE1: Arc<CharDevInode> = Arc::new(CharDevInode::new(TTY.clone()));
 }
 
 pub struct CharDevInode {

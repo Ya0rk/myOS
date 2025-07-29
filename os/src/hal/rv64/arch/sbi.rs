@@ -1,4 +1,5 @@
 use core::arch::asm;
+use log::{error, info};
 use sbi_spec::time::{EID_TIME, SET_TIMER};
 // use sbi_spec::srst::{EID_SRST, SYSTEM_RESET};
 use sbi_spec::hsm::EID_HSM;

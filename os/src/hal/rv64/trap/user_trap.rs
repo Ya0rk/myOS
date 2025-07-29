@@ -3,7 +3,7 @@
 use super::{__return_to_user, set_trap_handler, IndertifyMode, TrapContext};
 use crate::hal::arch::sstatus::FS;
 use crate::mm::memory_space::PageFaultAccessType;
-use crate::sync::{set_next_trigger, yield_now};
+use crate::sync::{disable_supervisor_interrupt, set_next_trigger, yield_now};
 use crate::syscall::syscall;
 use crate::task::{current_task, current_trap_cx, executor, get_current_cpu, get_current_hart_id};
 use log::info;
@@ -19,8 +19,9 @@ use riscv::register::{sepc, stval};
 pub async fn user_trap_handler() {
     // 设置kernel的trap handler entry
 
-    use crate::sync::TIMER_QUEUE;
+    use crate::sync::{enable_supervisor_interrupt, TIMER_QUEUE};
     set_trap_handler(IndertifyMode::Kernel);
+    enable_supervisor_interrupt();
     let scause = scause::read();
     let stval = stval::read();
     let sepc = sepc::read();
@@ -116,7 +117,7 @@ pub async fn user_trap_handler() {
         }
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
             use log::error;
-            info!("got a supervisor external interrupt. do nothing");
+            error!("got a supervisor external interrupt. do nothing");
             crate::hal::arch::interrupt::irq_handler();
         }
         _ => {
@@ -133,6 +134,7 @@ pub async fn user_trap_handler() {
 #[no_mangle]
 pub fn user_trap_return() {
     // 重新修改stvec设置 user 的trap handler entry
+    disable_supervisor_interrupt();
     set_trap_handler(IndertifyMode::User);
 
     let trap_cx = current_trap_cx();

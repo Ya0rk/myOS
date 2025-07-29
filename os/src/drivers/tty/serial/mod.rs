@@ -1,4 +1,4 @@
-use crate::{drivers::{tty::termios, uart}, hal::config::KERNEL_ADDR_OFFSET, sync::{get_waker, new_shared}};
+use crate::{drivers::{tty::termios, uart}, hal::{arch::interrupt::IrqHandler, config::KERNEL_ADDR_OFFSET}, sync::{get_waker, new_shared}};
 use core::task::Waker;
 
 use alloc::{collections::vec_deque::VecDeque, sync::Arc, boxed::Box};
@@ -8,18 +8,18 @@ use crate::{drivers::tty::tty_core::TtyDriver, sync::{suspend_now, Shared}, util
 
 pub mod ns16550a;
 
-// lazy_static! {
-//     pub static ref UART_DRIVER: Arc<ns16550a::Uart16550Driver> = Arc::new(ns16550a::Uart16550Driver::new(
-//         KERNEL_ADDR_OFFSET + 0x1000_0000,
-//         0,
-//         115200,
-//         1,
-//         0,
-//         false
-//     ));
+lazy_static! {
+    pub static ref UART_DRIVER: Arc<ns16550a::Uart16550Driver> = Arc::new(ns16550a::Uart16550Driver::new(
+        KERNEL_ADDR_OFFSET + 0x1000_0000,
+        0,
+        115200,
+        1,
+        0,
+        false
+    ));
 
-//     pub static ref SERIAL_DRIVER: Arc<SerialDriver> = Arc::new(SerialDriver::new(UART_DRIVER.clone()));
-// }
+    pub static ref SERIAL_DRIVER: Arc<SerialDriver> = Arc::new(SerialDriver::new(UART_DRIVER.clone()));
+}
 
 pub trait UartDriver : Send + Sync + 'static {
     fn getc(&self) -> u8;
@@ -113,6 +113,18 @@ impl SerialDriver {
             ocbuffer: new_shared(CharBuffer::new(4096)),
             read_queue: new_shared(VecDeque::new()),
             write_queue: new_shared(VecDeque::new()),
+        }
+    }
+}
+
+impl IrqHandler for SerialDriver {
+    fn handle_irq(&self) {
+        while self.uart.poll_in() {
+            let c = self.uart.getc();
+            self.icbuffer.lock().push(c);
+        }
+        if let Some(waker) = self.read_queue.lock().pop_front() {
+            waker.wake();
         }
     }
 }

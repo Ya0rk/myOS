@@ -1,6 +1,8 @@
 #[cfg(target_arch = "riscv64")]
 use riscv::register::{sie, sstatus};
 
+use crate::drivers::tty::serial::SERIAL_DRIVER;
+
 const VIRT_PLIC: usize = 0xffff_ffc0_0000_0000 + 0xC00_0000;
 
 #[cfg(target_arch = "riscv64")]
@@ -68,8 +70,8 @@ pub fn device_init() {
     }
     // 设置S-Mode CPU使能中断
     unsafe {
-        // sstatus::set_sie();
-        // sie::set_sext();
+        sstatus::set_sie();
+        sie::set_sext();
         // 临时启动uart设备的中断功能
         // ((0xffff_ffc0_0000_0000 as usize + 0x1000_0001) as *mut u8).write_volatile(0x01);
     }
@@ -77,6 +79,7 @@ pub fn device_init() {
 pub fn irq_handler() {
     use crate::hal::arch::plic::*;
     use riscv::register::sie;
+    disable_supervisor_interrupt();
     let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
     let intr_src_id = plic.claim(0, IntrTargetPriority::Supervisor);
     use log::info;
@@ -84,7 +87,11 @@ pub fn irq_handler() {
         5 => info!("[irq_handler] extern irq from keyboard"),
         6 => info!("[irq_handle] extern irq from mouse"),
         8 => info!("[irq_handle] extern irq from blockd evice"),
-        10 => info!("[irq_handler] extern irq from uart"),
+        10 => {
+            // TODO: 暂时硬编码，后面需要实现
+            info!("[irq_handler] extern irq from uart");
+            SERIAL_DRIVER.handle_irq();
+        },
         _ => panic!("unsupported IRQ {}", intr_src_id),
     }
     plic.complete(0, IntrTargetPriority::Supervisor, intr_src_id);
@@ -109,4 +116,9 @@ impl Drop for InterruptGuard {
             enable_supervisor_interrupt();
         }
     }
+}
+
+
+pub trait IrqHandler {
+    fn handle_irq(&self);
 }
