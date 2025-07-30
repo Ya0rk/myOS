@@ -50,8 +50,15 @@ sbi-rt = { path = "../vendor/sbi-rt", version = "0.0.3", features = ["legacy"] }
 loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
+default = [
+    "error", 
+    "test", 
+    "qemu_riscv", 
+    "mbshell", 
+   # "vf2",
+]
 board_qemu = []
-default = ["error", "test", "qemu_riscv", "mbshell"]
+vf2 = []
 error = []
 timewhell = []
 warn = []

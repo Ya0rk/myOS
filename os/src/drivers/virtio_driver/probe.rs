@@ -48,9 +48,9 @@ lazy_static! {
     pub static ref BLOCKDEVICE_SIZE_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
 }
 
-pub fn probe(fd: u64) {
-    println!("fd addr @{:X}", fd);
-    let fdt = unsafe { Fdt::from_ptr(fd as _).expect("fdt trans from ptr error") };
+pub fn probe(fdt_ptr: u64) {
+    println!("fdt addr @{:X}", fdt_ptr);
+    let fdt = unsafe { Fdt::from_ptr(fdt_ptr as _).expect("fdt trans from ptr error") };
     for node in fdt.all_nodes() {
         println!(
             "name: {} {:?}",
