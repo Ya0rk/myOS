@@ -5,7 +5,6 @@ pub mod once;
 pub mod time;
 pub mod time_async;
 pub mod timer;
-mod up;
 
 use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, task::Wake, vec, vec::Vec};
 use core::{
@@ -29,7 +28,6 @@ pub use mutex::{
 pub use time::{TimeData, TimeSpec, TimeStamp, TimeVal, Tms};
 pub use time_async::*;
 pub use timer::{set_next_trigger, sleep_for, time_duration};
-pub use up::SyncUnsafeCell;
 
 struct BlockWaker;
 

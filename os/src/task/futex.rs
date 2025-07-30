@@ -1,6 +1,6 @@
 use super::{current_task, Pid, TaskControlBlock};
 use crate::mm::{Direct, PhysAddr, VirtAddr};
-use crate::sync::{SpinNoIrqLock, SyncUnsafeCell};
+use crate::sync::SpinNoIrqLock;
 use crate::utils::{Errno, SysResult};
 use alloc::collections::btree_map::BTreeMap;
 use alloc::task::Wake;
