@@ -1,6 +1,7 @@
 pub mod device;
 pub mod disk;
 pub mod virtio_driver;
+pub mod vf2;
 
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 use alloc::{sync::Arc, vec::Vec};
