@@ -9,6 +9,7 @@ mod sync;
 
 use crate::sync::TimeSpec;
 use crate::utils::SysResult;
+use crate::utils::{backtrace, Errno, SysResult};
 pub use ffi::CloneFlags;
 pub use ffi::CpuSet;
 pub use ffi::RLimit64;
@@ -401,8 +402,8 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
 
         _ => {
             log::error!("Unsupported syscall_id: {}", syscall_id);
-            panic!("unimpl syscall: No.{}", syscall_id);
-            Ok(0)
+            log::error!("unimpl syscall: No.{}", syscall_id);
+            Err(Errno::ENOSYS)
         }
     }
 }

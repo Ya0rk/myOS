@@ -153,7 +153,7 @@ pub fn do_signal(task: &Arc<TaskControlBlock>) {
 fn default_func(task: &Arc<TaskControlBlock>, signo: SigNom) {
     info!("[default_func] signo = {:?}", signo);
     match signo {
-        // TODO(YJJ):有待完善
+        // TODO:(YJJ):有待完善
         SigNom::SIGCHLD | SigNom::SIGURG | SigNom::SIGWINCH => {} // no Core Dump
         SigNom::SIGSTOP | SigNom::SIGTSTP | SigNom::SIGTTIN | SigNom::SIGTTOU => {
             do_signal_stop(task, signo)

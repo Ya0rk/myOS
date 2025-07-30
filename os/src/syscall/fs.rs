@@ -163,7 +163,9 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
         let write_len = file.write(buffer).await?;
         res += write_len;
     }
-    info!("[sys_writev] write len = {}", res);
+    if fd != 1 {
+        info!("[sys_writev] write len = {}", res);
+    }
     Ok(res)
 }
 
@@ -368,7 +370,6 @@ pub fn sys_statx(
 ///
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult<usize> {
-    info!("[sys_openat] start");
     if unlikely(path == 0) {
         info!("[sys_openat] path ptr is null, fault.");
         return Err(Errno::EFAULT);
@@ -378,7 +379,10 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     let path = user_cstr(path.into())?.unwrap();
     let flags = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
-    // info!("[sys_openat] path = {}, flags = {:?}", path, flags);
+    info!(
+        "[sys_openat] fd: {}, path = {}, flags = {:?}, _mode: {}",
+        fd, path, flags, _mode
+    );
 
     // 计算目标路径
     let target_path = if fd == AT_FDCWD {
@@ -639,12 +643,12 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 ///
 /// Success: 0; Fail: 返回-1
 pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
-    info!("[sys_mkdirat] start");
-
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = user_cstr(path.into())?.unwrap();
     let cwd = task.get_current_path();
+
+    info!("[sys_mkdirat] start path: {}", path);
 
     // 计算目标路径
     let target_path = if dirfd == AT_FDCWD {
@@ -774,7 +778,6 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let token = task.get_user_token();
     let path = user_cstr(path.into())?.unwrap();
-    info!("[sys_unlink] start path = {}", path);
     let base = task.get_current_path();
     info!(
         "[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}",
@@ -1015,7 +1018,7 @@ pub async fn sys_sendfile(
 pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let mut path = user_cstr(pathname.into())?.unwrap();
-    info!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
+    error!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
 

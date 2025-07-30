@@ -42,7 +42,9 @@ impl Future for IoFutrue {
                 }
             };
 
-            info!("[iofuture] fd = {}", pollfd.fd);
+            if pollfd.fd != 0 && pollfd.fd != 1 && pollfd.fd != 2 {
+                info!("[iofuture] fd = {}", pollfd.fd);
+            }
             if pollfd.events.contains(PollEvents::POLLIN) {
                 match file.pollin(cx.waker().clone()) {
                     Ok(ok) => {
