@@ -14,7 +14,7 @@ pub const GB: usize = 1024 * MB;
 // 如果是无栈协程就不会
 pub const USER_STACK_SIZE: usize = 8 * MB;
 pub const KERNEL_STACK_SIZE: usize = 128 * KB;
-pub const KERNEL_HEAP_SIZE: usize = 0x800_0000;
+pub const KERNEL_HEAP_SIZE: usize = 128 * MB;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_SIZE_BITS: usize = 12;
 pub const PAGE_MASK: usize = PAGE_SIZE - 1;
