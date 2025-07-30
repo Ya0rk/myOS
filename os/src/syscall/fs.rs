@@ -184,7 +184,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
 pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let path = user_cstr(pathname.into())?.ok_or(Errno::EINVAL)?;
-    debug!("[sys_fsstatat] pathname {:?},", path);
+    error!("[sys_fsstatat] pathname {:?},", path);
     let cwd = task.get_current_path();
     info!(
         "[sys_fstatat] start cwd: {}, pathname: {}, flags: {}, dirfd = {}",
@@ -810,6 +810,41 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     Ok(0)
 }
 
+// FIX: 临时放这
+pub fn ksys_unlinkat(fd: isize, path: String, flags: u32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let base = task.get_current_path();
+    info!(
+        "[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}",
+        fd, base, path, flags
+    );
+
+    let target_path = resolve_path(base, path);
+
+    match open(target_path.clone(), OpenFlags::O_RDWR) {
+        Ok(file_class) => {
+            let file = file_class.file()?;
+            let is_dir = file.is_dir();
+            if is_dir && flags != AT_REMOVEDIR {
+                return Err(Errno::EISDIR);
+            }
+            if flags == AT_REMOVEDIR && !is_dir {
+                return Err(Errno::ENOTDIR);
+            }
+            let target_dentry = Dentry::get_dentry_from_path(&target_path.get())?;
+            file.get_inode().unlink(target_dentry)?;
+            // drop(target_dentry);
+            // error!("[unlink] path: {}, inode ref count: {}", target_path.get() , Arc::strong_count(&file.get_inode()));
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    }
+    info!("[sys_unlink] finished");
+
+    Ok(0)
+}
+
 /// TODO:这里的rename好像没有真正实现
 pub fn sys_renameat2(
     olddirfd: isize,
@@ -854,7 +889,78 @@ pub fn sys_renameat2(
     // 简单的实现, 当目标路径存在文件的时候就返回存在
     if let Ok(file) = open(new_path.clone(), OpenFlags::O_RDWR) {
         // debug_point!("[sys_renameat2] return EEXIST");
-        return Err(Errno::EEXIST);
+        // return Err(Errno::EEXIST);
+        ksys_unlinkat(0, new_path.clone().get(), 0);
+    }
+
+    if let Ok(file) = open(old_path.clone(), OpenFlags::O_RDWR) {
+        let old_inode = file.file()?.get_inode();
+        let old_dentry = Dentry::get_dentry_from_path(&old_path.get())?;
+        let parent_of_new_denrty = Dentry::get_dentry_from_path(&new_path.get_parent_abs())?;
+        let new_dentry =
+            if let Some(dentry) = parent_of_new_denrty.bare_child(&new_path.get_filename()) {
+                dentry
+            } else {
+                // FIX:
+                // 可能不是这个返回值
+                return Err(Errno::EEXIST);
+            };
+        if let Ok(_) = old_inode.rename(old_dentry, new_dentry) {
+            // 如果重命名成功，返回0
+            // debug_point!("[sys_renameat2] return Ok(0)");
+            return Ok(0);
+        } else {
+            // 如果重命名失败，返回错误
+            // debug_point!("[sys_renameat2] return EACCES");
+            return Err(Errno::EACCES);
+        }
+    } else {
+        // debug_point!("[sys_renameat2] return ENOENT");
+        return Err(Errno::ENOENT);
+    }
+    // debug_point!("[sys_renameat2] return Ok(0)");
+    Ok(0)
+}
+pub fn ksys_renameat2(
+    olddirfd: isize,
+    old_path: String,
+    newdirfd: isize,
+    new_path: String,
+    flags: u32,
+) -> SysResult<usize> {
+    let flags = RenameFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
+    let cwd = String::from("/");
+    info!(
+        "[sys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: {} ",
+        &olddirfd, &old_path, &newdirfd, &new_path
+    );
+
+    let old_path = resolve_path(cwd.clone(), old_path);
+    // } else {
+    //     match task.get_file_by_fd(olddirfd as usize) {
+    //         Some(file) => resolve_path(file.get_name()?, old_path),
+    //         None => {
+    //             // debug_point!("[sys_renameat2] return EBADF");
+    //             return Err(Errno::EBADF);
+    //         }
+    //     }
+    // };
+
+    let new_path = resolve_path(cwd.clone(), new_path);
+    // } else {
+    //     match task.get_file_by_fd(newdirfd as usize) {
+    //         Some(file) => resolve_path(file.get_name()?, new_path),
+    //         None => {
+    //             // debug_point!("[sys_renameat2] return EBADF");
+    //             return Err(Errno::EBADF);
+    //         }
+    //     }
+    // };
+    // 简单的实现, 当目标路径存在文件的时候就返回存在
+    if let Ok(file) = open(new_path.clone(), OpenFlags::O_RDWR) {
+        // debug_point!("[sys_renameat2] return EEXIST");
+        // return Err(Errno::EEXIST);
+        ksys_unlinkat(0, new_path.clone().get(), 0);
     }
 
     if let Ok(file) = open(old_path.clone(), OpenFlags::O_RDWR) {
@@ -1338,6 +1444,7 @@ pub fn sys_readlinkat(
     buf: usize,
     bufsiz: usize,
 ) -> SysResult<usize> {
+    return Err(Errno::ENOSYS);
     let task = current_task().unwrap();
     let cwd = task.get_current_path();
     let pathname = user_cstr(pathname.into())?.unwrap();
