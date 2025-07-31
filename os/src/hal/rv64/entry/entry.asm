@@ -4,6 +4,13 @@ _start:
     # 启动时rust sbi将hart_id放在a0中
     mv tp,a0
 
+    # 打印hart_id，测试用
+    addi a7, zero, 1
+    mv t1, a0
+    addi a0, a0, 48
+    ecall
+    mv a0, t1
+
     # 设置 mstatus.FS 为 "Initial" 状态 (0b01), 
     # 启用浮点寄存器，不然后面汇编不能识别双精度相关指令，会触发
     # li t0, (1 << 13)  # FS 字段位于 bit 13-14
@@ -23,6 +30,14 @@ _start:
     or t0, t0, t1
     csrw satp, t0
     sfence.vma
+
+
+        # 打印hart_id，测试用
+    # addi a7, zero, 1
+    # mv t1, a0
+    # addi a0, a0, 48
+    # ecall
+    # mv a0, t1
 
     # 调用 辅助函数（在utils/boot.rs中），在辅助函数中调用真正的程序入口
     call jump_helper

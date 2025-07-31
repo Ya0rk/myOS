@@ -10,6 +10,7 @@ use crate::{hal::arch::hart_start_success, mm::VirtAddr};
 #[cfg(target_arch = "riscv64")]
 #[no_mangle]
 pub fn jump_helper(hart_id: usize) {
+    print_checkpoint(2);
     unsafe {
         // 调整栈指针 加上偏移，跳转到 rust_main
         asm!(
@@ -23,6 +24,7 @@ pub fn jump_helper(hart_id: usize) {
             options(noreturn)
         );
     }
+    // println!("hello");
 }
 #[cfg(target_arch = "loongarch64")]
 #[no_mangle]
@@ -75,4 +77,20 @@ pub fn boot_all_harts(hartid: usize) {
 }
 
 pub fn arch_init() {
+}
+
+#[inline(always)]
+pub fn print_checkpoint(num: usize) {
+    unsafe {
+        asm!(
+            "mv t0, a0",
+            "li a7, 1",
+            "mv a0, {num}",
+            "addi a0, a0, 48",
+            "ecall",
+            "mv a0, t0",
+            num = in(reg) num,
+        );
+    }
+    
 }

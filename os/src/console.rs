@@ -1,4 +1,4 @@
-use crate::{hal::arch::console_putchar, sync::SpinNoIrqLock};
+use crate::{hal::{arch::console_putchar, entry::boot::print_checkpoint}, sync::SpinNoIrqLock};
 use core::fmt::{self, Write};
 use lazy_static::*;
 use log::{error, info};
@@ -15,11 +15,24 @@ impl Write for Stdout {
 }
 
 lazy_static! {
+
+    static ref TEST: SpinNoIrqLock<usize> = SpinNoIrqLock::new(6);
+
+}
+
+lazy_static! {
     static ref MUTEX_STDOUT: SpinNoIrqLock<Stdout> = SpinNoIrqLock::new(Stdout {});
 }
 pub fn print(args: fmt::Arguments) {
     // unsafe {
-    MUTEX_STDOUT.lock().write_fmt(args);
+    let m = *TEST.lock();
+    print_checkpoint(m);
+    print_checkpoint(7);
+    let mut lock = MUTEX_STDOUT.lock();
+    print_checkpoint(8);
+    lock.write_fmt(args);
+    print_checkpoint(9);
+    // MUTEX_STDOUT.lock().write_fmt(args);
     // }
 }
 
