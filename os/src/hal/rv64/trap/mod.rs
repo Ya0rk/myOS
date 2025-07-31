@@ -67,9 +67,9 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
 
         user_trap_return();
 
-        unsafe {
-            crate::hal::rv64::arch::interrupt::disenable_supervisor_extern_interrupt();
-        }
+        // unsafe {
+        //     crate::hal::rv64::arch::interrupt::disenable_supervisor_extern_interrupt();
+        // }
 
         match task.get_status() {
             TaskStatus::Zombie => break,

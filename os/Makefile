@@ -84,8 +84,8 @@ ifeq ($(ARCH), riscv64)
 	QEMU_ARGS += -smp $(CPUS)
 
 
-	FS_IMG := ../final-rv.img
-	FS_IMG_BAK = ../final-rv-copy.img
+	FS_IMG := ../sdcard-rv.img
+	FS_IMG_BAK = ../sdcard-rv-copy.img
 endif
 ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS =  -machine virt 
