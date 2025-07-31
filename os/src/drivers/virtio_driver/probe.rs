@@ -5,7 +5,9 @@ use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
 use log::info;
 
+use crate::drivers::vf2::Vf2BlkDev;
 use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
+use crate::hal::config::KERNEL_ADDR_OFFSET;
 use crate::sync::SpinNoIrqLock;
 use alloc::sync::Arc;
 
@@ -69,7 +71,7 @@ pub fn probe(fdt_ptr: u64) {
             {
                 println!("Found VirtIO MMIO device at {:?}", region);
                 let size = region.size.unwrap();
-                let addr = region.starting_address as usize + 0xffff_ffc0_0000_0000;
+                let addr = region.starting_address as usize + KERNEL_ADDR_OFFSET;
                 let header = NonNull::new(addr as *mut VirtIOHeader).unwrap();
                 println!(
                     "addr: {:X} size: {:X} start trans to MmioTransport",
@@ -95,6 +97,12 @@ pub fn probe(fdt_ptr: u64) {
                         virtio_device(transport);
                     }
                 }
+            }
+            #[cfg(feature = "vf2")]
+            if compatible.all().any(|s| s == "starfive,jh7110-sdio") {
+                let sd_device = Vf2BlkDev::new_and_init();
+                info!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
+                register_block_device(Arc::new(sd_device));
             }
         }
     }
