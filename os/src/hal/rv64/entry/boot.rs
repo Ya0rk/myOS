@@ -9,7 +9,7 @@ use crate::{hal::arch::hart_start_success, mm::VirtAddr};
 /// 这里是一个简单的启动代码，它将在启动时运行。
 #[cfg(target_arch = "riscv64")]
 #[no_mangle]
-pub fn jump_helper(hart_id: usize) {
+pub fn jump_helper(hart_id: usize, dtb_ptr: usize) {
     print_checkpoint(2);
     unsafe {
         // 调整栈指针 加上偏移，跳转到 rust_main
@@ -18,8 +18,10 @@ pub fn jump_helper(hart_id: usize) {
             "la t0, rust_main",
             "add t0, t0, {offset}",
             "mv a0, {hartid}",
+            "mv a1, {dtb}",
             "jalr zero, 0(t0)",
             hartid = in(reg) hart_id,
+            dtb = in(reg) dtb_ptr,
             offset = in(reg) KERNEL_ADDR_OFFSET,
             options(noreturn)
         );

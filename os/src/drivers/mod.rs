@@ -49,9 +49,10 @@ pub fn get_block_device() -> Option<Arc<dyn BlockDriver>> {
 /// 设备的初始化
 /// 会注册设备
 /// 特别地在外部使用get_block_device去获得一个块设备
-pub fn init() {
+pub fn init(dtb_root: usize) {
     #[cfg(target_arch = "riscv64")]
-    let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
+    // let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
+    let dt_root: usize = dtb_root + KERNEL_ADDR_OFFSET; // 上板的设备树地址
     #[cfg(target_arch = "loongarch64")]
     let dt_root: usize = 0x9000_0000_0010_0000;
     info!("satrt probe fdt tree root: {:X}", dt_root);

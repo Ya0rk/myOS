@@ -125,7 +125,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         hal::trap::init();
 
-        crate::drivers::init();
+        crate::drivers::init(dt_root);
 
         // fs::init();
         block_on(async { fs::init().await });
