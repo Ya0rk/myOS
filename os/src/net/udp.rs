@@ -298,8 +298,9 @@ impl Socket for UdpSocket {
     fn get_socktype(&self) -> SysResult<Sock> {
         Ok(Sock::Udp)
     }
-    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollin(&self) -> SysResult<bool> {
         NET_DEV.lock().poll();
+        let waker = get_waker().await;
         let res = self.with_socket(|socket| {
             if socket.can_recv() {
                 info!("[UdpSocket::pollin] have data can recv");
@@ -311,8 +312,9 @@ impl Socket for UdpSocket {
         });
         res
     }
-    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollout(&self) -> SysResult<bool> {
         NET_DEV.lock().poll();
+        let waker = get_waker().await;
         let res = self.with_socket(|socket| {
             if socket.can_send() {
                 info!("[UdpSocket::pollout] have data to send");

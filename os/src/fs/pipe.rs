@@ -205,17 +205,18 @@ impl FileTrait for Pipe {
     }
     /// 异步管道（Pipe）读取操作的核心逻辑，用于检查管道是否可读（有数据可读或对端已关闭），
     /// 并根据情况注册 Waker 以便在数据到达时唤醒异步任务。
-    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollin(&self) -> SysResult<bool> {
         if !self.buffer.lock().buf.is_empty() || self.other.strong_count() == 0 {
             return Ok(true);
         }
 
         // println!("pollin:no avaliable read");
         // 还没有数据，此时等待被唤醒
+        let waker = get_waker().await;
         self.buffer.lock().reader_waker.push_back(waker);
         Ok(false)
     }
-    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollout(&self) -> SysResult<bool> {
         if self.other.strong_count() == 0 {
             return Err(Errno::EPIPE);
         } else if !self.is_full() {
@@ -223,6 +224,7 @@ impl FileTrait for Pipe {
             return Ok(true);
         }
 
+        let waker = get_waker().await;
         self.buffer.lock().writer_waker.push_back(waker);
         Ok(false)
     }

@@ -81,9 +81,9 @@ pub trait Socket: Send + Sync {
 
     fn get_socktype(&self) -> SysResult<Sock>;
 
-    fn pollin(&self, waker: Waker) -> SysResult<bool>;
+    async fn pollin(&self) -> SysResult<bool>;
 
-    fn pollout(&self, waker: Waker) -> SysResult<bool>;
+    async fn pollout(&self) -> SysResult<bool>;
 
     fn get_flags(&self) -> SysResult<OpenFlags>;
 }

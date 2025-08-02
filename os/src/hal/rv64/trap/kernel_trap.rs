@@ -33,7 +33,7 @@ pub fn kernel_trap_handler() {
 
             use log::error;
 
-            error!("[kernel_trap_handler] kernel timer interrupt");
+            // error!("[kernel_trap_handler] kernel timer interrupt");
             TIMER_QUEUE.handle_expired();
             get_current_cpu().timer_irq_inc();
             set_next_trigger();
@@ -77,7 +77,7 @@ pub fn kernel_trap_handler() {
         },
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
             use log::error;
-            error!("got a supervisor external interrupt. do nothing");
+            // error!("got a supervisor external interrupt. do nothing");
             crate::hal::arch::interrupt::irq_handler();
         },
         _ => {

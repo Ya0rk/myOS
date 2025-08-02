@@ -2,7 +2,7 @@
 use alloc::{sync::Arc, vec::Vec};
 use core::{intrinsics::unlikely, ptr::NonNull, time::Duration};
 use hashbrown::{HashMap, HashSet};
-use log::info;
+use log::{error, info};
 
 use crate::{
     signal::SigMask,
@@ -81,6 +81,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, tmo_p: usize, sigmask: usize) ->
         0 => None,
         _ => {
             let timespec = unsafe { *(tmo_p as *const TimeSpec) };
+            error!("[sys_ppoll] timespec: {:?}", timespec);
             Some(Duration::from(timespec))
         }
     };
@@ -100,7 +101,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, tmo_p: usize, sigmask: usize) ->
                 Ok(res) => res,
                 Err(_) => {
                     // 代表任务超时
-                    info!("[sys_ppoll] task time out");
+                    error!("[sys_ppoll] task time out");
                     Ok(0)
                 }
             }

@@ -11,9 +11,9 @@ pub trait CharDevice : Device + Send + Sync + 'static {
     async fn write(&self, buf: &[u8]) -> usize;
     async fn ioctl(&self, op: TtyIoctlCmd, arg: usize) -> SysResult<usize>;
     // // poll if input is available
-    // async fn poll_in(&self) -> bool;
+    async fn poll_in(&self) -> bool;
     // // poll if output is available
-    // async fn poll_out(&self) -> bool;
+    async fn poll_out(&self) -> bool;
 }
 
 lazy_static! {
@@ -238,5 +238,15 @@ impl CharDevice for TtyBase {
     }
     async fn ioctl(&self, request: TtyIoctlCmd, arg: usize) -> SysResult<usize> {
         Ok(0)
+    }
+    async fn poll_in(&self) -> bool {
+        self.with_ldisc( |ldisc| {
+            ldisc.poll_in(self)
+        }).await
+    }
+    async fn poll_out(&self) -> bool {
+        self.with_ldisc( |ldisc| {
+            ldisc.poll_out(self)
+        }).await
     }
 }

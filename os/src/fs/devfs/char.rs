@@ -1,3 +1,5 @@
+use core::future::Future;
+
 use alloc::{sync::Arc, vec::Vec, boxed::Box};
 use async_trait::async_trait;
 
@@ -43,5 +45,11 @@ impl InodeTrait for CharDevInode {
 impl CharDevInode {
     pub fn new(dev: Arc<dyn CharDevice>) -> Self {
         CharDevInode { dev }
+    }
+    pub fn poll_in(&self) -> impl Future<Output = bool> + use<'_> {
+        self.dev.poll_in()
+    }
+    pub fn poll_out(&self) -> impl Future<Output = bool> + use<'_> {
+        self.dev.poll_out()
     }
 }

@@ -488,13 +488,14 @@ impl Socket for TcpSocket {
         Ok(Sock::Tcp)
     }
 
-    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollin(&self) -> SysResult<bool> {
         info!("[TcpSocket::pollin] start");
         // 调用底层网络接口轮询机制，处理待处理的网络事件, 确保 Socket 状态和数据缓冲区是最新的
         NET_DEV.lock().poll();
         if self.shoule_return_ready() {
             return Ok(true);
         }
+        let waker = get_waker().await;
         self.with_socket(|socket| {
             info!(
                 "[TcpSocket::pollin] nothing to read, state {:?}",
@@ -506,9 +507,10 @@ impl Socket for TcpSocket {
         Ok(false)
     }
     
-    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollout(&self) -> SysResult<bool> {
         info!("[TcpSocket::pollout] start");
         NET_DEV.lock().poll();
+        let waker = get_waker().await;
         let res = self.with_socket(|socket| {
             if socket.can_send() {
                 info!("[TcpSocket::pollout] can send");
