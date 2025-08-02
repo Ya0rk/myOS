@@ -81,7 +81,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, tmo_p: usize, sigmask: usize) ->
         0 => None,
         _ => {
             let timespec = unsafe { *(tmo_p as *const TimeSpec) };
-            error!("[sys_ppoll] timespec: {:?}", timespec);
+            // error!("[sys_ppoll] timespec: {:?}", timespec);
             Some(Duration::from(timespec))
         }
     };
@@ -101,7 +101,7 @@ pub async fn sys_ppoll(fds: usize, nfds: usize, tmo_p: usize, sigmask: usize) ->
                 Ok(res) => res,
                 Err(_) => {
                     // 代表任务超时
-                    error!("[sys_ppoll] task time out");
+                    // error!("[sys_ppoll] task time out");
                     Ok(0)
                 }
             }

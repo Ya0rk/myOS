@@ -2,8 +2,9 @@ use core::{cell::{SyncUnsafeCell, UnsafeCell}, fmt::write, marker::PhantomData};
 
 use async_trait::async_trait;
 use alloc::{boxed::Box, sync::Arc};
+use log::{error, info};
 use spin::RwLock;
-use crate::{drivers::{device_new::{dev_number::MajorNumber, Device, DeviceType}, tty::{self, serial::SERIAL_DRIVER, termios}}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, SysResult}};
+use crate::{drivers::{device_new::{dev_number::MajorNumber, Device, DeviceType}, tty::{self, serial::SERIAL_DRIVER, termios::{self, Termios, WinSize}}}, mm::user_ptr::{user_ref, user_ref_mut}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, Errno, SysResult}};
 
 #[async_trait]
 pub trait CharDevice : Device + Send + Sync + 'static {
@@ -172,6 +173,10 @@ pub struct TtyBase {
     pub n_tty_mode: RwLock<TtyLineDiscMode>,
     pub ldisc: SyncUnsafeCell<Arc<dyn LineDiscPolicy>>,
 
+    pub fg_pgid: RwLock<u32>,
+
+    pub win_size: RwLock<WinSize>,
+
     pub lbuffer: Shared<LineBuffer>,
 
     pub major: MajorNumber,
@@ -189,6 +194,8 @@ impl TtyBase {
             termios: RwLock::new(termios::Termios::new()),
             n_tty_mode: RwLock::new(TtyLineDiscMode::Raw),
             ldisc: SyncUnsafeCell::new(Arc::new(TtyLineDisc)),
+            fg_pgid: RwLock::new(1),
+            win_size: RwLock::new(WinSize::new()),
             lbuffer: new_shared(LineBuffer::new(4096)),
             major,
             minor,
@@ -236,8 +243,48 @@ impl CharDevice for TtyBase {
             ldisc.write(self, buf)
         }).await
     }
-    async fn ioctl(&self, request: TtyIoctlCmd, arg: usize) -> SysResult<usize> {
-        Ok(0)
+    async fn ioctl(&self, op: TtyIoctlCmd, arg: usize) -> SysResult<usize> {
+        let cmd = TtyIoctlCmd::try_from(op).map_err(|_| Errno::EINVAL)?;
+        info!("[DevTty::ioctl] cmd: {:?}, arg: {:#x}", cmd, arg);
+        unsafe {
+            match cmd {
+                TtyIoctlCmd::TCGETS | TtyIoctlCmd::TCGETA => {
+                    let user_termios_ptr = user_ref_mut::<Termios>(arg.into())?.ok_or(Errno::EFAULT)?;
+                    *user_termios_ptr = self.termios.read().clone();
+                    Ok(0)
+                }
+                TtyIoctlCmd::TIOCGPGRP => {
+                    let mut user_pgid_ptr = user_ref_mut::<u32>(arg.into())?.ok_or(Errno::EFAULT)?;
+                    *user_pgid_ptr = *self.fg_pgid.read();
+                    Ok(0)
+                }
+                TtyIoctlCmd::TIOCGWINSZ => {
+                    let mut user_winsize_ptr = user_ref_mut::<WinSize>(arg.into())?.ok_or(Errno::EFAULT)?;
+                    *user_winsize_ptr = self.win_size.read().clone();
+                    Ok(0)
+                }
+                TtyIoctlCmd::TCSETS | TtyIoctlCmd::TCSETSW | TtyIoctlCmd::TCSETSF => {
+                    let user_termios_ref: &Termios = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                    *self.termios.write() = user_termios_ref.clone();
+                    Ok(0)
+                }
+                TtyIoctlCmd::TIOCSPGRP => {
+                    let user_pgid_ref: &u32 = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                    *self.fg_pgid.write() = *user_pgid_ref;
+                    Ok(0)
+                }
+                TtyIoctlCmd::TIOCSWINSZ => {
+                    let user_winsize_ref: &WinSize = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                    *self.win_size.write() = *user_winsize_ref;
+                    Ok(0)
+                }
+                TtyIoctlCmd::TCSBRK => Ok(0),
+                _ => {
+                    error!("[DevTty::ioctl] Unsupported command: {:?}", cmd);
+                    Err(Errno::EINVAL)
+                }
+            }
+        }
     }
     async fn poll_in(&self) -> bool {
         self.with_ldisc( |ldisc| {

@@ -1,3 +1,4 @@
+// deprecated
 use crate::{
     drivers::{device::uart::UART_DEVICE, tty::{termios::Termios, tty_core::TtyIoctlCmd}},
     fs::{
