@@ -68,7 +68,7 @@ use mm::memory_space::test_la_memory_space;
 use sync::{block_on, time_init, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
-use crate::hal::entry::boot::arch_init;
+use crate::hal::entry::boot::{arch_init, print_checkpoint};
 
 #[macro_use]
 extern crate lazy_static;
@@ -79,6 +79,7 @@ static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
 pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
+    print_checkpoint(3);
     // 启动顺序：
     // clear_bss
     // logo
@@ -99,6 +100,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     //     tlb_init(tlb_fill as usize);
     // }
     arch_init();
+    print_checkpoint(4);
     println!("hello world!");
     println!("hart id is {:#X}, dt_root is {:#x}", hart_id, dt_root);
 
@@ -123,7 +125,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         START_HART_ID.store(hart_id, Ordering::SeqCst);
         hal::trap::init();
 
-        crate::drivers::init();
+        crate::drivers::init(dt_root);
 
         // fs::init();
         block_on(async { fs::init().await });

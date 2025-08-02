@@ -15,7 +15,7 @@ lazy_static! {
         115200,
         1,
         0,
-        false
+        true
     ));
 
     pub static ref SERIAL_DRIVER: Arc<SerialDriver> = Arc::new(SerialDriver::new(UART_DRIVER.clone()));
