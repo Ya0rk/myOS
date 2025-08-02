@@ -52,6 +52,10 @@ pub fn kernel_trap_handler() {
                     _ => unreachable!(),
                 };
 
+                // println!(
+                //         "[kernel_trap_handler] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}",
+                //         stval, sepc, cause
+                // );
                 let task = current_task().unwrap();
                 // task.switch_pgtable();
                 result = task.with_mut_memory_space(|m| {

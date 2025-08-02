@@ -98,13 +98,13 @@ pub fn probe(fdt_ptr: u64) {
                     }
                 }
             }
-            #[cfg(feature = "vf2")]
-            if compatible.all().any(|s| s == "starfive,jh7110-sdio") {
-                let sd_device = Vf2BlkDev::new_and_init();
-                info!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
-                register_block_device(Arc::new(sd_device));
-            }
         }
+    }
+    /// 解析sd卡
+    if let Some(sdio) = fdt.find_node("/soc/sdio1@16020000") {
+        let sd_device = Vf2BlkDev::new_and_init();
+        println!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
+        register_block_device(Arc::new(sd_device));
     }
     #[cfg(target_arch = "loongarch64")]
     if let Some(pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {

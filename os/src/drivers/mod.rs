@@ -33,7 +33,9 @@ lazy_static::lazy_static! {
 
 pub fn register_block_device(dev: Arc<dyn BlockDriver>) {
     let device = Device::BlockDevice(dev);
+    println!("bbbbbbbbb");
     DEVICE_SET.write().push(device);
+    println!("cccccccc");
 }
 
 /// 获得一个任意一个块设备
