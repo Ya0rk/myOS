@@ -52,7 +52,11 @@ pub fn kernel_trap_handler() {
                     _ => unreachable!(),
                 };
 
-                let task = current_task().unwrap();
+                let task = current_task().unwrap_or_else(
+                    || {
+                        panic!("No task! bad addr:{:#x}", stval);
+                    }
+                );
                 // task.switch_pgtable();
                 result = task.with_mut_memory_space(|m| {
                     // info!("[kernel_trap_page_fault] task id = {}", task.get_pid());
