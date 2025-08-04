@@ -281,9 +281,13 @@ impl PageTable {
         // ffff_ffc0_8800_0000
         println!("mapping devices");
         // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
-        // TODO: to adapt la
-        kernel_page_table.map_kernel_huge_page((0x0000_0000).into(), MapPerm::RW);
-        kernel_page_table.map_kernel_huge_page((0x4000_0000).into(), MapPerm::RW);
+        // TODO: 临时取消巨页，常规映射
+        kernel_page_table.map_kernel_range(
+            (0x0000_0000 + KERNEL_ADDR_OFFSET).into()..(0x8000_0000 + KERNEL_ADDR_OFFSET).into(),
+            MapPerm::RW, 
+        );
+        // kernel_page_table.map_kernel_huge_page((0x0000_0000).into(), MapPerm::RW);
+        // kernel_page_table.map_kernel_huge_page((0x4000_0000).into(), MapPerm::RW);
         // for pair in MMIO {
         //     memory_set.push(
         //         MapArea::new(
