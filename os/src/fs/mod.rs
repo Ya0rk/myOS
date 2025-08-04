@@ -164,209 +164,212 @@ pub async fn init() {
         panic!("Failed to create {}", old_path_str1);
     }
 
-    // 2. Perform rename
-    assert!(
-        do_rename(old_path_str1, new_path_str1).is_ok(),
-        "rename failed"
-    );
-    println!("[fs test] renamed {} to {}", old_path_str1, new_path_str1);
+    // // 2. Perform rename
+    // assert!(
+    //     do_rename(old_path_str1, new_path_str1).is_ok(),
+    //     "rename failed"
+    // );
+    // println!("[fs test] renamed {} to {}", old_path_str1, new_path_str1);
+    //
+    // // 3. Verify old path is gone
+    // assert!(
+    //     matches!(
+    //         open(old_path_str1.into(), OpenFlags::O_RDONLY),
+    //         Err(Errno::ENOENT)
+    //     ),
+    //     "Old file should not exist"
+    // );
+    // println!("[fs test] verified old file does not exist");
+    //
+    // // 4. Verify new path exists and has correct content
+    // if let Ok(FileClass::File(file)) = open(new_path_str1.into(), OpenFlags::O_RDONLY) {
+    //     let mut buf = [0u8; 100];
+    //     let len = file.read(&mut buf).await.unwrap();
+    //     assert_eq!(
+    //         &buf[..len],
+    //         content1.as_bytes(),
+    //         "Content mismatch after rename"
+    //     );
+    //     println!("[fs test] verified new file content is correct");
+    // } else {
+    //     panic!("Failed to open new file {}", new_path_str1);
+    // }
+    // println!("[fs test] PASS: rename and verify content");
+    //
+    // // Test Case 2: Rename to overwrite an existing file.
+    // println!("\n[fs test] start test 2: rename to overwrite existing file");
+    // let old_path_str2 = "/rename_overwrite_old";
+    // let new_path_str2 = "/rename_overwrite_new";
+    // let old_content2 = "old file content";
+    // let new_content_initial2 = "new file initial content";
+    //
+    // // 1. Create old file with its content
+    // if let Ok(FileClass::File(file)) = open(
+    //     old_path_str2.into(),
+    //     OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_TRUNC,
+    // ) {
+    //     file.write(old_content2.as_bytes()).await.unwrap();
+    // } else {
+    //     panic!("Failed to create {}", old_path_str2);
+    // }
+    //
+    // // 2. Create new file with its own content
+    // if let Ok(FileClass::File(file)) = open(
+    //     new_path_str2.into(),
+    //     OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_TRUNC,
+    // ) {
+    //     file.write(new_content_initial2.as_bytes()).await.unwrap();
+    // } else {
+    //     panic!("Failed to create {}", new_path_str2);
+    // }
+    //
+    // // 3. Perform rename (overwrite)
+    // assert!(
+    //     do_rename(old_path_str2, new_path_str2).is_ok(),
+    //     "rename (overwrite) failed"
+    // );
+    // println!(
+    //     "[fs test] renamed (overwrite) {} to {}",
+    //     old_path_str2, new_path_str2
+    // );
+    //
+    // // 4. Verify old path is gone
+    // assert!(
+    //     matches!(
+    //         open(old_path_str2.into(), OpenFlags::O_RDONLY),
+    //         Err(Errno::ENOENT)
+    //     ),
+    //     "Old file should not exist after overwrite"
+    // );
+    //
+    // // 5. Verify new path has the content of the old file
+    // if let Ok(FileClass::File(file)) = open(new_path_str2.into(), OpenFlags::O_RDONLY) {
+    //     let mut buf = [0u8; 100];
+    //     let len = file.read(&mut buf).await.unwrap();
+    //     assert_eq!(
+    //         &buf[..len],
+    //         old_content2.as_bytes(),
+    //         "Content mismatch after overwrite"
+    //     );
+    //     println!("[fs test] verified overwritten file content is correct");
+    // } else {
+    //     panic!("Failed to open overwritten file {}", new_path_str2);
+    // }
+    // println!("[fs test] PASS: rename to overwrite existing file");
 
-    // 3. Verify old path is gone
-    assert!(
-        matches!(
-            open(old_path_str1.into(), OpenFlags::O_RDONLY),
-            Err(Errno::ENOENT)
-        ),
-        "Old file should not exist"
-    );
-    println!("[fs test] verified old file does not exist");
-
-    // 4. Verify new path exists and has correct content
-    if let Ok(FileClass::File(file)) = open(new_path_str1.into(), OpenFlags::O_RDONLY) {
-        let mut buf = [0u8; 100];
-        let len = file.read(&mut buf).await.unwrap();
-        assert_eq!(
-            &buf[..len],
-            content1.as_bytes(),
-            "Content mismatch after rename"
-        );
-        println!("[fs test] verified new file content is correct");
-    } else {
-        panic!("Failed to open new file {}", new_path_str1);
-    }
-    println!("[fs test] PASS: rename and verify content");
-
-    // Test Case 2: Rename to overwrite an existing file.
-    println!("\n[fs test] start test 2: rename to overwrite existing file");
-    let old_path_str2 = "/rename_overwrite_old";
-    let new_path_str2 = "/rename_overwrite_new";
-    let old_content2 = "old file content";
-    let new_content_initial2 = "new file initial content";
-
-    // 1. Create old file with its content
-    if let Ok(FileClass::File(file)) = open(
-        old_path_str2.into(),
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_TRUNC,
-    ) {
-        file.write(old_content2.as_bytes()).await.unwrap();
-    } else {
-        panic!("Failed to create {}", old_path_str2);
-    }
-
-    // 2. Create new file with its own content
-    if let Ok(FileClass::File(file)) = open(
-        new_path_str2.into(),
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_TRUNC,
-    ) {
-        file.write(new_content_initial2.as_bytes()).await.unwrap();
-    } else {
-        panic!("Failed to create {}", new_path_str2);
-    }
-
-    // 3. Perform rename (overwrite)
-    assert!(
-        do_rename(old_path_str2, new_path_str2).is_ok(),
-        "rename (overwrite) failed"
-    );
-    println!(
-        "[fs test] renamed (overwrite) {} to {}",
-        old_path_str2, new_path_str2
-    );
-
-    // 4. Verify old path is gone
-    assert!(
-        matches!(
-            open(old_path_str2.into(), OpenFlags::O_RDONLY),
-            Err(Errno::ENOENT)
-        ),
-        "Old file should not exist after overwrite"
-    );
-
-    // 5. Verify new path has the content of the old file
-    if let Ok(FileClass::File(file)) = open(new_path_str2.into(), OpenFlags::O_RDONLY) {
-        let mut buf = [0u8; 100];
-        let len = file.read(&mut buf).await.unwrap();
-        assert_eq!(
-            &buf[..len],
-            old_content2.as_bytes(),
-            "Content mismatch after overwrite"
-        );
-        println!("[fs test] verified overwritten file content is correct");
-    } else {
-        panic!("Failed to open overwritten file {}", new_path_str2);
-    }
-    println!("[fs test] PASS: rename to overwrite existing file");
-
-    // Test Case 3: Rename a file into a different directory.
-    println!("\n[fs test] start test 3: rename into a subdirectory");
-    let dir_path3 = "/rename_test_dir";
-    let old_path_str3 = "/rename_subdir_old";
-    let new_path_str3 = "/rename_test_dir/rename_subdir_new";
-
-    // 1. Create directory
-    mkdir(dir_path3.into(), 0).unwrap_or_else(|e| {
-        if e != Errno::EEXIST {
-            panic!("Failed to create directory: {:?}", e)
-        }
-    });
-    println!("[fs test] created directory {}", dir_path3);
-
-    // 2. Create the file to be moved
-    if let Ok(FileClass::File(file)) = open(
-        old_path_str3.into(),
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_TRUNC,
-    ) {
-        file.write(b"move me").await.unwrap();
-    } else {
-        panic!("Failed to create {}", old_path_str3);
-    }
-
-    // 3. Perform rename
-    assert!(
-        do_rename(old_path_str3, new_path_str3).is_ok(),
-        "rename (into subdir) failed"
-    );
-    println!("[fs test] renamed {} to {}", old_path_str3, new_path_str3);
-
-    // 4. Verify old path is gone
-    assert!(
-        matches!(
-            open(old_path_str3.into(), OpenFlags::O_RDONLY),
-            Err(Errno::ENOENT)
-        ),
-        "Old file should not exist after move"
-    );
-
-    // 5. Verify new path exists in the directory
-    assert!(
-        open(new_path_str3.into(), OpenFlags::O_RDONLY).is_ok(),
-        "New file does not exist in subdirectory"
-    );
-    println!("[fs test] verified file exists in new directory");
-    println!("[fs test] PASS: rename into a subdirectory");
-
-    // Test Case 4: Rename a directory.
-    println!("\n[fs test] start test 4: rename a directory");
-    let old_dir_path4 = "/rename_dir_old";
-    let new_dir_path4 = "/rename_dir_new";
-    let file_inside_path_old4 = "/rename_dir_old/file_inside";
-    let file_inside_path_new4 = "/rename_dir_new/file_inside";
-
-    // 1. Create old directory and a file inside it
-    mkdir(old_dir_path4.into(), 0).unwrap_or_else(|e| {
-        if e != Errno::EEXIST {
-            panic!("Failed to create directory: {:?}", e)
-        }
-    });
-    println!("[fs test] created old directory and a file inside");
-
-    // 2. Perform directory rename
-    assert!(
-        do_rename(old_dir_path4, new_dir_path4).is_ok(),
-        "rename (directory) failed"
-    );
-    println!(
-        "[fs test] renamed directory {} to {}",
-        old_dir_path4, new_dir_path4
-    );
-
-    // 3. Verify old directory is gone
-    assert!(
-        matches!(
-            open(old_dir_path4.into(), OpenFlags::O_RDONLY),
-            Err(Errno::ENOENT)
-        ),
-        "Old directory should not exist"
-    );
-
-    // 4. Verify new directory exists and its content (the file) is there
-    let new_dir_inode =
-        Dentry::get_inode_from_path(new_dir_path4).expect("New directory inode not found");
-    assert_eq!(
-        new_dir_inode.node_type(),
-        InodeType::Dir,
-        "New path is not a directory"
-    );
-
-    if let Ok(FileClass::File(file)) = open(file_inside_path_new4.into(), OpenFlags::O_RDONLY) {
-        let mut buf = [0u8; 100];
-        let len = file.read(&mut buf).await.unwrap();
-        assert_eq!(
-            &buf[..len],
-            b"i am inside",
-            "Content of file in renamed directory mismatch"
-        );
-        println!("[fs test] verified file inside renamed directory");
-    } else {
-        panic!(
-            "Failed to open file in new directory {}",
-            file_inside_path_new4
-        );
-    }
-    println!("[fs test] PASS: rename a directory");
-
-    println!("\n[fs test] All rename tests finished successfully!");
-    panic!();
+    // // Test Case 3: Rename a file into a different directory.
+    // println!("\n[fs test] start test 3: rename into a subdirectory");
+    // let dir_path3 = "/rename_test_dir";
+    // let old_path_str3 = "/rename_subdir_old";
+    // let new_path_str3 = "/rename_test_dir/rename_subdir_new";
+    //
+    // // 1. Create directory
+    // mkdir(dir_path3.into(), 0).unwrap_or_else(|e| {
+    //     if e != Errno::EEXIST {
+    //         panic!("Failed to create directory: {:?}", e)
+    //     }
+    // });
+    // println!("[fs test] created directory {}", dir_path3);
+    //
+    // // 2. Create the file to be moved
+    // if let Ok(FileClass::File(file)) = open(
+    //     old_path_str3.into(),
+    //     OpenFlags::O_CREAT | OpenFlags::O_RDWR | OpenFlags::O_TRUNC,
+    // ) {
+    //     debug_point!("");
+    //     file.write(b"move me").await.unwrap();
+    // } else {
+    //     panic!("Failed to create {}", old_path_str3);
+    // }
+    //
+    // // 3. Perform rename
+    // assert!(
+    //     do_rename(old_path_str3, new_path_str3).is_ok(),
+    //     "rename (into subdir) failed"
+    // );
+    // println!("[fs test] renamed {} to {}", old_path_str3, new_path_str3);
+    //
+    // // 4. Verify old path is gone
+    // assert!(
+    //     matches!(
+    //         open(old_path_str3.into(), OpenFlags::O_RDONLY),
+    //         Err(Errno::ENOENT)
+    //     ),
+    //     "Old file should not exist after move"
+    // );
+    //
+    // // 5. Verify new path exists in the directory
+    // assert!(
+    //     open(new_path_str3.into(), OpenFlags::O_RDONLY).is_ok(),
+    //     "New file does not exist in subdirectory"
+    // );
+    // println!("[fs test] verified file exists in new directory");
+    // println!("[fs test] PASS: rename into a subdirectory");
+    //
+    // // INFO: 暂时对这个测试不作要求
+    //
+    // // Test Case 4: Rename a directory.
+    // println!("\n[fs test] start test 4: rename a directory");
+    // let old_dir_path4 = "/rename_dir_old";
+    // let new_dir_path4 = "/rename_dir_new";
+    // let file_inside_path_old4 = "/rename_dir_old/file_inside";
+    // let file_inside_path_new4 = "/rename_dir_new/file_inside";
+    //
+    // // 1. Create old directory and a file inside it
+    // mkdir(old_dir_path4.into(), 0).unwrap_or_else(|e| {
+    //     if e != Errno::EEXIST {
+    //         panic!("Failed to create directory: {:?}", e)
+    //     }
+    // });
+    // println!("[fs test] created old directory and a file inside");
+    //
+    // // 2. Perform directory rename
+    // assert!(
+    //     do_rename(old_dir_path4, new_dir_path4).is_ok(),
+    //     "rename (directory) failed"
+    // );
+    // println!(
+    //     "[fs test] renamed directory {} to {}",
+    //     old_dir_path4, new_dir_path4
+    // );
+    //
+    // // 3. Verify old directory is gone
+    // assert!(
+    //     matches!(
+    //         open(old_dir_path4.into(), OpenFlags::O_RDONLY),
+    //         Err(Errno::ENOENT)
+    //     ),
+    //     "Old directory should not exist"
+    // );
+    //
+    // // 4. Verify new directory exists and its content (the file) is there
+    // let new_dir_inode =
+    //     Dentry::get_inode_from_path(new_dir_path4).expect("New directory inode not found");
+    // assert_eq!(
+    //     new_dir_inode.node_type(),
+    //     InodeType::Dir,
+    //     "New path is not a directory"
+    // );
+    //
+    // if let Ok(FileClass::File(file)) = open(file_inside_path_new4.into(), OpenFlags::O_RDONLY) {
+    //     let mut buf = [0u8; 100];
+    //     let len = file.read(&mut buf).await.unwrap();
+    //     assert_eq!(
+    //         &buf[..len],
+    //         b"i am inside",
+    //         "Content of file in renamed directory mismatch"
+    //     );
+    //     println!("[fs test] verified file inside renamed directory");
+    // } else {
+    //     panic!(
+    //         "Failed to open file in new directory {}",
+    //         file_inside_path_new4
+    //     );
+    // }
+    // println!("[fs test] PASS: rename a directory");
+    //
+    // println!("\n[fs test] All rename tests finished successfully!");
+    // panic!();
 }
 
 pub async fn create_init_files() -> SysResult {

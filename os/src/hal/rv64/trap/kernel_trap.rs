@@ -47,7 +47,8 @@ pub fn kernel_trap_handler() {
                     Exception::StorePageFault => PageFaultAccessType::RW,
                     _ => unreachable!(),
                 };
-
+                use log::error;
+                error!("page fault: {:x}", stval);
                 let task = current_task().unwrap();
                 // task.switch_pgtable();
                 result = task.with_mut_memory_space(|m| {

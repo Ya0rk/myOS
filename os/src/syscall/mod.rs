@@ -1,5 +1,5 @@
 mod ffi;
-mod fs;
+pub mod fs;
 mod io;
 mod io_async;
 mod mm;
@@ -8,7 +8,6 @@ mod process;
 mod sync;
 
 use crate::sync::TimeSpec;
-use crate::utils::SysResult;
 use crate::utils::{backtrace, Errno, SysResult};
 pub use ffi::CloneFlags;
 pub use ffi::CpuSet;

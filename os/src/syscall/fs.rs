@@ -182,9 +182,27 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
 /// - AT_EMPTY_PATH：当 pathname 为空字符串时，操作 dirfd 本身
 /// ```
 pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) -> SysResult<usize> {
+    let AT_EMPTY_PATH: u32 = 0x1000;
+    let AT_SYMLINK_NOFOLLOW: usize = 0x100;
+
     let task = current_task().unwrap();
-    let path = user_cstr(pathname.into())?.ok_or(Errno::EINVAL)?;
-    error!("[sys_fsstatat] pathname {:?},", path);
+    let ptr = statbuf as *mut Kstat;
+    let mut tempstat: Kstat = Kstat::new();
+    let path = match user_cstr(pathname.into())? {
+        Some(x) => x,
+        None => {
+            if (flags & AT_EMPTY_PATH) != 0 {
+                let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
+                file.fstat(&mut tempstat)?;
+                info!("[sys_fstatat] res: {:?}", &tempstat);
+                unsafe {
+                    core::ptr::write(ptr, tempstat);
+                }
+                return Ok(0);
+            }
+            return Err(Errno::EINVAL);
+        }
+    };
     let cwd = task.get_current_path();
     info!(
         "[sys_fstatat] start cwd: {}, pathname: {}, flags: {}, dirfd = {}",
@@ -199,8 +217,8 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             return Err(Errno::EBADF);
         }
-        let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
-        let other_cwd = inode.get_name()?;
+        let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
+        let other_cwd = file.get_name()?;
         if unlikely(
             other_cwd.contains("is pipe file")
                 || other_cwd == String::from("Stdout")
@@ -211,9 +229,8 @@ pub fn sys_fstatat(dirfd: isize, pathname: usize, statbuf: usize, flags: u32) ->
         resolve_path(other_cwd, path)
     };
 
-    let ptr = statbuf as *mut Kstat;
+    info!("[sys_fstatat] pathname {:?},", target_path);
 
-    let mut tempstat: Kstat = Kstat::new();
     // 检查路径是否有效并打开文件
     match open(target_path, OpenFlags::O_RDONLY) {
         Ok(FileClass::File(file)) => {
@@ -812,10 +829,11 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
 
 // FIX: 临时放这
 pub fn ksys_unlinkat(fd: isize, path: String, flags: u32) -> SysResult<usize> {
-    let task = current_task().unwrap();
-    let base = task.get_current_path();
+    // let task = current_task().unwrap();
+    // let base = task.get_current_path();
+    let base = String::from("/");
     info!(
-        "[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}",
+        "[ksys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}",
         fd, base, path, flags
     );
 
@@ -887,6 +905,9 @@ pub fn sys_renameat2(
         }
     };
     // 简单的实现, 当目标路径存在文件的时候就返回存在
+    // FIX: 如果目标文件存在就删除
+    // BUG: 注意到可能存在并发 bug，因为 git 程序使用 rename 系统调用
+    //      来充当文件替换原语。
     if let Ok(file) = open(new_path.clone(), OpenFlags::O_RDWR) {
         // debug_point!("[sys_renameat2] return EEXIST");
         // return Err(Errno::EEXIST);
@@ -894,6 +915,7 @@ pub fn sys_renameat2(
     }
 
     if let Ok(file) = open(old_path.clone(), OpenFlags::O_RDWR) {
+        // BUG: 注意到这里很丑陋，传入的 old_inode 应当与 old_dentry 相对应
         let old_inode = file.file()?.get_inode();
         let old_dentry = Dentry::get_dentry_from_path(&old_path.get())?;
         let parent_of_new_denrty = Dentry::get_dentry_from_path(&new_path.get_parent_abs())?;
@@ -905,6 +927,7 @@ pub fn sys_renameat2(
                 // 可能不是这个返回值
                 return Err(Errno::EEXIST);
             };
+        debug_point!("");
         if let Ok(_) = old_inode.rename(old_dentry, new_dentry) {
             // 如果重命名成功，返回0
             // debug_point!("[sys_renameat2] return Ok(0)");
@@ -918,7 +941,7 @@ pub fn sys_renameat2(
         // debug_point!("[sys_renameat2] return ENOENT");
         return Err(Errno::ENOENT);
     }
-    // debug_point!("[sys_renameat2] return Ok(0)");
+    debug_point!("[sys_renameat2] return Ok(0)");
     Ok(0)
 }
 pub fn ksys_renameat2(
@@ -931,10 +954,11 @@ pub fn ksys_renameat2(
     let flags = RenameFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
     let cwd = String::from("/");
     info!(
-        "[sys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: {} ",
+        "[ksys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: {} ",
         &olddirfd, &old_path, &newdirfd, &new_path
     );
 
+    debug_point!("");
     let old_path = resolve_path(cwd.clone(), old_path);
     // } else {
     //     match task.get_file_by_fd(olddirfd as usize) {
@@ -945,6 +969,7 @@ pub fn ksys_renameat2(
     //         }
     //     }
     // };
+    debug_point!("");
 
     let new_path = resolve_path(cwd.clone(), new_path);
     // } else {
@@ -958,37 +983,41 @@ pub fn ksys_renameat2(
     // };
     // 简单的实现, 当目标路径存在文件的时候就返回存在
     if let Ok(file) = open(new_path.clone(), OpenFlags::O_RDWR) {
-        // debug_point!("[sys_renameat2] return EEXIST");
+        debug_point!("[sys_renameat2] ksys_unlinkat new dir");
         // return Err(Errno::EEXIST);
         ksys_unlinkat(0, new_path.clone().get(), 0);
     }
 
+    debug_point!("");
     if let Ok(file) = open(old_path.clone(), OpenFlags::O_RDWR) {
+        debug_point!("");
         let old_inode = file.file()?.get_inode();
         let old_dentry = Dentry::get_dentry_from_path(&old_path.get())?;
         let parent_of_new_denrty = Dentry::get_dentry_from_path(&new_path.get_parent_abs())?;
         let new_dentry =
             if let Some(dentry) = parent_of_new_denrty.bare_child(&new_path.get_filename()) {
+                debug_point!("");
                 dentry
             } else {
+                debug_point!("");
                 // FIX:
                 // 可能不是这个返回值
                 return Err(Errno::EEXIST);
             };
         if let Ok(_) = old_inode.rename(old_dentry, new_dentry) {
             // 如果重命名成功，返回0
-            // debug_point!("[sys_renameat2] return Ok(0)");
+            debug_point!("[sys_renameat2] return Ok(0)");
             return Ok(0);
         } else {
             // 如果重命名失败，返回错误
-            // debug_point!("[sys_renameat2] return EACCES");
+            debug_point!("[sys_renameat2] return EACCES");
             return Err(Errno::EACCES);
         }
     } else {
-        // debug_point!("[sys_renameat2] return ENOENT");
+        debug_point!("[sys_renameat2] return ENOENT");
         return Err(Errno::ENOENT);
     }
-    // debug_point!("[sys_renameat2] return Ok(0)");
+    debug_point!("[sys_renameat2] return Ok(0)");
     Ok(0)
 }
 
@@ -1130,10 +1159,14 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
 
     let abs = if dirfd == AT_FDCWD {
         // 相对路径，以当前目录为起点
-        resolve_path(cwd, path)
+        resolve_path(cwd, path.clone())
     } else {
         // 相对路径，以 fd 对应的目录为起点
         if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
+            error!(
+                "[sys_faccessat] return EBADF dirfd: {}, pathname: {}",
+                dirfd, path
+            );
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -1142,25 +1175,45 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
             return Err(Errno::ENOTDIR);
         }
         let other_cwd = inode.get_name()?;
-        resolve_path(other_cwd, path)
+        resolve_path(other_cwd, path.clone())
     };
 
     if let Ok(file_class) = open(abs, OpenFlags::O_RDONLY) {
         let file = file_class.file()?;
         let inode = file.get_inode();
         if mode.contains(FaccessatMode::F_OK) {
+            error!(
+                "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
+                dirfd, path
+            );
             return Ok(0);
         }
         if mode.contains(FaccessatMode::R_OK) && !file.readable() {
+            error!(
+                "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
+                dirfd, path
+            );
             return Err(Errno::EACCES);
         }
         if mode.contains(FaccessatMode::W_OK) && !file.writable() {
+            error!(
+                "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
+                dirfd, path
+            );
             return Err(Errno::EACCES);
         }
         if mode.contains(FaccessatMode::X_OK) && !file.executable() {
+            error!(
+                "[sys_faccessat] return no executable dirfd: {}, pathname: {}",
+                dirfd, path
+            );
             return Err(Errno::EACCES);
         }
     } else {
+        error!(
+            "[sys_faccessat] return ENOENT dirfd: {}, pathname: {}",
+            dirfd, path
+        );
         return Err(Errno::ENOENT);
     }
     Ok(0)

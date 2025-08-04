@@ -73,8 +73,6 @@ impl Future for IoFutrue {
                     }
                 }
             }
-
-            
         }
 
         if res_vec.len() > 0 {

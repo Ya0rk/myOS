@@ -7,7 +7,7 @@ use crate::{
         stat::as_inode_stat,
         Dentry, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat,
     },
-    sync::{new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
+    sync::{block_on, new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult},
 };
 use async_trait::async_trait;
@@ -51,6 +51,12 @@ impl Ext4Inode {
         // if INODE_CACHE.has_inode(path) {
         //     return INODE_CACHE.get(path).clone().unwrap();
         // }
+        info!(
+            "[ext4_inode] new: path: {}, types: {:?}, page_cache: {}",
+            path,
+            types,
+            page_cache.is_some()
+        );
         let file_type = as_inode_type(types.clone());
         let ext4file = new_shared(Ext4File::new(path, types.clone()));
         let mut file_size = 0u64;
@@ -253,6 +259,7 @@ impl InodeTrait for Ext4Inode {
             .map_err(|_| Errno::EIO)
             .unwrap();
         let r = file.file_write(buf);
+        error!("ext4 inode write_directly res: {}", r.unwrap());
         file.file_close()
             .expect("[write_directly]: file close fail!");
         r.map_err(|_| Errno::EIO).unwrap()
@@ -271,18 +278,17 @@ impl InodeTrait for Ext4Inode {
         let path = file.get_path();
         file.file_open(path.clone().to_str().unwrap(), O_RDWR);
         // info!("[ext4file state] desc:{:?} path:{:?}, type:{:?}", file.file_desc, file.get_path(), file.get_type());
-        let r = file.file_truncate(size as u64);  // 暂时注释
+        let r = file.file_truncate(size as u64); // 暂时注释
         info!("lw successfully truncate");
         file.file_close();
         self.get_page_cache().unwrap().truncate(size);
         self.set_size(size).expect("[truncate]: set size fail!");
 
         r.map_or_else(|_| Errno::EIO.into(), |_| 0) //暂时注释
-        
     }
     /// 同步文件
     async fn sync(&self) {
-        debug!("[ext4Inode sync] do sync with pagecache");
+        error!("[ext4Inode sync] do sync with pagecache");
         if let Some(cache) = &self.page_cache {
             cache.flush().await;
         }
@@ -350,6 +356,7 @@ impl InodeTrait for Ext4Inode {
     /// 删除文件
     fn unlink(&self, valid_dentry: Arc<Dentry>) -> SysResult<usize> {
         // mayby bug? 这个用的parent cnt
+        self.sync();
         let mut lock_file = self.file.lock();
         info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
         // 获得要去 unlink 的路径
@@ -410,11 +417,16 @@ impl InodeTrait for Ext4Inode {
 
     fn rename(&self, old_dentry: Arc<Dentry>, new_dentry: Arc<Dentry>) -> SysResult<usize> {
         // 注意到这里并没有，check old_dentry 是否是 self， 其实 self 这个参数是没有用的
+        error!("ext4 inode rename");
+        block_on(async {
+            old_dentry.clone().sync();
+        });
         let old_inode = if let Some(inode) = old_dentry.get_inode() {
             inode
         } else {
             return Err(Errno::ENOENT);
         };
+        let old_size = self.get_size();
         let mut ext4file = self.file.lock();
         if new_dentry.is_valid() {
             return Err(Errno::EEXIST);
@@ -428,6 +440,12 @@ impl InodeTrait for Ext4Inode {
                     old_inode.node_type().into(),
                     old_inode.get_page_cache(),
                 );
+                new_inode
+                    .clone()
+                    .get_page_cache()
+                    .unwrap()
+                    .set_inode(new_inode.clone());
+                new_inode.set_size(old_size);
                 new_dentry.bind(new_inode);
                 old_dentry.release_self();
                 Ok(0)

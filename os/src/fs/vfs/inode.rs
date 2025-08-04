@@ -1,4 +1,3 @@
-use core::{any::Any, sync::atomic::AtomicUsize};
 use crate::{
     fs::{
         ext4::NormalFile, ffi::InodeType, page_cache::PageCache, vfs::alloc_ino, AbsPath, Dentry,
@@ -14,6 +13,7 @@ use alloc::{
     vec::Vec,
 };
 use async_trait::async_trait;
+use core::{any::Any, sync::atomic::AtomicUsize};
 use log::warn;
 use lwext4_rust::{Ext4File, InodeTypes};
 use spin::Mutex;
@@ -65,7 +65,7 @@ pub trait InodeTrait: Any + Send + Sync {
     }
 
     /// 设置大小
-    fn set_size(&self, new_size: usize) -> SysResult{
+    fn set_size(&self, new_size: usize) -> SysResult {
         warn!("[InodeTrait::set_size] not implemented for this inode type");
         Err(Errno::ENOIMPL)
     }
@@ -212,6 +212,7 @@ pub trait InodeTrait: Any + Send + Sync {
     }
 
     /// 更改名字
+    /// 当前 inode 应当是old_path 所对应的
     fn rename(&self, old_path: Arc<Dentry>, new_path: Arc<Dentry>) -> SysResult<usize> {
         Err(Errno::EACCES)
     }
@@ -240,3 +241,4 @@ impl Downcast for dyn InodeTrait {
         self
     }
 }
+
