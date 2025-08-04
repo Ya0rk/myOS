@@ -5,7 +5,7 @@ use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
 use log::info;
 
-use crate::drivers::vf2::Vf2BlkDev;
+use crate::drivers::vf2::{Vf2BlkDev, Vf2SDIO};
 use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 use crate::sync::SpinNoIrqLock;
@@ -101,8 +101,22 @@ pub fn probe(fdt_ptr: u64) {
         }
     }
     /// 解析sd卡
-    if let Some(sdio) = fdt.find_node("/soc/sdio1@16020000") {
-        let sd_device = Vf2BlkDev::new_and_init();
+    if let Some(sdionode) = fdt.find_node("/soc/sdio1@16020000") {
+        println!("aaaaaaaa");
+        // let sd_device = Vf2BlkDev::new_and_init(); // for package
+
+        // 获取寄存器信息
+        let base_address = sdionode.reg().next().unwrap().starting_address as usize;
+        let size = sdionode.reg().next().unwrap().size.unwrap();
+        // 获取中断号
+        let interrupt_number = match sdionode.interrupts().next() {
+            None => 33,
+            Some(a) => a,
+        };
+        // 创建 SDIO 设备
+        let sd_device = Vf2SDIO::new(base_address, size, interrupt_number);
+        sd_device.card_init();
+        println!("bbbbbbbb");
         println!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
         register_block_device(Arc::new(sd_device));
     }
