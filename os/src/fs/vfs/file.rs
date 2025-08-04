@@ -7,6 +7,7 @@ use crate::{
 use alloc::{boxed::Box, string::ToString};
 use alloc::{string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
+use lwext4_rust::bindings::EXT4_SUPERBLOCK_FLAGS_TEST_FILESYS;
 use core::{
     any::Any,
     sync::atomic::{AtomicUsize, Ordering},
@@ -172,14 +173,14 @@ pub trait FileTrait: Any + Send + Sync + DowncastSync {
     }
 
     // ppoll处理,代表数据到达，可以读取数据
-    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollin(&self) -> SysResult<bool> {
         // info!("[Filetrait::pollin] file: {}", self.get_name().unwrap());
         // info!("[pollin] use defaule implement");
         // println!("default implement");
         Ok(true)
     }
     // ppoll处理，代表可以写入数据，如 socket 发送缓冲区有空闲
-    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollout(&self) -> SysResult<bool> {
         info!("[pollout] use defaule implement");
         Ok(true)
     }

@@ -1,3 +1,4 @@
+// deprecated
 use crate::{
     drivers::{device::uart::UART_DEVICE, tty::{termios::Termios, tty_core::TtyIoctlCmd}},
     fs::{
@@ -91,6 +92,7 @@ impl InodeTrait for DevTty {
             ch = b'\n';
         }
         if termios.is_echo() {
+            error!("ECHO");
             print!("{}", ch as char);
         }
         buf[0] = ch;

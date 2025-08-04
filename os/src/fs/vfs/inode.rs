@@ -14,6 +14,7 @@ use alloc::{
     vec::Vec,
 };
 use async_trait::async_trait;
+use downcast_rs::{impl_downcast, DowncastSync};
 use log::warn;
 use lwext4_rust::{Ext4File, InodeTypes};
 use spin::Mutex;
@@ -240,3 +241,5 @@ impl Downcast for dyn InodeTrait {
         self
     }
 }
+
+// impl_downcast!(sync InodeTrait);

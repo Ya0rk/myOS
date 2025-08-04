@@ -48,16 +48,16 @@ impl FileTrait for SocketFile {
         Ok(res)
     }
 
-    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollin(&self) -> SysResult<bool> {
         let inode = self.get_inode();
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
-        socketinode.socket.pollin(waker)
+        socketinode.socket.pollin().await
     }
 
-    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollout(&self) -> SysResult<bool> {
         let inode = self.get_inode();
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
-        socketinode.socket.pollout(waker)
+        socketinode.socket.pollout().await
     }
 
     fn get_socket(&self) -> SysResult<Arc<dyn Socket>> {

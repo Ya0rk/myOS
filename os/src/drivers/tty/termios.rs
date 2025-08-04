@@ -122,3 +122,23 @@ impl fmt::Display for LFlag {
             .fmt(f)
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct WinSize {
+    ws_row: u16,
+    ws_col: u16,
+    ws_xpixel: u16,
+    ws_ypixel: u16,
+}
+
+impl WinSize {
+    pub fn new() -> Self {
+        Self {
+            ws_row: 24,
+            ws_col: 80,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        }
+    }
+}

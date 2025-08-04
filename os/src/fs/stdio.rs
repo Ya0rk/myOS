@@ -5,7 +5,9 @@ use super::FileTrait;
 use super::InodeTrait;
 use super::Kstat;
 use super::OpenFlags;
+use crate::fs::devfs::char::CharDevInode;
 use crate::fs::Page;
+use crate::utils::downcast::Downcast;
 use crate::utils::{Errno, SysResult};
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -76,6 +78,24 @@ impl FileTrait for Stdin {
     }
     fn is_device(&self) -> bool {
         true
+    }
+    async fn pollin(&self) -> SysResult<bool> {
+        Ok(self.inode
+            .clone()
+            .downcast_arc::<CharDevInode>()
+            .ok_or(Errno::ENODEV)?
+            .poll_in()
+            .await
+        )
+    }
+    async fn pollout(&self) -> SysResult<bool> {
+        Ok(self.inode
+            .clone()
+            .downcast_arc::<CharDevInode>()
+            .ok_or(Errno::ENODEV)?
+            .poll_out()
+            .await
+        )
     }
 }
 

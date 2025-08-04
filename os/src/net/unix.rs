@@ -81,11 +81,11 @@ impl Socket for UnixSocket {
     fn get_socktype(&self) -> SysResult<Sock> {
         Ok(Sock::Unix)
     }
-    fn pollin(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollin(&self) -> SysResult<bool> {
         warn!("UnixSocket::pollin not implemented");
         todo!()
     }
-    fn pollout(&self, waker: Waker) -> SysResult<bool> {
+    async fn pollout(&self) -> SysResult<bool> {
         warn!("UnixSocket::pollout not implemented");
         todo!()
     }

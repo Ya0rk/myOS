@@ -44,31 +44,33 @@ impl Future for IoFutrue {
 
             info!("[iofuture] fd = {}", pollfd.fd);
             if pollfd.events.contains(PollEvents::POLLIN) {
-                match file.pollin(cx.waker().clone()) {
-                    Ok(ok) => {
+                match unsafe{Pin::new_unchecked(& mut file.pollin())}.poll(cx) {
+                    Poll::Ready(Ok(ok)) => {
                         if ok {
                             pollfd.revents |= PollEvents::POLLIN;
                             res_vec.push(PollEvents::POLLIN);
                         }
                     }
-                    Err(_) => {
+                    Poll::Ready(Err(_)) => {
                         pollfd.revents |= PollEvents::POLLERR;
                         res_vec.push(PollEvents::POLLERR);
                     }
+                    Poll::Pending => unreachable!()
                 }
             }
             if pollfd.events.contains(PollEvents::POLLOUT) {
-                match file.pollout(cx.waker().clone()) {
-                    Ok(ok) => {
+                match unsafe{Pin::new_unchecked(& mut file.pollin())}.poll(cx) {
+                    Poll::Ready(Ok(ok)) => {
                         if ok {
                             pollfd.revents |= PollEvents::POLLOUT;
                             res_vec.push(PollEvents::POLLOUT);
                         }
                     }
-                    Err(_) => {
+                    Poll::Ready(Err(_)) => {
                         pollfd.revents |= PollEvents::POLLERR;
                         res_vec.push(PollEvents::POLLERR);
                     }
+                    Poll::Pending => unreachable!()
                 }
             }
 

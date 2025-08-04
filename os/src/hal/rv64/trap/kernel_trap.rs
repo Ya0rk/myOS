@@ -81,7 +81,7 @@ pub fn kernel_trap_handler() {
         },
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
             use log::error;
-            error!("got a supervisor external interrupt. do nothing");
+            // error!("got a supervisor external interrupt. do nothing");
             crate::hal::arch::interrupt::irq_handler();
         },
         _ => {
