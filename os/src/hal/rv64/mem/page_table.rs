@@ -1,3 +1,5 @@
+use core::fmt::Debug;
+
 /// 更换页表，刷新TLB，开启内存屏障
 /// 传入的是satp的值
 // pub fn switch_pagetable(satp: usize) {
@@ -65,6 +67,7 @@ impl PTEFlags {
         pub W,
         pub X,
         pub G,
+        pub A,
         pub D,
         pub COW
     );
@@ -76,6 +79,7 @@ impl PTEFlags {
         pub W,
         pub X,
         pub G,
+        pub A,
         pub D,
         pub COW
     );
@@ -93,6 +97,8 @@ impl From<MapPerm> for PTEFlags {
             .set_G(!perm.contains(MapPerm::U))
             .set_R(perm.contains(MapPerm::R))
             .set_W(perm.contains(MapPerm::W))
+            .set_D(true)
+            .set_A(true)
             .set_X(perm.contains(MapPerm::X))
 
         // ret |= PTEFlags::V;
@@ -120,6 +126,12 @@ impl From<MapPerm> for PTEFlags {
 pub struct PageTableEntry {
     ///PTE
     pub bits: usize,
+}
+
+impl Debug for PageTableEntry {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "PTE{{ ppn: {:#x}, flags: {:?} }}", self.ppn().0, self.flags())
+    }
 }
 
 impl PageTableEntry {
@@ -283,12 +295,12 @@ impl PageTable {
         println!("mapping devices");
         // 映射两个巨页，0x0000_0000~0x8000_0000，作为设备保留区
         // TODO: 临时取消巨页，常规映射
-        kernel_page_table.map_kernel_range(
-            (0x0000_0000 + KERNEL_ADDR_OFFSET).into()..(0x8000_0000 + KERNEL_ADDR_OFFSET).into(),
-            MapPerm::RW, 
-        );
-        // kernel_page_table.map_kernel_huge_page((0x0000_0000).into(), MapPerm::RW);
-        // kernel_page_table.map_kernel_huge_page((0x4000_0000).into(), MapPerm::RW);
+        // kernel_page_table.map_kernel_range(
+        //     (0x0000_0000 + KERNEL_ADDR_OFFSET).into()..(0x8000_0000 + KERNEL_ADDR_OFFSET).into(),
+        //     MapPerm::RW, 
+        // );
+        kernel_page_table.map_kernel_huge_page((0x0000_0000).into(), MapPerm::RW);
+        kernel_page_table.map_kernel_huge_page((0x4000_0000).into(), MapPerm::RW);
         // for pair in MMIO {
         //     memory_set.push(
         //         MapArea::new(

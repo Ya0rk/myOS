@@ -1,5 +1,6 @@
-use super::{PhysAddr, PhysPageNum};
+use super::{PhysAddr, PhysPageNum, VirtAddr};
 use crate::fs::Dentry;
+use crate::mm::Paged;
 use crate::sync::SpinNoIrqLock;
 use crate::task::current_task;
 use crate::{
@@ -7,6 +8,7 @@ use crate::{
     mm::address::KernelAddr,
 };
 use alloc::vec::Vec;
+// use riscv::addr::VirtAddr;
 use core::fmt::{self, Debug, Formatter};
 use lazy_static::*;
 use spin::Mutex;
@@ -131,8 +133,8 @@ pub fn init_frame_allocator() {
         fn ekernel();
     }
     FRAME_ALLOCATOR.lock().init(
-        PhysAddr::from(KernelAddr(0x9000_0000 + KERNEL_ADDR_OFFSET)).ceil(),
-        PhysAddr::from(KernelAddr(MEMORY_END)).floor(),
+        VirtAddr(ekernel as usize).paged_pa().ceil(),
+        VirtAddr(MEMORY_END).paged_pa().floor(),
     );
 }
 /// allocate a frame
