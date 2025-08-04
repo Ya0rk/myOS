@@ -189,6 +189,7 @@ impl PageTable {
             ".bss [{:#x}, {:#x})",
             sbss_with_stack as usize, ebss as usize
         );
+        println!(".ekernel {:#x}", ekernel as usize);
         println!("mapping .text section");
         // memory_set.push(
         //     MapArea::new(

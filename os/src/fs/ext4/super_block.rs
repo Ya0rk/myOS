@@ -25,8 +25,10 @@ impl Ext4SuperBlock {
         println!("init ext4 device superblock");
         let inner =
             Ext4BlockWrapper::<Disk>::new(disk).expect("failed to initialize EXT4 filesystem");
+        println!("mmmmmmmmmmm");
         let page_cache = Some(PageCache::new_bare());
         let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR, page_cache.clone());
+        println!("sssssssssss");
         Self { inner, root }
     }
 }

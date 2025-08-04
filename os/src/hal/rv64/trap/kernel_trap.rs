@@ -52,6 +52,10 @@ pub fn kernel_trap_handler() {
                     _ => unreachable!(),
                 };
 
+                println!(
+                        "[kernel_trap_handler] encounter page fault, addr {:#x}, instruction {:#x} scause {:?}, type = {:?}",
+                        stval, sepc, cause, access_type
+                );
                 let task = current_task().unwrap_or_else(
                     || {
                         panic!("No task! bad addr:{:#x}", stval);
