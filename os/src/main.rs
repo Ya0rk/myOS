@@ -79,7 +79,7 @@ static START_HART_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[no_mangle]
 pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
-    print_checkpoint(3);
+    // print_checkpoint(3);
     // 启动顺序：
     // clear_bss
     // logo
@@ -100,7 +100,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     //     tlb_init(tlb_fill as usize);
     // }
     arch_init();
-    print_checkpoint(4);
+    // print_checkpoint(4);
     println!("hello world!");
     println!("hart id is {:#X}, dt_root is {:#x}", hart_id, dt_root);
 

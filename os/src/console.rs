@@ -22,9 +22,9 @@ lazy_static! {
     static ref MUTEX_STDOUT: SpinNoIrqLock<Stdout> = SpinNoIrqLock::new(Stdout {});
 }
 pub fn print(args: fmt::Arguments) {
-    print_checkpoint(5);
+    // print_checkpoint(5);
     // let m = *TEST.lock();
-    print_checkpoint(8);
+    // print_checkpoint(8);
     Stdout.write_fmt(args);
 }
 

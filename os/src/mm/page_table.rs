@@ -1,7 +1,9 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
 use crate::board::{MEMORY_END, MMIO};
-use crate::hal::arch::kernel_token_write;
+use crate::console::print;
+use crate::hal::arch::{kernel_token_write, sfence};
+use crate::hal::entry::boot::print_checkpoint;
 use crate::mm::{Direct, PageNum};
 use core::arch::asm;
 use core::ops::Range;
@@ -183,5 +185,10 @@ impl PageTable {
 /// NOTE: should be used no more than init phase
 pub fn enable_kernel_pgtable() {
     // unsafe { KERNEL_PAGE_TABLE.lock().enable(); }
+    print_checkpoint(3);
     kernel_token_write(KERNEL_PAGE_TABLE.lock().token());
+    print_checkpoint(4);
+    sfence();
+    print_checkpoint(5);
+
 }

@@ -3,7 +3,7 @@ pub mod plic;
 mod sbi;
 pub mod sstatus;
 
-use core::arch::asm;
+use core::{arch::asm, option};
 use log::info;
 use riscv::register::satp;
 pub use riscv::register::scause;
@@ -37,38 +37,45 @@ pub fn satp_read() -> usize {
     riscv::register::satp::read().bits()
 }
 
+#[inline(always)]
 pub fn satp_write(satp: usize) {
     unsafe {
         satp::write(satp);
     }
 }
 
+#[inline(always)]
 pub fn user_token_write(token: usize) {
     unsafe {
         satp::write(token);
     }
 }
 
+#[inline(always)]
 pub fn user_token_read() -> usize {
     unsafe { satp_read() }
 }
 
+#[inline(always)]
 pub fn kernel_token_write(token: usize) {
     unsafe {
         satp::write(token);
     }
 }
 
+#[inline(always)]
 pub fn kernel_token_read() -> usize {
     unsafe { satp_read() }
 }
 
+#[inline(always)]
 pub fn sfence() {
     unsafe {
-        asm!("sfence.vma");
+        asm!("sfence.vma", options(nostack));
     }
 }
 
+#[inline(always)]
 pub fn sfence_vma_vaddr(vaddr: usize) {
     unsafe { asm!("sfence.vma {}, x0", in(reg) vaddr, options(nostack)) }
 }
