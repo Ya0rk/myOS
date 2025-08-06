@@ -58,18 +58,22 @@ pub fn device_init() {
     use crate::hal::arch::plic::*;
     use riscv::register::sie;
     let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
-    let hart_id: usize = START_HART_ID.load(Ordering::SeqCst);
+    // let hart_id: usize = START_HART_ID.load(Ordering::SeqCst);
     let supervisor = IntrTargetPriority::Supervisor;
     let machine = IntrTargetPriority::Machine;
     // 设置PLIC中外设中断的阈值
-    plic.set_threshold(hart_id, supervisor, 0);
-    plic.set_threshold(hart_id, machine, 1);
-    // 使能PLIC在CPU处于S-Mode下传递键盘/鼠标/块设备/串口外设中断
-    // irq nums: 5 keyboard, 6 mouse, 8 block, 10 uart
-    for intr_src_id in [5usize, 6, 8, 10, 32] {
-        plic.enable(hart_id, supervisor, intr_src_id);
-        plic.set_priority(intr_src_id, 1);
+    for hart_id in 0..5 {
+        plic.set_threshold(hart_id, supervisor, 0);
+        plic.set_threshold(hart_id, machine, 0);
+        // 使能PLIC在CPU处于S-Mode下传递键盘/鼠标/块设备/串口外设中断
+        // irq nums: 5 keyboard, 6 mouse, 8 block, 10 uart
+        for intr_src_id in [5usize, 6, 8, 10, 32] {
+            plic.enable(hart_id, supervisor, intr_src_id);
+            plic.enable(hart_id, machine, intr_src_id);
+            plic.set_priority(intr_src_id, 6);
+        }
     }
+
     // 设置S-Mode CPU使能中断
     unsafe {
         sstatus::set_sie();
