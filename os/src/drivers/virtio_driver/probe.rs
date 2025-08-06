@@ -4,18 +4,15 @@
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
 use log::info;
-
-use crate::drivers::vf2::{Vf2BlkDev, Vf2SDIO};
+use crate::drivers::vf2::Vf2SDIO;
 use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 use crate::sync::SpinNoIrqLock;
 use alloc::sync::Arc;
-
 use super::VirtIoHalImpl;
 use core::ptr::NonNull;
 use lazy_static::*;
 use spin::RwLock;
-
 use alloc::boxed::Box;
 use spin::mutex::Mutex;
 use virtio_drivers::{
@@ -102,24 +99,9 @@ pub fn probe(fdt_ptr: u64) {
     }
     /// 解析sd卡
     if let Some(sdionode) = fdt.find_node("/soc/sdio1@16020000") {
-        println!("aaaaaaaa");
-        // let sd_device = Vf2BlkDev::new_and_init(); // for package
-
-        // 获取寄存器信息
-        let base_address = sdionode.reg().next().unwrap().starting_address as usize;
-        let size = sdionode.reg().next().unwrap().size.unwrap();
-        // 获取中断号
-        let interrupt_number = match sdionode.interrupts().next() {
-            None => 33,
-            Some(a) => a,
-        };
-        // 创建 SDIO 设备
-        let sd_device = Vf2SDIO::new(base_address, size, interrupt_number);
-        sd_device.card_init();
-        println!("bbbbbbbb");
-        println!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
-        register_block_device(Arc::new(sd_device));
+        probe_vf2sd(&sdionode);
     }
+
     #[cfg(target_arch = "loongarch64")]
     if let Some(pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {
         log::info!("Found PCI node: {}", pci_node.name);
@@ -130,6 +112,24 @@ pub fn probe(fdt_ptr: u64) {
         log::info!("Found PCIe node: {}", pcie_node.name);
         super::pci::enumerate_pci(pcie_node, Cam::Ecam);
     }
+}
+
+pub fn probe_vf2sd(sdionode: &FdtNode) {
+    // let sd_device = Vf2BlkDev::new_and_init(); // for package
+
+    // 获取寄存器信息
+    let base_address = sdionode.reg().next().unwrap().starting_address as usize;
+    let size = sdionode.reg().next().unwrap().size.unwrap();
+    // 获取中断号
+    let interrupt_number = match sdionode.interrupts().next() {
+        None => 33,
+        Some(a) => a,
+    };
+    // 创建 SDIO 设备
+    let sd_device = Vf2SDIO::new(base_address, size, interrupt_number);
+    sd_device.card_init();
+    println!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
+    register_block_device(Arc::new(sd_device));
 }
 
 pub fn virtio_device(transport: impl Transport + 'static) {
