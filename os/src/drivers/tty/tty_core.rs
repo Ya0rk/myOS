@@ -1,7 +1,7 @@
 use core::{cell::{SyncUnsafeCell, UnsafeCell}, fmt::write, marker::PhantomData};
 
 use async_trait::async_trait;
-use alloc::{boxed::Box, sync::Arc};
+use alloc::{boxed::Box, sync::Arc, vec::{self, Vec}};
 use log::{error, info};
 use spin::RwLock;
 use crate::{drivers::{device_new::{dev_number::MajorNumber, Device, DeviceType}, tty::{self, serial::SERIAL_DRIVER, termios::{self, Termios, WinSize}}}, mm::user_ptr::{user_ref, user_ref_mut}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, Errno, SysResult}};
@@ -117,9 +117,21 @@ impl LineDiscPolicy for TtyLineDisc {
             TtyLineDiscMode::Canonical => TtyLineDisc::read_canonical(tty, buf).await,
         }
     }
-    async fn write(&self, tty: &TtyBase, buf: &[u8]) -> usize {
-            
-        tty.driver.write(buf).await
+    async fn write(&self, tty: &TtyBase, _buf: &[u8]) -> usize {
+        let mut buf = Vec::<u8>::new();
+        let opost = tty.termios.read().is_opost();
+        let onlcr = tty.termios.read().is_onlcr();
+        for &c in _buf {
+            if opost {
+                if onlcr && c == b'\n' {
+                    buf.push(b'\r');
+                    buf.push(b'\n');
+                } else {
+                    buf.push(c);
+                }
+            }
+        }
+        tty.driver.write(&buf).await
     }
     async fn poll_in(&self, tty: &TtyBase) -> bool {
         tty.driver.poll_in().await

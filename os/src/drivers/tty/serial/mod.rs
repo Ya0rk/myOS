@@ -88,7 +88,7 @@ impl TtyDriver for SerialDriver {
     }
     // poll if output is available
     async fn poll_out(&self) -> bool {
-        false
+        true
     }
 
     async fn stop(&self) {
