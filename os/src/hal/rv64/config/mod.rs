@@ -125,3 +125,5 @@ pub fn is_aligned_to_page(addr: usize) -> bool {
 pub const PIPE_BUFFER_SIZE: usize = 0x10000;
 
 pub const VIRTIO0: usize = 0x10001000 + KERNEL_ADDR_OFFSET;
+
+pub const UART_ADDR: usize = 0x1000_0000 + KERNEL_ADDR_OFFSET;

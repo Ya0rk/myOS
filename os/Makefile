@@ -70,6 +70,8 @@ DISASM ?= -x
 # Run usertests or usershell
 TEST ?=
 
+FS_IMG_PREFIX := sdcard
+
 #qemu
 QEMU_NAME := qemu-system-$(ARCH)
 
@@ -84,8 +86,8 @@ ifeq ($(ARCH), riscv64)
 	QEMU_ARGS += -smp $(CPUS)
 
 
-	FS_IMG := ../sdcard-rv.img
-	FS_IMG_BAK = ../sdcard-rv-copy.img
+	FS_IMG := ../$(FS_IMG_PREFIX)-rv.img
+	FS_IMG_BAK = ../$(FS_IMG_PREFIX)-rv-copy.img
 endif
 ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS =  -machine virt 
@@ -100,8 +102,8 @@ ifeq ($(ARCH), loongarch64)
 	QEMU_ARGS += -L /opt/qemu-9.2.1/pc-bios  # 这里是YJJ需要指定
 
 
-	FS_IMG := ../final-la.img
-	FS_IMG_BAK = ../final-la-copy.img
+	FS_IMG := ../$(FS_IMG_PREFIX)-la.img
+	FS_IMG_BAK = ../$(FS_IMG_PREFIX)-la-copy.img
 endif
 
 # 加入另一个块设备

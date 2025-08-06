@@ -1,0 +1,41 @@
+name: / Some(Some("linux,dummy-loongson3"))
+name: platform-bus@16000000 Some(Some("qemu,platform"))
+name: poweroff Some(Some("syscon-poweroff"))
+name: reboot Some(Some("syscon-reboot"))
+name: ged@100e001c Some(Some("syscon"))
+   0x00000000100e001c, length Some(3)
+name: rtc@100d0100 Some(Some("loongson,ls7a-rtc"))
+   0x00000000100d0100, length Some(256)
+name: serial@1fe001e0 Some(Some("ns16550a"))
+   0x000000001fe001e0, length Some(256)
+name: serial@1fe002e0 Some(Some("ns16550a"))
+   0x000000001fe002e0, length Some(256)
+name: serial@1fe003e0 Some(Some("ns16550a"))
+   0x000000001fe003e0, length Some(256)
+name: serial@1fe004e0 Some(Some("ns16550a"))
+   0x000000001fe004e0, length Some(256)
+name: pcie@20000000 Some(Some("pci-host-ecam-generic"))
+   0x0000000020000000, length Some(134217728)
+name: msi@2ff00000 Some(Some("loongson,pch-msi-1.0"))
+   0x000000002ff00000, length Some(8)
+name: platic@10000000 Some(Some("loongson,pch-pic-1.0"))
+   0x0000000010000000, length Some(1024)
+name: eiointc@1400 Some(Some("loongson,ls2k2000-eiointc"))
+   0x0000000000001400, length Some(2048)
+name: cpuic Some(Some("loongson,cpu-interrupt-controller"))
+name: flash@1c000000 Some(Some("cfi-flash"))
+   0x000000001c000000, length Some(16777216)
+   0x000000001d000000, length Some(16777216)
+name: fw_cfg@1e020000 Some(Some("qemu,fw-cfg-mmio"))
+   0x000000001e020000, length Some(24)
+name: memory@80000000 None
+   0x0000000080000000, length Some(805306368)
+name: memory@0 None
+   0x0000000000000000, length Some(268435456)
+name: cpus None
+name: cpu-map None
+name: socket0 None
+name: core0 None
+name: cpu@0 Some(Some("loongarch,Loongson-3A5000"))
+   0x0000000000000000, length None
+name: chosen None

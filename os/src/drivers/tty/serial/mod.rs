@@ -1,4 +1,4 @@
-use crate::{drivers::{tty::termios, uart}, hal::{arch::interrupt::IrqHandler, config::KERNEL_ADDR_OFFSET}, sync::{get_waker, new_shared}};
+use crate::{drivers::{tty::termios, uart}, hal::{arch::interrupt::IrqHandler, config::{KERNEL_ADDR_OFFSET, UART_ADDR}}, sync::{get_waker, new_shared}};
 use core::task::Waker;
 
 use alloc::{collections::vec_deque::VecDeque, sync::Arc, boxed::Box};
@@ -10,11 +10,11 @@ pub mod ns16550a;
 
 lazy_static! {
     pub static ref UART_DRIVER: Arc<ns16550a::Uart16550Driver> = Arc::new(ns16550a::Uart16550Driver::new(
-        KERNEL_ADDR_OFFSET + 0x1000_0000,
+        UART_ADDR,
         0x16e3600,
         115200,
-        4,
-        2,
+        1,
+        0,
         true
     ));
 
