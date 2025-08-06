@@ -41,7 +41,7 @@ bitflags! {
 
 macro_rules! wait_for {
     ($cond:expr) => {{
-        let mut timeout = 10000000;
+        let mut timeout = 1000;
         while !$cond && timeout > 0 {
             core::hint::spin_loop();
             timeout -= 1;

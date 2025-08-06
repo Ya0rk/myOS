@@ -23,7 +23,7 @@ pub struct Stdin {
 impl Stdin {
     pub fn new() -> Self {
         Self {
-            inode: TTY_INODE.clone(),
+            inode: TTY_INODE1.clone(),
         }
     }
 }
@@ -108,7 +108,7 @@ pub struct Stdout {
 impl Stdout {
     pub fn new() -> Self {
         Self {
-            inode: TTY_INODE.clone(),
+            inode: TTY_INODE1.clone(),
         }
     }
 }

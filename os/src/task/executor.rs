@@ -271,10 +271,11 @@ pub fn run() {
         } else {
             trycnt = 0;
         }
-        if trycnt > 0x10000000 {
-            println!("no task");
-            return;
-        }
+        // 暂时注释，没有影响
+        // if trycnt > 0x10000000 {
+        //     println!("no task");
+        //     return;
+        // }
     }
     // while let Some(task) = TASK_QUEUE.fetch() {
     //     task.run();

@@ -1,7 +1,9 @@
+use core::sync::atomic::Ordering;
+
 #[cfg(target_arch = "riscv64")]
 use riscv::register::{sie, sstatus};
 
-use crate::drivers::tty::serial::SERIAL_DRIVER;
+use crate::{drivers::tty::serial::SERIAL_DRIVER, START_HART_ID};
 
 const VIRT_PLIC: usize = 0xffff_ffc0_0000_0000 + 0xC00_0000;
 
@@ -56,7 +58,7 @@ pub fn device_init() {
     use crate::hal::arch::plic::*;
     use riscv::register::sie;
     let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
-    let hart_id: usize = 0;
+    let hart_id: usize = START_HART_ID.load(Ordering::SeqCst);
     let supervisor = IntrTargetPriority::Supervisor;
     let machine = IntrTargetPriority::Machine;
     // 设置PLIC中外设中断的阈值
@@ -81,7 +83,8 @@ pub fn irq_handler() {
     use riscv::register::sie;
     disable_supervisor_interrupt();
     let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
-    let intr_src_id = plic.claim(0, IntrTargetPriority::Supervisor);
+    let hart_id = START_HART_ID.load(Ordering::SeqCst);
+    let intr_src_id = plic.claim(hart_id, IntrTargetPriority::Supervisor);
     use log::info;
     match intr_src_id {
         5 => info!("[irq_handler] extern irq from keyboard"),
@@ -94,7 +97,7 @@ pub fn irq_handler() {
         },
         _ => panic!("unsupported IRQ {}", intr_src_id),
     }
-    plic.complete(0, IntrTargetPriority::Supervisor, intr_src_id);
+    plic.complete(hart_id, IntrTargetPriority::Supervisor, intr_src_id);
 }
 
 /// A guard that disable interrupt when it is created and enable interrupt when it is dropped.
