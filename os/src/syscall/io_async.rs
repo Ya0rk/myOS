@@ -42,7 +42,7 @@ impl Future for IoFutrue {
                 }
             };
 
-            info!("[iofuture] fd = {}", pollfd.fd);
+            // info!("[iofuture] fd = {}", pollfd.fd);
             if pollfd.events.contains(PollEvents::POLLIN) {
                 match unsafe{Pin::new_unchecked(& mut file.pollin())}.poll(cx) {
                     Poll::Ready(Ok(ok)) => {

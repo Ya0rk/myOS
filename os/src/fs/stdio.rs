@@ -133,6 +133,9 @@ impl FileTrait for Stdout {
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
         self.inode.clone()
     }
+    fn is_device(&self) -> bool {
+        true
+    }
 
     async fn read(&self, _user_buf: &mut [u8]) -> SysResult<usize> {
         Err(Errno::EINVAL)

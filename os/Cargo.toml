@@ -56,7 +56,7 @@ default = [
     "test", 
     "qemu_riscv", 
     "mbshell", 
-   # "vf2",
+    "vf2",  # 上板需要打开
 ]
 board_qemu = []
 vf2 = []

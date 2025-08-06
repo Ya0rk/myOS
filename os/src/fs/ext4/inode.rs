@@ -51,7 +51,6 @@ impl Ext4Inode {
         // if INODE_CACHE.has_inode(path) {
         //     return INODE_CACHE.get(path).clone().unwrap();
         // }
-        println!("[Ext4Inode::new] path = {} ssssss", path);
         let file_type = as_inode_type(types.clone());
         let ext4file = new_shared(Ext4File::new(path, types.clone()));
         let mut file_size = 0u64;
@@ -63,7 +62,6 @@ impl Ext4Inode {
             file_size = ext4file.lock().file_size();
             ext4file.lock().file_close();
         }
-        println!("open saskldflkjasd");
 
         let inode = Arc::new(Self {
             metadata: InodeMeta::new(file_type, file_size as usize, path),
@@ -75,7 +73,6 @@ impl Ext4Inode {
             pg.set_inode(inode.clone());
         }
         // INODE_CACHE.insert(path, inode.clone());
-        println!("finish asdfasdf");
         inode
     }
 }
