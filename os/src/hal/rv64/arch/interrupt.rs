@@ -64,7 +64,7 @@ pub fn device_init() {
     plic.set_threshold(hart_id, machine, 1);
     // 使能PLIC在CPU处于S-Mode下传递键盘/鼠标/块设备/串口外设中断
     // irq nums: 5 keyboard, 6 mouse, 8 block, 10 uart
-    for intr_src_id in [5usize, 6, 8, 10] {
+    for intr_src_id in [5usize, 6, 8, 10, 32] {
         plic.enable(hart_id, supervisor, intr_src_id);
         plic.set_priority(intr_src_id, 1);
     }

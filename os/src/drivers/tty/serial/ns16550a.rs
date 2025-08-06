@@ -118,18 +118,18 @@ impl Uart16550Driver {
 
             // Enable DLAB
             // Enter a setting mode to set baud rate
-            // reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
+            reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
 
             // Set baud rate
-            // let divisor = self.clock_frequency / (16 * self.baud_rate);
-            // reg.byte_add(0 << self.reg_shift)
-            //     .write_volatile(divisor as u8);
-            // reg.byte_add(1 << self.reg_shift)
-            //     .write_volatile((divisor >> 8) as u8);
+            let divisor = self.clock_frequency / (16 * self.baud_rate);
+            reg.byte_add(0 << self.reg_shift)
+                .write_volatile(divisor as u8);
+            reg.byte_add(1 << self.reg_shift)
+                .write_volatile((divisor >> 8) as u8);
 
             // Disable DLAB and set data word length to 8 bits
             // Leave setting mode
-            // reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);
+            reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);
 
             // // Enable FIFO
             // reg.byte_add(FCR << self.reg_shift).write_volatile(0x01);

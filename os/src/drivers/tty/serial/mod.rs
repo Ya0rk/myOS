@@ -11,10 +11,10 @@ pub mod ns16550a;
 lazy_static! {
     pub static ref UART_DRIVER: Arc<ns16550a::Uart16550Driver> = Arc::new(ns16550a::Uart16550Driver::new(
         KERNEL_ADDR_OFFSET + 0x1000_0000,
-        0,
+        0x16e3600,
         115200,
-        1,
-        0,
+        4,
+        2,
         true
     ));
 
