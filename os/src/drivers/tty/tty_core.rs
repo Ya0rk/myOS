@@ -121,6 +121,7 @@ impl LineDiscPolicy for TtyLineDisc {
         let mut buf = Vec::<u8>::new();
         let opost = tty.termios.read().is_opost();
         let onlcr = tty.termios.read().is_onlcr();
+        let len = _buf.len();
         for &c in _buf {
             if opost {
                 if onlcr && c == b'\n' {
@@ -131,7 +132,8 @@ impl LineDiscPolicy for TtyLineDisc {
                 }
             }
         }
-        tty.driver.write(&buf).await
+        tty.driver.write(&buf).await;
+        len
     }
     async fn poll_in(&self, tty: &TtyBase) -> bool {
         tty.driver.poll_in().await
