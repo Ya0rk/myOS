@@ -54,7 +54,7 @@ pub unsafe fn disenable_supervisor_extern_interrupt() {
     }
 }
 
-pub fn device_init() {
+pub fn plic_init() {
     use crate::hal::arch::plic::*;
     use riscv::register::sie;
     let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
@@ -94,7 +94,7 @@ pub fn irq_handler() {
         5 => info!("[irq_handler] extern irq from keyboard"),
         6 => info!("[irq_handle] extern irq from mouse"),
         8 => info!("[irq_handle] extern irq from blockd evice"),
-        10 => {
+        32 => {
             // TODO: 暂时硬编码，后面需要实现
             info!("[irq_handler] extern irq from uart");
             SERIAL_DRIVER.handle_irq();

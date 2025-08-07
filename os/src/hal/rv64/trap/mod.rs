@@ -60,9 +60,9 @@ pub async fn trap_loop(task: Arc<TaskControlBlock>) {
         }
 
         // debug_point!("before enable sext");
-        unsafe {
-            crate::hal::rv64::arch::interrupt::device_init();
-        };
+        // unsafe {
+        //     crate::hal::rv64::arch::interrupt::plic_init();
+        // };
         // debug_point!("after enable sext");
 
         user_trap_return();

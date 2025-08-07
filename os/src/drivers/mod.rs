@@ -60,6 +60,7 @@ pub fn init(dtb_root: usize) {
     let dt_root: usize = 0x9000_0000_0010_0000;
     info!("satrt probe fdt tree root: {:X}", dt_root);
     crate::drivers::virtio_driver::probe::probe(dt_root as u64);
+    crate::hal::rv64::arch::interrupt::plic_init();
 }
 
 // #[cfg(target_arch = "riscv64")]
