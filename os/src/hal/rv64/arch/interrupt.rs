@@ -62,11 +62,11 @@ pub fn plic_init() {
     let supervisor = IntrTargetPriority::Supervisor;
     let machine = IntrTargetPriority::Machine;
     // 设置PLIC中外设中断的阈值
-    for hart_id in 0..5 {
+    for hart_id in 0..2 {
         plic.set_threshold(hart_id, supervisor, 0);
         plic.set_threshold(hart_id, machine, 0);
         // 使能PLIC在CPU处于S-Mode下传递键盘/鼠标/块设备/串口外设中断
-        // irq nums: 5 keyboard, 6 mouse, 8 block, 10 uart
+        // irq nums: 5 keyboard, 6 mouse, 8 block, 32 uart
         for intr_src_id in [5usize, 6, 8, 10, 32] {
             plic.enable(hart_id, supervisor, intr_src_id);
             plic.enable(hart_id, machine, intr_src_id);
