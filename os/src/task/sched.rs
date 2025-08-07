@@ -61,3 +61,8 @@ pub fn spawn_kernel_task<T: Future<Output = ()> + Send + 'static>(kernel_task: T
     let future = TaskFuture::kernel_task(kernel_task);
     executor::spawn(future);
 }
+
+pub fn spawn_idle_task<T: Future<Output = ()> + Send + 'static>(idle_task: T) {
+    let future = TaskFuture::kernel_task(idle_task);
+    executor::spawn_idle(future);
+}

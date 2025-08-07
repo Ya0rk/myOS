@@ -181,7 +181,7 @@
 
 extern crate alloc;
 
-use crate::sync::{SpinNoIrqLock, TIMER_QUEUE};
+use crate::sync::{yield_now, SpinNoIrqLock, TIMER_QUEUE};
 use alloc::collections::VecDeque;
 use async_task::{Runnable, ScheduleInfo, Task, WithInfo};
 use core::future::Future;
@@ -189,6 +189,7 @@ use core::future::Future;
 static TASK_QUEUE: TaskQueue = TaskQueue::new();
 
 struct TaskQueue {
+    idle: SpinNoIrqLock<Option<Runnable>>,
     normal: SpinNoIrqLock<VecDeque<Runnable>>,
     prior: SpinNoIrqLock<VecDeque<Runnable>>,
 }
@@ -200,6 +201,7 @@ pub fn has_task() -> bool {
 impl TaskQueue {
     pub const fn new() -> Self {
         Self {
+            idle: SpinNoIrqLock::new(None),
             normal: SpinNoIrqLock::new(VecDeque::new()),
             prior: SpinNoIrqLock::new(VecDeque::new()),
         }
@@ -227,6 +229,7 @@ impl TaskQueue {
             .lock()
             .pop_front()
             .or_else(|| self.normal.lock().pop_front())
+            .or_else(|| self.fetch_idle())
     }
 
     pub fn len(&self) -> usize {
@@ -239,6 +242,14 @@ impl TaskQueue {
 
     pub fn normal_len(&self) -> usize {
         self.normal.lock().len()
+    }
+
+    pub fn spawn_idle(&self, idle: Runnable) {
+        self.idle.lock().replace(idle);
+    }
+
+    pub fn fetch_idle(&self) -> Option<Runnable> {
+        self.idle.lock().take()
     }
 }
 
@@ -261,6 +272,19 @@ where
     task.detach();
 }
 
+pub fn spawn_idle<F>(future: F)
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    let schedule = move |runnable: Runnable, _info: ScheduleInfo| {
+        TASK_QUEUE.spawn_idle(runnable);
+    };
+    let (runnable, task) = async_task::spawn(future, WithInfo(schedule));
+    runnable.schedule();
+    task.detach();
+}
+
 /// Run all tasks in the task queue
 pub fn run() {
     let mut trycnt = 0;
@@ -272,10 +296,10 @@ pub fn run() {
             trycnt = 0;
         }
         // 暂时注释，没有影响
-        // if trycnt > 0x10000000 {
-        //     println!("no task");
-        //     return;
-        // }
+        if trycnt > 0x10000000 {
+            println!("no task");
+            return;
+        }
     }
     // while let Some(task) = TASK_QUEUE.fetch() {
     //     task.run();
@@ -290,4 +314,10 @@ pub fn run_once() -> usize {
         tasks += 1;
     }
     tasks
+}
+
+pub async fn yield_idle_task() {
+    loop {
+        yield_now().await;
+    }
 }

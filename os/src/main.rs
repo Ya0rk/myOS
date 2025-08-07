@@ -68,7 +68,7 @@ use mm::memory_space::test_la_memory_space;
 use sync::{block_on, time_init, timer};
 use task::{executor, get_current_hart_id, spawn_kernel_task};
 
-use crate::hal::entry::boot::{arch_init, print_checkpoint};
+use crate::{hal::entry::boot::{arch_init, print_checkpoint}, task::{executor::yield_idle_task, spawn_idle_task}};
 
 #[macro_use]
 extern crate lazy_static;
@@ -201,6 +201,8 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
 
     unsafe { sync::enable_supervisor_timer_interrupt() };
     timer::set_next_trigger();
+    // spawn_idle_task(async move { executor::yield_idle_task().await });
+    spawn_idle_task(executor::yield_idle_task());
     executor::run();
     panic!("Unreachable in rust_main!");
 }

@@ -28,7 +28,7 @@ pub use processor::{
     get_current_hart_id, init_processors, set_ktrap_ret, take_current_task, take_ktrap_ret,
 };
 pub use sched::TaskFuture;
-pub use sched::{spawn_kernel_task, spawn_user_task};
+pub use sched::{spawn_kernel_task, spawn_user_task, spawn_idle_task};
 pub use task::{TaskControlBlock, TaskStatus};
 
 use crate::fs::{autorun, gbshell, initproc, mbshell};
