@@ -241,5 +241,3 @@ impl Downcast for dyn InodeTrait {
         self
     }
 }
-
-// impl_downcast!(sync InodeTrait);

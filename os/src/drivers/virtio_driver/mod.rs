@@ -69,29 +69,6 @@ unsafe impl Hal for VirtIoHalImpl {
 
     unsafe fn share(buffer: NonNull<[u8]>, _direction: BufferDirection) -> PhysAddr {
         let vaddr = buffer.as_ptr() as *mut u8 as usize;
-        // println!("[share] {:#x}", vaddr);
-        // info!("[share] buffer vaddr is {:#x}, user token is {:#x}, kernel token is {:#x}", vaddr, current_user_token(), current_kernel_token());
-        // match vaddr >> 60 {
-        //     0x9 | 0x8 => {
-        //         vaddr & 0x0fff_ffff_ffff_ffff
-        //     },
-        //     0xF => {
-        //         PageTable::from_token(current_kernel_token())
-        //         .translate_va(VirtAddr::from(vaddr))
-        //         .unwrap()
-        //         .0
-        //     },
-        //     0x0 => {
-        //         PageTable::from_token(current_user_token())
-        //         .translate_va(VirtAddr::from(vaddr))
-        //         .unwrap()
-        //         .0
-        //     },
-        //     _ => {
-        //         panic!("Invalid Virtual Address");
-        //     }
-        // }
-        // Nothing to do, as the host already has access to all memory.
 
         vaddr - KERNEL_ADDR_OFFSET
         // 注意到现在采取直接映射模式,在entry中有设置
@@ -103,19 +80,6 @@ unsafe impl Hal for VirtIoHalImpl {
         // anywhere else.
     }
 
-    // // 这些属性中的接口已经被删除
-    // fn phys_to_virt(addr: usize) -> usize {
-    //     KernelAddr::from(PhysAddr::from(addr)).0
-    // }
-
-    // fn virt_to_phys(vaddr: usize) -> usize {
-    //     // info!("kkkkkk");
-    //     PageTable::from_token(current_user_token())
-    //         .translate_va(VirtAddr::from(vaddr))
-    //         .unwrap()
-    //         .0
-    //     // PhysAddr::from(vaddr - KERNEL_ADDR_OFFSET).0
-    // }
 }
 
 #[allow(dead_code)]

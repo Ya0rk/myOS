@@ -427,29 +427,6 @@ impl Dentry {
             if !mid_inode.is_dir() && i < size_of_path - 1 {
                 return Err(Errno::ENOTDIR);
             }
-
-            // match dentry_now.get_child(name) {
-            //     Some(child) => {
-            //         dentry_now = child;
-            //         match dentry_now.get_inode() {
-            //             Some(mid_inode) => {
-            //                 if !mid_inode.is_dir() && i < size_of_path - 1 {
-            //                     return Err(Errno::ENOTDIR);
-            //                 }
-            //             }
-            //             None => {
-            //                 return Err(Errno::ENOENT);
-            //             }
-            //         };
-            //     }
-            //     None => {
-            //         info!(
-            //             "[get_dentry_from_path] no such file or directory: {}/{}",
-            //             path_now, name
-            //         );
-            //         return Err(Errno::ENOENT);
-            //     }
-            // }
         }
         if dentry_now.is_negtive() {
             return Err(Errno::ENOENT);

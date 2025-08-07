@@ -20,23 +20,11 @@ pub struct Dirent {
 impl Dirent {
     pub fn new(name: [u8; 256], off: i64, ino: u64, dtype: u8, reclen: u16) -> Self {
         //对齐 align8
-        // name += "\0";
-        // let mut len = name.len() + 19;
-        // let align = 8 - len % 8;
-        // len += align;
-        // for _ in 0..align {
-        //     name.push('\0');
-        // }
         Self {
             d_ino: ino,
             d_off: off,
             d_reclen: reclen,
             d_type: dtype,
-            // d_name: {
-            //     let mut tmp: [u8; 256] = [0; 256];
-            //     tmp[..name.len()].copy_from_slice(name.as_bytes());
-            //     tmp
-            // },
             d_name: name,
         }
     }

@@ -147,38 +147,6 @@ impl LineDiscPolicy for TtyLineDisc {
     }
 }
 
-// pub struct LineDiscipline<P: LineDiscPolicy> {
-//     _null: u8,
-//     _marker: PhantomData<P>
-// }
-
-// impl<P> LineDiscipline<P>
-// where P: LineDiscPolicy {
-//     pub fn new() -> LineDiscipline<P> {
-//         LineDiscipline {
-//             _null: 0,
-//             _marker: PhantomData
-//         }
-//     }
-//     pub async fn read(tty: &TtyBase, buf: &mut [u8]) -> usize {
-//         P::read(tty, buf).await
-//     }
-//     pub async fn write(tty: &TtyBase, buf: &[u8]) -> usize {
-//         P::write(tty, buf).await
-//     }
-//     pub async fn poll_in(tty: &TtyBase) -> bool {
-//         P::poll_in(tty).await
-//     }
-//     pub async fn poll_out(tty: &TtyBase) -> bool {
-//         P::poll_out(tty).await
-//     }
-//     pub async fn set_mode(tty: &TtyBase, mode: TtyLineDiscMode) {
-//         P::set_mode(tty, mode).await
-//     }
-    
-// }
-
-
 pub struct TtyBase {
     pub driver: Arc<dyn TtyDriver>,
 
