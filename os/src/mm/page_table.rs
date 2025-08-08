@@ -3,7 +3,6 @@
 use crate::board::{MEMORY_END, MMIO};
 use crate::console::print;
 use crate::hal::arch::{kernel_token_write, sfence};
-use crate::hal::entry::boot::print_checkpoint;
 use crate::mm::{Direct, PageNum};
 use core::arch::asm;
 use core::ops::Range;

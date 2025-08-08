@@ -23,6 +23,9 @@ pub struct Stdin {
 impl Stdin {
     pub fn new() -> Self {
         Self {
+            #[cfg(not(feature = "vf2"))]
+            inode: TTY_INODE.clone(),
+            #[cfg(feature = "vf2")]
             inode: TTY_INODE1.clone(),
         }
     }
@@ -108,6 +111,9 @@ pub struct Stdout {
 impl Stdout {
     pub fn new() -> Self {
         Self {
+            #[cfg(not(feature = "vf2"))]
+            inode: TTY_INODE.clone(),
+            #[cfg(feature = "vf2")]
             inode: TTY_INODE1.clone(),
         }
     }

@@ -4,7 +4,6 @@
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
 use log::info;
-use crate::drivers::vf2::Vf2SDIO;
 use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 use crate::sync::SpinNoIrqLock;
@@ -38,6 +37,8 @@ use virtio_drivers::{
     },
     Result,
 };
+#[cfg(feature = "vf2")]
+use crate::drivers::vf2::Vf2SDIO;
 
 lazy_static! {
     pub static ref BLOCKDEVICE_ADDR_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
@@ -98,6 +99,7 @@ pub fn probe(fdt_ptr: u64) {
         }
     }
     /// 解析sd卡
+    #[cfg(feature = "vf2")]
     if let Some(sdionode) = fdt.find_node("/soc/sdio1@16020000") {
         probe_vf2sd(&sdionode);
     }
@@ -114,6 +116,7 @@ pub fn probe(fdt_ptr: u64) {
     }
 }
 
+#[cfg(feature = "vf2")]
 pub fn probe_vf2sd(sdionode: &FdtNode) {
     // let sd_device = Vf2BlkDev::new_and_init(); // for package
 

@@ -20,15 +20,12 @@ use page_table::{enable_kernel_pgtable, KERNEL_PAGE_TABLE};
 pub use frame_allocator::{frame_alloc, frame_dealloc};
 pub use page_table::PageTable;
 
-use crate::hal::entry::boot::print_checkpoint;
 // pub use page_table::{translated_byte_buffer, translated_ref, translated_refmut, translated_str};
 
 /// initiate heap allocator, frame allocator and kernel space
 pub fn init(first: bool) {
     if first {
-        print_checkpoint(1);
         heap_allocator::init_heap();
-        print_checkpoint(2);
         frame_allocator::init_frame_allocator();
     }
     // unsafe {

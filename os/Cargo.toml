@@ -54,11 +54,12 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 default = [
     "error", 
     "test", 
-    "qemu_riscv", 
     "mbshell", 
-    "vf2",  # 上板需要打开
+    #"vf2",  # 上板riscv需要打开,否则关闭
+    #"2k1000la", # 上板龙芯需要打开，否则关闭
 ]
 board_qemu = []
+2k1000la = []
 vf2 = []
 error = []
 timewhell = []
@@ -72,7 +73,6 @@ debug = []
 trace = []
 mul_hart = []
 test = []
-qemu_riscv = []
 test_initproc = []
 
 [profile.release]

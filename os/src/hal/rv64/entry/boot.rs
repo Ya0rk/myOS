@@ -10,7 +10,6 @@ use crate::{hal::arch::hart_start_success, mm::VirtAddr};
 #[cfg(target_arch = "riscv64")]
 #[no_mangle]
 pub fn jump_helper(hart_id: usize, dtb_ptr: usize) {
-    print_checkpoint(2);
     unsafe {
         // 调整栈指针 加上偏移，跳转到 rust_main
         asm!(
