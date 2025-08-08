@@ -1,7 +1,9 @@
-use crate::{hal::{arch::console_putchar, entry::boot::print_checkpoint}, sync::SpinNoIrqLock};
+use crate::{hal::arch::console_putchar, sync::SpinNoIrqLock};
 use core::fmt::{self, Write};
 use lazy_static::*;
 use log::{error, info};
+#[cfg(target_arch = "riscv64")]
+use crate::hal::entry::boot::print_checkpoint;
 
 struct Stdout;
 

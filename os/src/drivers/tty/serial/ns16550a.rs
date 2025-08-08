@@ -1,4 +1,5 @@
 use log::{error, info};
+#[cfg(target_arch = "riscv64")]
 use riscv::addr::PhysAddr;
 
 use crate::{drivers::{device_new::dev_core::{PhysDevice, PhysDriver}, tty::serial::UartDriver}, utils::SysResult};

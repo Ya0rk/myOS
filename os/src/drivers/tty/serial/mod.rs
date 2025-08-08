@@ -1,8 +1,10 @@
-use crate::{drivers::{tty::termios, uart}, hal::{arch::interrupt::IrqHandler, config::KERNEL_ADDR_OFFSET}, sync::{get_waker, new_shared}};
+use crate::{drivers::{tty::termios, uart}, hal::config::KERNEL_ADDR_OFFSET, sync::{get_waker, new_shared}};
 use core::task::Waker;
 use alloc::{collections::vec_deque::VecDeque, sync::Arc, boxed::Box};
 use async_trait::async_trait;
 use crate::{drivers::tty::tty_core::TtyDriver, sync::{suspend_now, Shared}, utils::container::ring_buffer::CharBuffer};
+#[cfg(target_arch = "riscv64")]
+use crate::hal::arch::interrupt::IrqHandler;
 
 pub mod ns16550a;
 
@@ -115,6 +117,7 @@ impl SerialDriver {
     }
 }
 
+#[cfg(target_arch = "riscv64")]
 impl IrqHandler for SerialDriver {
     fn handle_irq(&self) {
         while self.uart.poll_in() {
