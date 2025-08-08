@@ -101,20 +101,12 @@ impl CacheStatus for Arc<Dentry> {
 impl Dentry {
     /// 初始化dentry系统,将根节点和ext4文件系统绑定
     pub fn init_dentry_sys() {
-        // info!("[dentry init]");
         Self::bind(&DENTRY_ROOT, crate::fs::ext4::SUPER_BLOCK.root_inode());
-        // info!("list root dir");
-        {
-            DENTRY_ROOT
-                .children
-                .read()
-                .iter()
-                .for_each(|x| println!("{}", x.0));
-        };
-        // info!("mount ProcFs");
-        mkdir("/proc".into(), 0);
-        let procFs = Self::get_dentry_from_path("/proc").unwrap();
-        procFs.mount(PROCFS_SUPER_BLOCK.clone());
+        DENTRY_ROOT
+            .children
+            .read()
+            .iter()
+            .for_each(|x| println!("{}", x.0));
     }
     /// 创建一个根节点dentry
     fn new_root() -> Arc<Self> {
@@ -151,6 +143,7 @@ impl Dentry {
     fn new(self: &Arc<Self>, name: &str, inode: Arc<dyn InodeTrait>) -> Arc<Self> {
         // info!("[dentry::new] {}: {}", self.get_abs_path(), name);
         let mut inodes = Vec::new();
+        inodes.push(inode);
         let res = Self {
             name: RwLock::new(String::from(name)),
             path: RwLock::new(None),
@@ -164,7 +157,6 @@ impl Dentry {
             .write()
             .insert(String::from(name), res.clone());
         // info!("[Dentry::new] {} insert child {} ", self.name.read(), name);
-        res.inode.write().push(inode);
         res
     }
     /// 查看是否是有效的 dentry
@@ -232,12 +224,8 @@ impl Dentry {
             DentryStatus::Negtive => return None,
         };
         if pattern.ends_with("..") {
-            // 有点多于，这里的路径都是系统调用传来的，.. 和 . 已经处理了
-            // info!("return parent");
             return self.parent();
         } else if pattern.ends_with("/") || pattern.ends_with(".") || pattern == "" {
-            // 多余判断，并且好像pattern不会是/,因为上层是用/分割
-            // info!("return name is {}", self.name.read());
             return Some(self.clone());
         }
         // 直接检索当前的文件夹
@@ -314,11 +302,6 @@ impl Dentry {
             };
         }
         let inode = self.get_inode().ok_or(Errno::ENOENT)?;
-        // let inode = if let Some(inode) = self.get_inode() {
-        //     inode
-        // } else {
-        //     return Err(Errno::ENOENT);
-        // };
         if inode.node_type() == InodeType::Dir {
             let dents = inode.read_dents().unwrap();
             let parent_abs = self.get_abs_path();
@@ -342,7 +325,7 @@ impl Dentry {
     }
 
     /// 将一个dentry和一个superblock绑定
-    fn mount(self: &Arc<Self>, sb: Arc<dyn SuperBlockTrait>) {
+    pub fn mount(self: &Arc<Self>, sb: Arc<dyn SuperBlockTrait>) {
         if sb.root_inode().node_type() != InodeType::Dir {
             // info!("you can't mount a inode which is not TYPE DIR");
             return;

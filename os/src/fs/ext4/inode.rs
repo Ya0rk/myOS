@@ -301,8 +301,6 @@ impl InodeTrait for Ext4Inode {
     /// 在当前文件夹下查找该路径的的文件
     ///
     /// 返回一个InodeTrait
-    ///
-    /// 应当剥夺walk创造inode的权力todo
     fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
         if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {

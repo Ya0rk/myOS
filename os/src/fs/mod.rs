@@ -81,66 +81,24 @@ pub async fn init() {
     // 应当初始化Dentry
     println!("[Del0n1x] init fs start ...");
     Dentry::init_dentry_sys();
+
+    // 挂载proc文件系统
+    mkdir("/proc".into(), 0);
+    Dentry::get_dentry_from_path("/proc")
+        .unwrap()
+        .mount(PROCFS_SUPER_BLOCK.clone());
+
+    // 挂载tmp文件系统 todo
+    mkdir("/tmp".into(), 0);
+
+    // 挂载dev文件系统 todo
+    mkdir("/dev".into(), 0);
+
     create_init_files().await;
-
-    // Test case for file hole created by truncate and write
-    println!("[fs test] start test file hole (truncate scenario)");
-    let test_file_path = "/hole_test_truncate".into();
-    if let Ok(FileClass::File(file)) = open(test_file_path, OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-    {
-        // 1. Write initial data
-        let initial_data = "initial data".as_bytes();
-        file.write(initial_data).await.unwrap();
-        println!("[fs test] wrote initial data");
-
-        // 2. Truncate to 0
-        let inode = file.get_inode();
-        inode.truncate(0);
-        println!("[fs test] truncated file to 0");
-
-        // 3. Seek to a position > 0 to create a hole
-        let hole_size = 10;
-        file.lseek(hole_size as isize, SEEK_SET).unwrap();
-        println!("[fs test] seeked to {}", hole_size);
-
-        // 4. Write new data, creating a hole from 0 to 9
-        let new_data = "new data".as_bytes();
-        file.write(new_data).await.unwrap();
-        println!("[fs test] wrote new data after hole");
-
-        // 5. Seek back to the beginning to verify the hole
-        file.lseek(0, SEEK_SET).unwrap();
-        println!("[fs test] seeked to 0");
-
-        // 6. Read from the hole and verify it's all zeros
-        let mut hole_buf = [1u8; 10]; // Pre-fill with non-zero to be sure
-        let read_len = file.read(&mut hole_buf).await.unwrap();
-        assert_eq!(read_len, hole_size);
-        for &byte in hole_buf.iter() {
-            assert_eq!(byte, 0, "Byte in hole is not zero!");
-        }
-        println!("[fs test] hole content is verified to be zero");
-
-        // 7. Verify the data written after the hole
-        // The offset is now at the end of the hole (10)
-        let mut data_buf = [0u8; 8];
-        let read_len_data = file.read(&mut data_buf).await.unwrap();
-        assert_eq!(read_len_data, new_data.len());
-        assert_eq!(&data_buf[..read_len_data], new_data);
-        println!("[fs test] data after hole is verified");
-
-        println!("[fs test] file hole (truncate scenario) test pass");
-    } else {
-        println!("[fs test] file hole test fail: cannot create file");
-    }
-    // panic!("temp test");
 }
 
 pub async fn create_init_files() -> SysResult {
     mkdir("/usr".into(), 0);
-    mkdir("/tmp".into(), 0);
-    //创建/dev文件夹
-    mkdir("/dev".into(), 0);
     //创建./dev/misc文件夹
     mkdir("/dev/misc".into(), 0);
     // libctest中的pthread_cancel_points测试用例需要
