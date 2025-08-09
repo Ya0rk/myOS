@@ -461,8 +461,11 @@ impl InodeTrait for Ext4Inode {
         let mut dir_entrys = Vec::new();
 
         for dir in dirs {
+            let types: Ext4InodeType = (dir.d_type as usize).into();
+            let vfs_types: InodeType = types.into();
+            let real_types = vfs_types as u8;
             let (d_ino, d_off, d_reclen, d_type, d_name) =
-                (dir.d_ino, dir.d_off, dir.d_reclen, dir.d_type, dir.d_name);
+                (dir.d_ino, dir.d_off, dir.d_reclen, real_types, dir.d_name);
 
             let entry = Dirent::new(d_name, d_off, d_ino, d_type, d_reclen);
             dir_entrys.push(entry);
