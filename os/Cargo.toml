@@ -52,7 +52,7 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 default = [
-    "error", 
+    "info", 
     "test", 
     "qemu_riscv", 
     "mbshell", 
