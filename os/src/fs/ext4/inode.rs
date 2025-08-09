@@ -18,7 +18,7 @@ use lwext4_rust::{
         ext4_inode_stat, EXT4_DE_DIR, EXT4_DE_REG_FILE, O_CREAT, O_RDONLY, O_RDWR, O_TRUNC,
         SEEK_SET,
     },
-    file, Ext4File, InodeTypes,
+    file, Ext4File, Ext4InodeType,
 };
 
 use alloc::boxed::Box;
@@ -44,7 +44,7 @@ impl Ext4Inode {
     /// 创建一个inode，设置pagecache，并将其加入Inodecache
     pub fn new(
         path: &str,
-        types: InodeTypes,
+        types: Ext4InodeType,
         page_cache: Option<Arc<PageCache>>,
     ) -> Arc<dyn InodeTrait> {
         // warn!("[Ext4Inode::new] path = {} ssssss", path);
@@ -60,7 +60,8 @@ impl Ext4Inode {
         let file_type = as_inode_type(types.clone());
         let ext4file = new_shared(Ext4File::new(path, types.clone()));
         let mut file_size = 0u64;
-        if types == InodeTypes::EXT4_DE_DIR || types == InodeTypes::EXT4_INODE_MODE_DIRECTORY {
+        if types == Ext4InodeType::EXT4_DE_DIR || types == Ext4InodeType::EXT4_INODE_MODE_DIRECTORY
+        {
             // file_size = ext4file.lock().file_size();
             file_size = 0;
         } else {
@@ -136,7 +137,7 @@ impl InodeTrait for Ext4Inode {
         // 注意到原来这里是一个虚假的闯将,应当修改为在ext4文件系统中,真实的创建.
         // 这里文件创建的标识 O_RDWR | O_CREAT | O_TRUNC 和原来的fs/mod.rs::open函数中保持一致
         match types.clone().into() {
-            InodeTypes::EXT4_DE_DIR => {
+            Ext4InodeType::EXT4_DE_DIR => {
                 debug!("[do_create] type is dir {}", path);
                 let mut file = Ext4File::new(path, types.clone().into());
                 if let Ok(_) = file.dir_mk(path) {
@@ -146,7 +147,7 @@ impl InodeTrait for Ext4Inode {
                 }
                 file.file_close();
             }
-            InodeTypes::EXT4_DE_REG_FILE => {
+            Ext4InodeType::EXT4_DE_REG_FILE => {
                 debug!("[do_create] type is reg file {}", path);
                 let mut file = Ext4File::new(path, types.clone().into());
                 if let Ok(_) = file.file_open(path, O_CREAT | O_TRUNC | O_RDWR) {
@@ -311,19 +312,19 @@ impl InodeTrait for Ext4Inode {
     /// 应当剥夺walk创造inode的权力todo
     fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         let mut file = self.file.lock();
-        if file.check_inode_exist(path, InodeTypes::EXT4_DE_DIR) {
+        if file.check_inode_exist(path, Ext4InodeType::EXT4_DE_DIR) {
             // let page_cache = None;
             let page_cache = Some(PageCache::new_bare());
             Some(Ext4Inode::new(
                 path,
-                InodeTypes::EXT4_DE_DIR,
+                Ext4InodeType::EXT4_DE_DIR,
                 page_cache.clone(),
             ))
-        } else if file.check_inode_exist(path, InodeTypes::EXT4_DE_REG_FILE) {
+        } else if file.check_inode_exist(path, Ext4InodeType::EXT4_DE_REG_FILE) {
             let page_cache = Some(PageCache::new_bare());
             Some(Ext4Inode::new(
                 path,
-                InodeTypes::EXT4_DE_REG_FILE,
+                Ext4InodeType::EXT4_DE_REG_FILE,
                 page_cache.clone(),
             ))
         } else {

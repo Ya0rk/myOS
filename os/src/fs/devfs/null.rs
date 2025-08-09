@@ -6,7 +6,7 @@ use crate::{
     fs::{
         ffi::RenameFlags, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR,
     },
-    mm::{page::Page},
+    mm::page::Page,
     utils::{Errno, SysResult},
 };
 use alloc::boxed::Box;
@@ -17,7 +17,7 @@ use alloc::{
 };
 use async_trait::async_trait;
 use log::info;
-use lwext4_rust::InodeTypes;
+use lwext4_rust::Ext4InodeType;
 use spin::Mutex;
 
 pub struct DevNull {

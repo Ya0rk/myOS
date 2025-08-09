@@ -22,7 +22,7 @@ use ext4::{file, Ext4Inode};
 pub use ext4::{ls, root_inode};
 pub use ffi::*;
 use lwext4_rust::bindings::{self, true_, O_CREAT, O_RDWR, O_TRUNC};
-use lwext4_rust::{Ext4File, InodeTypes};
+use lwext4_rust::{Ext4File, Ext4InodeType};
 // use page_cache::PageCache;
 pub use path::{path_test, resolve_path, AbsPath};
 // pub use inode_cache::*;

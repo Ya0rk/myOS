@@ -15,7 +15,7 @@ use alloc::{
 use async_trait::async_trait;
 use core::{any::Any, sync::atomic::AtomicUsize};
 use log::warn;
-use lwext4_rust::{Ext4File, InodeTypes};
+use lwext4_rust::{Ext4File, Ext4InodeType};
 use spin::Mutex;
 
 /// inode的基础字段
@@ -241,4 +241,3 @@ impl Downcast for dyn InodeTrait {
         self
     }
 }
-

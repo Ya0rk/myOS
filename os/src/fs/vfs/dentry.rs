@@ -8,7 +8,7 @@ use hashbrown::{HashMap, HashSet};
 use log::{error, info, warn};
 use lwext4_rust::{
     bindings::{false_, printf, true_},
-    InodeTypes,
+    Ext4InodeType,
 };
 // use riscv::{interrupt::Mutex, register::fcsr::read};
 // use sbi_rt::{NonRetentive, SharedPtr};

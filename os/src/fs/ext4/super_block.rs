@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 use log::info;
-use lwext4_rust::{Ext4BlockWrapper, InodeTypes};
+use lwext4_rust::{Ext4BlockWrapper, Ext4InodeType};
 
 use crate::{
     drivers::Disk,
@@ -26,7 +26,7 @@ impl Ext4SuperBlock {
         let inner =
             Ext4BlockWrapper::<Disk>::new(disk).expect("failed to initialize EXT4 filesystem");
         let page_cache = Some(PageCache::new_bare());
-        let root = Ext4Inode::new("/", InodeTypes::EXT4_DE_DIR, page_cache.clone());
+        let root = Ext4Inode::new("/", Ext4InodeType::EXT4_DE_DIR, page_cache.clone());
         Self { inner, root }
     }
 }
