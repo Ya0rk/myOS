@@ -7,6 +7,7 @@ use crate::{
     hal::config::{KERNEL_ADDR_OFFSET, MEMORY_END},
     mm::address::KernelAddr,
 };
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 // use riscv::addr::VirtAddr;
 use core::fmt::{self, Debug, Formatter};
@@ -104,20 +105,34 @@ impl FrameAllocator for StackFrameAllocator {
 }
 
 /// 硬编码释放ltp文件的pagecache
-fn release_ltp() {
-    let ltp_dentry = Dentry::get_dentry_from_path("/musl/ltp/testcases/bin")
-            .map_or(Dentry::get_dentry_from_path("/glibc/ltp/testcases/bin").unwrap(), |d| d);
-
-    ltp_dentry.with_children(|children| {
-        for (abs, child_inode) in children.iter().filter_map(|(abs, dentry)| {
-            dentry.get_inode().map(|inode| (abs, inode))
-        })
-        {
-            if let Some(cache) = child_inode.get_page_cache() {
-                cache.pages.write().clear();
+fn oom() -> Option<FrameTracker> {
+    fn release(dentry: Arc<Dentry>) {
+        dentry.with_children(|children| {
+            for (abs, child_inode) in children.iter().filter_map(|(abs, dentry)| {
+                dentry.get_inode().map(|inode| (abs, inode))
+            })
+            {
+                if let Some(cache) = child_inode.get_page_cache() {
+                    cache.pages.write().clear();
+                }
             }
-        }
-    });
+        });
+    }
+
+    let tmp_dentry = Dentry::get_dentry_from_path("/tmp").unwrap();
+
+    release(tmp_dentry);
+    let res = FRAME_ALLOCATOR.lock().alloc().map(FrameTracker::new);
+    if res.is_some() {
+        return res;
+    }
+
+    let ltp_dentry = Dentry::get_dentry_from_path("/musl/ltp/testcases/bin")
+        .or_else(|_| Dentry::get_dentry_from_path("/glibc/ltp/testcases/bin"))
+        .unwrap();
+
+    release(ltp_dentry);
+    FRAME_ALLOCATOR.lock().alloc().map(FrameTracker::new)
 }
 
 
@@ -144,8 +159,7 @@ pub fn frame_alloc() -> Option<FrameTracker> {
         return res;
     }
 
-    release_ltp();
-    FRAME_ALLOCATOR.lock().alloc().map(FrameTracker::new)
+    oom()
 }
 /// deallocate a frame
 pub fn frame_dealloc(ppn: PhysPageNum) {
