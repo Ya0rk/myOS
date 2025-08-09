@@ -43,7 +43,7 @@ CTestTestfile.cmake
 _deps
 CMakeUserPresets.json
 
-lwext4_rust/** 
+# lwext4_rust/** 
 cty/**
 vendor/**
 

@@ -271,7 +271,7 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
 
-    info!("[sys_execve]: path: {:?}, cwd: {:?}", path, cwd);
+    error!("[sys_execve]: path: {:?}, argv: {:?}, env: {:?}, cwd: {:?}", path, argv, env, cwd);
     // #[cfg(target_arch = "loongarch64")]
     if unlikely(
         cwd == "/glibc"
