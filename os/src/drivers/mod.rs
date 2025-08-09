@@ -5,6 +5,8 @@ pub mod tty;
 // pub mod dev_core;
 pub mod virtio_driver;
 pub mod vf2;
+#[cfg(feature = "2k1000la")]
+pub mod k1000la;
 
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 use alloc::{sync::Arc, vec::Vec};
@@ -33,9 +35,7 @@ lazy_static::lazy_static! {
 
 pub fn register_block_device(dev: Arc<dyn BlockDriver>) {
     let device = Device::BlockDevice(dev);
-    println!("bbbbbbbbb");
     DEVICE_SET.write().push(device);
-    println!("cccccccc");
 }
 
 /// 获得一个任意一个块设备

@@ -24,7 +24,7 @@ use log::{error, info};
 type Pid = u32;
 
 lazy_static! {
-    pub static ref TTY_INODE: Arc<DevTty> = Arc::new(DevTty::new());
+    pub static ref SBI_TTY_INODE: Arc<DevTty> = Arc::new(DevTty::new());
 }
 
 pub struct DevTty {
@@ -51,7 +51,7 @@ impl FileTrait for DevTty {
         false
     }
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        TTY_INODE.clone()
+        SBI_TTY_INODE.clone()
     }
     async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
         Ok(self.read_dirctly(0, user_buf).await)

@@ -1,5 +1,5 @@
 use super::{time::TimeSpec, yield_now, SpinNoIrqLock};
-use crate::{hal::arch::set_timer, hal::config::CLOCK_FREQ};
+use crate::{boards::CLOCK_FREQ, hal::arch::set_timer};
 use alloc::collections::binary_heap::BinaryHeap;
 use core::{cmp::Ordering, task::Waker, time::Duration};
 use spin::Lazy;

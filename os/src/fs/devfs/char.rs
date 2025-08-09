@@ -6,7 +6,7 @@ use crate::{drivers::tty::tty_core::{CharDevice, TTY}, fs::{Dirent, InodeTrait, 
 
 
 lazy_static!{
-    pub static ref TTY_INODE1: Arc<CharDevInode> = Arc::new(CharDevInode::new(TTY.clone()));
+    pub static ref VF2_TTY_INODE: Arc<CharDevInode> = Arc::new(CharDevInode::new(TTY.clone()));
 }
 
 pub struct CharDevInode {

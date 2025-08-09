@@ -10,7 +10,7 @@ use core::fmt::Debug;
 // }
 use alloc::vec;
 
-use crate::board::MEMORY_END;
+use crate::boards::MEMORY_END;
 use crate::mm::memory_space::vm_area::MapPerm;
 use crate::mm::page_table::KERNEL_PAGE_TABLE;
 use crate::mm::{frame_alloc, PageTable, PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};

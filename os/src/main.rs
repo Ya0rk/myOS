@@ -26,8 +26,7 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-#[path = "boards/qemu.rs"]
-mod board;
+mod boards;
 
 #[macro_use]
 mod console;

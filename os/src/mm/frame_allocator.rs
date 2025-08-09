@@ -1,10 +1,11 @@
 use super::{PhysAddr, PhysPageNum, VirtAddr};
+use crate::boards::MEMORY_END;
 use crate::fs::Dentry;
 use crate::mm::Paged;
 use crate::sync::SpinNoIrqLock;
 use crate::task::current_task;
 use crate::{
-    hal::config::{KERNEL_ADDR_OFFSET, MEMORY_END},
+    hal::config::{KERNEL_ADDR_OFFSET},
     mm::address::KernelAddr,
 };
 use alloc::sync::Arc;

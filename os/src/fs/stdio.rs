@@ -1,6 +1,6 @@
 use super::ffi::RenameFlags;
-use super::devfs::tty::TTY_INODE;
-use super::devfs::char::TTY_INODE1;
+use super::devfs::tty::SBI_TTY_INODE;
+use super::devfs::char::VF2_TTY_INODE;
 use super::FileTrait;
 use super::InodeTrait;
 use super::Kstat;
@@ -23,10 +23,10 @@ pub struct Stdin {
 impl Stdin {
     pub fn new() -> Self {
         Self {
-            #[cfg(feature = "board_qemu")]
-            inode: TTY_INODE.clone(),
+            #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+            inode: SBI_TTY_INODE.clone(),
             #[cfg(feature = "vf2")]
-            inode: TTY_INODE1.clone(),
+            inode: VF2_TTY_INODE.clone(),
         }
     }
 }
@@ -111,10 +111,10 @@ pub struct Stdout {
 impl Stdout {
     pub fn new() -> Self {
         Self {
-            #[cfg(feature = "board_qemu")]
-            inode: TTY_INODE.clone(),
+            #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+            inode: SBI_TTY_INODE.clone(),
             #[cfg(feature = "vf2")]
-            inode: TTY_INODE1.clone(),
+            inode: VF2_TTY_INODE.clone(),
         }
     }
 }

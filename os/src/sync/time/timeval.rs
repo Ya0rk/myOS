@@ -1,5 +1,4 @@
 use crate::{
-    board::CLOCK_FREQ,
     hal::arch::get_time,
     sync::{
         time_duration,

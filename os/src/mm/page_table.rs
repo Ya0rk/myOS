@@ -1,6 +1,5 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
-use crate::board::{MEMORY_END, MMIO};
 use crate::console::print;
 use crate::hal::arch::{kernel_token_write, sfence};
 use crate::mm::{Direct, PageNum};

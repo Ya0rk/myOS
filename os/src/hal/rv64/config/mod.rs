@@ -1,7 +1,6 @@
 //! `os/src/hal/rv64/config/mod.rs`
 //!
 //!
-pub use crate::board::{CLOCK_FREQ, MEMORY_END, MMIO};
 
 pub const KB: usize = 1024;
 #[allow(unused)]
