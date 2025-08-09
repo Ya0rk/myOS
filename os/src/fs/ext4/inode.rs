@@ -384,6 +384,7 @@ impl InodeTrait for Ext4Inode {
     }
 
     fn link(&self, bare_dentry: Arc<Dentry>) -> SysResult<usize> {
+        // block_on( async {self.sync().await});
         let types = { self.node_type().into() };
         let mut file = self.file.lock();
         if bare_dentry.is_valid() {
@@ -395,11 +396,23 @@ impl InodeTrait for Ext4Inode {
             file.file_path.to_str().unwrap(),
             new_path
         );
-
+        
+        // let mut file = self.file.lock();
+        // let path = file.get_path();
+        // let path = path.to_str().unwrap();
+        // file.file_open(path, O_RDWR)
+        //     .map_err(|_| Errno::EIO)
+        //     .unwrap();
+        // file.file_truncate(self.get_size() as u64)
+        //     .map_err(|_| Errno::EIO)
+        //     .unwrap();
+        // file.file_close()
+        //     .expect("[set_size]: file close fail!");
         match file.link(new_path) {
             Ok(_) => {
                 debug_point!("[ext4_link]");
                 let inode = Ext4Inode::new(&new_path, types, self.get_page_cache());
+                inode.set_size(self.get_size());
                 debug_point!("[ext4_link]");
                 bare_dentry.bind(inode);
                 debug_point!("[ext4_link]");
