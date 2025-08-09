@@ -83,4 +83,5 @@ const ENV: &[&str] = &[
     "LD_LIBRARY_PATH=/lib\0",
     "TERM=xterm\0",
     "LTPROOT=Ya0rk\0",
+    "GIT_PAGER=cat",
 ];
