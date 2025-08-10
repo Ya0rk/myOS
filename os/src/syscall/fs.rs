@@ -1153,7 +1153,7 @@ pub async fn sys_sendfile(
 pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let mut path = user_cstr(pathname.into())?.unwrap();
-    error!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
+    // error!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
 

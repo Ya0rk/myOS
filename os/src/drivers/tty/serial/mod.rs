@@ -1,4 +1,4 @@
-use crate::{drivers::{tty::termios, uart}, hal::{arch::interrupt::IrqHandler, config::{KERNEL_ADDR_OFFSET, UART_ADDR}}, sync::{get_waker, new_shared}};
+use crate::{drivers::{tty::termios, uart}, hal::{config::{KERNEL_ADDR_OFFSET, UART_ADDR}}, sync::{get_waker, new_shared}};
 use core::task::Waker;
 use alloc::{collections::vec_deque::VecDeque, sync::Arc, boxed::Box};
 use async_trait::async_trait;

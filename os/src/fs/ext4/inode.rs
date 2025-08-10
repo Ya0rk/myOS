@@ -429,7 +429,7 @@ impl InodeTrait for Ext4Inode {
 
     fn rename(&self, old_dentry: Arc<Dentry>, new_dentry: Arc<Dentry>) -> SysResult<usize> {
         // 注意到这里并没有，check old_dentry 是否是 self， 其实 self 这个参数是没有用的
-        error!("ext4 inode rename");
+        // error!("ext4 inode rename");
         block_on(async {
             old_dentry.clone().sync();
         });
