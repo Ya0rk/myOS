@@ -10,6 +10,7 @@ use crate::{
     sync::{block_on, new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult},
 };
+use alloc::boxed::Box;
 use async_trait::async_trait;
 use core::{error, sync::atomic::Ordering};
 use log::{debug, error, info, warn};
@@ -21,7 +22,7 @@ use lwext4_rust::{
     file, Ext4File, Ext4InodeType,
 };
 
-use alloc::boxed::Box;
+use alloc::sync::Weak;
 use alloc::vec;
 use alloc::{
     string::{String, ToString},
@@ -35,6 +36,8 @@ pub struct Ext4Inode {
     pub metadata: InodeMeta,
     pub file: Shared<Ext4File>,
     pub page_cache: Option<Arc<PageCache>>,
+    /// 表示软连接指向的 inode，当且仅当本 inode 是一个软链接的时候有效
+    pub symlinkInode: Option<Weak<Dentry>>,
 }
 
 unsafe impl Send for Ext4Inode {}
@@ -74,6 +77,7 @@ impl Ext4Inode {
             metadata: InodeMeta::new(file_type, file_size as usize, path),
             file: ext4file,
             page_cache: page_cache.clone(),
+            symlinkInode: None,
         });
         // 修改 inode.page_cache
         if let Some(pg) = &inode.page_cache {
@@ -92,10 +96,34 @@ impl Drop for Ext4Inode {
     }
 }
 
+impl Ext4Inode {
+    fn get_symlink(&self) -> Option<Arc<dyn InodeTrait>> {
+        if self.metadata.file_type == InodeType::SymLink {
+            let dentry = match &self.symlinkInode {
+                Some(x) => x,
+                None => return None,
+            };
+            let dentry = match dentry.upgrade() {
+                Some(x) => x,
+                None => return None,
+            };
+            let inode = match dentry.get_inode() {
+                Some(x) => x,
+                None => return None,
+            };
+            return Some(inode);
+        }
+        None
+    }
+}
+
 #[async_trait]
 impl InodeTrait for Ext4Inode {
     /// 检查inode是否有效
     fn is_valid(&self) -> bool {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().is_valid();
+        }
         let mut file = self.file.lock();
         let types = file.get_type();
         let c_path = file.get_path();
@@ -106,17 +134,26 @@ impl InodeTrait for Ext4Inode {
     }
 
     fn get_page_cache(&self) -> Option<Arc<PageCache>> {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().get_page_cache();
+        }
         return self.page_cache.as_ref().cloned();
     }
 
     /// 获取文件大小
     fn get_size(&self) -> usize {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().get_size();
+        }
         let size = self.metadata.size.load(Ordering::Relaxed);
         debug!("[get_size] {}", size);
         size
     }
 
     fn set_size(&self, new_size: usize) -> SysResult {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().set_size(new_size);
+        }
         self.metadata.size.store(new_size, Ordering::Relaxed);
         // info!("    [set_size] {}", new_size);
         Ok(())
@@ -124,6 +161,9 @@ impl InodeTrait for Ext4Inode {
 
     /// 创建文件或者目录,self是父目录,path是子文件的绝对路径,这里是要创建一个Inode
     fn do_create(&self, bare_dentry: Arc<Dentry>, types: InodeType) -> Option<Arc<dyn InodeTrait>> {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().do_create(bare_dentry, types);
+        }
         if bare_dentry.is_valid() {
             return None;
         }
@@ -177,6 +217,9 @@ impl InodeTrait for Ext4Inode {
     }
     /// 读取文件
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().read_at(offset, buf).await;
+        }
         info!(
             "[ext_inode read_at] file: {}, offset: {} size: {}",
             &self.metadata.path,
@@ -203,6 +246,9 @@ impl InodeTrait for Ext4Inode {
 
     /// 直接读取
     async fn read_dirctly(&self, offset: usize, buf: &mut [u8]) -> usize {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().read_dirctly(offset, buf).await;
+        }
         let mut file = self.file.lock();
         let path = file.get_path();
         let path = path.to_str().unwrap();
@@ -220,6 +266,9 @@ impl InodeTrait for Ext4Inode {
 
     /// 写入文件
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().write_at(offset, buf).await;
+        }
         info!(
             "[ext4_inode write_at] file: {}, offset: {}, len: {}",
             self.metadata.path,
@@ -245,6 +294,13 @@ impl InodeTrait for Ext4Inode {
     }
 
     async fn write_directly(&self, offset: usize, buf: &[u8]) -> usize {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self
+                .get_symlink()
+                .unwrap()
+                .write_directly(offset, buf)
+                .await;
+        }
         let file_size = self.get_size();
         if file_size < offset + buf.len() {
             self.set_size(buf.len() + offset)
@@ -268,6 +324,9 @@ impl InodeTrait for Ext4Inode {
 
     /// 改变文件size
     fn truncate(&self, size: usize) -> usize {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().truncate(size);
+        }
         let mut file = self.file.lock();
         info!("[inode truncate] size = {}", size);
         // TODO added by lsz: 这里必须打开
@@ -289,6 +348,9 @@ impl InodeTrait for Ext4Inode {
     }
     /// 同步文件
     async fn sync(&self) {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().sync().await;
+        }
         error!("[ext4Inode sync] do sync with pagecache");
         if let Some(cache) = &self.page_cache {
             cache.flush().await;
@@ -296,6 +358,10 @@ impl InodeTrait for Ext4Inode {
     }
     /// 读取文件所有内容
     async fn read_all(&self) -> SysResult<Vec<u8>> {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().read_all().await;
+        }
+
         debug!("[read_all] read all file, size = {}", self.get_size());
         let mut buf = vec![0; self.get_size()];
         // info!("got enough buf");
@@ -309,6 +375,10 @@ impl InodeTrait for Ext4Inode {
     ///
     /// 返回一个InodeTrait
     fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().look_up(path);
+        }
+
         let mut file = self.file.lock();
         if file.check_inode_exist(path, Ext4InodeType::EXT4_DE_DIR) {
             // let page_cache = None;
@@ -331,6 +401,10 @@ impl InodeTrait for Ext4Inode {
     }
     /// 获取文件状态
     fn fstat(&self) -> Kstat {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().fstat();
+        }
+
         let size = match self.metadata.size.load(Ordering::Relaxed) {
             0 => self.get_size(),
             size => size,
@@ -355,6 +429,10 @@ impl InodeTrait for Ext4Inode {
     /// 删除文件
     fn unlink(&self, valid_dentry: Arc<Dentry>) -> SysResult<usize> {
         // mayby bug? 这个用的parent cnt
+        if self.node_type() == InodeType::SymLink {
+            valid_dentry.release_self();
+            return Ok(0);
+        }
         self.sync();
         let mut lock_file = self.file.lock();
         info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
@@ -394,7 +472,7 @@ impl InodeTrait for Ext4Inode {
             file.file_path.to_str().unwrap(),
             new_path
         );
-        
+
         // let mut file = self.file.lock();
         // let path = file.get_path();
         // let path = path.to_str().unwrap();
@@ -420,7 +498,28 @@ impl InodeTrait for Ext4Inode {
         }
     }
 
+    fn symlink(&self, bare_dentry: Arc<Dentry>) -> SysResult<usize> {
+        // let mut new_inode = Self::new(&bare_dentry.get_abs_path(), InodeType::SymLink, Some(self));
+        let ext4file = new_shared(Ext4File::new("/", Ext4InodeType::EXT4_DE_SYMLINK));
+
+        let self_dentry = crate::fs::Dentry::get_dentry_from_path(&self.metadata.path)?;
+
+        let inode = Self {
+            metadata: InodeMeta::new(InodeType::SymLink, self.get_size(), "/"),
+            file: ext4file,
+            page_cache: None,
+            symlinkInode: Some(Arc::downgrade(&self_dentry)),
+        };
+        let new_inode: Arc<dyn InodeTrait> = Arc::new(inode);
+        bare_dentry.bind(new_inode);
+        Ok(0)
+    }
+
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
+        // BUG: 无法通过编译
+        // if self.metadata.file_type == InodeType::SymLink {
+        //     return &(self.get_symlink().unwrap().get_timestamp());
+        // }
         &self.metadata.timestamp
     }
     fn is_dir(&self) -> bool {
@@ -467,6 +566,10 @@ impl InodeTrait for Ext4Inode {
     }
 
     fn read_dents(&self) -> Option<Vec<Dirent>> {
+        if self.metadata.file_type == InodeType::SymLink {
+            return self.get_symlink().unwrap().read_dents();
+        }
+
         let ext4_file = self.file.lock();
         let dirs = ext4_file.read_dir_from(0).unwrap();
         let mut dir_entrys = Vec::new();

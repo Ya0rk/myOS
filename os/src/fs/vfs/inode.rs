@@ -186,6 +186,12 @@ pub trait InodeTrait: Any + Send + Sync {
         Err(Errno::EINVAL)
     }
 
+    /// 创建一个软连接，目标路径为 bare_dentry
+    /// 注意到，应当传入一个无效的（也就是没有被使用的）dentry
+    fn symlink(&self, bare_dentry: Arc<Dentry>) -> SysResult<usize> {
+        unimplemented!()
+    }
+
     /// Reads the entire contents of the file.
     ///
     /// # Returns
