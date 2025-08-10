@@ -5,6 +5,7 @@ pub mod tty;
 // pub mod dev_core;
 #[cfg(feature = "2k1000la")]
 pub mod k1000la;
+pub mod loongarch_cic;
 pub mod loongarch_icu;
 pub mod vf2;
 pub mod virtio_driver;
@@ -71,8 +72,4 @@ pub fn init(dtb_root: usize) {
     DEVICE_MANAGER.write().probe_initial(dt_root);
     #[cfg(target_arch = "riscv64")]
     crate::hal::rv64::arch::interrupt::plic_init();
-    unsafe {
-        crate::drivers::loongarch_icu::test_loongarch_icu(0x10000000 + KERNEL_ADDR_OFFSET);
-    }
 }
-
