@@ -1,8 +1,10 @@
+use alloc::{string::{String, ToString}, sync::Arc};
+use flat_device_tree::standard_nodes::Compatible;
 use log::{error, info};
 #[cfg(target_arch = "riscv64")]
 use riscv::addr::PhysAddr;
 
-use crate::{drivers::{device_new::dev_core::{PhysDevice, PhysDriver}, tty::serial::UartDriver}, utils::SysResult};
+use crate::{drivers::{device_new::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, tty::serial::UartDriver}, hal::{arch::interrupt, config::KERNEL_ADDR_OFFSET}, utils::SysResult};
 
 
 
@@ -53,10 +55,13 @@ macro_rules! wait_for {
 /// UART driver
 #[derive(Debug)]
 pub struct Uart16550Driver {
+    // path: String,
+    /// phys irq number
+    irq_number: Option<usize>,
     /// UART MMIO base address
     mmio_base_vaddr: usize,
-    clock_frequency: u32,
-    baud_rate: u32,
+    clock_frequency: usize,
+    baud_rate: usize,
     reg_io_width: usize,
     reg_shift: usize,
     is_snps: bool,
@@ -68,18 +73,22 @@ impl Uart16550Driver {
     /// This function is unsafe because the caller must ensure that the given
     /// base address really points to a serial port device.
     pub fn new(
+        // path: &str,
         mmio_base_vaddr: usize,
         clock_frequency: usize,
         baud_rate: usize,
         reg_io_width: usize,
         reg_shift: usize,
         is_snps: bool,
+        irq_number: Option<usize>,
     ) -> Self {
         // TODO: init in probe
         let mut ret = Self {
+            // path: path.to_string(),
+            irq_number,
             mmio_base_vaddr,
-            clock_frequency: clock_frequency as u32,
-            baud_rate: baud_rate as u32,
+            clock_frequency: clock_frequency,
+            baud_rate: baud_rate,
             reg_io_width,
             reg_shift,
             is_snps,
@@ -117,20 +126,23 @@ impl Uart16550Driver {
             // Disable Interrupt
             reg.byte_add(IER << self.reg_shift).write_volatile(0x00);
 
-            // // Enable DLAB
-            // // Enter a setting mode to set baud rate
-            // reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
+            if self.clock_frequency > 0 {
+                // Enable DLAB
+                // Enter a setting mode to set baud rate
+                reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
 
-            // // Set baud rate
-            // let divisor = self.clock_frequency / (16 * self.baud_rate);
-            // reg.byte_add(0 << self.reg_shift)
-            //     .write_volatile(divisor as u8);
-            // reg.byte_add(1 << self.reg_shift)
-            //     .write_volatile((divisor >> 8) as u8);
+                // Set baud rate
+                let divisor = self.clock_frequency / (16 * self.baud_rate);
+                reg.byte_add(0 << self.reg_shift)
+                    .write_volatile(divisor as u8);
+                reg.byte_add(1 << self.reg_shift)
+                    .write_volatile((divisor >> 8) as u8);
 
-            // // Disable DLAB and set data word length to 8 bits
-            // // Leave setting mode
-            // reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);
+                // Disable DLAB and set data word length to 8 bits
+                // Leave setting mode
+                reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);
+            }
+
 
             // // Enable FIFO
             // reg.byte_add(FCR << self.reg_shift).write_volatile(0x01);
@@ -151,20 +163,23 @@ impl Uart16550Driver {
             // Disable Interrupt
             reg.byte_add(IER << self.reg_shift).write_volatile(0x00);
 
-            // Enable DLAB
-            // Enter a setting mode to set baud rate
-            reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
+            if self.clock_frequency > 0 {
+                // Enable DLAB
+                // Enter a setting mode to set baud rate
+                reg.byte_add(LCR << self.reg_shift).write_volatile(0x80);
 
-            // Set baud rate
-            let divisor = self.clock_frequency / (16 * self.baud_rate);
-            reg.byte_add(0 << self.reg_shift)
-                .write_volatile(divisor & 0xff);
-            reg.byte_add(1 << self.reg_shift)
-                .write_volatile((divisor >> 8) & 0xff);
+                // Set baud rate
+                let divisor = self.clock_frequency / (16 * self.baud_rate);
+                let divisor = divisor as u32;
+                reg.byte_add(0 << self.reg_shift)
+                    .write_volatile(divisor & 0xff);
+                reg.byte_add(1 << self.reg_shift)
+                    .write_volatile((divisor >> 8) & 0xff);
 
-            // Disable DLAB and set data word length to 8 bits
-            // Leave setting mode
-            reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);
+                // Disable DLAB and set data word length to 8 bits
+                // Leave setting mode
+                reg.byte_add(LCR << self.reg_shift).write_volatile(0x03);                
+            }
 
             // Enable FIFO
             reg.byte_add(FCR << self.reg_shift).write_volatile(0x01);
@@ -282,8 +297,67 @@ impl UartDriver for Uart16550Driver {
     }
 }
 
-impl PhysDriver for Uart16550Driver {
-    fn probe(&self, device: &dyn PhysDevice) -> SysResult<()> {
-        Ok(())
+impl PhysDriverProbe for Uart16550Driver {
+    fn probe(fdt: &flat_device_tree::Fdt) -> Option<Arc<Self>> {
+        // todo!()
+        let chosen_stdout = fdt.chosen().ok().and_then(|chosen| chosen.stdout());
+        // let Some(chosen_stdout) = chosen_stdout else {
+        //     return None;
+        // };
+
+
+        let uart0 = chosen_stdout.map(|path| path.node())
+            .or( fdt.find_node("/soc/serial@10000000") ) // riscv general
+            .or( fdt.find_node("/2k1000-soc/serial@0x1fe20000") ) // ls2k
+            .or( fdt.find_node("/serial@1fe001e0") ) // la qemu virt
+            .or( fdt.find_compatible(&["ns16550a", "snps,dw-apb-uart", "sifive,uart0"]))?;
+
+        let compatible = uart0.compatible().and_then(|c| c.first()).unwrap_or("ns16550a");
+
+        // uart has only one mmio range
+        // must unwrap
+        let mmio_base = uart0.reg().next().unwrap().starting_address as usize;
+
+        let reg_io_width = uart0.property("reg-io-width")
+            .and_then( |p| p.as_usize())
+            .unwrap_or(1);
+
+        let reg_shift = uart0.property("reg-shift")
+            .and_then( |p| p.as_usize())
+            .unwrap_or(0);
+
+        let clock_frequency = uart0.property("clock-frequency")
+            .and_then( |p| p.as_usize())
+            .unwrap_or(0); 
+
+        let interrupt = uart0.interrupts().next();
+
+        let is_snps = compatible.contains("snps");
+
+        let uart_driver = Arc::new(Uart16550Driver::new(
+            mmio_base + KERNEL_ADDR_OFFSET,
+            clock_frequency,
+            115200,
+            reg_io_width,
+            reg_shift,
+            is_snps,
+            interrupt
+        ));
+
+
+
+        Some(uart_driver)
+
+
+
     }
+}    
+    
+impl PhysDriver for Uart16550Driver {
+    fn irq_number(&self) -> Option<usize> {
+        self.irq_number
+    }    
 }
+
+
+    

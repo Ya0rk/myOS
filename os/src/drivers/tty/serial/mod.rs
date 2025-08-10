@@ -1,4 +1,4 @@
-use crate::{drivers::{tty::termios, uart}, hal::{config::{KERNEL_ADDR_OFFSET, UART_ADDR}}, sync::{get_waker, new_shared}};
+use crate::{drivers::{device_new::{dev_core::PhysDriver, irq::HandleHardIrq}, tty::termios, uart}, hal::config::{KERNEL_ADDR_OFFSET, UART_ADDR}, sync::{get_waker, new_shared}};
 use core::task::Waker;
 use alloc::{collections::vec_deque::VecDeque, sync::Arc, boxed::Box};
 use async_trait::async_trait;
@@ -8,20 +8,20 @@ use crate::hal::arch::interrupt::IrqHandler;
 
 pub mod ns16550a;
 
-lazy_static! {
-    pub static ref UART_DRIVER: Arc<ns16550a::Uart16550Driver> = Arc::new(ns16550a::Uart16550Driver::new(
-        UART_ADDR,
-        0x16e3600,
-        115200,
-        1,
-        0,
-        true
-    ));
+// lazy_static! {
+//     pub static ref UART_DRIVER: Arc<ns16550a::Uart16550Driver> = Arc::new(ns16550a::Uart16550Driver::new(
+//         UART_ADDR,
+//         0x16e3600,
+//         115200,
+//         1,
+//         0,
+//         true
+//     ));
 
-    pub static ref SERIAL_DRIVER: Arc<SerialDriver> = Arc::new(SerialDriver::new(UART_DRIVER.clone()));
-}
+//     pub static ref SERIAL_DRIVER: Arc<SerialDriver> = Arc::new(SerialDriver::new(UART_DRIVER.clone()));
+// }
 
-pub trait UartDriver : Send + Sync + 'static {
+pub trait UartDriver : Send + Sync + PhysDriver + 'static {
     fn getc(&self) -> u8;
     fn putc(&self, c: u8);
     fn poll_in(&self) -> bool;
@@ -29,14 +29,15 @@ pub trait UartDriver : Send + Sync + 'static {
 }
 
 
+/// tty struct 和 uart 的中间层，发挥Linux中uart_port、tty_port的作用
 pub struct SerialDriver {
     pub uart: Arc<dyn UartDriver>,
     
     pub icbuffer: Shared<CharBuffer>,
     pub ocbuffer: Shared<CharBuffer>,
 
-    /// TODO:还没做
     pub read_queue: Shared<VecDeque<Waker>>,
+    /// TODO:还没做
     pub write_queue: Shared<VecDeque<Waker>>,
 }
 
@@ -117,8 +118,8 @@ impl SerialDriver {
     }
 }
 
-#[cfg(target_arch = "riscv64")]
-impl IrqHandler for SerialDriver {
+// #[cfg(target_arch = "riscv64")]
+impl HandleHardIrq for SerialDriver {
     fn handle_irq(&self) {
         while self.uart.poll_in() {
             let c = self.uart.getc();
