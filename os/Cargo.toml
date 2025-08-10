@@ -53,7 +53,7 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 default = [
-    "error", 
+    "info", 
     "test", 
     "mbshell", 
     "board_qemu" # 在quem上就开这个

@@ -48,6 +48,9 @@ impl Termios {
     pub fn is_opost(&self) -> bool {
         self.oflag.contains(OFlag::OPOST)
     }
+    pub fn is_isig(&self) -> bool {
+        self.lflag.contains(LFlag::ISIG)
+    }
 }
 
 

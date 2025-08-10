@@ -2,7 +2,7 @@ use core::future::Future;
 use alloc::{sync::Arc, vec::Vec, boxed::Box};
 use async_trait::async_trait;
 
-use crate::{drivers::tty::tty_core::{CharDevice, TTY}, fs::{Dirent, InodeTrait, InodeType, PageCache}, sync::{SpinNoIrqLock, TimeStamp}, utils::SysResult};
+use crate::{drivers::tty::tty_core::{CharDevice, TtyIoctlCmd, TTY}, fs::{Dirent, InodeTrait, InodeType, PageCache}, sync::{block_on, SpinNoIrqLock, TimeStamp}, utils::{Errno, SysResult}};
 
 
 lazy_static!{
@@ -38,6 +38,11 @@ impl InodeTrait for CharDevInode {
     }
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         None
+    }
+    fn ioctl(&self, op: usize, arg: usize) -> SysResult<usize> {
+        block_on(async{
+            self.dev.ioctl(TtyIoctlCmd::try_from(op).map_err(|_| Errno::EINVAL)?, arg).await
+        })
     }
 }
 
