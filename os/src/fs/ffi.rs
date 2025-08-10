@@ -1,5 +1,5 @@
 use bitflags::*;
-use lwext4_rust::InodeTypes;
+use lwext4_rust::Ext4InodeType;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -127,11 +127,11 @@ impl OpenFlags {
         self.contains(OpenFlags::O_WRONLY) || self.contains(OpenFlags::O_RDWR)
     }
 
-    pub fn node_type(&self) -> InodeTypes {
+    pub fn node_type(&self) -> Ext4InodeType {
         if self.contains(OpenFlags::O_DIRECTORY) {
-            InodeTypes::EXT4_DE_DIR
+            Ext4InodeType::EXT4_DE_DIR
         } else {
-            InodeTypes::EXT4_DE_REG_FILE
+            Ext4InodeType::EXT4_DE_REG_FILE
         }
     }
 }
@@ -242,48 +242,48 @@ impl InodeType {
     }
 }
 
-pub fn as_ext4_de_type(types: InodeType) -> InodeTypes {
+pub fn as_ext4_de_type(types: InodeType) -> Ext4InodeType {
     match types {
-        InodeType::BlockDevice => InodeTypes::EXT4_DE_BLKDEV,
-        InodeType::CharDevice => InodeTypes::EXT4_DE_CHRDEV,
-        InodeType::Dir => InodeTypes::EXT4_DE_DIR,
-        InodeType::Fifo => InodeTypes::EXT4_DE_FIFO,
-        InodeType::File => InodeTypes::EXT4_DE_REG_FILE,
-        InodeType::Socket => InodeTypes::EXT4_DE_SOCK,
-        InodeType::SymLink => InodeTypes::EXT4_DE_SYMLINK,
-        InodeType::Unknown => InodeTypes::EXT4_DE_UNKNOWN,
+        InodeType::BlockDevice => Ext4InodeType::EXT4_DE_BLKDEV,
+        InodeType::CharDevice => Ext4InodeType::EXT4_DE_CHRDEV,
+        InodeType::Dir => Ext4InodeType::EXT4_DE_DIR,
+        InodeType::Fifo => Ext4InodeType::EXT4_DE_FIFO,
+        InodeType::File => Ext4InodeType::EXT4_DE_REG_FILE,
+        InodeType::Socket => Ext4InodeType::EXT4_DE_SOCK,
+        InodeType::SymLink => Ext4InodeType::EXT4_DE_SYMLINK,
+        InodeType::Unknown => Ext4InodeType::EXT4_DE_UNKNOWN,
     }
 }
 
-impl From<InodeTypes> for InodeType {
-    fn from(types: InodeTypes) -> Self {
+impl From<Ext4InodeType> for InodeType {
+    fn from(types: Ext4InodeType) -> Self {
         match types {
-            InodeTypes::EXT4_DE_FIFO => InodeType::Fifo,
-            InodeTypes::EXT4_DE_CHRDEV => InodeType::CharDevice,
-            InodeTypes::EXT4_DE_DIR => InodeType::Dir,
-            InodeTypes::EXT4_DE_BLKDEV => InodeType::BlockDevice,
-            InodeTypes::EXT4_DE_REG_FILE => InodeType::File,
-            InodeTypes::EXT4_DE_SYMLINK => InodeType::SymLink,
-            InodeTypes::EXT4_DE_SOCK => InodeType::Socket,
-            InodeTypes::EXT4_INODE_MODE_DIRECTORY => InodeType::Dir,
-            InodeTypes::EXT4_INODE_MODE_FILE => InodeType::File,
+            Ext4InodeType::EXT4_DE_FIFO => InodeType::Fifo,
+            Ext4InodeType::EXT4_DE_CHRDEV => InodeType::CharDevice,
+            Ext4InodeType::EXT4_DE_DIR => InodeType::Dir,
+            Ext4InodeType::EXT4_DE_BLKDEV => InodeType::BlockDevice,
+            Ext4InodeType::EXT4_DE_REG_FILE => InodeType::File,
+            Ext4InodeType::EXT4_DE_SYMLINK => InodeType::SymLink,
+            Ext4InodeType::EXT4_DE_SOCK => InodeType::Socket,
+            Ext4InodeType::EXT4_INODE_MODE_DIRECTORY => InodeType::Dir,
+            Ext4InodeType::EXT4_INODE_MODE_FILE => InodeType::File,
             _ => unreachable!(),
         }
     }
 }
 
-pub fn as_inode_type(types: InodeTypes) -> InodeType {
+pub fn as_inode_type(types: Ext4InodeType) -> InodeType {
     match types {
-        InodeTypes::EXT4_DE_FIFO => InodeType::Fifo,
-        InodeTypes::EXT4_DE_CHRDEV => InodeType::CharDevice,
-        InodeTypes::EXT4_DE_DIR => InodeType::Dir,
-        InodeTypes::EXT4_DE_BLKDEV => InodeType::BlockDevice,
-        InodeTypes::EXT4_DE_REG_FILE => InodeType::File,
-        InodeTypes::EXT4_DE_SYMLINK => InodeType::SymLink,
-        InodeTypes::EXT4_DE_SOCK => InodeType::Socket,
+        Ext4InodeType::EXT4_DE_FIFO => InodeType::Fifo,
+        Ext4InodeType::EXT4_DE_CHRDEV => InodeType::CharDevice,
+        Ext4InodeType::EXT4_DE_DIR => InodeType::Dir,
+        Ext4InodeType::EXT4_DE_BLKDEV => InodeType::BlockDevice,
+        Ext4InodeType::EXT4_DE_REG_FILE => InodeType::File,
+        Ext4InodeType::EXT4_DE_SYMLINK => InodeType::SymLink,
+        Ext4InodeType::EXT4_DE_SOCK => InodeType::Socket,
 
-        InodeTypes::EXT4_INODE_MODE_DIRECTORY => InodeType::Dir,
-        InodeTypes::EXT4_INODE_MODE_FILE => InodeType::File,
+        Ext4InodeType::EXT4_INODE_MODE_DIRECTORY => InodeType::Dir,
+        Ext4InodeType::EXT4_INODE_MODE_FILE => InodeType::File,
 
         _ => {
             log::warn!("unknown file type: {:?}", types);
@@ -292,16 +292,16 @@ pub fn as_inode_type(types: InodeTypes) -> InodeType {
     }
 }
 
-impl From<InodeType> for InodeTypes {
+impl From<InodeType> for Ext4InodeType {
     fn from(types: InodeType) -> Self {
         match types {
-            InodeType::Fifo => InodeTypes::EXT4_DE_FIFO,
-            InodeType::CharDevice => InodeTypes::EXT4_DE_CHRDEV,
-            InodeType::Dir => InodeTypes::EXT4_DE_DIR,
-            InodeType::BlockDevice => InodeTypes::EXT4_DE_BLKDEV,
-            InodeType::File => InodeTypes::EXT4_DE_REG_FILE,
-            InodeType::SymLink => InodeTypes::EXT4_DE_SYMLINK,
-            InodeType::Socket => InodeTypes::EXT4_DE_SOCK,
+            InodeType::Fifo => Ext4InodeType::EXT4_DE_FIFO,
+            InodeType::CharDevice => Ext4InodeType::EXT4_DE_CHRDEV,
+            InodeType::Dir => Ext4InodeType::EXT4_DE_DIR,
+            InodeType::BlockDevice => Ext4InodeType::EXT4_DE_BLKDEV,
+            InodeType::File => Ext4InodeType::EXT4_DE_REG_FILE,
+            InodeType::SymLink => Ext4InodeType::EXT4_DE_SYMLINK,
+            InodeType::Socket => Ext4InodeType::EXT4_DE_SOCK,
             _ => unreachable!(),
         }
     }

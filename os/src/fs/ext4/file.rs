@@ -230,6 +230,7 @@ impl FileTrait for NormalFile {
             Some(x) => x,
             _ => return 0,
         };
+        info!("[exit_file][read_dents] dirs: {:?}", &dirs);
         // let mut res = 0;
         // let one_den_len = size_of::<Dirent>();
         let mut res = 0;

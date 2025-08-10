@@ -22,7 +22,7 @@ use ext4::{file, Ext4Inode};
 pub use ext4::{ls, root_inode};
 pub use ffi::*;
 use lwext4_rust::bindings::{self, true_, O_CREAT, O_RDWR, O_TRUNC};
-use lwext4_rust::{Ext4File, InodeTypes};
+use lwext4_rust::{Ext4File, Ext4InodeType};
 // use page_cache::PageCache;
 pub use path::{path_test, resolve_path, AbsPath};
 // pub use inode_cache::*;
@@ -95,6 +95,58 @@ pub async fn init() {
     mkdir("/dev".into(), 0);
 
     create_init_files().await;
+
+    // Test case for file hole created by truncate and write
+    println!("[fs test] start test file hole (truncate scenario)");
+    let test_file_path = "/hole_test_truncate".into();
+    if let Ok(FileClass::File(file)) = open(test_file_path, OpenFlags::O_CREAT | OpenFlags::O_RDWR)
+    {
+        // 1. Write initial data
+        let initial_data = "initial data".as_bytes();
+        file.write(initial_data).await.unwrap();
+        println!("[fs test] wrote initial data");
+
+        // 2. Truncate to 0
+        let inode = file.get_inode();
+        inode.truncate(0);
+        println!("[fs test] truncated file to 0");
+
+        // 3. Seek to a position > 0 to create a hole
+        let hole_size = 10;
+        file.lseek(hole_size as isize, SEEK_SET).unwrap();
+        println!("[fs test] seeked to {}", hole_size);
+
+        // 4. Write new data, creating a hole from 0 to 9
+        let new_data = "new data".as_bytes();
+        file.write(new_data).await.unwrap();
+        println!("[fs test] wrote new data after hole");
+
+        // 5. Seek back to the beginning to verify the hole
+        file.lseek(0, SEEK_SET).unwrap();
+        println!("[fs test] seeked to 0");
+
+        // 6. Read from the hole and verify it's all zeros
+        let mut hole_buf = [1u8; 10]; // Pre-fill with non-zero to be sure
+        let read_len = file.read(&mut hole_buf).await.unwrap();
+        assert_eq!(read_len, hole_size);
+        for &byte in hole_buf.iter() {
+            assert_eq!(byte, 0, "Byte in hole is not zero!");
+        }
+        println!("[fs test] hole content is verified to be zero");
+
+        // 7. Verify the data written after the hole
+        // The offset is now at the end of the hole (10)
+        let mut data_buf = [0u8; 8];
+        let read_len_data = file.read(&mut data_buf).await.unwrap();
+        assert_eq!(read_len_data, new_data.len());
+        assert_eq!(&data_buf[..read_len_data], new_data);
+        println!("[fs test] data after hole is verified");
+
+        println!("[fs test] file hole (truncate scenario) test pass");
+    } else {
+        println!("[fs test] file hole test fail: cannot create file");
+    }
+    // panic!("temp test");
 }
 
 pub async fn create_init_files() -> SysResult {
@@ -141,23 +193,22 @@ pub async fn create_init_files() -> SysResult {
     if let Ok(FileClass::File(file)) = open(
         "/etc/localtime".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
-    )
-    {
+    ) {
         let buf = "/etc/localtime  Fri Jul 19 12:34:56 2024 CST\0".as_bytes(); // 这里是提前往里面写数据
         file.write(&buf).await;
     };
-    
-    if let Ok(FileClass::File(file) ) = open(
+
+    if let Ok(FileClass::File(file)) = open(
         "/ltp_testcode_musl.sh".into(),
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
         let buf = ltp::MUSL_LTP_testcode.as_bytes();
         file.write(&buf).await;
     }
-    
-    if let Ok(FileClass::File(file) ) = open(
+
+    if let Ok(FileClass::File(file)) = open(
         "/ltp_testcode_glibc.sh".into(),
-        OpenFlags::O_CREAT | OpenFlags::O_RDWR
+        OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
         let buf = ltp::GLIBC_LTP_testcode.as_bytes();
         let buf = ltp::GLIBC_LTP_testcode.as_bytes();
@@ -278,7 +329,7 @@ pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<FileClass> {
         path.get(),
         flags
     );
-    debug_point!("    [open]");
+    // debug_point!("    [open]");
     // info!("[open] abspath = {}", abs_path.get());
     if !path.is_absolute() {
         // panic!("    [fs_open] path = {} is not absolte path.", path.get());

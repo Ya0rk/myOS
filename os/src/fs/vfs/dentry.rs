@@ -8,7 +8,7 @@ use hashbrown::{HashMap, HashSet};
 use log::{error, info, warn};
 use lwext4_rust::{
     bindings::{false_, printf, true_},
-    InodeTypes,
+    Ext4InodeType,
 };
 // use riscv::{interrupt::Mutex, register::fcsr::read};
 // use sbi_rt::{NonRetentive, SharedPtr};
@@ -124,6 +124,7 @@ impl Dentry {
     /// 注意到这个应该为单纯的名字而不是绝对路径
     fn new_bare(self: &Arc<Self>, path: &AbsPath) -> Arc<Self> {
         // info!("create bare {}", name);
+        // BUG: 应当设置为 neg？
         let mut inode = Vec::new();
         let res = Self {
             name: RwLock::new(path.get_filename()),
@@ -239,11 +240,11 @@ impl Dentry {
     }
     /// 当且仅当 pattern 这个文件无效或者不存在的时候会返回
     pub fn bare_child(self: Arc<Self>, pattern: &str) -> Option<Arc<Self>> {
-        // info!(
-        //     "[get_bare_child] {} try to create {}",
-        //     self.get_abs_path(),
-        //     pattern
-        // );
+        info!(
+            "[get_bare_child] {} try to create {}",
+            self.get_abs_path(),
+            pattern
+        );
         match self.get_status() {
             DentryStatus::Valid => {}
             DentryStatus::Unint => {
@@ -277,6 +278,19 @@ impl Dentry {
             .expect("failed to remove dentry from cache");
         // error!("[release_self] release dentry {}, ref count: {}", self.get_abs_path(), Arc::strong_count(&self));
         Ok(0)
+    }
+
+    pub async fn sync(self: Arc<Self>) {
+        debug_point!("");
+        if self.is_negtive() {
+            return;
+        }
+        if let Some(inode) = self.get_inode() {
+            inode.sync().await;
+        }
+        for child in self.children.write().values_mut() {
+            child.clone().sync();
+        }
     }
 
     /// 将一个dentry和inode绑定,如果inode是一个文件夹,就把为他的儿子创建一个新的dentry
@@ -377,7 +391,7 @@ impl Dentry {
 
     /// 根据绝对路径获取对应的inode
     pub fn get_inode_from_path(path: &str) -> SysResult<Arc<dyn InodeTrait>> {
-        // info!("[get_inode_from_path] {}", path);
+        info!("[get_inode_from_path] {}", path);
         Dentry::get_dentry_from_path(path)?
             .get_inode()
             .ok_or(Errno::ENOENT)

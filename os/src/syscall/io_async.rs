@@ -73,8 +73,6 @@ impl Future for IoFutrue {
                     Poll::Pending => unreachable!()
                 }
             }
-
-            
         }
 
         if res_vec.len() > 0 {
