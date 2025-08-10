@@ -3,10 +3,11 @@ pub mod device_new;
 pub mod disk;
 pub mod tty;
 // pub mod dev_core;
-pub mod virtio_driver;
-pub mod vf2;
 #[cfg(feature = "2k1000la")]
 pub mod k1000la;
+pub mod loongarch_icu;
+pub mod vf2;
+pub mod virtio_driver;
 
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 use alloc::{sync::Arc, vec::Vec};
@@ -62,4 +63,8 @@ pub fn init(dtb_root: usize) {
     crate::drivers::virtio_driver::probe::probe(dt_root as u64);
     #[cfg(target_arch = "riscv64")]
     crate::hal::rv64::arch::interrupt::plic_init();
+    unsafe {
+        crate::drivers::loongarch_icu::test_loongarch_icu(0x10000000 + KERNEL_ADDR_OFFSET);
+    }
 }
+
