@@ -401,7 +401,6 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
 
         _ => {
             log::error!("Unsupported syscall_id: {}", syscall_id);
-            log::error!("unimpl syscall: No.{}", syscall_id);
             Err(Errno::ENOSYS)
         }
     }
