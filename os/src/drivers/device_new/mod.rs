@@ -1,7 +1,7 @@
 
 use alloc::sync::Arc;
 
-use crate::drivers::{device_new::dev_number::MajorNumber, tty::tty_core::CharDevice, BlockDriver};
+use crate::drivers::{device_new::dev_number::MajorNumber, tty::tty_core::CharDevice, BlockDriver, DevResult};
 
 pub mod dev_core;
 pub mod dev_number;
@@ -29,10 +29,13 @@ pub trait Device : Send + Sync {
     fn as_block(self: Arc<Self>) -> Option<Arc<dyn BlockDevice>> {
         None
     }
+    // fn as_abs(self: Arc<Self>) -> Option<Arc<dyn BlockDevice>> {
+    //     None
+    // }
 }
 
 /// A specialized `Result` type for device operations.
-pub type DevResult<T = ()> = Result<T, DevError>;
+// pub type DevResult<T = ()> = Result<T, DevError>;
 /// The error type for device operation failures.
 #[derive(Debug)]
 pub enum DevError {
@@ -54,6 +57,7 @@ pub enum DevError {
     Unsupported,
 }
 
+// TODO: make it async
 /// Operations that require a block storage device driver to implement.
 pub trait BlockDevice: Device {
     /// The number of blocks in this storage device.

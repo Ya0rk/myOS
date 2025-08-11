@@ -2,16 +2,14 @@ use core::future::Future;
 use alloc::{sync::Arc, vec::Vec, boxed::Box};
 use async_trait::async_trait;
 
-use crate::{drivers::{device_new::{dev_number::MajorNumber, manager::DEVICE_MANAGER}, tty::tty_core::{CharDevice, TtyIoctlCmd}}, fs::{Dirent, InodeTrait, InodeType, PageCache}, sync::{block_on, SpinNoIrqLock, TimeStamp}, utils::{Errno, SysResult}};
+use crate::{drivers::{device_new::{dev_number::{CharMajorNum, MajorNumber}, manager::DEVICE_MANAGER}, tty::tty_core::{CharDevice, TtyIoctlCmd}}, fs::{Dirent, InodeTrait, InodeType, PageCache}, sync::{block_on, SpinNoIrqLock, TimeStamp}, utils::{Errno, SysResult}};
 
 
 lazy_static!{
     pub static ref VF2_TTY_INODE: Arc<CharDevInode> = Arc::new(
         CharDevInode::new(
             DEVICE_MANAGER.read()
-                .get_device(MajorNumber::Tty, 64)
-                .unwrap()
-                .as_char()
+                .get_char_dev(CharMajorNum::Tty, 64)
                 .unwrap()
         )
     );

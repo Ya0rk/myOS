@@ -3,13 +3,16 @@ use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::{Vec}};
 use alloc::vec;
 use embedded_hal::serial;
 use flat_device_tree::Fdt;
+// use riscv::register;
 use spin::{rwlock::RwLock};
+use virtio_drivers::{device::blk::VirtIOBlk, transport::{mmio::MmioTransport, pci::PciTransport}};
 
-use crate::drivers::{device_new::{dev_core::{PhysDriver, PhysDriverProbe}, dev_number::MajorNumber, irq::{HandleHardIrq, HardIrqHandler}, Device}, tty::{serial::{ns16550a::Uart16550Driver, SerialDriver, UartDriver}, tty_core::TtyStruct}};
+use crate::drivers::{device_new::{dev_core::{PhysDriver, PhysDriverProbe}, dev_number::{BlockMajorNum, CharMajorNum, MajorNumber}, irq::{HandleHardIrq, HardIrqHandler}, BlockDevice, Device}, tty::{serial::{ns16550a::Uart16550Driver, SerialDriver, UartDriver}, tty_core::{CharDevice, TtyStruct}}, VirtIoBlkDev, VirtIoHalImpl};
 
 
 pub struct DeviceManager {
-    pub device_table: BTreeMap<(MajorNumber, usize), Arc<dyn Device>>,
+    pub char_devs: BTreeMap<(CharMajorNum, usize), Arc<dyn CharDevice>>,
+    pub blk_devs: BTreeMap<(BlockMajorNum, usize), Arc<dyn BlockDevice>>,
     // pub drivers: Vec<Arc<dyn PhysDriver>>,
     pub irq_table: Vec<HardIrqHandler>,
     
@@ -20,6 +23,9 @@ pub struct DeviceManager {
     pub uarts: Vec<Arc<dyn UartDriver>>,
 
     serials: Vec<Arc<SerialDriver>>,
+
+    pub virtblks_mmio: Vec< Arc< VirtIoBlkDev<VirtIoHalImpl, MmioTransport<'static>> > >,
+    pub virtblks_pci: Vec< Arc< VirtIoBlkDev<VirtIoHalImpl, PciTransport> > >,
 
     // /// interrupt controller unit
     // pub ICU: Option<Arc<super::PLIC>>,
@@ -35,7 +41,8 @@ pub struct DeviceManager {
 impl DeviceManager {
     pub fn new() -> DeviceManager {
         DeviceManager {
-            device_table: BTreeMap::new(),
+            char_devs: BTreeMap::new(),
+            blk_devs: BTreeMap::new(),
             // drivers: Vec::new(),
             irq_table: vec![HardIrqHandler::new(); 256],
             // UART_DRIVER: None,
@@ -43,6 +50,9 @@ impl DeviceManager {
 
             uarts: Vec::new(),
             serials: Vec::new(),
+
+            virtblks_mmio: Vec::new(),
+            virtblks_pci: Vec::new(),
         }
     }
     pub fn validate_raw_fdt(&mut self, root_addr: usize) {
@@ -70,31 +80,93 @@ impl DeviceManager {
 
     pub fn register_ttys(&mut self) {
         self.register_serials();
-        let major = MajorNumber::Tty;
+        let major = CharMajorNum::Tty;
         let mut minor = 0;
         // TODO: virtual console
         minor = 64;
         for serial in self.serials.iter() {
-            let tty = TtyStruct::new(serial.clone(), major, minor);
-            self.device_table.insert((major, minor),  Arc::new(tty));
+            let tty = TtyStruct::new(serial.clone(), MajorNumber::Char(major), minor);
+            self.char_devs.insert((major, minor),  Arc::new(tty));
             minor += 1;
         }
     }
+
+    pub fn probe_virtio_blk(&mut self) {
+        // from mmio
+        let virtio_blk = VirtIoBlkDev::<VirtIoHalImpl, MmioTransport>::probe(&self.FDT.unwrap());
+        if let Some(virtio_blk) = virtio_blk {
+            self.virtblks_mmio.push(virtio_blk);
+        }
+
+        // from pci
+        let virtio_blk = VirtIoBlkDev::<VirtIoHalImpl, PciTransport>::probe(&self.FDT.unwrap());
+        if let Some(virtio_blk) = virtio_blk {
+            self.virtblks_pci.push(virtio_blk);
+        }
+    }
+
+    pub fn register_virtio_blk_dev(&mut self) {
+        /// 不重复就行
+        // let mut minor = 0;
+        for blk in self.virtblks_mmio.iter() {
+            // let virt_blk_dev = Arc::new(VirtIoBlkDev::new(blk.clone(), MajorNumber::Block(major), minor));
+            let virt_blk_dev = blk.clone();
+            let MajorNumber::Block(major) = blk.get_major() else { continue; };
+            let minor = blk.get_minor();
+            let ret = self.blk_devs.insert((major, minor), virt_blk_dev);
+            assert!(ret.is_none());
+        }
+
+        for blk in self.virtblks_pci.iter() {
+            // let virt_blk_dev = Arc::new(VirtIoBlkDev::new(blk.clone(), MajorNumber::Block(major), minor));
+            let virt_blk_dev = blk.clone();
+            let MajorNumber::Block(major) = blk.get_major() else { continue; };
+            let minor = blk.get_minor();
+            let ret = self.blk_devs.insert((major, minor), virt_blk_dev);
+            assert!(ret.is_none());
+        }
+    }
+
+
+
     pub fn probe_initial(&mut self, root_addr: usize) {
         self.validate_raw_fdt(root_addr);
         self.probe_uarts();
         self.register_ttys();
+        self.probe_virtio_blk();
+        self.register_virtio_blk_dev();
+    }
+
+    // pub fn register_char_dev(&mut self, dev: Arc<dyn CharDevice>, major: CharMajorNum, minor: usize) {
+    //     self.char_devs.insert((major, minor), dev);
+    // }
+
+    pub fn get_char_dev(&self, major: CharMajorNum, minor: usize) -> Option<Arc<dyn CharDevice>> {
+        self.char_devs.get(&(major, minor)).map(Arc::clone)
+    }
+
+    // pub fn register_block_dev(&mut self, dev: Arc<dyn BlockDevice>, major: BlockMajorNum, minor: usize) {
+    //     self.blk_devs.insert((major, minor), dev);
+    // }
+
+    pub fn get_block_dev(&self, major: BlockMajorNum, minor: usize) -> Option<Arc<dyn BlockDevice>> {
+        self.blk_devs.get(&(major, minor)).map(Arc::clone)
     }
 
     pub fn get_device(&self, major: MajorNumber, minor: usize) -> Option<Arc<dyn Device>> {
-        self.device_table.get(&(major, minor)).map(Arc::clone)
+        match major {
+            MajorNumber::Char(major) => self.get_char_dev(major, minor).map( | a | a as Arc<dyn Device> ),
+            MajorNumber::Block(major) => self.get_block_dev(major, minor).map( | a | a as Arc<dyn Device> ),
+        }
     }
+
 
     pub fn handle_irq(&self, irq_number: usize) {
         self.irq_table[irq_number].handle_irq();
     }
 }
 
+// TODO: remove the lock
 lazy_static!{
     pub static ref DEVICE_MANAGER: RwLock<DeviceManager> = RwLock::new(DeviceManager::new());
 }

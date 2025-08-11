@@ -17,7 +17,7 @@ use alloc::{
 };
 use async_trait::async_trait;
 use bitflags::bitflags;
-use core::fmt;
+use core::{error, fmt};
 use lazy_static::lazy_static;
 use log::{error, info};
 
@@ -83,6 +83,7 @@ impl FileTrait for DevTty {
 #[async_trait]
 impl InodeTrait for DevTty {
     async fn read_dirctly(&self, _offset: usize, buf: &mut [u8]) -> usize {
+        // error!("getchar");
         if buf.is_empty() {
             return 0;
         }

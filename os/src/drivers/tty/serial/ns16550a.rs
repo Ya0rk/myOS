@@ -297,8 +297,8 @@ impl UartDriver for Uart16550Driver {
     }
 }
 
-impl PhysDriverProbe for Uart16550Driver {
-    fn probe(fdt: &flat_device_tree::Fdt) -> Option<Arc<Self>> {
+impl<'b, 'a> PhysDriverProbe<'b, 'a> for Uart16550Driver {
+    fn probe(fdt: &'b flat_device_tree::Fdt<'a>) -> Option<Arc<Self>> {
         // todo!()
         let chosen_stdout = fdt.chosen().ok().and_then(|chosen| chosen.stdout());
         // let Some(chosen_stdout) = chosen_stdout else {

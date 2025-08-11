@@ -8,7 +8,7 @@ pub mod vf2;
 #[cfg(feature = "2k1000la")]
 pub mod k1000la;
 
-use crate::{drivers::device_new::manager::DEVICE_MANAGER, hal::config::KERNEL_ADDR_OFFSET};
+use crate::{drivers::device_new::{dev_number::BlockMajorNum, manager::DEVICE_MANAGER, BlockDevice}, hal::config::KERNEL_ADDR_OFFSET};
 use alloc::{sync::Arc, vec::Vec};
 use core::any::Any;
 use core::ptr::NonNull;
@@ -39,14 +39,18 @@ pub fn register_block_device(dev: Arc<dyn BlockDriver>) {
 }
 
 /// 获得一个任意一个块设备
-pub fn get_block_device() -> Option<Arc<dyn BlockDriver>> {
-    let device_set = DEVICE_SET.read();
-    for dev in device_set.iter() {
-        if let Device::BlockDevice(block_dev) = dev {
-            return Some(block_dev.clone());
-        }
-    }
-    None
+pub fn get_block_device() -> Option<Arc<dyn BlockDevice>> {
+    // let device_set = DEVICE_SET.read();
+    // for dev in device_set.iter() {
+    //     if let Device::BlockDevice(block_dev) = dev {
+    //         return Some(block_dev.clone());
+    //     }
+    // }
+
+    // None
+    let major = BlockMajorNum::VirtBlock;
+    let minor = 0;
+    DEVICE_MANAGER.read().get_block_dev(major, minor)
 }
 
 /// 设备的初始化
@@ -59,7 +63,7 @@ pub fn init(dtb_root: usize) {
     #[cfg(target_arch = "loongarch64")]
     let dt_root: usize = 0x9000_0000_0010_0000;
     info!("satrt probe fdt tree root: {:X}", dt_root);
-    crate::drivers::virtio_driver::probe::probe(dt_root as u64);
+    // crate::drivers::virtio_driver::probe::probe(dt_root as u64);
     DEVICE_MANAGER.write().probe_initial(dt_root);
     #[cfg(target_arch = "riscv64")]
     crate::hal::rv64::arch::interrupt::plic_init();
