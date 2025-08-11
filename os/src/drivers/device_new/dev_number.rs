@@ -1,10 +1,12 @@
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[repr(usize)]
 pub enum MajorNumber {
     /// Memory devices (/dev/null, /dev/zero, /dev/random, etc.)
     Mem = 1,
     /// TTY devices (serial ports, virtual consoles)
-    Serial = 4,
+    Tty = 4,
+    /// TTY auxiliary devices
+    TtyAux = 5,
     /// Loopback devices (/dev/loopX)
     Loop = 7,
     /// SCSI disk devices (/dev/sdX)

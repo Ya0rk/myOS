@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use alloc::{boxed::Box, sync::Arc, vec::{self, Vec}};
 use log::{error, info};
 use spin::RwLock;
-use crate::{drivers::{device_new::{dev_number::MajorNumber, Device, DeviceType}, tty::{self, serial::SERIAL_DRIVER, termios::{self, Termios, WinSize}}}, mm::user_ptr::{user_ref, user_ref_mut}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, Errno, SysResult}};
+use crate::{drivers::{device_new::{dev_number::MajorNumber, Device, DeviceType}, tty::{self, termios::{self, Termios, WinSize}}}, mm::user_ptr::{user_ref, user_ref_mut}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, Errno, SysResult}};
 
 #[async_trait]
 pub trait CharDevice : Device + Send + Sync + 'static {
@@ -17,9 +17,9 @@ pub trait CharDevice : Device + Send + Sync + 'static {
     async fn poll_out(&self) -> bool;
 }
 
-lazy_static! {
-    pub static ref TTY: Arc<TtyBase> = Arc::new(TtyBase::new(SERIAL_DRIVER.clone(), MajorNumber::Serial, 64));
-}
+// lazy_static! {
+//     pub static ref TTY: Arc<TtyBase> = Arc::new(TtyBase::new(SERIAL_DRIVER.clone(), MajorNumber::Tty, 64));
+// }
 
 
 #[async_trait]
@@ -71,26 +71,26 @@ pub enum TtyLineDiscMode {
 
 #[async_trait]
 pub trait LineDiscPolicy : Sync + Send + 'static {
-    async fn read(&self, tty: &TtyBase, buf: &mut [u8]) -> usize;
-    async fn write(&self, tty: &TtyBase, buf: &[u8]) -> usize;
-    async fn poll_in(&self, tty: &TtyBase) -> bool;
-    async fn poll_out(&self, tty: &TtyBase) -> bool;
+    async fn read(&self, tty: &TtyStruct, buf: &mut [u8]) -> usize;
+    async fn write(&self, tty: &TtyStruct, buf: &[u8]) -> usize;
+    async fn poll_in(&self, tty: &TtyStruct) -> bool;
+    async fn poll_out(&self, tty: &TtyStruct) -> bool;
     /// TODO: validate_termios is a more adaptable choice
-    async fn set_mode(&self, tty: &TtyBase, mode: TtyLineDiscMode);
+    async fn set_mode(&self, tty: &TtyStruct, mode: TtyLineDiscMode);
 }
 
 
 pub struct TtyLineDisc;
 
 impl TtyLineDisc {
-    pub async fn read_raw(tty: &TtyBase, buf: &mut [u8]) -> usize {
+    pub async fn read_raw(tty: &TtyStruct, buf: &mut [u8]) -> usize {
         tty.driver.read(buf).await
     }
 }
 
 /// TODO：暂未完善
 impl TtyLineDisc {
-    pub async fn read_canonical(tty: &TtyBase, buf: &mut [u8]) -> usize {
+    pub async fn read_canonical(tty: &TtyStruct, buf: &mut [u8]) -> usize {
 
         loop {
             let c = tty.driver.readc().await;
@@ -110,14 +110,14 @@ impl TtyLineDisc {
 
 #[async_trait]
 impl LineDiscPolicy for TtyLineDisc {
-    async fn read(&self, tty: &TtyBase, buf: &mut [u8]) -> usize {
+    async fn read(&self, tty: &TtyStruct, buf: &mut [u8]) -> usize {
         let mode = tty.n_tty_mode.read().clone();
         match mode {
             TtyLineDiscMode::Raw => TtyLineDisc::read_raw(tty, buf).await,
             TtyLineDiscMode::Canonical => TtyLineDisc::read_canonical(tty, buf).await,
         }
     }
-    async fn write(&self, tty: &TtyBase, _buf: &[u8]) -> usize {
+    async fn write(&self, tty: &TtyStruct, _buf: &[u8]) -> usize {
         let mut buf = Vec::<u8>::new();
         let opost = tty.termios.read().is_opost();
         let onlcr = tty.termios.read().is_onlcr();
@@ -135,19 +135,19 @@ impl LineDiscPolicy for TtyLineDisc {
         tty.driver.write(&buf).await;
         len
     }
-    async fn poll_in(&self, tty: &TtyBase) -> bool {
+    async fn poll_in(&self, tty: &TtyStruct) -> bool {
         tty.driver.poll_in().await
     }
-    async fn poll_out(&self, tty: &TtyBase) -> bool {
+    async fn poll_out(&self, tty: &TtyStruct) -> bool {
         tty.driver.poll_out().await
         // true
     }
-    async fn set_mode(&self, tty: &TtyBase, mode: TtyLineDiscMode) {
+    async fn set_mode(&self, tty: &TtyStruct, mode: TtyLineDiscMode) {
         *tty.n_tty_mode.write() = mode;
     }
 }
 
-pub struct TtyBase {
+pub struct TtyStruct {
     pub driver: Arc<dyn TtyDriver>,
 
     pub termios: RwLock<termios::Termios>,
@@ -169,9 +169,9 @@ pub struct TtyBase {
 
 
 
-impl TtyBase {
-    pub fn new(driver: Arc<dyn TtyDriver>, major: MajorNumber, minor: usize) -> TtyBase {
-        TtyBase {
+impl TtyStruct {
+    pub fn new(driver: Arc<dyn TtyDriver>, major: MajorNumber, minor: usize) -> TtyStruct {
+        TtyStruct {
             driver,
             termios: RwLock::new(termios::Termios::new()),
             n_tty_mode: RwLock::new(TtyLineDiscMode::Raw),
@@ -196,7 +196,7 @@ impl TtyBase {
 }
 
 
-impl Device for TtyBase {
+impl Device for TtyStruct {
     fn get_type(&self) -> DeviceType {
         DeviceType::Char
     }
@@ -210,11 +210,14 @@ impl Device for TtyBase {
         // TODO
         self.minor
     }
+    fn as_char(self: Arc<Self>) -> Option<Arc<dyn CharDevice>> {
+        Some(self)
+    }
 }
 
 
 #[async_trait]
-impl CharDevice for TtyBase {
+impl CharDevice for TtyStruct {
     async fn read(&self, buf: &mut [u8]) -> usize {
         self.with_ldisc( |ldisc| {
             ldisc.read(self, buf)

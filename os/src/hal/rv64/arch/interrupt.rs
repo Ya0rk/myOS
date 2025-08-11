@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::{sie, sstatus};
 
-use crate::{drivers::tty::serial::SERIAL_DRIVER, START_HART_ID};
+use crate::{drivers::{device_new::manager::DEVICE_MANAGER}, START_HART_ID};
 
 const VIRT_PLIC: usize = 0xffff_ffc0_0000_0000 + 0xC00_0000;
 
@@ -89,18 +89,19 @@ pub fn irq_handler() {
     let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
     let hart_id = START_HART_ID.load(Ordering::SeqCst);
     let intr_src_id = plic.claim(hart_id, IntrTargetPriority::Supervisor);
-    use log::info;
-    match intr_src_id {
-        5 => info!("[irq_handler] extern irq from keyboard"),
-        6 => info!("[irq_handle] extern irq from mouse"),
-        8 => info!("[irq_handle] extern irq from blockd evice"),
-        32 => {
-            // TODO: 暂时硬编码，后面需要实现
-            info!("[irq_handler] extern irq from uart");
-            SERIAL_DRIVER.handle_irq();
-        },
-        _ => panic!("unsupported IRQ {}", intr_src_id),
-    }
+    DEVICE_MANAGER.read().handle_irq(intr_src_id as usize);
+    // use log::info;
+    // match intr_src_id {
+    //     5 => info!("[irq_handler] extern irq from keyboard"),
+    //     6 => info!("[irq_handle] extern irq from mouse"),
+    //     8 => info!("[irq_handle] extern irq from blockd evice"),
+    //     32 => {
+    //         // TODO: 暂时硬编码，后面需要实现
+    //         info!("[irq_handler] extern irq from uart");
+    //         SERIAL_DRIVER.handle_irq();
+    //     },
+    //     _ => panic!("unsupported IRQ {}", intr_src_id),
+    // }
     plic.complete(hart_id, IntrTargetPriority::Supervisor, intr_src_id);
 }
 

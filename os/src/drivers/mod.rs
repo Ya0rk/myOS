@@ -8,7 +8,7 @@ pub mod vf2;
 #[cfg(feature = "2k1000la")]
 pub mod k1000la;
 
-use crate::hal::config::KERNEL_ADDR_OFFSET;
+use crate::{drivers::device_new::manager::DEVICE_MANAGER, hal::config::KERNEL_ADDR_OFFSET};
 use alloc::{sync::Arc, vec::Vec};
 use core::any::Any;
 use core::ptr::NonNull;
@@ -60,6 +60,7 @@ pub fn init(dtb_root: usize) {
     let dt_root: usize = 0x9000_0000_0010_0000;
     info!("satrt probe fdt tree root: {:X}", dt_root);
     crate::drivers::virtio_driver::probe::probe(dt_root as u64);
+    DEVICE_MANAGER.write().probe_initial(dt_root);
     #[cfg(target_arch = "riscv64")]
     crate::hal::rv64::arch::interrupt::plic_init();
 }
