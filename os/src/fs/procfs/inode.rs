@@ -1,7 +1,6 @@
 use crate::{
     fs::{
-        dirent::build_dirents, ffi::MEMINFO, open, AbsPath, Dirent, FileClass, InodeTrait,
-        InodeType, Kstat, OpenFlags,
+        dirent::build_dirents, ffi::MEMINFO, open, procfs::irqtable::{SupervisorExternal, SupervisorTimer, IRQTABLE}, AbsPath, Dirent, FileClass, InodeTrait, InodeType, Kstat, OpenFlags
     },
     mm::frame_allocator::{FrameAllocator, StackFrameAllocator, FRAME_ALLOCATOR},
     sync::{SpinNoIrqLock, TimeStamp},
@@ -39,6 +38,8 @@ pub enum ProcFsInodeInner {
     meminfo,
     /// 记录当前系统挂载的所有文件系统信息(busybox的df测例)
     mounts,
+    /// 记录中断次数
+    interrupts,
 }
 
 /// ProcFsInode is a struct that represents an inode in the proc filesystem.
@@ -92,6 +93,7 @@ impl InodeTrait for ProcFsInode {
             ProcFsInodeInner::exe => crate::fs::InodeType::File,
             ProcFsInodeInner::meminfo => crate::fs::InodeType::File,
             ProcFsInodeInner::mounts => crate::fs::InodeType::File,
+            ProcFsInodeInner::interrupts => crate::fs::InodeType::File,
         }
     }
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
@@ -132,6 +134,18 @@ MemAvailable: {mem_available:>10} kB
                 if offset < len {
                     let read_len = core::cmp::min(len - offset, buf.len());
                     buf[..read_len].copy_from_slice(&meminfo[offset..offset + read_len]);
+                    read_len
+                } else {
+                    0
+                }
+            }
+            ProcFsInodeInner::interrupts => {
+                let irqinfo = IRQTABLE.lock().tostring();
+                let irqinfo = Vec::from(irqinfo);
+                let len = irqinfo.len();
+                if offset < len {
+                    let read_len = core::cmp::min(len - offset, buf.len());
+                    buf[..read_len].copy_from_slice(&irqinfo[offset..offset + read_len]);
                     read_len
                 } else {
                     0
@@ -199,6 +213,9 @@ MemAvailable: {mem_available:>10} kB
                 let mut buf = Vec::from(meminfo);
                 Ok(buf)
             }
+            ProcFsInodeInner::interrupts => {
+                Ok(Vec::from(IRQTABLE.lock().tostring()))
+            }
             _ => {
                 // error!("[read_all] is a directory");
                 Err(crate::utils::Errno::EISDIR)
@@ -215,6 +232,8 @@ MemAvailable: {mem_available:>10} kB
                     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::meminfo)))
                 } else if pattern == "mounts" {
                     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::mounts)))
+                } else if pattern == "interrupts" {
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::interrupts)))
                 } else {
                     None
                 }
@@ -248,6 +267,12 @@ MemAvailable: {mem_available:>10} kB
                 res.st_size = MEMINFO.len() as i64;
                 res
             }
+            ProcFsInodeInner::interrupts => {
+                res.st_mode = InodeType::File as u32;
+                res.st_nlink = 1;
+                res.st_size = IRQTABLE.lock().tostring().len() as i64;
+                res
+            }
             _ => {
                 // error!("[fstat] is a directory");
                 res.st_mode = 16877;
@@ -279,6 +304,7 @@ MemAvailable: {mem_available:>10} kB
                     ("self", 2, 4),
                     ("meminfo", 3, 8),
                     ("mounts", 4, 8),
+                    ("interrupts", 5, 8),
                 ];
 
                 Some(build_dirents(entries))

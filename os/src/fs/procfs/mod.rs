@@ -3,6 +3,7 @@ use super_block::ProcFsSuperBlock;
 
 pub mod inode;
 pub mod super_block;
+pub mod irqtable;
 
 lazy_static! {
     /// procfs的超级块

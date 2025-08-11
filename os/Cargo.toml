@@ -43,6 +43,7 @@ num-traits = { version = "0.2.19", default-features = false}
 visionfive2-sd = { path = "../vendor/visionfive2-sd" }
 bitfield-struct = "0.11"
 embedded-hal = "=1.0.0-alpha.7"
+ahci_driver = { git = "https://github.com/Tikifire/ls2k1000la_driver.git" }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = { path = "../vendor/riscv", features = ["inline-asm"] }
@@ -53,7 +54,7 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 default = [
-    "info", 
+    "error", 
     "test", 
     "mbshell", 
     "board_qemu" # 在quem上就开这个
