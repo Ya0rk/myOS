@@ -33,6 +33,6 @@ extract:
 	tar -xvzf vendor.tar.gz 
 
 tar:
-	tar -cvzf vendor.tar.gz ./vendor
+	tar -cvzf vendor.tar.gz ./vendor ./cty
 
 .PHONY: all clean doc docker build_docker run extract 
