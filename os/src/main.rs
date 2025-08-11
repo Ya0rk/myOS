@@ -185,7 +185,7 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
             // error!("[hash] {:#x} {:#x}", h_a, h_b);
             // panic!();
         }
-        crate::utils::container::lru::Lru::<i32, usize>::test_lru();
+        // crate::utils::container::lru::Lru::<i32, usize>::test_lru();
 
         task::init_processors();
         spawn_kernel_task(async move { task::add_initproc().await });

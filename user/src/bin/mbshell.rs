@@ -36,7 +36,6 @@ fn run_cmd(cmd: &str) {
 
 #[no_mangle]
 fn main() -> i32 {
-    // run_cmd("/musl/busybox --install /bin\0");
     // println!("finish install");
     // // 拷贝动态库到指定位置,这里是musl的动态库
     // #[cfg(target_arch = "loongarch64")]
@@ -64,8 +63,9 @@ fn main() -> i32 {
     let child_pid = fork();
     if child_pid == 0 {
         // println!("main run sh");
-        // run_cmd("/bin/sh\0");
-        execve("/musl/busybox\0", &["/musl/busybox\0", "sh\0"], ENV);
+        run_cmd("/musl/busybox --install /bin\0");
+        run_cmd("/bin/sh\0");
+        // execve("/musl/busybox\0", &["/musl/busybox\0", "sh\0"], ENV);
         exit(0);
     } else {
         // println!("main parent");
