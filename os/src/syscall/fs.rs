@@ -1163,10 +1163,10 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
     } else {
         // 相对路径，以 fd 对应的目录为起点
         if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
-            error!(
-                "[sys_faccessat] return EBADF dirfd: {}, pathname: {}",
-                dirfd, path
-            );
+            // error!(
+            //     "[sys_faccessat] return EBADF dirfd: {}, pathname: {}",
+            //     dirfd, path
+            // );
             return Err(Errno::EBADF);
         }
         let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -1182,38 +1182,38 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         let file = file_class.file()?;
         let inode = file.get_inode();
         if mode.contains(FaccessatMode::F_OK) {
-            error!(
-                "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
-                dirfd, path
-            );
+            // error!(
+            //     "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
+            //     dirfd, path
+            // );
             return Ok(0);
         }
         if mode.contains(FaccessatMode::R_OK) && !file.readable() {
-            error!(
-                "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
-                dirfd, path
-            );
+            // error!(
+            //     "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
+            //     dirfd, path
+            // );
             return Err(Errno::EACCES);
         }
         if mode.contains(FaccessatMode::W_OK) && !file.writable() {
-            error!(
-                "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
-                dirfd, path
-            );
+            // error!(
+            //     "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
+            //     dirfd, path
+            // );
             return Err(Errno::EACCES);
         }
         if mode.contains(FaccessatMode::X_OK) && !file.executable() {
-            error!(
-                "[sys_faccessat] return no executable dirfd: {}, pathname: {}",
-                dirfd, path
-            );
+            // error!(
+            //     "[sys_faccessat] return no executable dirfd: {}, pathname: {}",
+            //     dirfd, path
+            // );
             return Err(Errno::EACCES);
         }
     } else {
-        error!(
-            "[sys_faccessat] return ENOENT dirfd: {}, pathname: {}",
-            dirfd, path
-        );
+        // error!(
+        //     "[sys_faccessat] return ENOENT dirfd: {}, pathname: {}",
+        //     dirfd, path
+        // );
         return Err(Errno::ENOENT);
     }
     Ok(0)
