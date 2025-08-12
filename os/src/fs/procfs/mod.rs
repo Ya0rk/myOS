@@ -1,9 +1,11 @@
 use alloc::sync::Arc;
 use super_block::ProcFsSuperBlock;
 
+pub mod domainname;
+pub mod info_node;
 pub mod inode;
-pub mod super_block;
 pub mod irqtable;
+pub mod super_block;
 
 lazy_static! {
     /// procfs的超级块

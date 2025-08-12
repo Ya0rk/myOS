@@ -1,6 +1,15 @@
+use core::ops::DerefMut;
+
 use crate::{
     fs::{
-        dirent::build_dirents, ffi::MEMINFO, open, procfs::irqtable::{SupervisorExternal, SupervisorTimer, IRQTABLE}, AbsPath, Dirent, FileClass, InodeTrait, InodeType, Kstat, OpenFlags
+        dirent::build_dirents,
+        ffi::MEMINFO,
+        open,
+        procfs::{
+            domainname::{DOMAINNAME, PIPE_MAX_SIZE},
+            irqtable::{SupervisorExternal, SupervisorTimer, IRQTABLE},
+        },
+        AbsPath, Dirent, FileClass, InodeTrait, InodeType, Kstat, ModeFlag, OpenFlags, StMode,
     },
     mm::frame_allocator::{FrameAllocator, StackFrameAllocator, FRAME_ALLOCATOR},
     sync::{SpinNoIrqLock, TimeStamp},
@@ -14,6 +23,7 @@ use alloc::{
 };
 use async_trait::async_trait;
 use log::error;
+use log::info;
 use lwext4_rust::bindings::O_RDONLY;
 
 /// ProcFsInodeInner 是一个枚举类型, 代表proc文件系统中的inode的类型
@@ -40,6 +50,16 @@ pub enum ProcFsInodeInner {
     mounts,
     /// 记录中断次数
     interrupts,
+    /// 记录最大的 pipe 大小
+    pipe_max_size,
+    ///
+    domainname,
+    ///
+    fs,
+    ///
+    kernel,
+    ///
+    sys,
 }
 
 /// ProcFsInode is a struct that represents an inode in the proc filesystem.
@@ -94,6 +114,11 @@ impl InodeTrait for ProcFsInode {
             ProcFsInodeInner::meminfo => crate::fs::InodeType::File,
             ProcFsInodeInner::mounts => crate::fs::InodeType::File,
             ProcFsInodeInner::interrupts => crate::fs::InodeType::File,
+            ProcFsInodeInner::fs => crate::fs::InodeType::Dir,
+            ProcFsInodeInner::kernel => crate::fs::InodeType::Dir,
+            ProcFsInodeInner::pipe_max_size => crate::fs::InodeType::File,
+            ProcFsInodeInner::domainname => crate::fs::InodeType::File,
+            ProcFsInodeInner::sys => crate::fs::InodeType::Dir,
         }
     }
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
@@ -151,6 +176,33 @@ MemAvailable: {mem_available:>10} kB
                     0
                 }
             }
+            ProcFsInodeInner::domainname => {
+                debug_point!("");
+                let domainname = format!("(none)");
+
+                let meminfo = Vec::from(domainname);
+                let len = meminfo.len();
+                if offset < len {
+                    let read_len = core::cmp::min(len - offset, buf.len());
+                    buf[..read_len].copy_from_slice(&meminfo[offset..offset + read_len]);
+                    read_len
+                } else {
+                    0
+                }
+            }
+            ProcFsInodeInner::pipe_max_size => {
+                let pipe_max_size = format!("1048576");
+
+                let meminfo = Vec::from(pipe_max_size);
+                let len = meminfo.len();
+                if offset < len {
+                    let read_len = core::cmp::min(len - offset, buf.len());
+                    buf[..read_len].copy_from_slice(&meminfo[offset..offset + read_len]);
+                    read_len
+                } else {
+                    0
+                }
+            }
             _ => {
                 // error!("[read_at] is a directory");
                 0
@@ -159,17 +211,32 @@ MemAvailable: {mem_available:>10} kB
     }
     async fn read_dirctly(&self, offset: usize, buf: &mut [u8]) -> usize {
         // 疑似被弃用
-        0
+        self.read_at(offset, buf).await
     }
 
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         // 非常重要
         // 这里不能write_at
-        0
+        debug_point!("");
+        match self.inner {
+            ProcFsInodeInner::domainname => {
+                debug_point!("");
+                DOMAINNAME.lock().write(buf)
+            }
+            ProcFsInodeInner::pipe_max_size => {
+                debug_point!("");
+                PIPE_MAX_SIZE.lock().write(buf)
+            }
+            _ => 0,
+        }
     }
     async fn write_directly(&self, offset: usize, buf: &[u8]) -> usize {
         // 这里不能write_directly
-        0
+        debug_point!("");
+        match self.inner {
+            ProcFsInodeInner::domainname => DOMAINNAME.lock().write(buf),
+            _ => 0,
+        }
     }
     fn truncate(&self, size: usize) -> usize {
         // 这里不能truncate
@@ -213,9 +280,7 @@ MemAvailable: {mem_available:>10} kB
                 let mut buf = Vec::from(meminfo);
                 Ok(buf)
             }
-            ProcFsInodeInner::interrupts => {
-                Ok(Vec::from(IRQTABLE.lock().tostring()))
-            }
+            ProcFsInodeInner::interrupts => Ok(Vec::from(IRQTABLE.lock().tostring())),
             _ => {
                 // error!("[read_all] is a directory");
                 Err(crate::utils::Errno::EISDIR)
@@ -233,7 +298,26 @@ MemAvailable: {mem_available:>10} kB
                 } else if pattern == "mounts" {
                     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::mounts)))
                 } else if pattern == "interrupts" {
-                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::interrupts)))
+                    Some(Arc::new(ProcFsInode::new(
+                        path,
+                        ProcFsInodeInner::interrupts,
+                    )))
+                // } else if pattern == "pipe-max-size" {
+                //     Some(Arc::new(ProcFsInode::new(
+                //         path,
+                //         ProcFsInodeInner::pipe_max_size,
+                //     )))
+                // } else if pattern == "domainname" {
+                //     Some(Arc::new(ProcFsInode::new(
+                //         path,
+                //         ProcFsInodeInner::domainname,
+                //     )))
+                // } else if pattern == "fs" {
+                //     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::fs)))
+                // } else if pattern == "kernel" {
+                //     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::kernel)))
+                } else if pattern == "sys" {
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::sys)))
                 } else {
                     None
                 }
@@ -241,6 +325,35 @@ MemAvailable: {mem_available:>10} kB
             ProcFsInodeInner::_self => {
                 if pattern == "exe" {
                     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::exe)))
+                } else {
+                    None
+                }
+            }
+            ProcFsInodeInner::sys => {
+                if pattern == "fs" {
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::fs)))
+                } else if pattern == "kernel" {
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::kernel)))
+                } else {
+                    None
+                }
+            }
+            ProcFsInodeInner::fs => {
+                if pattern == "pipe-max-size" {
+                    Some(Arc::new(ProcFsInode::new(
+                        path,
+                        ProcFsInodeInner::pipe_max_size,
+                    )))
+                } else {
+                    None
+                }
+            }
+            ProcFsInodeInner::kernel => {
+                if pattern == "domainname" {
+                    Some(Arc::new(ProcFsInode::new(
+                        path,
+                        ProcFsInodeInner::domainname,
+                    )))
                 } else {
                     None
                 }
@@ -273,6 +386,22 @@ MemAvailable: {mem_available:>10} kB
                 res.st_size = IRQTABLE.lock().tostring().len() as i64;
                 res
             }
+            ProcFsInodeInner::pipe_max_size => {
+                res.st_mode = StMode::new(
+                    ModeFlag::S_IRUSR | ModeFlag::S_IRGRP | ModeFlag::S_IROTH | ModeFlag::S_IFREG,
+                )
+                .into();
+                res.st_nlink = 1;
+                res
+            }
+            ProcFsInodeInner::domainname => {
+                res.st_mode = StMode::new(
+                    ModeFlag::S_IRUSR | ModeFlag::S_IRGRP | ModeFlag::S_IROTH | ModeFlag::S_IFREG,
+                )
+                .into();
+                res.st_nlink = 1;
+                res
+            }
             _ => {
                 // error!("[fstat] is a directory");
                 res.st_mode = 16877;
@@ -288,6 +417,9 @@ MemAvailable: {mem_available:>10} kB
         match self.inner {
             ProcFsInodeInner::root => true,
             ProcFsInodeInner::_self => true,
+            ProcFsInodeInner::sys => true,
+            ProcFsInodeInner::fs => true,
+            ProcFsInodeInner::kernel => true,
             _ => false,
         }
     }
@@ -305,12 +437,26 @@ MemAvailable: {mem_available:>10} kB
                     ("meminfo", 3, 8),
                     ("mounts", 4, 8),
                     ("interrupts", 5, 8),
+                    ("sys", 6, 8),
                 ];
 
                 Some(build_dirents(entries))
             }
             ProcFsInodeInner::_self => {
                 let mut entries = alloc::vec![(".", 2, 4), ("..", 1, 4), ("exe", 4, 8),];
+                Some(build_dirents(entries))
+            }
+            ProcFsInodeInner::sys => {
+                let mut entries: Vec<(&str, u64, u8)> =
+                    alloc::vec![(".", 1, 4), ("..", 0, 4), ("fs", 2, 4), ("kernel", 3, 4),];
+                Some(build_dirents(entries))
+            }
+            ProcFsInodeInner::fs => {
+                let mut entries = alloc::vec![(".", 2, 4), ("..", 1, 4), ("pipe-max-size", 4, 8),];
+                Some(build_dirents(entries))
+            }
+            ProcFsInodeInner::kernel => {
+                let mut entries = alloc::vec![(".", 2, 4), ("..", 1, 4), ("domainname", 4, 8),];
                 Some(build_dirents(entries))
             }
             _ => None,
