@@ -20,6 +20,8 @@ pub const KB: usize = 1024;
 #[allow(unused)]
 pub const MB: usize = 1024 * KB;
 
+pub const GB: usize = 1024 * MB;
+
 // mm
 // TODO:目前是有栈协程，如果将userstack修改为8MB，kernelstack修改为64kB，会导致Kerenlstack爆栈
 // 如果是无栈协程就不会

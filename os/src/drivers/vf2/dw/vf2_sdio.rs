@@ -3,7 +3,24 @@ use core::{cell::UnsafeCell, mem};
 use alloc::{string::{String, ToString}, sync::Arc, vec::Vec};
 use log::{debug, info, warn};
 
-use crate::{drivers::{device_new::{dev_core::{PhysDriver, PhysDriverProbe}, dev_number::{BlockMajorNum, MajorNumber}, BlockDevice, Device, DeviceType}, vf2::dw::register::{CtypeCardWidth, BLKSIZ, BMOD, BYTCNT, CDETECT, CID, CLKDIV, CLKENA, CMD, CMDARG, CTRL, CTYPE, DBADDRL, DBADDRU, IDSTS, PWREN, RESP, RINSTS, STATUS}, BaseDriver, BlockDriver, DevResult, DeviceType}, hal::config::{BLOCK_SIZE, GB, KERNEL_ADDR_OFFSET}, mm::{frame_alloc, user_ptr::user_ref, FrameTracker, PhysAddr}};
+use crate::{
+    drivers::{
+        device_new::{
+            dev_core::{PhysDriver, PhysDriverProbe},
+            dev_number::{BlockMajorNum, MajorNumber},
+            BlockDevice, Device, DeviceType
+        }, 
+        vf2::dw::register::{
+            CtypeCardWidth, BLKSIZ, BMOD, BYTCNT,
+            CDETECT, CID, CLKDIV, CLKENA, CMD,
+            CMDARG, CTRL, CTYPE, DBADDRL, DBADDRU, 
+            IDSTS, PWREN, RESP, RINSTS, STATUS
+        }, 
+        BaseDriver, BlockDriver, DevResult
+    }, 
+    hal::config::{BLOCK_SIZE, GB, KERNEL_ADDR_OFFSET},
+    mm::{frame_alloc, user_ptr::user_ref, FrameTracker, PhysAddr}
+};
 
 #[inline(never)]
 fn spin(cycle: usize) {
@@ -575,7 +592,7 @@ impl BlockDriver for Vf2SDIO {
 }
 
 impl Device for Vf2SDIO {
-    fn get_type(&self) -> crate::drivers::device_new::DeviceType {
+    fn get_type(&self) -> DeviceType {
         DeviceType::Block
     }
 
