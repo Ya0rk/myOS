@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use bitflags::*;
 use lwext4_rust::Ext4InodeType;
 
@@ -316,3 +317,82 @@ impl From<InodeType> for Ext4InodeType {
 pub const S_IFCHR: u32 = 0o0020000;
 pub const S_IFDIR: u32 = 0o0040000;
 pub const S_IFBLK: u32 = 0o0060000;
+
+use bitflags::bitflags;
+use core::fmt;
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct StMode {
+    pub mode: ModeFlag,
+}
+
+impl fmt::Debug for StMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StMode")
+            .field("mode", &format_args!("{}", self.mode))
+            .finish()
+    }
+}
+
+impl StMode {
+    pub fn new(mode: ModeFlag) -> Self {
+        Self { mode }
+    }
+
+    pub fn is_regular(&self) -> bool {
+        self.mode.contains(ModeFlag::S_IFREG)
+    }
+    pub fn is_dir(&self) -> bool {
+        self.mode.contains(ModeFlag::S_IFDIR)
+    }
+    pub fn is_symlink(&self) -> bool {
+        self.mode.contains(ModeFlag::S_IFLNK)
+    }
+    pub fn is_executable(&self) -> bool {
+        self.mode
+            .intersects(ModeFlag::S_IXUSR | ModeFlag::S_IXGRP | ModeFlag::S_IXOTH)
+    }
+}
+
+bitflags! {
+    #[derive(Clone, Copy)]
+    pub struct ModeFlag: u32 {
+        // 文件类型（高位）
+        const S_IFMT   = 0o170000;
+        const S_IFSOCK = 0o140000;
+        const S_IFLNK  = 0o120000;
+        const S_IFREG  = 0o100000;
+        const S_IFBLK  = 0o060000;
+        const S_IFDIR  = 0o040000;
+        const S_IFCHR  = 0o020000;
+        const S_IFIFO  = 0o010000;
+
+        // 权限位
+        const S_ISUID  = 0o004000;
+        const S_ISGID  = 0o002000;
+        const S_ISVTX  = 0o001000;
+
+        const S_IRUSR  = 0o000400;
+        const S_IWUSR  = 0o000200;
+        const S_IXUSR  = 0o000100;
+
+        const S_IRGRP  = 0o000040;
+        const S_IWGRP  = 0o000020;
+        const S_IXGRP  = 0o000010;
+
+        const S_IROTH  = 0o000004;
+        const S_IWOTH  = 0o000002;
+        const S_IXOTH  = 0o000001;
+    }
+}
+
+impl fmt::Display for ModeFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.iter_names()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>()
+            .join(" | ")
+            .fmt(f)
+    }
+}
