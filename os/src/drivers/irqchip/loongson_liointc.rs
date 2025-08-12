@@ -1,3 +1,5 @@
+//! Written by JD Lu
+//! Refactored by Sean Lin
 // 用于 loongarch icu 中断控制器的驱动
 //
 //                              +---------------------+
@@ -140,11 +142,11 @@ impl ConfigVector {
 }
 
 /// 龙芯中断控制器单元 (ICU) 驱动
-pub struct Icu {
+pub struct LocalIOIntController {
     base_addr: usize,
 }
 
-impl Icu {
+impl LocalIOIntController {
     /// 创建一个新的 ICU 驱动实例
     /// # Safety
     /// 调用者必须确保 `base_addr` 是 ICU 控制器的正确物理地址,
@@ -247,7 +249,7 @@ pub unsafe fn test_loongarch_icu(base_addr: usize) {
     // If not, status should be reported in another way.
     println!("--- Starting LoongArch ICU driver test ---");
 
-    let icu = Icu::new(base_addr);
+    let icu = LocalIOIntController::new(base_addr);
     let test_irq = Interrupt::Uart0;
 
     println!("Testing IRQ: {:?}", test_irq);

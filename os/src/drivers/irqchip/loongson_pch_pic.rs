@@ -1,7 +1,9 @@
-// os/src/drivers/loongarch_cic.rs
+//! os/src/drivers/loongarch_cic.rs
 
-// Based on loongarch_icu.rs and detailed Loongson 7A documentation.
-// This driver is for the Companion Interrupt Controller (CIC) in the LS7A bridge chip.
+//! Based on loongarch_icu.rs and detailed Loongson 7A documentation.
+//! This driver is for the Companion Interrupt Controller (CIC) in the LS7A bridge chip.
+//! Written by JD Lu
+//! Refactored by Sean Lin
 
 use bitflags::bitflags;
 use core::ptr::{read_volatile, write_volatile};

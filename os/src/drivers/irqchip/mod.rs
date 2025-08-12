@@ -1,5 +1,5 @@
-// pub mod loongson_pch_pic;
-// pub mod loongson_liointc;
+pub mod loongson_pch_pic;
+pub mod loongson_liointc;
 // pub mod loongson_eiointc;
 pub mod riscv_plic;
 
