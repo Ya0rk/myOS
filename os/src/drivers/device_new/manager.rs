@@ -7,7 +7,7 @@ use flat_device_tree::Fdt;
 use spin::{rwlock::RwLock};
 use virtio_drivers::{device::blk::VirtIOBlk, transport::{mmio::MmioTransport, pci::PciTransport}};
 
-use crate::drivers::{device_new::{dev_core::{PhysDriver, PhysDriverProbe}, dev_number::{BlockMajorNum, CharMajorNum, MajorNumber}, irq::{HandleHardIrq, HardIrqHandler}, BlockDevice, Device}, tty::{serial::{ns16550a::Uart16550Driver, SerialDriver, UartDriver}, tty_core::{CharDevice, TtyStruct}}, VirtIoBlkDev, VirtIoHalImpl};
+use crate::drivers::{device_new::{dev_core::{PhysDriver, PhysDriverProbe}, dev_number::{BlockMajorNum, CharMajorNum, MajorNumber}, irq::{HandleHardIrq, HardIrqHandler}, BlockDevice, Device}, tty::{serial::{ns16550a::Uart16550Driver, SerialDriver, UartDriver}, tty_core::{CharDevice, TtyStruct}}, vf2::Vf2SDIO, VirtIoBlkDev, VirtIoHalImpl};
 
 
 pub struct DeviceManager {
@@ -20,12 +20,14 @@ pub struct DeviceManager {
     pub FDT: Option<flat_device_tree::Fdt<'static>>,
 
     // pub mods: Vec<dyn AbsDriverModule>,
+    // 不是好的设计，摆烂
     pub uarts: Vec<Arc<dyn UartDriver>>,
 
     serials: Vec<Arc<SerialDriver>>,
 
     pub virtblks_mmio: Vec< Arc< VirtIoBlkDev<VirtIoHalImpl, MmioTransport<'static>> > >,
     pub virtblks_pci: Vec< Arc< VirtIoBlkDev<VirtIoHalImpl, PciTransport> > >,
+    pub vf2_sdcards: Vec< Arc< Vf2SDIO >>
 
     // /// interrupt controller unit
     // pub ICU: Option<Arc<super::PLIC>>,
@@ -53,6 +55,7 @@ impl DeviceManager {
 
             virtblks_mmio: Vec::new(),
             virtblks_pci: Vec::new(),
+            vf2_sdcards: Vec::new(),
         }
     }
     pub fn validate_raw_fdt(&mut self, root_addr: usize) {
@@ -91,7 +94,7 @@ impl DeviceManager {
         }
     }
 
-    pub fn probe_virtio_blk(&mut self) {
+    pub fn probe_virtio_blks(&mut self) {
         // from mmio
         let virtio_blk = VirtIoBlkDev::<VirtIoHalImpl, MmioTransport>::probe(&self.FDT.unwrap());
         if let Some(virtio_blk) = virtio_blk {
@@ -103,9 +106,17 @@ impl DeviceManager {
         if let Some(virtio_blk) = virtio_blk {
             self.virtblks_pci.push(virtio_blk);
         }
+
     }
 
-    pub fn register_virtio_blk_dev(&mut self) {
+    pub fn probe_vf2_sdcards(&mut self) {
+        let vf2_sdcard = Vf2SDIO::probe(&self.FDT.unwrap());
+        if let Some(vf2_sdcard) = vf2_sdcard {
+            self.vf2_sdcards.push(vf2_sdcard);
+        }
+    }
+
+    pub fn register_virtio_blk_devs(&mut self) {
         /// 不重复就行
         // let mut minor = 0;
         for blk in self.virtblks_mmio.iter() {
@@ -127,14 +138,33 @@ impl DeviceManager {
         }
     }
 
+    pub fn register_vf2_sd_devs(&mut self) {
+        for blk in self.vf2_sdcards.iter() {
+            // let virt_blk_dev = Arc::new(VirtIoBlkDev::new(blk.clone(), MajorNumber::Block(major), minor));
+            let virt_blk_dev = blk.clone();
+            let MajorNumber::Block(major) = blk.get_major() else { continue; };
+            let minor = blk.get_minor();
+            let ret = self.blk_devs.insert((major, minor), virt_blk_dev);
+            assert!(ret.is_none());
+        }
+    }
 
 
     pub fn probe_initial(&mut self, root_addr: usize) {
         self.validate_raw_fdt(root_addr);
         self.probe_uarts();
         self.register_ttys();
-        self.probe_virtio_blk();
-        self.register_virtio_blk_dev();
+        #[cfg(feature = "board_qemu")]
+        {
+            self.probe_virtio_blks();
+            self.register_virtio_blk_devs();            
+        }
+        #[cfg(feature = "vf2")]
+        {
+            self.probe_vf2_sdcards();
+            self.register_vf2_sd_devs();            
+        }
+
     }
 
     // pub fn register_char_dev(&mut self, dev: Arc<dyn CharDevice>, major: CharMajorNum, minor: usize) {

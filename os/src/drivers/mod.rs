@@ -48,7 +48,10 @@ pub fn get_block_device() -> Option<Arc<dyn BlockDevice>> {
     // }
 
     // None
+    #[cfg(feature = "board_qemu")]
     let major = BlockMajorNum::VirtBlock;
+    #[cfg(feature = "vf2")]
+    let major = BlockMajorNum::MmcBlock;
     let minor = 0;
     DEVICE_MANAGER.read().get_block_dev(major, minor)
 }

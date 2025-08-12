@@ -130,7 +130,7 @@ pub fn probe_vf2sd(sdionode: &FdtNode) {
         Some(a) => a,
     };
     // 创建 SDIO 设备
-    let sd_device = Vf2SDIO::new(base_address, size, interrupt_number);
+    let sd_device = Vf2SDIO::new(base_address, size, interrupt_number, BlockMajorNum::MmcBlock, 0);
     sd_device.card_init();
     println!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
     register_block_device(Arc::new(sd_device));
