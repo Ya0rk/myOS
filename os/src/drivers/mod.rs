@@ -5,8 +5,9 @@ pub mod tty;
 // pub mod dev_core;
 #[cfg(feature = "2k1000la")]
 pub mod k1000la;
-pub mod loongarch_cic;
-pub mod loongarch_icu;
+pub mod irqchip;
+// pub mod loongarch_cic;
+// pub mod loongarch_icu;
 pub mod vf2;
 pub mod virtio_driver;
 

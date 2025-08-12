@@ -1,5 +1,5 @@
 pub mod interrupt;
-pub mod plic;
+// pub mod plic;
 mod sbi;
 pub mod sstatus;
 

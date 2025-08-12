@@ -1,4 +1,6 @@
-use alloc::{collections::btree_map::BTreeMap, sync::Arc, vec::{Vec}};
+use core::char::MAX;
+
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, sync::Arc, vec::Vec};
 #[macro_use]
 use alloc::vec;
 use embedded_hal::serial;
@@ -7,7 +9,7 @@ use flat_device_tree::Fdt;
 use spin::{rwlock::RwLock};
 use virtio_drivers::{device::blk::VirtIOBlk, transport::{mmio::MmioTransport, pci::PciTransport}};
 
-use crate::drivers::{device_new::{dev_core::{PhysDriver, PhysDriverProbe}, dev_number::{BlockMajorNum, CharMajorNum, MajorNumber}, irq::{HandleHardIrq, HardIrqHandler}, BlockDevice, Device}, tty::{serial::{ns16550a::Uart16550Driver, SerialDriver, UartDriver}, tty_core::{CharDevice, TtyStruct}}, vf2::Vf2SDIO, VirtIoBlkDev, VirtIoHalImpl};
+use crate::drivers::{device_new::{dev_core::{PhysDriver, PhysDriverProbe}, dev_number::{BlockMajorNum, CharMajorNum, MajorNumber}, irq::HardIrqHandler, BlockDevice, Device}, irqchip::{riscv_plic::PLIC, IrqController}, tty::{serial::{ns16550a::Uart16550Driver, SerialDriver, UartDriver}, tty_core::{CharDevice, TtyStruct}}, vf2::Vf2SDIO, VirtIoBlkDev, VirtIoHalImpl};
 
 
 pub struct DeviceManager {
@@ -18,6 +20,8 @@ pub struct DeviceManager {
     
     // pub UART_DRIVER: Option<Arc<dyn UartDriver>>
     pub FDT: Option<flat_device_tree::Fdt<'static>>,
+
+    pub ICU: Option<Arc<dyn IrqController>>,
 
     // pub mods: Vec<dyn AbsDriverModule>,
     // 不是好的设计，摆烂
@@ -49,6 +53,7 @@ impl DeviceManager {
             irq_table: vec![HardIrqHandler::new(); 256],
             // UART_DRIVER: None,
             FDT: None,
+            ICU: None,
 
             uarts: Vec::new(),
             serials: Vec::new(),
@@ -60,6 +65,12 @@ impl DeviceManager {
     }
     pub fn validate_raw_fdt(&mut self, root_addr: usize) {
         self.FDT = unsafe{ Fdt::from_ptr(root_addr as _) }.ok();
+    }
+
+
+    pub fn probe_plic(&mut self) {
+        let icu = PLIC::probe(&self.FDT.unwrap());
+        self.ICU = icu.map(| icu | icu as Arc<dyn IrqController>) ;
     }
 
     pub fn probe_uarts(&mut self) {
@@ -76,6 +87,12 @@ impl DeviceManager {
             let serial = Arc::new(SerialDriver::new(uart.clone()));
             self.serials.push(serial.clone());
             if let Some(irq_number) = irq_number {
+                if let Some(icu) = &self.ICU {
+                    const MAX_CORES: usize = 1;
+                    for core_id in 0..MAX_CORES {
+                        icu.enable_irq(core_id, irq_number);
+                    }
+                }
                 self.irq_table[irq_number].register(serial.clone());
             }
         }
@@ -152,6 +169,7 @@ impl DeviceManager {
 
     pub fn probe_initial(&mut self, root_addr: usize) {
         self.validate_raw_fdt(root_addr);
+        self.probe_plic();
         self.probe_uarts();
         self.register_ttys();
         #[cfg(feature = "board_qemu")]
@@ -191,9 +209,17 @@ impl DeviceManager {
     }
 
 
-    pub fn handle_irq(&self, irq_number: usize) {
+    pub fn handle_irq(&self, hart_id: usize) {
+        let irq_number = self.ICU
+            .as_ref()
+            .expect("[DeviceManager::handle_irq] Bad icu")
+            .claim_irq(hart_id)
+            .expect("[DeviceManager::handle_irq] irq number not found");
         self.irq_table[irq_number].handle_irq();
+        self.ICU.as_ref().unwrap().finish_irq(hart_id, irq_number);
     }
+
+    // pub fn 
 }
 
 // TODO: remove the lock
