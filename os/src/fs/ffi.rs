@@ -420,3 +420,23 @@ impl fmt::Display for ModeFlag {
             .fmt(f)
     }
 }
+
+impl From<u32> for StMode {
+    fn from(bits: u32) -> Self {
+        Self {
+            mode: ModeFlag::from_bits_truncate(bits),
+        }
+    }
+}
+
+impl From<ModeFlag> for StMode {
+    fn from(mode: ModeFlag) -> Self {
+        Self { mode }
+    }
+}
+
+impl From<StMode> for u32 {
+    fn from(st: StMode) -> Self {
+        st.mode.bits()
+    }
+}
