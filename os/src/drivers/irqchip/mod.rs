@@ -1,14 +1,17 @@
-pub mod loongson_pch_pic;
-pub mod loongson_liointc;
-pub mod loongson_eiointc;
-pub mod riscv_plic;
+#[cfg(target_arch = "loongarch64")]
+pub mod la64;
 
-pub use {
-    loongson_pch_pic::PCHIntController,
-    loongson_liointc::LocalIOIntController,
-    loongson_eiointc::ExtIOIntController,
-    riscv_plic::PLIC,
-};
+#[cfg(target_arch = "loongarch64")]
+pub use la64::*;
+
+
+#[cfg(target_arch = "riscv64")]
+pub mod rv64;
+
+#[cfg(target_arch = "riscv64")]
+pub use rv64::*;
+
+
 
 
 pub trait IrqController: Send + Sync {

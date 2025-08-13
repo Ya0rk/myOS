@@ -24,7 +24,7 @@ use crate::{
         vf2::Vf2SDIO, 
         VirtIoBlkDev, VirtIoHalImpl
     }, 
-    hal::{DEVICE_ADDR_OFFSET, KERNEL_ADDR_OFFSET}
+    hal::config::{DEVICE_ADDR_OFFSET, KERNEL_ADDR_OFFSET}
 };
 
 
@@ -84,37 +84,27 @@ impl DeviceManager {
     }
 
 
-    pub fn probe_riscv_plic(&mut self) {
-        let icu = PLIC::probe(&self.FDT.unwrap());
-        self.ICU = icu.map(| icu | icu as Arc<dyn IrqController>) ;
-    }
 
-    pub fn probe_ls_eiointc(&mut self) {
-        let pic = unsafe { PCHIntController::new(0x10000000 + DEVICE_ADDR_OFFSET) };
-        let icu = ExtIOIntController::new(0x1fe00000 + DEVICE_ADDR_OFFSET, Arc::new(pic));
-        icu.device_enable();
-        icu.enable_irq(0, 1);
-        icu.debug_send(1);
-        self.ICU = Some(Arc::new(icu));
-    }
 
-    pub fn probe_icu(&mut self) {
-        #[cfg(target_arch = "riscv64")]
-        {
-            self.probe_plic();
-        }
-        #[cfg(target_arch = "loongarch64")]
-        {
-            #[cfg(feature = "board_qemu")]
-            {
-                self.probe_ls_eiointc();   
-            }
-            #[cfg(feature = "2k1000la")]
-            {
-                // self.probe_plic();
-            }
-        }
-    }
+
+
+    // pub fn probe_icu(&mut self) {
+    //     #[cfg(target_arch = "riscv64")]
+    //     {
+    //         self.probe_plic();
+    //     }
+    //     #[cfg(target_arch = "loongarch64")]
+    //     {
+    //         #[cfg(feature = "board_qemu")]
+    //         {
+    //             self.probe_ls_eiointc();   
+    //         }
+    //         #[cfg(feature = "2k1000la")]
+    //         {
+    //             // self.probe_plic();
+    //         }
+    //     }
+    // }
 
 
 

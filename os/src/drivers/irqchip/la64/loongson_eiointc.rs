@@ -330,7 +330,7 @@ impl ExtIOIntController {
         self.set_node(node, node_vector);
         let Some(cfg_vector) = ConfigVector::new(core_id, node) else { return; };
         self.set_cfg(irq, cfg_vector);
-        error!("finish route");
+        // error!("finish route");
     }
 
     pub fn device_enable(&self) {
@@ -348,18 +348,18 @@ impl IrqController for ExtIOIntController {
     // 坏实现
     fn enable_irq(&self, hart_id: usize, irq_no: usize) {
         // todo!()
-        error!("[ExtIOIntController] enable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
-        let in_pin_id = 0;
+        // error!("[ExtIOIntController] enable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
+        let in_pin_id = irq_no;
         let out_pin_id = 0;
         self.enable(in_pin_id as u32);
         self.route(in_pin_id as u32, hart_id as u8, out_pin_id);
 
-        self.next_icu.enable_irq(in_pin_id, irq_no);
+        self.next_icu.enable_irq(0, irq_no);
     }
 
     fn disable_irq(&self, hart_id: usize, irq_no: usize) {
         // todo!()
-        error!("[ExtIOIntController] disable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
+        // error!("[ExtIOIntController] disable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
         let in_pin_id = 0;
         self.next_icu.disable_irq(in_pin_id, irq_no);
     }
@@ -369,13 +369,14 @@ impl IrqController for ExtIOIntController {
         // todo!()
         let pendings_group = self.get_core_pendings(hart_id as u8)
             .expect("[ExtIOIntController::claim_irq] Bad hart id");
+        // error!("[ExtIOIntController::claim_irq] pendings_group: {:#x?}", pendings_group);
         for i in 0..4 {
             let pendings = pendings_group[i];
             if pendings == 0 { continue;}
             let pending = pendings.trailing_zeros() as usize + i * 64;
-            if pending == 0 {
-                return Some(self.next_icu.claim_irq(hart_id)?);
-            }
+            // if pending == 0 {
+            //     return Some(self.next_icu.claim_irq(0)?);
+            // }
             return Some(pending);
         }
         None

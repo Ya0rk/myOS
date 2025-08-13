@@ -301,16 +301,18 @@ impl IrqController for PCHIntController {
     
     fn enable_irq(&self, hart_id: usize, irq_no: usize) {
         // todo!()
-        error!("[pic] enable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
-        let pin_id = 0;
+        // error!("[pic] enable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
+        // let pin_id = 0;
         self.enable(irq_no as u32);
-        self.route(irq_no as u32, pin_id);
+        self.set_ht_msi_vector(irq_no as u32, irq_no as u8);
+        // self.set_trigger_mode(irq_no as u32, true);
+        self.route(irq_no as u32, 1 << hart_id);
 
     }
     
     fn disable_irq(&self, hart_id: usize, irq_no: usize) {
         // todo!()
-        error!("[pic] disable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
+        // error!("[pic] disable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
         self.disable(irq_no as u32);
     }
     
@@ -318,6 +320,7 @@ impl IrqController for PCHIntController {
         // todo!()
         let pendings = self.get_pendings(hart_id as u8)
             .expect("[PCHIntController::claim_irq] Bad pin id");
+        // error!("[PCHIntController::claim_irq] pendings: {:#x?}", pendings);
         if pendings == 0 { return None; }
         Some(pendings.trailing_zeros() as usize)
 
