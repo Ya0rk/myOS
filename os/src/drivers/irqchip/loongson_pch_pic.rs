@@ -6,7 +6,10 @@
 //! Refactored by Sean Lin
 
 use bitflags::bitflags;
+use log::error;
 use core::ptr::{read_volatile, write_volatile};
+
+use crate::drivers::irqchip::IrqController;
 
 // Register offsets from Loongson 7A documentation (Table 5-3)
 const OFFSET_INT_ID_L: usize = 0x000;
@@ -113,11 +116,12 @@ pub enum DistributionMode {
 }
 
 /// Loongson Companion Interrupt Controller (CIC) driver.
-pub struct Cic {
+/// Platform Controller Hub Programmable Interrupt Controller
+pub struct PCHIntController {
     base_addr: usize,
 }
 
-impl Cic {
+impl PCHIntController {
     /// Creates a new CIC driver instance.
     /// # Safety
     /// The caller must ensure `base_addr` is the correct physical address for the CIC
@@ -224,7 +228,7 @@ impl Cic {
     }
 
     /// Gets the mask of pending interrupts for a specific output.
-    pub fn get_pending_mask(&self, output: u8) -> Option<u64> {
+    pub fn get_pendings(&self, output: u8) -> Option<u64> {
         match output {
             0 => Some(self.read_u64_reg(OFFSET_INTISR_0_L)),
             1 => Some(self.read_u64_reg(OFFSET_INTISR_1_L)),
@@ -292,6 +296,39 @@ impl Cic {
     }
 }
 
+
+impl IrqController for PCHIntController {
+    
+    fn enable_irq(&self, hart_id: usize, irq_no: usize) {
+        // todo!()
+        error!("[pic] enable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
+        let pin_id = 0;
+        self.enable(irq_no as u32);
+        self.route(irq_no as u32, pin_id);
+
+    }
+    
+    fn disable_irq(&self, hart_id: usize, irq_no: usize) {
+        // todo!()
+        error!("[pic] disable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
+        self.disable(irq_no as u32);
+    }
+    
+    fn claim_irq(&self, hart_id: usize) -> Option<usize> {
+        // todo!()
+        let pendings = self.get_pendings(hart_id as u8)
+            .expect("[PCHIntController::claim_irq] Bad pin id");
+        if pendings == 0 { return None; }
+        Some(pendings.trailing_zeros() as usize)
+
+    }
+    
+    fn finish_irq(&self, hart_id: usize, irq_no: usize) {
+        // todo!()
+        self.clear_pending_edge(irq_no as u32);
+    } 
+}
+
 /// A test function that can be called from kernel initialization.
 /// It assumes `println!` is available for output.
 /// # Safety
@@ -303,7 +340,7 @@ pub unsafe fn test_loongarch_cic(base_addr: usize) {
     // Assuming println! is available in the kernel.
     println!("--- Starting LoongArch CIC driver test ---");
 
-    let cic = Cic::new(base_addr);
+    let cic = PCHIntController::new(base_addr);
     let test_irq = Interrupt::Uart as u32; // Use UART (IRQ 8) for testing
 
     println!("Testing with IRQ: {} ({:?})", test_irq, Interrupt::Uart);
@@ -381,8 +418,8 @@ pub unsafe fn test_loongarch_cic(base_addr: usize) {
     println!("7. Cleanup and final calls...");
     cic.clear_pending_edge(test_irq);
     println!("  - Called clear_pending_edge OK.");
-    let pending_mask0 = cic.get_pending_mask(0);
-    let pending_mask1 = cic.get_pending_mask(1);
+    let pending_mask0 = cic.get_pendings(0);
+    let pending_mask1 = cic.get_pendings(1);
     println!(
         "  - Read pending masks OK (Output 0: {:?}, Output 1: {:?}).",
         pending_mask0, pending_mask1

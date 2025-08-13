@@ -27,7 +27,7 @@ impl Stdin {
             // inode: SBI_TTY_INODE.clone(),
             // #[cfg(feature = "vf2")]
             #[cfg(target_arch = "loongarch64")]
-            inode: SBI_TTY_INODE.clone(),
+            inode: VF2_TTY_INODE.clone(),
             #[cfg(target_arch = "riscv64")]
             inode: VF2_TTY_INODE.clone(),
         }
@@ -118,7 +118,7 @@ impl Stdout {
             // inode: SBI_TTY_INODE.clone(),
             // #[cfg(feature = "vf2")]
             #[cfg(target_arch = "loongarch64")]
-            inode: SBI_TTY_INODE.clone(),
+            inode: VF2_TTY_INODE.clone(),
             #[cfg(target_arch = "riscv64")]
             inode: VF2_TTY_INODE.clone(),
         }
