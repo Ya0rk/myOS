@@ -213,6 +213,12 @@ pub enum InodeType {
 
 impl InodeType {
     /// Tests whether this node type represents a regular file.
+    pub const fn is_device(self) -> bool {
+        match self {
+            Self::BlockDevice | Self::CharDevice => true,
+            _ => false,
+        }
+    }
     pub const fn is_file(self) -> bool {
         matches!(self, Self::File)
     }

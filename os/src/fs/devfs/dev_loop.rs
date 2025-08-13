@@ -1,7 +1,6 @@
 use crate::{
     fs::{
-        ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFBLK,
-        S_IFCHR,
+        ffi::RenameFlags, Dirent, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, S_IFBLK, S_IFCHR
     },
     mm::{
         page::Page,
@@ -20,89 +19,95 @@ use async_trait::async_trait;
 use log::{error, info};
 use spin::Spin;
 
-lazy_static! {
-    pub static ref DEVLOOP: Arc<DevLoop> = DevLoop::new();
-}
+// lazy_static! {
+//     pub static ref DEVLOOP: Arc<DevLoop> = DevLoop::new();
+// }
 
-pub struct DevLoop {
-    inode: Arc<DevLoopInode>,
-}
+// pub struct DevLoop {
+//     inode: Arc<DevLoopInode>,
+// }
 
-impl DevLoop {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self {
-            inode: Arc::new(DevLoopInode::new()),
-        })
-    }
-}
+// impl DevLoop {
+//     pub fn new() -> Arc<Self> {
+//         Arc::new(Self {
+//             inode: Arc::new(DevLoopInode::new()),
+//         })
+//     }
+// }
 
-#[async_trait]
-impl FileTrait for DevLoop {
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        self.inode.clone()
-    }
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        true
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
-        let len = user_buf.len();
-        user_buf.fill(0);
-        Ok(len)
-    }
-    /// 填满0
-    async fn pread(&self, mut user_buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
-        info!("[pread] from zerofs, fill 0");
-        user_buf.fill(0);
-        Ok(len)
-    }
-    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        // do nothing
-        Ok(user_buf.len())
-    }
+// #[async_trait]
+// impl FileTrait for DevLoop {
+//     fn get_inode(&self) -> Arc<dyn InodeTrait> {
+//         self.inode.clone()
+//     }
+//     fn readable(&self) -> bool {
+//         true
+//     }
+//     fn writable(&self) -> bool {
+//         true
+//     }
+//     fn executable(&self) -> bool {
+//         false
+//     }
+//     async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
+//         let len = user_buf.len();
+//         user_buf.fill(0);
+//         Ok(len)
+//     }
+//     /// 填满0
+//     async fn pread(&self, mut user_buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
+//         info!("[pread] from zerofs, fill 0");
+//         user_buf.fill(0);
+//         Ok(len)
+//     }
+//     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
+//         // do nothing
+//         Ok(user_buf.len())
+//     }
 
-    fn get_name(&self) -> SysResult<String> {
-        Ok("/dev/loop0".to_string())
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
-    }
-    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
-        0
-    }
-    fn fstat(&self, stat: &mut Kstat) -> SysResult {
-        *stat = Kstat::new();
-        stat.st_mode = S_IFBLK + 0o666;
-        Ok(())
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
-        Some(Page::new())
-    }
-    fn is_device(&self) -> bool {
-        true
-    }
-}
+//     fn get_name(&self) -> SysResult<String> {
+//         Ok("/dev/loop0".to_string())
+//     }
+//     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
+//         todo!()
+//     }
+//     fn read_dents(&self, mut ub: usize, len: usize) -> usize {
+//         0
+//     }
+//     fn fstat(&self, stat: &mut Kstat) -> SysResult {
+//         *stat = Kstat::new();
+//         stat.st_mode = S_IFBLK + 0o666;
+//         Ok(())
+//     }
+//     fn is_dir(&self) -> bool {
+//         false
+//     }
+//     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
+//         // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
+//         Some(Page::new())
+//     }
+//     fn is_device(&self) -> bool {
+//         true
+//     }
+// }
 
-struct DevLoopInode {
-    timestamp: SpinNoIrqLock<TimeStamp>,
-    meta: SpinNoIrqLock<DevLoopInodeMeta>,
+pub struct DevLoopInode {
+    metadata: InodeMeta,
+    // timestamp: SpinNoIrqLock<TimeStamp>,
+    inner: SpinNoIrqLock<DevLoopInodeMeta>,
 }
 
 impl DevLoopInode {
-    fn new() -> Self {
-        Self {
-            timestamp: SpinNoIrqLock::new(TimeStamp::new()),
-            meta: SpinNoIrqLock::new(DevLoopInodeMeta::new()),
-        }
+    pub fn new() -> Arc<dyn InodeTrait> {
+        Arc::new(Self {
+            metadata: InodeMeta::new(
+                InodeType::BlockDevice,
+                0,
+                "/dev/loop0",
+            ),
+            // timestamp: SpinNoIrqLock::new(TimeStamp::new()),
+            inner: SpinNoIrqLock::new(DevLoopInodeMeta::new()),
+        })
     }
 }
 
@@ -124,6 +129,9 @@ impl DevLoopInodeMeta {
 
 #[async_trait]
 impl InodeTrait for DevLoopInode {
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
+    }
     fn get_page_cache(&self) -> Option<Arc<crate::fs::page_cache::PageCache>> {
         None
     }
@@ -134,10 +142,6 @@ impl InodeTrait for DevLoopInode {
 
     fn set_size(&self, _new_size: usize) -> SysResult {
         Ok(())
-    }
-
-    fn node_type(&self) -> InodeType {
-        InodeType::BlockDevice
     }
 
     async fn read_at(&self, _offset: usize, buf: &mut [u8]) -> usize {
@@ -173,18 +177,6 @@ impl InodeTrait for DevLoopInode {
         stat
     }
 
-    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
-        // 你可以给 DevLoop 加一个 timestamp 字段并返回它
-        // unimplemented!("DevLoop does not have a timestamp")
-        &self.timestamp
-    }
-
-    fn is_dir(&self) -> bool {
-        false
-    }
-
-    // fn rename(&self, _old_path: &String, _new_path: &String) {}
-
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         None
     }
@@ -203,10 +195,10 @@ impl InodeTrait for DevLoopInode {
                 // Handle LOOP_GET_STATUS
                 info!("[DevLoopInode_ioctl]LOOP_GET_STATUS ");
                 {
-                    *user_ptr = self.meta.lock().info;
+                    *user_ptr = self.inner.lock().info;
                 }
                 info!("[DevLoopInode_ioctl] return\n {:?}", user_ptr);
-                if self.meta.lock().fd.is_none() {
+                if self.inner.lock().fd.is_none() {
                     return Err(Errno::ENXIO);
                 } else {
                     return Ok(0);
@@ -214,16 +206,16 @@ impl InodeTrait for DevLoopInode {
             }
             cmd if cmd.bits() == LoopIoctl::LOOP_SET_STATUS.bits() => {
                 // Handle LOOP_SET_STATUS
-                self.meta.lock().info = *user_ptr;
+                self.inner.lock().info = *user_ptr;
                 Ok(0)
             }
             cmd if cmd.bits() == LoopIoctl::LOOP_SET_FD.bits() => {
                 // Handle LOOP_SET_FD
-                self.meta.lock().fd = Some(arg);
+                self.inner.lock().fd = Some(arg);
                 Ok(0)
             }
             cmd if cmd.bits() == LoopIoctl::LOOP_CLR_FD.bits() => {
-                self.meta.lock().fd = None;
+                self.inner.lock().fd = None;
                 Ok(0)
             }
             _ => {

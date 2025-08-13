@@ -1,9 +1,6 @@
 use super::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags};
 use crate::{
-    hal::config::PIPE_BUFFER_SIZE,
-    mm::{page::Page},
-    sync::{get_waker, once::LateInit, SpinNoIrqLock},
-    utils::{Errno, SysResult},
+    fs::{FileMeta, InodeMeta, InodeType}, hal::config::PIPE_BUFFER_SIZE, mm::page::Page, sync::{get_waker, once::LateInit, SpinNoIrqLock}, utils::{Errno, SysResult}
 };
 use alloc::boxed::Box;
 use alloc::{
@@ -23,7 +20,7 @@ use log::info;
 use spin::Mutex;
 
 pub struct Pipe {
-    pub flags: OpenFlags,
+    pub metadata: FileMeta,
     pub other: LateInit<Weak<Pipe>>,
     pub is_reader: bool,
     pub buffer: Arc<SpinNoIrqLock<PipeInner>>,
@@ -44,7 +41,10 @@ impl Pipe {
     /// 创建管道的读端
     pub fn read_end_with_buffer(buffer: Arc<SpinNoIrqLock<PipeInner>>) -> Self {
         Self {
-            flags: OpenFlags::O_RDONLY,
+            metadata: FileMeta::new(
+                OpenFlags::O_RDONLY,
+                DummyInode::new(InodeType::Fifo, "pipefile_readend"),
+            ),
             other: LateInit::new(),
             is_reader: true,
             buffer,
@@ -53,7 +53,11 @@ impl Pipe {
     /// 创建管道的写端
     pub fn write_end_with_buffer(buffer: Arc<SpinNoIrqLock<PipeInner>>) -> Self {
         Self {
-            flags: OpenFlags::O_WRONLY,
+            metadata: FileMeta::new(
+                OpenFlags::O_WRONLY,
+                DummyInode::new(InodeType::Fifo, "pipefile_writeend"),
+            ),
+            // flags: OpenFlags::O_WRONLY,
             other: LateInit::new(),
             is_reader: false,
             buffer,
@@ -138,24 +142,13 @@ impl PipeInner {
 
 #[async_trait]
 impl FileTrait for Pipe {
+    fn metadata(&self) -> &FileMeta {
+        &self.metadata
+    }
     fn set_flags(&self, _flags: OpenFlags) {}
-    fn get_flags(&self) -> OpenFlags {
-        self.flags
-    }
-    fn readable(&self) -> bool {
-        self.flags.contains(OpenFlags::O_RDONLY)
-    }
-    fn writable(&self) -> bool {
-        self.flags.contains(OpenFlags::O_WRONLY)
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    fn is_pipe(&self) -> bool {
-        true
-    }
+
     async fn read(&self, buf: &mut [u8]) -> SysResult<usize> {
-        assert!(self.readable());
+        assert!(self.metadata.flags.read().readable());
         if buf.len() == 0 {
             return Ok(0);
         }
@@ -167,7 +160,7 @@ impl FileTrait for Pipe {
         .await
     }
     async fn write(&self, buf: &[u8]) -> SysResult<usize> {
-        assert!(self.writable());
+        assert!(self.metadata.flags.read().writable());
         if buf.len() == 0 {
             return Ok(0);
         }
@@ -179,12 +172,6 @@ impl FileTrait for Pipe {
         .await
     }
 
-    fn get_name(&self) -> SysResult<String> {
-        Ok("[getname] this is pipe file".to_string())
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
-    }
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
         *stat = Kstat::new();
         stat.st_nlink = 1;
@@ -194,12 +181,6 @@ impl FileTrait for Pipe {
         Ok(())
     }
 
-    fn is_dir(&self) -> bool {
-        todo!()
-    }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        todo!()
-    }
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
         todo!()
     }
@@ -210,7 +191,6 @@ impl FileTrait for Pipe {
             return Ok(true);
         }
 
-        // println!("pollin:no avaliable read");
         // 还没有数据，此时等待被唤醒
         let waker = get_waker().await;
         self.buffer.lock().reader_waker.push_back(waker);
@@ -304,5 +284,23 @@ impl Future for PipeWriteFuture<'_> {
             inner.writer_waker.push_back(cx.waker().clone());
             Poll::Pending
         }
+    }
+}
+
+pub struct DummyInode(pub InodeMeta);
+
+impl DummyInode {
+    pub fn new(_type: InodeType, abspath: &str) -> Arc<dyn InodeTrait> {
+        Arc::new(Self(InodeMeta::new(
+            _type,
+            0,
+            abspath.into(),
+        )))
+    }
+}
+
+impl InodeTrait for DummyInode {
+    fn metadata(&self) ->  &InodeMeta {
+        &self.0
     }
 }

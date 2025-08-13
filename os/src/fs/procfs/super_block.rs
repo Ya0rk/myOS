@@ -2,18 +2,23 @@ use alloc::sync::Arc;
 use log::info;
 
 use crate::fs::{
-    procfs::inode::{ProcFsInode, ProcFsInodeInner},
+    procfs::root::ProcFsRootInode,
     InodeTrait, SuperBlockTrait,
 };
 
+lazy_static! {
+    /// procfs的超级块
+    pub static ref PROCFS_SUPER_BLOCK: Arc<ProcFsSuperBlock> = Arc::new(ProcFsSuperBlock::new("/proc"));
+}
+
 pub struct ProcFsSuperBlock {
-    root: Arc<ProcFsInode>,
+    root: Arc<ProcFsRootInode>,
 }
 
 impl ProcFsSuperBlock {
     pub fn new(path: &str) -> Self {
         info!("init procfs superblock");
-        let root = Arc::new(ProcFsInode::new(path, ProcFsInodeInner::root));
+        let root = Arc::new(ProcFsRootInode::new(path));
         Self { root }
     }
 }

@@ -24,7 +24,7 @@ use crate::{
 use super::ffi::ShmOp;
 
 pub fn sys_brk(new_brk: *const u8) -> SysResult<usize> {
-    info!("[sys_brk] new_brk: {:#x}", new_brk as usize);
+    // info!("[sys_brk] new_brk: {:#x}", new_brk as usize);
 
     // #[cfg(feature = "test")]
     // {

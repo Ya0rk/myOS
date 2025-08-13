@@ -47,10 +47,6 @@ impl Ext4Inode {
         types: Ext4InodeType,
         page_cache: Option<Arc<PageCache>>,
     ) -> Arc<dyn InodeTrait> {
-        // warn!("[Ext4Inode::new] path = {} ssssss", path);
-        // if INODE_CACHE.has_inode(path) {
-        //     return INODE_CACHE.get(path).clone().unwrap();
-        // }
         info!(
             "[ext4_inode] new: path: {}, types: {:?}, page_cache: {}",
             path,
@@ -62,7 +58,6 @@ impl Ext4Inode {
         let mut file_size = 0u64;
         if types == Ext4InodeType::EXT4_DE_DIR || types == Ext4InodeType::EXT4_INODE_MODE_DIRECTORY
         {
-            // file_size = ext4file.lock().file_size();
             file_size = 0;
         } else {
             ext4file.lock().file_open(path, O_RDONLY);
@@ -79,7 +74,6 @@ impl Ext4Inode {
         if let Some(pg) = &inode.page_cache {
             pg.set_inode(inode.clone());
         }
-        // INODE_CACHE.insert(path, inode.clone());
         inode
     }
 }
@@ -94,6 +88,9 @@ impl Drop for Ext4Inode {
 
 #[async_trait]
 impl InodeTrait for Ext4Inode {
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
+    }
     /// 检查inode是否有效
     fn is_valid(&self) -> bool {
         let mut file = self.file.lock();
@@ -101,7 +98,6 @@ impl InodeTrait for Ext4Inode {
         let c_path = file.get_path();
         let c_path = c_path.to_str().unwrap();
         let res = file.check_inode_exist(c_path, types);
-        // info!("[check inode is valid] path: {}, res: {}", c_path, res);
         res
     }
 
@@ -172,14 +168,14 @@ impl InodeTrait for Ext4Inode {
         Some(nf)
     }
     /// 获取文件类型
-    fn node_type(&self) -> InodeType {
-        as_inode_type(self.metadata.file_type.into())
-    }
+    // fn node_type(&self) -> InodeType {
+    //     self.metadata.file_type
+    // }
     /// 读取文件
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
         info!(
             "[ext_inode read_at] file: {}, offset: {} size: {}",
-            &self.metadata.path,
+            &self.metadata.abspath,
             offset,
             buf.len()
         );
@@ -222,7 +218,7 @@ impl InodeTrait for Ext4Inode {
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         info!(
             "[ext4_inode write_at] file: {}, offset: {}, len: {}",
-            self.metadata.path,
+            self.metadata.abspath,
             offset,
             buf.len()
         );
@@ -272,7 +268,7 @@ impl InodeTrait for Ext4Inode {
         info!("[inode truncate] size = {}", size);
         // TODO added by lsz: 这里必须打开
         // TODO 暫時先這麼用著，後面改
-        if self.metadata.path.contains("iperf3") {
+        if self.metadata.abspath.contains("iperf3") {
             self.set_size(size);
             return 0;
         }
@@ -360,7 +356,7 @@ impl InodeTrait for Ext4Inode {
         info!("[unlink] {}", lock_file.file_path.to_str().unwrap());
         // 获得要去 unlink 的路径
         let child_abs_path = &valid_dentry.get_abs_path();
-        let res = if self.metadata.file_type.is_dir() {
+        let res = if self.metadata._type.is_dir() {
             // info!("[unlink] unlink dir {}", child_abs_path);
             debug_point!("");
             lock_file.dir_rm(child_abs_path)
@@ -383,7 +379,7 @@ impl InodeTrait for Ext4Inode {
 
     fn link(&self, bare_dentry: Arc<Dentry>) -> SysResult<usize> {
         // block_on( async {self.sync().await});
-        let types = { self.node_type().into() };
+        let types = { self.metadata()._type.into() };
         let mut file = self.file.lock();
         if bare_dentry.is_valid() {
             return Err(Errno::EEXIST);
@@ -395,17 +391,6 @@ impl InodeTrait for Ext4Inode {
             new_path
         );
         
-        // let mut file = self.file.lock();
-        // let path = file.get_path();
-        // let path = path.to_str().unwrap();
-        // file.file_open(path, O_RDWR)
-        //     .map_err(|_| Errno::EIO)
-        //     .unwrap();
-        // file.file_truncate(self.get_size() as u64)
-        //     .map_err(|_| Errno::EIO)
-        //     .unwrap();
-        // file.file_close()
-        //     .expect("[set_size]: file close fail!");
         match file.link(new_path) {
             Ok(_) => {
                 debug_point!("[ext4_link]");
@@ -422,9 +407,6 @@ impl InodeTrait for Ext4Inode {
 
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         &self.metadata.timestamp
-    }
-    fn is_dir(&self) -> bool {
-        self.metadata.file_type.is_dir()
     }
 
     fn rename(&self, old_dentry: Arc<Dentry>, new_dentry: Arc<Dentry>) -> SysResult<usize> {
@@ -449,7 +431,7 @@ impl InodeTrait for Ext4Inode {
             Ok(_) => {
                 let new_inode = Ext4Inode::new(
                     &new_path,
-                    old_inode.node_type().into(),
+                    old_inode.metadata()._type.into(),
                     old_inode.get_page_cache(),
                 );
                 new_inode

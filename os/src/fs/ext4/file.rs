@@ -23,7 +23,7 @@ use sbi_spec::pmu::cache_event::NODE;
 use super::Ext4Inode;
 
 pub struct NormalFile {
-    pub path: String,                         // 文件的路径
+    pub abspath: String,                      // 文件的路径
     pub parent: Option<Weak<dyn InodeTrait>>, // 对父目录的弱引用
     pub metadata: FileMeta,
 }
@@ -36,64 +36,29 @@ impl NormalFile {
         path: String,
     ) -> Self {
         Self {
-            path,
+            abspath: path,
             parent,
             metadata: FileMeta::new(flags, inode),
         }
     }
-
-    // 判断是否存在同名文件
-    pub fn is_child(&self, path: &str) -> bool {
-        // info!("[is_child] ? {}", path);
-        if let Some(_) = self
-            .parent
-            .as_ref()
-            .expect("no parent, plz check!")
-            .upgrade()
-            .unwrap()
-            .look_up(&path)
-        {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn unlink(&self) {}
 }
 
 // 为 OSInode 实现 File Trait
 #[async_trait]
 impl FileTrait for NormalFile {
+    fn metadata(&self) -> &FileMeta {
+        &self.metadata
+    }
+    /// 权限：通过flag判断
     fn set_flags(&self, flags: OpenFlags) {
         *self.metadata.flags.write() = flags;
-    }
-
-    fn get_flags(&self) -> OpenFlags {
-        self.metadata.flags.read().clone()
-    }
-
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        self.metadata.inode.clone()
-    }
-    fn readable(&self) -> bool {
-        self.metadata.flags.read().readable()
-    }
-
-    fn writable(&self) -> bool {
-        self.metadata.flags.read().writable()
-    }
-
-    fn executable(&self) -> bool {
-        let stat = self.metadata.inode.fstat();
-        stat.st_mode & 0o111 != 0
     }
 
     async fn read(&self, mut buf: &mut [u8]) -> SysResult<usize> {
         let mut total_read_size = 0usize;
         info!(
             "read file: {}, offset: {}",
-            self.path,
+            self.abspath,
             self.metadata.offset()
         );
 
@@ -107,7 +72,7 @@ impl FileTrait for NormalFile {
         self.metadata.set_offset(new_offset);
         info!(
             "read file: {}, old_offset: {}, new_offset: {}",
-            self.path, old_offset, new_offset
+            self.abspath, old_offset, new_offset
         );
 
         Ok(total_read_size)
@@ -116,7 +81,7 @@ impl FileTrait for NormalFile {
     /// 从偏移处读数据到buf，不用改变offset(这是和read的区别，可以将这两个函数综合)
     async fn pread(&self, mut buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
         let mut total_read_size = 0usize;
-        info!("pread file: {}, offset: {}", self.path, offset);
+        info!("pread file: {}, offset: {}", self.abspath, offset);
 
         if self.metadata.inode.get_size() <= offset {
             //读取位置超过文件大小，返回结果为EOF
@@ -180,43 +145,28 @@ impl FileTrait for NormalFile {
         Ok(res)
     }
 
-    fn get_name(&self) -> SysResult<String> {
-        Ok(self.path.clone())
-    }
-
-    fn rename(&mut self, new_path: String, flags: RenameFlags) -> SysResult<usize> {
-        Err(Errno::EIO)
+    fn abspath(&self) -> String {
+        self.abspath.clone()
     }
 
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
         let inode: &(dyn InodeTrait + 'static) = self.metadata.inode.as_ref();
         *stat = inode.fstat();
-        if self.path.contains("null") {
-            stat.st_mode = S_IFCHR;
-        }
         Ok(())
     }
 
-    fn is_dir(&self) -> bool {
-        self.metadata.inode.is_dir()
-    }
-
-    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
+    fn read_dents(&self, mut ub: usize, len: usize) -> SysResult<usize> {
         info!(
             "[read_dents] {}, len: {}, now file offset: {}",
-            self.path,
+            self.abspath,
             len,
             self.metadata.offset()
         );
-        if !self.is_dir() {
-            // info!("[read_dents] {} is not a dir", self.path);
-            return 0;
-        }
 
         let ub = if let Ok(Some(buf)) = user_slice_mut::<u8>(ub.into(), len) {
             buf
         } else {
-            return 0;
+            return Ok(0);
         };
 
         // if self.path == "/musl/ltp" || self.path == "/glibc/ltp" {
@@ -228,7 +178,7 @@ impl FileTrait for NormalFile {
         let dirs = self.metadata.inode.read_dents();
         let dirs = match dirs {
             Some(x) => x,
-            _ => return 0,
+            _ => return Ok(0),
         };
         info!("[exit_file][read_dents] dirs: {:?}", &dirs);
         // let mut res = 0;
@@ -253,7 +203,7 @@ impl FileTrait for NormalFile {
         }
         self.metadata.set_offset(file_now_offset + res);
         // info!("[read_dents] path {} return {}", self.path, res);
-        res
+        Ok(res)
     }
 
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {

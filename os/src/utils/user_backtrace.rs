@@ -24,7 +24,7 @@ pub fn user_backtrace(cx: &TrapContext) -> Result<(), ()> {
 }
 
 pub fn print_file_at() {
-    if let Ok(FileClass::File(file)) = open("/glibc/lib/libc.so.6".into(), OpenFlags::O_RDONLY) {
+    if let Ok(file) = open("/glibc/lib/libc.so.6".into(), OpenFlags::O_RDONLY) {
         let page = block_on( {file.get_page_at(0x1dbe30)});
         if let Some(page) = page {
             // let buf = &page.get_bytes_array()[0xe30..];

@@ -3,7 +3,7 @@ use core::{cmp::min, fmt::Display, intrinsics::unlikely};
 // #![allow(unused)]
 use super::current_task;
 use crate::{
-    fs::{open, socketfs::{socketfile::SocketFile, socketinode::SocketInode}, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::{Socket, PORT_FD_MANAMER}, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
+    fs::{open, socketfs::{socketfile::SocketFile, socketinode::SocketInode}, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::{Socket, PORT_FD_MANAMER}, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
 };
 use alloc::{collections::binary_heap::BinaryHeap, format, string::String, sync::Arc, vec::Vec};
 use log::info;
@@ -77,7 +77,7 @@ impl Display for FdTable {
         let mut msgs = String::from("FD TABLE:");
         for (i, item) in self.table.iter().enumerate() {
             if let Some(file) = &item.file {
-                let msg = format!("\n   {}: {}", i, file.get_name().unwrap());
+                let msg = format!("\n   {}: {}", i, file.abspath());
                 msgs.push_str(&msg);
             }
         }
@@ -157,10 +157,24 @@ impl FdTable {
 
 impl FdTable {
     pub fn new() -> Self {
+        let mut stdin;
+        let mut stdout;
+        let mut stderr;
         // 自带三个文件描述符，分别是标准输入、标准输出、标准错误
-        let stdin = FdInfo::new(Arc::new(Stdin::new()), OpenFlags::O_RDONLY);
-        let stdout = FdInfo::new(Arc::new(Stdout::new()), OpenFlags::O_WRONLY);
-        let stderr = FdInfo::new(Arc::new(Stdout::new()), OpenFlags::O_WRONLY);
+        #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+        {
+            use crate::fs::DevTty;
+            stdin = FdInfo::new(Arc::new(DevTty::new_in()), OpenFlags::O_RDONLY);
+            stdout = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
+            stderr = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
+        }
+        #[cfg(feature = "vf2")]
+        {
+            use crate::fs::CharDev;
+            stdin = FdInfo::new(Arc::new(CharDev::new_in()), OpenFlags::O_RDONLY);
+            stdout = FdInfo::new(Arc::new(CharDev::new_out()), OpenFlags::O_WRONLY);
+            stderr = FdInfo::new(Arc::new(CharDev::new_out()), OpenFlags::O_WRONLY);
+        }
         let mut fd_table = Vec::new();
         fd_table.push(stdin);
         fd_table.push(stdout);
@@ -300,7 +314,7 @@ impl FdTable {
             return Err(Errno::EBADF);
         }
         let file = self.table[fd].file.take().unwrap();
-        if file.get_name()? == "SocketFile" {
+        if file.metadata().inode.metadata()._type.is_socket() {
             let pid = current_task().unwrap().get_pid();
             PORT_FD_MANAMER.lock().remove_all_fds_by_pid_and_fd(pid, fd);
         }
@@ -315,7 +329,7 @@ impl FdTable {
 
     /// 通过fd获取文件
     pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn FileTrait>>> {
-        if idx >= self.table_len() {
+        if unlikely((idx as isize) < 0 || idx >= self.table_len() || idx > RLIMIT_NOFILE as usize) {
             info!("[getfilebyfd] fdtable len = {}", self.table_len());
             return Err(Errno::EBADF);
         }
@@ -376,8 +390,6 @@ pub fn test_fd_performance() {
 
     println!("Starting FD table performance tests...");
     let testfile = open("/aaa".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-        .unwrap()
-        .file()
         .unwrap();
 
     // 测试1: 顺序分配性能

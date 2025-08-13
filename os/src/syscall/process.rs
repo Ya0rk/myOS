@@ -318,7 +318,7 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // 对于路径上文件的问题,返回值应当和open的返回值一样?
     // 当返回的文件不是可执行文件的时候应当返回 Errno::ENOEXEC?
     let target_path = resolve_path(cwd, path);
-    if let Ok(FileClass::File(file)) = open(target_path, OpenFlags::O_RDONLY) {
+    if let Ok(file) = open(target_path, OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;
         Ok(0)

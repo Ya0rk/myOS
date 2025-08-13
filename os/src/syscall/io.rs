@@ -126,15 +126,15 @@ pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
     }
     // Ok(0)
     if let Some(file) = task.get_file_by_fd(fd) {
-        if file.is_pipe() {
+        if file.metadata().inode.metadata()._type.is_fifo() {
             info!("is pipe");
             return Ok(0);
         }
-        if !file.is_device() {
+        if !file.metadata().inode.metadata()._type.is_device() {
             info!("no device");
             return Ok(0);
         }
-        file.get_inode().ioctl(op, arg)
+        file.metadata().inode.ioctl(op, arg)
     } else {
         Err(Errno::EBADF)
     }

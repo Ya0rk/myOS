@@ -29,10 +29,10 @@ pub struct InodeMeta {
     /// 文件大小
     pub size: AtomicUsize,
     /// 文件类型
-    pub file_type: InodeType,
+    pub _type: InodeType,
     /// 时间戳
     pub timestamp: SpinNoIrqLock<TimeStamp>,
-    pub path: String,
+    pub abspath: String,
 }
 
 impl InodeMeta {
@@ -40,28 +40,21 @@ impl InodeMeta {
         Self {
             ino: alloc_ino(),
             size: AtomicUsize::new(file_size),
-            file_type,
+            _type: file_type,
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
-            path: String::from(path),
+            abspath: String::from(path),
         }
     }
 }
 
-/// Virtual File System (VFS) Inode interface.
-///
-/// This trait defines the standard operations that can be performed on an inode
-/// in the virtual file system. An inode represents either a file, directory, or
-/// other file system object.
 #[async_trait]
 pub trait InodeTrait: Any + Send + Sync {
+    fn metadata(&self) -> &InodeMeta;
+    
     fn is_valid(&self) -> bool {
         true
     }
-    /// Returns the size of the file in bytes.
-    ///
-    /// # Returns
-    ///
-    /// The size of the file in bytes.
+
     fn get_size(&self) -> usize {
         todo!()
     }
@@ -72,34 +65,11 @@ pub trait InodeTrait: Any + Send + Sync {
         Err(Errno::ENOIMPL)
     }
 
-    /// Returns the type of the inode (file, directory, etc.).
-    ///
-    /// # Returns
-    ///
-    /// An `InodeType` value indicating the type of this inode.
-    fn node_type(&self) -> InodeType {
-        todo!()
-    }
-
-    /// Returns the file status information.
-    ///
-    /// # Returns
-    ///
-    /// A `Kstat` structure containing various metadata about the file.
     fn fstat(&self) -> Kstat {
+        println!("path = {}, not implemented fstat", self.metadata().abspath);
         todo!()
     }
 
-    /// Creates a new file or directory in the current directory.
-    ///
-    /// # Arguments
-    ///
-    /// * `path` - The name of the new file or directory
-    /// * `ty` - The type of inode to create
-    ///
-    /// # Returns
-    ///
-    /// Some(Arc<dyn Inode>) if creation succeeds, None otherwise.
     /// 这里只是创建一个inode，打开文件还需要使用file结构体包裹inode，然后返回file
     fn do_create(&self, bare_dentry: Arc<Dentry>, _ty: InodeType) -> Option<Arc<dyn InodeTrait>> {
         None
@@ -109,17 +79,8 @@ pub trait InodeTrait: Any + Send + Sync {
         todo!()
     }
 
-    /// Reads data from the file at the specified offset.
-    ///
-    /// # Arguments
-    ///
-    /// * `off` - The offset from which to start reading, page中的偏移
-    /// * `buf` - The buffer to read into
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes actually read.
     async fn read_at(&self, _off: usize, _buf: &mut [u8]) -> usize {
+        println!("read_at: path {}", self.metadata().abspath);
         todo!()
     }
 
@@ -128,17 +89,8 @@ pub trait InodeTrait: Any + Send + Sync {
         todo!()
     }
 
-    /// Writes data to the file at the specified offset.
-    ///
-    /// # Arguments
-    ///
-    /// * `off` - The offset at which to start writing， page中的偏移
-    /// * `buf` - The buffer containing the data to write
-    ///
-    /// # Returns
-    ///
-    /// The number of bytes actually written.
     async fn write_at(&self, _off: usize, _buf: &[u8]) -> usize {
+        println!("write_at: path {}", self.metadata().abspath);
         todo!()
     }
 
@@ -148,14 +100,6 @@ pub trait InodeTrait: Any + Send + Sync {
     }
 
     /// 将文件设置新的size，这里用于将文件size为0
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - The new size for the file
-    ///
-    /// # Returns
-    ///
-    /// The actual new size of the file.
     fn truncate(&self, _size: usize) -> usize {
         todo!()
     }
@@ -165,15 +109,6 @@ pub trait InodeTrait: Any + Send + Sync {
         todo!()
     }
 
-    /// Removes a child entry from this directory.
-    ///
-    /// # Arguments
-    ///
-    /// * `child_name` - The abs path of the child to unlink
-    ///
-    /// # Returns
-    ///
-    /// Ok(0) on success, or an error code.
     /// unlink 一个路径，将 inode 和这个路径解耦
     /// 注意到，应当传入一个有效的 dentry
     fn unlink(&self, valid_dentry: Arc<Dentry>) -> SysResult<usize> {
@@ -186,11 +121,6 @@ pub trait InodeTrait: Any + Send + Sync {
         Err(Errno::EINVAL)
     }
 
-    /// Reads the entire contents of the file.
-    ///
-    /// # Returns
-    ///
-    /// Ok(Vec<u8>) containing the file's contents, or an error code.
     async fn read_all(&self) -> SysResult<Vec<u8>> {
         todo!();
     }
@@ -198,13 +128,6 @@ pub trait InodeTrait: Any + Send + Sync {
     /// 获取时间戳，用于修改或访问
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         todo!()
-    }
-
-    // /// 获取lwext4的ext4file
-    // fn get_ext4file(&self) -> MutexGuard<'_, Ext4File, NoIrqLock, >;
-
-    fn is_dir(&self) -> bool {
-        false
     }
 
     /// get page cache from ext4 file

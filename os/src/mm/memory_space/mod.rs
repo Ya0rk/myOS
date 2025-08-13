@@ -193,10 +193,12 @@ impl MemorySpace {
     pub async fn new_user_from_elf(
         elf_file: Arc<dyn FileTrait>,
     ) -> SysResult<(Self, usize, usize, Vec<AuxHeader>)> {
-        let elf_data = elf_file
-            .get_inode()
+        let elf_data = block_on(async { elf_file
+            .metadata()
+            .inode
             .read_all()
-            .await?;
+            .await
+        })?;
         let (mut memory_space, entry_point, auxv) =
             MemorySpace::new_user().parse_and_map_elf_data(&elf_data)?;
         let sp_init = memory_space.alloc_stack(USER_STACK_SIZE).into();
@@ -206,11 +208,12 @@ impl MemorySpace {
     pub async fn new_user_from_elf_lazily(
         elf_file: Arc<dyn FileTrait>,
     ) -> SysResult<(Self, usize, usize, Vec<AuxHeader>)> {
-        let elf_data = elf_file
-            .get_inode()
+        let elf_data = block_on(async { elf_file
+            .metadata()
+            .inode
             .read_all()
             .await
-            .expect("[new_user_from_elf_lazily] read elf file failed");
+        })?;
         let (mut memory_space, entry_point, auxv) =
             MemorySpace::new_user().parse_and_map_elf(elf_file, &elf_data)?;
         let sp_init = memory_space.alloc_stack_lazily(USER_STACK_SIZE).into();
@@ -389,8 +392,8 @@ impl MemorySpace {
 
             let cwd = current_task().unwrap().get_current_path();
             let target_path = resolve_path(cwd, interp_path);
-            if let Ok(FileClass::File(interp_file)) = open(target_path, OpenFlags::O_RDONLY) {
-                let interp_elf_data = block_on(async { interp_file.get_inode().read_all().await })?;
+            if let Ok(interp_file) = open(target_path, OpenFlags::O_RDONLY) {
+                let interp_elf_data = block_on(async { interp_file.metadata().inode.read_all().await })?;
                 let interp_elf = xmas_elf::ElfFile::new(&interp_elf_data).map_err(|_| Errno::ENOEXEC)?;
                 self.map_elf(interp_file, &interp_elf, DL_INTERP_OFFSET.into());
                 Ok(Some(

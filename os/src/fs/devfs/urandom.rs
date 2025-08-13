@@ -1,6 +1,6 @@
 use crate::{
-    fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
-    mm::{page::Page},
+    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
+    mm::page::Page,
     sync::{SpinNoIrqLock, TimeStamp},
     utils::{SysResult, RNG},
 };
@@ -12,58 +12,27 @@ use alloc::{
 };
 use async_trait::async_trait;
 
-pub struct DevRandom;
+pub struct DevRandomInode {
+    metadata: InodeMeta,
+}
 
-impl DevRandom {
-    pub fn new() -> Self {
-        Self
+impl DevRandomInode {
+    pub fn new() -> Arc<dyn InodeTrait> {
+        Arc::new(Self {
+            metadata: InodeMeta::new(
+                InodeType::CharDevice,
+                0,
+                "/dev/random",
+            ),
+        })
     }
 }
 
 #[async_trait]
-impl FileTrait for DevRandom {
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        todo!()
+impl InodeTrait for DevRandomInode {
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
     }
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        true
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
-        Ok(RNG.lock().fill_buf(user_buf))
-    }
-    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        // do nothing
-        Ok(user_buf.len())
-    }
-
-    fn get_name(&self) -> SysResult<String> {
-        Ok("/dev/random".to_string())
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
-    }
-    fn fstat(&self, stat: &mut Kstat) -> SysResult {
-        *stat = Kstat::new();
-        stat.st_mode = S_IFCHR;
-        Ok(())
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
-        todo!()
-    }
-}
-
-#[async_trait]
-impl InodeTrait for DevRandom {
     fn get_page_cache(&self) -> Option<Arc<crate::fs::page_cache::PageCache>> {
         None
     }
@@ -74,10 +43,6 @@ impl InodeTrait for DevRandom {
 
     fn set_size(&self, _new_size: usize) -> SysResult {
         Ok(())
-    }
-
-    fn node_type(&self) -> InodeType {
-        InodeType::CharDevice
     }
 
     async fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> usize {
@@ -115,12 +80,6 @@ impl InodeTrait for DevRandom {
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         unimplemented!("DevRandom does not have a timestamp")
     }
-
-    fn is_dir(&self) -> bool {
-        false
-    }
-
-    // fn rename(&self, _old_path: &String, _new_path: &String) {}
 
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         None

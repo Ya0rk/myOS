@@ -15,7 +15,7 @@ use lwext4_rust::{
 use super::{inode, InodeTrait, SuperBlockTrait};
 use crate::{
     fs::{
-        ffi::InodeType, mkdir, open, path, procfs::PROCFS_SUPER_BLOCK, root_inode, AbsPath,
+        ffi::InodeType, mkdir, open, path, root_inode, AbsPath,
         FileClass, FileTrait, OpenFlags,
     },
     sync::{NoIrqLock, SpinNoIrqLock},
@@ -316,7 +316,7 @@ impl Dentry {
             };
         }
         let inode = self.get_inode().ok_or(Errno::ENOENT)?;
-        if inode.node_type() == InodeType::Dir {
+        if inode.metadata()._type == InodeType::Dir {
             let dents = inode.read_dents().unwrap();
             let parent_abs = self.get_abs_path();
             for dent in dents {
@@ -340,7 +340,7 @@ impl Dentry {
 
     /// 将一个dentry和一个superblock绑定
     pub fn mount(self: &Arc<Self>, sb: Arc<dyn SuperBlockTrait>) {
-        if sb.root_inode().node_type() != InodeType::Dir {
+        if sb.root_inode().metadata()._type != InodeType::Dir {
             // info!("you can't mount a inode which is not TYPE DIR");
             return;
         }
@@ -421,7 +421,7 @@ impl Dentry {
             let child = dentry_now.get_child(name).ok_or(Errno::ENOENT)?;
             dentry_now = child;
             let mid_inode = dentry_now.get_inode().ok_or(Errno::ENOENT)?;
-            if !mid_inode.is_dir() && i < size_of_path - 1 {
+            if !mid_inode.metadata()._type.is_dir() && i < size_of_path - 1 {
                 return Err(Errno::ENOTDIR);
             }
         }

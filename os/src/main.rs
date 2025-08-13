@@ -188,9 +188,9 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         // crate::utils::container::lru::Lru::<i32, usize>::test_lru();
 
         task::init_processors();
-        spawn_kernel_task(async move { task::add_initproc().await });
 
         INIT_FINISHED.store(true, Ordering::SeqCst);
+        spawn_kernel_task(async move { task::add_initproc().await });
         #[cfg(feature = "mul_hart")]
         hal::entry::boot::boot_all_harts(hart_id);
     } else {

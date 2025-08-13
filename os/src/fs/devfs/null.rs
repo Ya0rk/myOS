@@ -1,5 +1,5 @@
 use crate::{
-    fs::{ext4::NormalFile, page_cache::PageCache, Dirent, FileClass, SEEK_END},
+    fs::{ext4::NormalFile, page_cache::PageCache, Dirent, FileClass, FileMeta, SEEK_END},
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
 };
 use crate::{
@@ -20,67 +20,7 @@ use log::info;
 use lwext4_rust::Ext4InodeType;
 use spin::Mutex;
 
-pub struct DevNull {
-    inode: Arc<DevNullInode>,
-}
-
-impl DevNull {
-    pub fn new() -> Self {
-        Self {
-            inode: Arc::new(DevNullInode::new()),
-        }
-    }
-}
-
-#[async_trait]
-impl FileTrait for DevNull {
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        self.inode.clone()
-    }
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        true
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    async fn read(&self, mut _user_buf: &mut [u8]) -> SysResult<usize> {
-        Ok(0)
-    }
-    /// 填满0
-    async fn pread(&self, mut user_buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
-        info!("[pread] from nullfs, fill 0");
-        user_buf.fill(0);
-        Ok(len)
-    }
-    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        Ok(user_buf.len())
-    }
-
-    fn get_name(&self) -> SysResult<String> {
-        Ok("/dev/null".to_string())
-    }
-
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
-    }
-
-    fn fstat(&self, stat: &mut Kstat) -> SysResult {
-        *stat = Kstat::new();
-        stat.st_mode = S_IFCHR;
-        Ok(())
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        todo!()
-    }
-}
-
-struct DevNullInode {
+pub struct DevNullInode {
     pub metadata: InodeMeta,
 }
 
@@ -88,25 +28,24 @@ unsafe impl Send for DevNullInode {}
 unsafe impl Sync for DevNullInode {}
 
 impl DevNullInode {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Arc<dyn InodeTrait> {
+        Arc::new(Self {
             metadata: InodeMeta::new(InodeType::CharDevice, 0, "/dev/null"),
-        }
+        })
     }
 }
 
 #[async_trait]
 impl InodeTrait for DevNullInode {
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
+    }
     fn get_size(&self) -> usize {
         0 // /dev/null 的大小始终为 0
     }
 
     fn set_size(&self, _new_size: usize) -> SysResult {
         Ok(()) // /dev/null 不支持设置大小，直接返回成功
-    }
-
-    fn node_type(&self) -> InodeType {
-        InodeType::File // /dev/null 是一个文件类型
     }
 
     fn fstat(&self) -> Kstat {
@@ -139,20 +78,12 @@ impl InodeTrait for DevNullInode {
         0 // /dev/null 的大小始终为 0
     }
 
-    async fn sync(&self) {
-        // /dev/null 不需要同步操作
-    }
-
     async fn read_all(&self) -> SysResult<Vec<u8>> {
         Ok(Vec::new()) // /dev/null 的读取始终返回空内容
     }
 
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
         &self.metadata.timestamp // 返回一个空的时间戳
-    }
-
-    fn is_dir(&self) -> bool {
-        false // /dev/null 不是目录
     }
 
     fn get_page_cache(&self) -> Option<Arc<PageCache>> {
