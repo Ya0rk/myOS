@@ -9,7 +9,7 @@ use bitflags::bitflags;
 use log::error;
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::drivers::irqchip::IrqController;
+use crate::{drivers::{device_new::dev_core::{PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::DEVICE_ADDR_OFFSET};
 
 // Register offsets from Loongson 7A documentation (Table 5-3)
 const OFFSET_INT_ID_L: usize = 0x000;
@@ -332,6 +332,25 @@ impl IrqController for PCHIntController {
     } 
 }
 
+
+impl PhysDriver for PCHIntController {
+    fn irq_number(&self) -> Option<usize> {
+        // todo!()
+        None
+    }
+}
+
+impl<'b, 'a> PhysDriverProbe<'b, 'a> for PCHIntController {
+    fn probe(fdt: &'b flat_device_tree::Fdt<'a>) -> Option<alloc::sync::Arc<Self>> {
+        // 
+        let pic_node = fdt.find_node("/intc@10000000")
+        .or( fdt.find_compatible( &["loongarch,ls7a"] ) )
+        .expect("[PCHIntController::probe] pic node not found");
+        
+        let mmio_base = pic_node.reg().next().unwrap().starting_address as usize + DEVICE_ADDR_OFFSET;
+        Some(alloc::sync::Arc::new(unsafe { PCHIntController::new(mmio_base) }))
+    }
+}
 /// A test function that can be called from kernel initialization.
 /// It assumes `println!` is available for output.
 /// # Safety
