@@ -1,4 +1,4 @@
-use crate::drivers::device_new::dev_core::{PhysDriver, PhysDriverProbe};
+use crate::{drivers::device_new::dev_core::{PhysDriver, PhysDriverProbe}, hal::config::DEVICE_ADDR_OFFSET};
 
 use super::probe::virtio_device;
 use super::VirtIoHalImpl;
@@ -85,7 +85,7 @@ pub fn enumerate_pci(pci_node: FdtNode, cam: Cam) {
 
         let mut pci_root = PciRoot::new(unsafe {
             MmioCam::new(
-                (region.starting_address as usize + 0x9000_0000_0000_0000) as *mut u8,
+                (region.starting_address as usize + DEVICE_ADDR_OFFSET) as *mut u8,
                 cam,
             )
         });

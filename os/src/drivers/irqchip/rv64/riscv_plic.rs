@@ -171,7 +171,7 @@ impl<'b, 'a> PhysDriverProbe<'b, 'a> for PLIC {
         let plic_node = fdt.find_node("/soc/plic@c000000")
         .or( fdt.find_compatible(&["riscv,plic0", "sifive,plic-1.0.0"]) )?;
         
-        let mmio_base = plic_node.reg().next().unwrap().starting_address as usize + KERNEL_ADDR_OFFSET;
+        let mmio_base = plic_node.reg().next().unwrap().starting_address as usize + DEVICE_ADDR_OFFSET;
         let plic = unsafe{ PLIC::new(mmio_base) };
 
         #[cfg(feature = "vf2")]

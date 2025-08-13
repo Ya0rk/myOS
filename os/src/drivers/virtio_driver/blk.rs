@@ -16,7 +16,7 @@ use crate::{
         virtio_driver::pci::{allocate_bars, dump_bar_contents, PciDriverProbe, PciMemory32Allocator}, 
         BaseDriver, BlockDriver, DevResult, DeviceType, VirtIoHalImpl
     }, 
-    hal::config::KERNEL_ADDR_OFFSET, 
+    hal::config::{DEVICE_ADDR_OFFSET, KERNEL_ADDR_OFFSET}, 
     sync::SpinNoIrqLock
 };
 
@@ -231,7 +231,7 @@ where
 
             let mut pci_root = PciRoot::new(unsafe {
                 MmioCam::new(
-                    (region.starting_address as usize + KERNEL_ADDR_OFFSET) as *mut u8,
+                    (region.starting_address as usize + DEVICE_ADDR_OFFSET) as *mut u8,
                     cam,
                 )
             });
