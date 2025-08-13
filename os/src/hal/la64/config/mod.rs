@@ -39,6 +39,7 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
 // #[cfg(target_arch = "loongarch64")]
 pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
+pub const DEVICE_ADDR_OFFSET: usize = 0x8000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
 
 pub const KERNEL_PG_ADDR_BASE: usize = 0xffff_ffc0_0000_0000;
