@@ -99,7 +99,7 @@ pub fn set_timer(timer: usize) {
     tcfg::set_periodic(true);
 
     ecfg::set_lie(LineBasedInterrupt::TIMER | LineBasedInterrupt::HWI0);
-    crmd::set_ie(true);
+    // crmd::set_ie(true);
     // Crmd::read().set_ie(true).write();
     // info!("interrupt enable: {:?}", ecfg::read().lie());
 }
