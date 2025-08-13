@@ -1632,12 +1632,15 @@ pub async fn sys_splice(
         return Err(Errno::EINVAL);
     }
     if unlikely(file_in.is_pipe() && off_in != 0) {
+        debug_point!("");
         return Err(Errno::ESPIPE);
     }
     if unlikely(file_out.is_pipe() && off_out != 0) {
+        debug_point!("");
         return Err(Errno::ESPIPE);
     }
     if unlikely(!file_in.is_pipe() && !file_out.is_pipe()) {
+        debug_point!("");
         return Err(Errno::EINVAL);
     }
 
@@ -1674,8 +1677,12 @@ pub async fn sys_splice(
 
     let len = min(size, read_size);
     let write_size = match file_out.is_pipe() {
-        true => file_out.write(&buffer[..len]).await?,
+        true => {
+            debug_point!("");
+            file_out.write(&buffer[..len]).await?
+        }
         false => {
+            debug_point!("");
             file_out
                 .write_at(out_offet as usize, &buffer[..len])
                 .await?
@@ -1702,7 +1709,8 @@ pub async fn sys_splice(
         }
     }
 
-    Ok(0)
+    info!("[splice] return write_size: {}", write_size);
+    Ok(write_size)
 }
 
 pub async fn sys_copy_file_range(

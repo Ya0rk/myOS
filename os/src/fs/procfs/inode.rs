@@ -60,6 +60,8 @@ pub enum ProcFsInodeInner {
     kernel,
     ///
     sys,
+    ///
+    maps,
 }
 
 /// ProcFsInode is a struct that represents an inode in the proc filesystem.
@@ -119,6 +121,7 @@ impl InodeTrait for ProcFsInode {
             ProcFsInodeInner::pipe_max_size => crate::fs::InodeType::File,
             ProcFsInodeInner::domainname => crate::fs::InodeType::File,
             ProcFsInodeInner::sys => crate::fs::InodeType::Dir,
+            ProcFsInodeInner::maps => crate::fs::InodeType::File,
         }
     }
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
@@ -178,10 +181,11 @@ MemAvailable: {mem_available:>10} kB
             }
             ProcFsInodeInner::domainname => {
                 debug_point!("");
-                let domainname = format!("(none)");
+                // let domainname = DOMAINNAME.lock().read();
 
-                let meminfo = Vec::from(domainname);
-                let len = meminfo.len();
+                let bind = DOMAINNAME.lock();
+                let meminfo = bind.read();
+                let len = bind.len();
                 if offset < len {
                     let read_len = core::cmp::min(len - offset, buf.len());
                     buf[..read_len].copy_from_slice(&meminfo[offset..offset + read_len]);
@@ -191,9 +195,32 @@ MemAvailable: {mem_available:>10} kB
                 }
             }
             ProcFsInodeInner::pipe_max_size => {
-                let pipe_max_size = format!("1048576");
+                // let pipe_max_size = PIPE_MAX_SIZE.lock().read();
 
-                let meminfo = Vec::from(pipe_max_size);
+                let bind = PIPE_MAX_SIZE.lock();
+                let meminfo = bind.read();
+                let len = bind.len();
+                if offset < len {
+                    let read_len = core::cmp::min(len - offset, buf.len());
+                    buf[..read_len].copy_from_slice(&meminfo[offset..offset + read_len]);
+                    read_len
+                } else {
+                    0
+                }
+            }
+            ProcFsInodeInner::maps => {
+                let maps = format!(
+                    r"555555554000-555555556000 r--p 00000000 00:42 5781                       /usr/bin/cat
+555555556000-55555555a000 r-xp 00002000 00:42 5781                       /usr/bin/cat
+55555555a000-55555555c000 r--p 00006000 00:42 5781                       /usr/bin/cat
+55555555c000-55555555d000 r--p 00007000 00:42 5781                       /usr/bin/cat
+55555555d000-55555555e000 rw-p 00008000 00:42 5781                       /usr/bin/cat
+efffffff8000-f00008a76000 rw-p 00000000 00:00 0
+ffff95bfe000-ffff95c00000 r--p 00000000 00:00 0                          [vvar]
+ffff95c00000-ffff95c02000 r-xp 00000000 00:00 0                          [vdso]
+ffffea742000-ffffea763000 rw-p 00000000 00:00 0                          [stack]"
+                );
+                let meminfo = Vec::from(maps);
                 let len = meminfo.len();
                 if offset < len {
                     let read_len = core::cmp::min(len - offset, buf.len());
@@ -234,7 +261,14 @@ MemAvailable: {mem_available:>10} kB
         // 这里不能write_directly
         debug_point!("");
         match self.inner {
-            ProcFsInodeInner::domainname => DOMAINNAME.lock().write(buf),
+            ProcFsInodeInner::domainname => {
+                debug_point!("");
+                DOMAINNAME.lock().write(buf)
+            }
+            ProcFsInodeInner::pipe_max_size => {
+                debug_point!("");
+                PIPE_MAX_SIZE.lock().write(buf)
+            }
             _ => 0,
         }
     }
@@ -302,20 +336,6 @@ MemAvailable: {mem_available:>10} kB
                         path,
                         ProcFsInodeInner::interrupts,
                     )))
-                // } else if pattern == "pipe-max-size" {
-                //     Some(Arc::new(ProcFsInode::new(
-                //         path,
-                //         ProcFsInodeInner::pipe_max_size,
-                //     )))
-                // } else if pattern == "domainname" {
-                //     Some(Arc::new(ProcFsInode::new(
-                //         path,
-                //         ProcFsInodeInner::domainname,
-                //     )))
-                // } else if pattern == "fs" {
-                //     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::fs)))
-                // } else if pattern == "kernel" {
-                //     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::kernel)))
                 } else if pattern == "sys" {
                     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::sys)))
                 } else {
@@ -325,6 +345,8 @@ MemAvailable: {mem_available:>10} kB
             ProcFsInodeInner::_self => {
                 if pattern == "exe" {
                     Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::exe)))
+                } else if pattern == "maps" {
+                    Some(Arc::new(ProcFsInode::new(path, ProcFsInodeInner::maps)))
                 } else {
                     None
                 }
@@ -402,6 +424,14 @@ MemAvailable: {mem_available:>10} kB
                 res.st_nlink = 1;
                 res
             }
+            ProcFsInodeInner::maps => {
+                res.st_mode = StMode::new(
+                    ModeFlag::S_IRUSR | ModeFlag::S_IRGRP | ModeFlag::S_IROTH | ModeFlag::S_IFREG,
+                )
+                .into();
+                res.st_nlink = 1;
+                res
+            }
             _ => {
                 // error!("[fstat] is a directory");
                 res.st_mode = 16877;
@@ -443,7 +473,8 @@ MemAvailable: {mem_available:>10} kB
                 Some(build_dirents(entries))
             }
             ProcFsInodeInner::_self => {
-                let mut entries = alloc::vec![(".", 2, 4), ("..", 1, 4), ("exe", 4, 8),];
+                let mut entries =
+                    alloc::vec![(".", 2, 4), ("..", 1, 4), ("exe", 4, 8), ("maps", 6, 8)];
                 Some(build_dirents(entries))
             }
             ProcFsInodeInner::sys => {

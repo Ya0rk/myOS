@@ -1,21 +1,44 @@
 use crate::sync::SpinNoIrqLock;
 use alloc::{collections::btree_map::BTreeMap, format, string::String, vec::Vec};
+
 lazy_static! {
-    pub static ref DOMAINNAME: SpinNoIrqLock<Domainname> = SpinNoIrqLock::new(Domainname::new());
+    pub static ref DOMAINNAME: SpinNoIrqLock<Domainname> =
+        SpinNoIrqLock::new(Domainname::new("(domain)"));
 }
 
 lazy_static! {
-    pub static ref PIPE_MAX_SIZE: SpinNoIrqLock<Domainname> = SpinNoIrqLock::new(Domainname::new());
+    pub static ref PIPE_MAX_SIZE: SpinNoIrqLock<Domainname> =
+        SpinNoIrqLock::new(Domainname::new("1024"));
 }
-pub struct Domainname(SpinNoIrqLock<String>);
+// pub struct Domainname([u8; 256]);
+pub struct Domainname {
+    data: [u8; 64],
+    size: usize,
+}
 
 impl Domainname {
-    fn new() -> Self {
-        Self(SpinNoIrqLock::new(String::from("(none)")))
+    fn new(content: &str) -> Self {
+        let mut res = Self {
+            data: [0; 64],
+            size: 0,
+        };
+        let data = content.as_bytes();
+        let size = data.len();
+        res.data[0..size].copy_from_slice(data);
+        res.size = size;
+        res
     }
-    pub fn write(&self, buf: &[u8]) -> usize {
-        *self.0.lock() = String::from_utf8(buf.to_vec()).ok().unwrap();
+    pub fn write(&mut self, buf: &[u8]) -> usize {
+        self.data[0..buf.len()].copy_from_slice(buf);
+        self.size = buf.len();
+        // *self.0 = String::from_utf8(buf.to_vec()).ok().unwrap();
         buf.len()
+    }
+    pub fn read(&self) -> &[u8] {
+        &self.data
+    }
+    pub fn len(&self) -> usize {
+        self.size
     }
 }
 
