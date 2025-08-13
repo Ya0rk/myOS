@@ -12,7 +12,7 @@ use crate::{
     hal::{
         arch::interrupt, 
         config::KERNEL_ADDR_OFFSET, 
-        DEVICE_ADDR_OFFSET
+        config::DEVICE_ADDR_OFFSET
     }, 
     utils::SysResult
 };

@@ -5,9 +5,10 @@ use loongarch64::register::ecfg::LineBasedInterrupt;
 use loongarch64::register::estat::{Exception, Interrupt, Trap};
 use loongarch64::register::*;
 
+use crate::drivers::device_new::manager::DEVICE_MANAGER;
 use crate::mm::memory_space::PageFaultAccessType;
-use crate::sync::{set_next_trigger, TIMER_QUEUE};
-use crate::task::{current_task, get_current_cpu, set_ktrap_ret};
+use crate::sync::{disable_supervisor_interrupt, set_next_trigger, TIMER_QUEUE};
+use crate::task::{current_task, get_current_cpu, get_current_hart_id, set_ktrap_ret};
 use crate::utils::SysResult;
 
 #[no_mangle]
@@ -32,7 +33,10 @@ pub fn kernel_trap_handler() {
         }
         Trap::Interrupt(Interrupt::HWI0) => {
             // 中断0 --- 外部中断处理
-            unimplemented!("loongarch64 Trap::Interrupt(Interrupt::HWI0)");
+            // unimplemented!("loongarch64 Trap::Interrupt(Interrupt::HWI0)");
+            // disable_supervisor_interrupt();
+            let hart_id = get_current_hart_id();
+            DEVICE_MANAGER.read().handle_irq(hart_id);
         }
         Trap::Exception(e) => {
             match e {
@@ -62,7 +66,16 @@ pub fn kernel_trap_handler() {
                         }
                     };
 
-                    let task = current_task().unwrap();
+                    let task = current_task().unwrap_or_else(
+                        || {
+                            panic!(
+                                "{:?} pc: {:#x} BADV: {:#x}",
+                                estat.cause(),
+                                era.pc(),
+                                badv::read().vaddr()
+                            )
+                        },
+                    );
                     result =
                         task.with_mut_memory_space(|m| m.handle_page_fault(va.into(), access_type));
 
