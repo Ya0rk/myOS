@@ -30,8 +30,11 @@
 // | GPIO24/16/8/0/SC0 -->0  |  |                     |
 // +-------------------------+  +---------------------+
 
+use alloc::sync::Arc;
 use bitflags::bitflags;
 use core::ptr::{read_volatile, write_volatile};
+
+use crate::{drivers::{device_new::dev_core::{PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::DEVICE_ADDR_OFFSET};
 
 // 根据龙芯 3A5000 用户手册，定义的寄存器偏移地址
 // const OFFSET_INTISR: usize = 0x1420;
@@ -156,21 +159,21 @@ impl LocalIOIntController {
     }
 
     /// 使能一个特定的中断源
-    pub fn enable(&self, irq: Interrupt) {
+    pub fn enable(&self, irq: u32) {
         let addr = (self.base_addr + OFFSET_INTENSET) as *mut u32;
         let irq_mask = 1 << (irq as u32);
         unsafe { write_volatile(addr, irq_mask) };
     }
 
     /// 禁用一个特定的中断源并清除其中断挂起状态
-    pub fn disable(&self, irq: Interrupt) {
+    pub fn disable(&self, irq: u32) {
         let addr = (self.base_addr + OFFSET_INTENCLR) as *mut u32;
         let irq_mask = 1 << (irq as u32);
         unsafe { write_volatile(addr, irq_mask) };
     }
 
     /// 检查一个中断源当前是否被使能
-    pub fn is_enabled(&self, irq: Interrupt) -> bool {
+    pub fn is_enabled(&self, irq: u32) -> bool {
         let addr = (self.base_addr + OFFSET_INTEN) as *const u32;
         let irq_mask = 1 << (irq as u32);
         let enabled_mask = unsafe { read_volatile(addr) };
@@ -179,7 +182,7 @@ impl LocalIOIntController {
 
     /// 设置中断源的触发模式
     /// `edge_triggered`: true 表示边沿触发, false 表示电平触发
-    pub fn set_trigger_mode(&self, irq: Interrupt, edge_triggered: bool) {
+    pub fn set_trigger_mode(&self, irq: u32, edge_triggered: bool) {
         let addr = (self.base_addr + OFFSET_INTEDGE) as *mut u32;
         let irq_mask = 1 << (irq as u32);
         unsafe {
@@ -195,7 +198,7 @@ impl LocalIOIntController {
 
     /// 获取中断源的触发模式
     /// 返回 `true` 如果是边沿触发, `false` 如果是电平触发
-    pub fn get_trigger_mode(&self, irq: Interrupt) -> bool {
+    pub fn get_trigger_mode(&self, irq: u32) -> bool {
         let addr = (self.base_addr + OFFSET_INTEDGE) as *const u32;
         let irq_mask = 1 << (irq as u32);
         let modes = unsafe { read_volatile(addr) };
@@ -203,7 +206,7 @@ impl LocalIOIntController {
     }
 
     /// 检查一个中断是否全局挂起
-    pub fn is_pending(&self, irq: Interrupt) -> bool {
+    pub fn is_pending(&self, irq: u32) -> bool {
         let addr = (self.base_addr + OFFSET_INTISR) as *const u32;
         let irq_mask = 1 << (irq as u32);
         let pending_mask = unsafe { read_volatile(addr) };
@@ -211,7 +214,7 @@ impl LocalIOIntController {
     }
 
     /// 获取指定核心上所有挂起中断的32位掩码
-    pub fn get_core_pending_mask(&self, core_id: u8) -> Option<u32> {
+    pub fn get_core_pendings(&self, core_id: u8) -> Option<u32> {
         if core_id > 3 {
             return None;
         }
@@ -220,18 +223,70 @@ impl LocalIOIntController {
     }
 
     /// 将一个中断源路由到特定的核心和引脚
-    pub fn route(&self, irq: Interrupt, config: ConfigVector) {
+    pub fn route(&self, irq: u32, config: ConfigVector) {
         let entry_offset = irq as u32;
         let addr = (self.base_addr + OFFSET_ENTRY_BASE + entry_offset as usize) as *mut u8;
         unsafe { write_volatile(addr, config.bits()) };
     }
 
     /// 获取一个中断源当前的路由配置
-    pub fn get_route(&self, irq: Interrupt) -> ConfigVector {
+    pub fn get_route(&self, irq: u32) -> ConfigVector {
         let entry_offset = irq as u32;
         let addr = (self.base_addr + OFFSET_ENTRY_BASE + entry_offset as usize) as *const u8;
         let bits = unsafe { read_volatile(addr) };
         ConfigVector::from_bits_truncate(bits)
+    }
+}
+
+
+
+impl IrqController for LocalIOIntController {
+    fn enable_irq(&self, hart_id: usize, irq_no: usize) {
+        // todo!()
+        // error!("[liointc] enable_irq; out_pin: {}, irq: {}", hart_id, irq_no);
+        let in_pin_id = irq_no;
+        let out_pin_id = 0u8;
+        self.enable(in_pin_id as u32);
+        let Some(cfg_vector) = ConfigVector::new(hart_id as u8, out_pin_id) else { return; };
+        self.route(in_pin_id as u32, cfg_vector);
+    }
+
+    fn disable_irq(&self, hart_id: usize, irq_no: usize) {
+        // todo!()
+        self.disable(irq_no as u32);
+    }
+
+    // claim only one irq
+    fn claim_irq(&self, hart_id: usize) -> Option<usize> {
+        // todo!()
+        let pendings = self.get_core_pendings(hart_id as u8);
+        pendings.map(|pendings| {
+            pendings.trailing_zeros() as usize
+        })
+        // TODO: maybe needed to mask it
+    }
+
+    fn finish_irq(&self, hart_id: usize, irq_no: usize) {
+        // todo!()
+        // TODO: maybe needed to unmask it
+    }
+}
+
+impl PhysDriver for LocalIOIntController {
+    fn irq_number(&self) -> Option<usize> {
+        None
+    }
+}
+
+impl<'b, 'a> PhysDriverProbe<'b, 'a> for LocalIOIntController {
+    fn probe(fdt: &'b flat_device_tree::Fdt<'a>) -> Option<alloc::sync::Arc<Self>> {
+        // todo!()
+        let liointc_node = fdt.find_node("/interrupt-controller@1fe01400")
+        .or( fdt.find_compatible(&["loongson,2k1000-icu"]) )
+        .expect("[LocalIOIntController::probe] bad fdt node");
+
+        let base_addr = liointc_node.reg().next().unwrap().starting_address as usize + DEVICE_ADDR_OFFSET;
+        Some(Arc::new(unsafe { LocalIOIntController::new(base_addr) }))
     }
 }
 
@@ -250,7 +305,7 @@ pub unsafe fn test_loongarch_icu(base_addr: usize) {
     println!("--- Starting LoongArch ICU driver test ---");
 
     let icu = LocalIOIntController::new(base_addr);
-    let test_irq = Interrupt::Uart0;
+    let test_irq = Interrupt::Uart0.into();
 
     println!("Testing IRQ: {:?}", test_irq);
 
@@ -305,3 +360,4 @@ pub unsafe fn test_loongarch_icu(base_addr: usize) {
 
     println!("--- LoongArch ICU driver test finished successfully ---");
 }
+
