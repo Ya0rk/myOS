@@ -5,23 +5,26 @@ use crate::{
     },
     mm::{
         page::Page,
-        user_ptr::{user_ref_mut, user_slice_mut},
+        user_ptr::{user_ref, user_ref_mut},
     },
     sync::{SpinNoIrqLock, TimeStamp},
+    task::current_task,
     utils::{Errno, SysResult},
 };
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::{
     string::{String, ToString},
     sync::Arc,
     vec::Vec,
 };
 use async_trait::async_trait;
+use bitflags::bitflags;
+use core::mem::size_of;
 use log::{error, info};
-use spin::Spin;
 
 lazy_static! {
-    pub static ref DEVLOOP: Arc<DevLoop> = DevLoop::new();
+    pub static ref DEVLOOP: Arc<DevLoop> = DevLoop::new(0);
 }
 
 pub struct DevLoop {
@@ -29,9 +32,9 @@ pub struct DevLoop {
 }
 
 impl DevLoop {
-    pub fn new() -> Arc<Self> {
+    pub fn new(device_num: u32) -> Arc<Self> {
         Arc::new(Self {
-            inode: Arc::new(DevLoopInode::new()),
+            inode: Arc::new(DevLoopInode::new(device_num)),
         })
     }
 }
@@ -39,6 +42,7 @@ impl DevLoop {
 #[async_trait]
 impl FileTrait for DevLoop {
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
+        debug_point!("");
         self.inode.clone()
     }
     fn readable(&self) -> bool {
@@ -51,41 +55,45 @@ impl FileTrait for DevLoop {
         false
     }
     async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
-        let len = user_buf.len();
-        user_buf.fill(0);
-        Ok(len)
+        // This is a stateful read, which is not typical for a block device file.
+        // The offset should be managed by the file descriptor.
+        // For now, we don't implement stateful reads.
+        Err(Errno::ESPIPE)
     }
-    /// 填满0
     async fn pread(&self, mut user_buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
-        info!("[pread] from zerofs, fill 0");
-        user_buf.fill(0);
-        Ok(len)
+        let read_len = self.inode.read_at(offset, &mut user_buf[..len]).await;
+        Ok(read_len)
     }
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        // do nothing
-        Ok(user_buf.len())
+        // Stateful write, see read().
+        Err(Errno::ESPIPE)
     }
 
     fn get_name(&self) -> SysResult<String> {
-        Ok("/dev/loop0".to_string())
+        Ok(format!(
+            "/dev/loop{}",
+            self.inode.meta.lock().info.lo_number
+        ))
     }
     fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
+        Err(Errno::EPERM)
     }
-    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
+    fn read_dents(&self, _ub: usize, _len: usize) -> usize {
         0
     }
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
-        *stat = Kstat::new();
-        stat.st_mode = S_IFBLK + 0o666;
+        *stat = self.inode.fstat();
         Ok(())
     }
     fn is_dir(&self) -> bool {
         false
     }
     async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
-        Some(Page::new())
+        if let Some(file) = &self.inode.meta.lock().backing_file {
+            file.get_page_at(offset).await
+        } else {
+            None
+        }
     }
     fn is_device(&self) -> bool {
         true
@@ -98,26 +106,28 @@ struct DevLoopInode {
 }
 
 impl DevLoopInode {
-    fn new() -> Self {
+    fn new(device_num: u32) -> Self {
         Self {
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
-            meta: SpinNoIrqLock::new(DevLoopInodeMeta::new()),
+            meta: SpinNoIrqLock::new(DevLoopInodeMeta::new(device_num)),
         }
     }
 }
 
 struct DevLoopInodeMeta {
-    /// 与之绑定的文件描述符, 不绑定文件(Arc<dyn Filetrait>是因为希望控制文件的生命周期)
-    fd: Option<usize>,
-    // 信息
-    info: LoopInfo,
+    /// With which file is the loop device associated?
+    backing_file: Option<Arc<dyn FileTrait>>,
+    // Information using the 64-bit structure
+    info: LoopInfo64,
 }
 
 impl DevLoopInodeMeta {
-    fn new() -> Self {
+    fn new(device_num: u32) -> Self {
+        let mut info = LoopInfo64::new();
+        info.lo_number = device_num;
         Self {
-            fd: None,
-            info: LoopInfo::new(),
+            backing_file: None,
+            info,
         }
     }
 }
@@ -129,38 +139,104 @@ impl InodeTrait for DevLoopInode {
     }
 
     fn get_size(&self) -> usize {
-        0
+        let meta = self.meta.lock();
+        if let Some(file) = &meta.backing_file {
+            if meta.info.lo_sizelimit > 0 {
+                meta.info.lo_sizelimit as usize
+            } else {
+                file.get_inode().get_size()
+            }
+        } else {
+            0
+        }
     }
 
     fn set_size(&self, _new_size: usize) -> SysResult {
-        Ok(())
+        // The size is determined by the backing file.
+        Err(Errno::EPERM)
     }
 
     fn node_type(&self) -> InodeType {
         InodeType::BlockDevice
     }
 
-    async fn read_at(&self, _offset: usize, buf: &mut [u8]) -> usize {
-        buf.fill(0);
-        buf.len()
+    async fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
+        let meta = self.meta.lock();
+        if let Some(file) = &meta.backing_file {
+            let inode = file.get_inode();
+            let read_offset = meta.info.lo_offset as usize + offset;
+
+            let size_limit = if meta.info.lo_sizelimit > 0 {
+                meta.info.lo_sizelimit
+            } else {
+                inode.get_size() as u64
+            };
+
+            if offset as u64 >= size_limit {
+                return 0;
+            }
+
+            let remaining_in_limit = (size_limit as usize).saturating_sub(offset);
+            let read_len = buf.len().min(remaining_in_limit);
+
+            if read_len == 0 {
+                return 0;
+            }
+            inode.read_at(read_offset, &mut buf[..read_len]).await
+        } else {
+            // No backing file, should return EIO. Since we can't, return 0 bytes read.
+            0
+        }
     }
 
-    async fn write_at(&self, _offset: usize, buf: &[u8]) -> usize {
-        buf.len()
+    async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
+        let meta = self.meta.lock();
+        if (meta.info.lo_flags & LoopFlags::LO_FLAGS_READ_ONLY.bits()) != 0 {
+            return 0; // Write on read-only device
+        }
+        if let Some(file) = &meta.backing_file {
+            let inode = file.get_inode();
+            let write_offset = meta.info.lo_offset as usize + offset;
+
+            let size_limit = if meta.info.lo_sizelimit > 0 {
+                meta.info.lo_sizelimit
+            } else {
+                inode.get_size() as u64
+            };
+
+            if offset as u64 >= size_limit {
+                return 0; // Attempt to write past the size limit
+            }
+
+            let remaining_in_limit = (size_limit as usize).saturating_sub(offset);
+            let write_len = buf.len().min(remaining_in_limit);
+
+            if write_len == 0 {
+                return 0;
+            }
+            inode.write_at(write_offset, &buf[..write_len]).await
+        } else {
+            // No backing file, should return EIO.
+            0
+        }
     }
 
-    async fn write_directly(&self, _offset: usize, buf: &[u8]) -> usize {
-        buf.len()
+    async fn write_directly(&self, offset: usize, buf: &[u8]) -> usize {
+        self.write_at(offset, buf).await
     }
 
     fn truncate(&self, _size: usize) -> usize {
         0
     }
 
-    async fn sync(&self) {}
+    async fn sync(&self) {
+        if let Some(file) = &self.meta.lock().backing_file {
+            file.get_inode().sync().await;
+        }
+    }
 
     async fn read_all(&self) -> SysResult<Vec<u8>> {
-        Ok(Vec::new())
+        Err(Errno::EPERM)
     }
 
     fn look_up(&self, _path: &str) -> Option<Arc<dyn InodeTrait>> {
@@ -169,21 +245,20 @@ impl InodeTrait for DevLoopInode {
 
     fn fstat(&self) -> Kstat {
         let mut stat = Kstat::new();
-        stat.st_mode = S_IFCHR;
+        stat.st_mode = S_IFBLK | 0o660;
+        stat.st_size = self.get_size() as i64;
+        // In a real scenario, major/minor numbers should be assigned.
+        stat.st_dev = 0;
         stat
     }
 
     fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
-        // 你可以给 DevLoop 加一个 timestamp 字段并返回它
-        // unimplemented!("DevLoop does not have a timestamp")
         &self.timestamp
     }
 
     fn is_dir(&self) -> bool {
         false
     }
-
-    // fn rename(&self, _old_path: &String, _new_path: &String) {}
 
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         None
@@ -195,40 +270,185 @@ impl InodeTrait for DevLoopInode {
     }
 
     fn ioctl(&self, op: usize, arg: usize) -> SysResult<usize> {
+        // Generic Block Device ioctls
+        info!("[ioctl] loop op: {:x}, arg: {:x}", op, arg);
+        const BLKGETSIZE64: u32 = 0x80081272; // returns u64, size in bytes
+        const BLKGETSIZE: u32 = 0x125D; // returns long, size in 512-byte sectors
+        const BLKSSZGET: u32 = 0x1268; // returns int, logical block size (sector size)
+        let op = op as u32;
+
+        match op {
+            BLKGETSIZE64 => {
+                info!("[DevLoopInode_ioctl] BLKGETSIZE64");
+                let size_in_bytes = self.get_size() as u64;
+                let user_ptr: &mut u64 = user_ref_mut(arg.into())?.ok_or(Errno::EFAULT)?;
+                *user_ptr = size_in_bytes;
+                return Ok(0);
+            }
+            BLKGETSIZE => {
+                info!("[DevLoopInode_ioctl] BLKGETSIZE");
+                let size_in_bytes = self.get_size() as u64;
+                let sector_size = 512; // Assume 512-byte sectors for this ioctl
+                let size_in_sectors = size_in_bytes / sector_size;
+                // The result is a `long`. On 64-bit arch, it's 64-bit.
+                let user_ptr: &mut u64 = user_ref_mut(arg.into())?.ok_or(Errno::EFAULT)?;
+                *user_ptr = size_in_sectors;
+                return Ok(0);
+            }
+            BLKSSZGET => {
+                info!("[DevLoopInode_ioctl] BLKSSZGET");
+                let sector_size = 512; // Logical sector size
+                let user_ptr: &mut u32 = user_ref_mut(arg.into())?.ok_or(Errno::EFAULT)?;
+                *user_ptr = sector_size;
+                return Ok(0);
+            }
+            _ => {} // Fall through to loop-specific ioctls
+        }
+
+        debug_point!("");
         let cmd = LoopIoctl::from_bits(op as u32).ok_or(Errno::EINVAL)?;
-        let user_ptr: &mut LoopInfo = user_ref_mut(arg.into())?.unwrap();
-        info!("[DevLoopInode_ioctl] {}, {:?}", &cmd, user_ptr);
+        info!("[DevLoopInode_ioctl] cmd: {}, arg: {:#x}", &cmd, arg);
+
+        let task = current_task().ok_or(Errno::ESRCH)?;
+
         match cmd {
-            cmd if cmd.bits() == LoopIoctl::LOOP_GET_STATUS.bits() => {
-                // Handle LOOP_GET_STATUS
-                info!("[DevLoopInode_ioctl]LOOP_GET_STATUS ");
-                {
-                    *user_ptr = self.meta.lock().info;
+            LoopIoctl::LOOP_SET_FD => {
+                let fd = arg as usize;
+                let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+                let inode = file.get_inode();
+                let mut meta = self.meta.lock();
+
+                if meta.backing_file.is_some() {
+                    return Err(Errno::EBUSY);
                 }
-                info!("[DevLoopInode_ioctl] return\n {:?}", user_ptr);
-                if self.meta.lock().fd.is_none() {
+
+                meta.backing_file = Some(file.clone());
+                // meta.info.lo_inode = inode.get_inode_num() as u64; // Assuming get_inode_num exists
+                meta.info.lo_sizelimit = inode.get_size() as u64;
+                let name = file.get_name().unwrap_or_default();
+                let name_bytes = name.as_bytes();
+                let len = name_bytes.len().min(LO_NAME_SIZE - 1);
+                meta.info.lo_file_name[..len].copy_from_slice(&name_bytes[..len]);
+                meta.info.lo_file_name[len] = 0;
+                Ok(0)
+            }
+            LoopIoctl::LOOP_CLR_FD => {
+                let mut meta = self.meta.lock();
+                if meta.backing_file.is_none() {
                     return Err(Errno::ENXIO);
+                }
+                meta.backing_file = None;
+                let number = meta.info.lo_number;
+                meta.info = LoopInfo64::new(); // Reset info
+                meta.info.lo_number = number;
+                Ok(0)
+            }
+            LoopIoctl::LOOP_GET_STATUS => {
+                let user_ptr: &mut LoopInfo = user_ref_mut(arg.into())?.ok_or(Errno::EFAULT)?;
+                let meta = self.meta.lock();
+                if meta.backing_file.is_none() {
+                    return Err(Errno::ENXIO);
+                }
+                *user_ptr = meta.info.to_loop_info();
+                Ok(0)
+            }
+            LoopIoctl::LOOP_SET_STATUS => {
+                let user_ptr: &LoopInfo = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                let mut meta = self.meta.lock();
+                if meta.backing_file.is_none() {
+                    return Err(Errno::ENXIO);
+                }
+                meta.info.from_loop_info(user_ptr);
+                Ok(0)
+            }
+            LoopIoctl::LOOP_GET_STATUS64 => {
+                let user_ptr: &mut LoopInfo64 = user_ref_mut(arg.into())?.ok_or(Errno::EFAULT)?;
+                let meta = self.meta.lock();
+                if meta.backing_file.is_none() {
+                    return Err(Errno::ENXIO);
+                }
+                *user_ptr = meta.info;
+                Ok(0)
+            }
+            LoopIoctl::LOOP_SET_STATUS64 => {
+                let user_ptr: &LoopInfo64 = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                let mut meta = self.meta.lock();
+                if meta.backing_file.is_none() {
+                    return Err(Errno::ENXIO);
+                }
+                let old_info = meta.info;
+                meta.info = *user_ptr;
+                // Restore read-only fields
+                meta.info.lo_device = old_info.lo_device;
+                meta.info.lo_inode = old_info.lo_inode;
+                meta.info.lo_rdevice = old_info.lo_rdevice;
+                meta.info.lo_number = old_info.lo_number;
+                Ok(0)
+            }
+            LoopIoctl::LOOP_CHANGE_FD => {
+                let meta = self.meta.lock();
+                if (meta.info.lo_flags & LoopFlags::LO_FLAGS_READ_ONLY.bits()) == 0 {
+                    return Err(Errno::EINVAL);
+                }
+                let old_file_size = meta
+                    .backing_file
+                    .as_ref()
+                    .map(|f| f.get_inode().get_size())
+                    .unwrap_or(0);
+                drop(meta);
+
+                let fd = arg as usize;
+                let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+                let inode = file.get_inode();
+                if inode.get_size() != old_file_size {
+                    return Err(Errno::EINVAL);
+                }
+                self.meta.lock().backing_file = Some(file);
+                Ok(0)
+            }
+            LoopIoctl::LOOP_SET_CAPACITY => {
+                let mut meta = self.meta.lock();
+                if let Some(file) = &meta.backing_file {
+                    let inode = file.get_inode();
+                    meta.info.lo_sizelimit = inode.get_size() as u64;
+                    Ok(0)
                 } else {
-                    return Ok(0);
+                    Err(Errno::ENXIO)
                 }
             }
-            cmd if cmd.bits() == LoopIoctl::LOOP_SET_STATUS.bits() => {
-                // Handle LOOP_SET_STATUS
-                self.meta.lock().info = *user_ptr;
+            LoopIoctl::LOOP_SET_DIRECT_IO => {
+                let mut meta = self.meta.lock();
+                if arg != 0 {
+                    meta.info.lo_flags |= LoopFlags::LO_FLAGS_DIRECT_IO.bits();
+                } else {
+                    meta.info.lo_flags &= !LoopFlags::LO_FLAGS_DIRECT_IO.bits();
+                }
                 Ok(0)
             }
-            cmd if cmd.bits() == LoopIoctl::LOOP_SET_FD.bits() => {
-                // Handle LOOP_SET_FD
-                self.meta.lock().fd = Some(arg);
-                Ok(0)
-            }
-            cmd if cmd.bits() == LoopIoctl::LOOP_CLR_FD.bits() => {
-                self.meta.lock().fd = None;
+            LoopIoctl::LOOP_SET_BLOCK_SIZE => Err(Errno::EINVAL), // Not supported for now
+            LoopIoctl::LOOP_CONFIGURE => {
+                let user_ptr: &LoopConfig = user_ref(arg.into())?.ok_or(Errno::EFAULT)?;
+                let config = *user_ptr;
+                let fd = config.fd as usize;
+                let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+                let inode = file.get_inode();
+
+                let mut meta = self.meta.lock();
+                meta.backing_file = Some(file.clone());
+                meta.info = config.info;
+                // meta.info.lo_inode = inode.get_inode_num() as u64;
+                if meta.info.lo_sizelimit == 0 {
+                    meta.info.lo_sizelimit = inode.get_size() as u64;
+                }
+                let name = file.get_name().unwrap_or_default();
+                let name_bytes = name.as_bytes();
+                let len = name_bytes.len().min(LO_NAME_SIZE - 1);
+                meta.info.lo_file_name[..len].copy_from_slice(&name_bytes[..len]);
+                meta.info.lo_file_name[len] = 0;
                 Ok(0)
             }
             _ => {
-                // Handle other cases
-                error!("no valid cmd");
+                error!("unimplemented or invalid loop ioctl: {}", &cmd);
                 Err(Errno::EINVAL)
             }
         }
@@ -236,35 +456,22 @@ impl InodeTrait for DevLoopInode {
 }
 
 bitflags! {
-    /// 环回设备的 ioctl 命令
+    /// `ioctl` commands for the loop device
+    #[derive(PartialEq)]
     pub struct LoopIoctl: u32 {
-        /// 设置环回设备的文件描述符
         const LOOP_SET_FD = 0x4C00;
-        /// 清除环回设备的文件描述符
         const LOOP_CLR_FD = 0x4C01;
-        /// 设置环回设备的状态
         const LOOP_SET_STATUS = 0x4C02;
-        /// 获取环回设备的状态
         const LOOP_GET_STATUS = 0x4C03;
-        /// 设置环回设备的状态（64 位版本）
         const LOOP_SET_STATUS64 = 0x4C04;
-        /// 获取环回设备的状态（64 位版本）
         const LOOP_GET_STATUS64 = 0x4C05;
-        /// 更改环回设备的文件描述符
         const LOOP_CHANGE_FD = 0x4C06;
-        /// 设置环回设备的容量
         const LOOP_SET_CAPACITY = 0x4C07;
-        /// 启用或禁用环回设备的直接 I/O
         const LOOP_SET_DIRECT_IO = 0x4C08;
-        /// 设置环回设备的块大小
         const LOOP_SET_BLOCK_SIZE = 0x4C09;
-        /// 配置环回设备
         const LOOP_CONFIGURE = 0x4C0A;
-        /// 添加一个新的环回设备
         const LOOP_CTL_ADD = 0x4C80;
-        /// 移除一个现有的环回设备
         const LOOP_CTL_REMOVE = 0x4C81;
-        /// 获取第一个空闲的环回设备
         const LOOP_CTL_GET_FREE = 0x4C82;
     }
 }
@@ -294,74 +501,101 @@ impl fmt::Display for LoopIoctl {
     }
 }
 
-use core::mem::size_of;
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-/// 表示环回设备的信息。
-pub struct LoopInfo {
-    /// 环回设备编号（通过 ioctl 只读）。
-    pub lo_number: i32,
-    /// 设备标识符（__kernel_old_dev_t，通过 ioctl 只读）。
-    pub lo_device: u16,
-    /// 与环回设备关联的 inode 编号（通过 ioctl 只读）。
-    pub lo_inode: u64,
-    /// 实际设备标识符（__kernel_old_dev_t，通过 ioctl 只读）。
-    pub lo_rdevice: u16,
-    /// 在后备文件或设备中的偏移量。
-    pub lo_offset: i32,
-    /// 环回设备使用的加密类型。
-    pub lo_encrypt_type: i32,
-    /// 加密密钥的大小（通过 ioctl 只写）。
-    pub lo_encrypt_key_size: i32,
-    /// 与环回设备关联的标志。
-    pub lo_flags: i32,
-    /// 后备文件或设备的名称。
-    pub lo_name: [u8; LO_NAME_SIZE],
-    /// 环回设备使用的加密密钥。
-    pub lo_encrypt_key: [u8; LO_KEY_SIZE],
-    /// 环回设备的初始化数据。
-    pub lo_init: [u64; 2],
-    /// 保留供将来使用。
-    pub reserved: [u8; 4],
+bitflags! {
+    pub struct LoopFlags: u32 {
+        const LO_FLAGS_READ_ONLY = 1;
+        const LO_FLAGS_AUTOCLEAR = 4;
+        const LO_FLAGS_PARTSCAN = 8;
+        const LO_FLAGS_DIRECT_IO = 16;
+    }
 }
 
-// 定义常量，确保与 C 语言的宏定义一致
 pub const LO_NAME_SIZE: usize = 64;
 pub const LO_KEY_SIZE: usize = 32;
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+/// 32-bit version of loop device info
+pub struct LoopInfo {
+    pub lo_number: i32,
+    pub lo_device: u16,
+    pub lo_inode: u64,
+    pub lo_rdevice: u16,
+    pub lo_offset: i32,
+    pub lo_encrypt_type: i32,
+    pub lo_encrypt_key_size: i32,
+    pub lo_flags: i32,
+    pub lo_name: [u8; LO_NAME_SIZE],
+    pub lo_encrypt_key: [u8; LO_KEY_SIZE],
+    pub lo_init: [u64; 2],
+    pub reserved: [u8; 4],
+}
+
 impl LoopInfo {
-    /// 创建一个新的 `LoopInfo` 实例，所有字段初始化为默认值
     pub fn new() -> Self {
-        Self {
-            lo_number: 1,
-            lo_device: 1,
-            lo_inode: 0,
-            lo_rdevice: 1,
-            lo_offset: 0,
-            lo_encrypt_type: 0,
-            lo_encrypt_key_size: 0,
-            lo_flags: 0,
-            lo_name: [0; LO_NAME_SIZE],
-            lo_encrypt_key: [0; LO_KEY_SIZE],
-            lo_init: [0; 2],
-            reserved: [0; 4],
-        }
+        unsafe { core::mem::zeroed() }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+/// 64-bit version of loop device info
+pub struct LoopInfo64 {
+    pub lo_device: u64,
+    pub lo_inode: u64,
+    pub lo_rdevice: u64,
+    pub lo_offset: u64,
+    pub lo_sizelimit: u64,
+    pub lo_number: u32,
+    pub lo_encrypt_type: u32,
+    pub lo_encrypt_key_size: u32,
+    pub lo_flags: u32,
+    pub lo_file_name: [u8; LO_NAME_SIZE],
+    pub lo_crypt_name: [u8; LO_NAME_SIZE],
+    pub lo_encrypt_key: [u8; LO_KEY_SIZE],
+    pub lo_init: [u64; 2],
+}
+
+impl LoopInfo64 {
+    pub fn new() -> Self {
+        unsafe { core::mem::zeroed() }
     }
 
-    /// 将结构体转换为字节数组，便于与 C 语言交互
-    pub fn as_bytes(&self) -> &[u8] {
-        let size = size_of::<Self>();
-        unsafe { core::slice::from_raw_parts(self as *const _ as *const u8, size) }
+    pub fn to_loop_info(&self) -> LoopInfo {
+        let mut info = LoopInfo::new();
+        info.lo_number = self.lo_number as i32;
+        info.lo_device = self.lo_device as u16;
+        info.lo_inode = self.lo_inode;
+        info.lo_rdevice = self.lo_rdevice as u16;
+        info.lo_offset = self.lo_offset as i32;
+        info.lo_encrypt_type = self.lo_encrypt_type as i32;
+        info.lo_encrypt_key_size = self.lo_encrypt_key_size as i32;
+        info.lo_flags = self.lo_flags as i32;
+        info.lo_name.copy_from_slice(&self.lo_file_name);
+        info.lo_encrypt_key.copy_from_slice(&self.lo_encrypt_key);
+        info.lo_init = self.lo_init;
+        info
     }
 
-    /// 从字节数组创建 `LoopInfo` 实例
-    pub fn from_bytes(bytes: &[u8]) -> Self {
-        assert_eq!(bytes.len(), size_of::<Self>(), "Invalid byte slice size");
-        unsafe { *(bytes.as_ptr() as *const Self) }
-    }
+    pub fn from_loop_info(&mut self, info: &LoopInfo) {
+        const MODIFIABLE_FLAGS: u32 =
+            LoopFlags::LO_FLAGS_AUTOCLEAR.bits() | LoopFlags::LO_FLAGS_PARTSCAN.bits();
 
-    pub fn sizeof() -> usize {
-        size_of::<Self>()
+        self.lo_offset = info.lo_offset as u64;
+        let new_flags = info.lo_flags as u32;
+        self.lo_flags = (self.lo_flags & !MODIFIABLE_FLAGS) | (new_flags & MODIFIABLE_FLAGS);
+        self.lo_file_name.copy_from_slice(&info.lo_name);
+        self.lo_encrypt_type = info.lo_encrypt_type as u32;
+        self.lo_encrypt_key_size = info.lo_encrypt_key_size as u32;
+        self.lo_encrypt_key.copy_from_slice(&info.lo_encrypt_key);
     }
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct LoopConfig {
+    pub fd: u32,
+    pub block_size: u32,
+    pub info: LoopInfo64,
+    pub __reserved: [u8; 8],
 }

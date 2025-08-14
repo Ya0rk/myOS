@@ -729,10 +729,6 @@ pub fn sys_mount(
     data: usize,
 ) -> SysResult<usize> {
     info!("[sys_mount] start");
-    // println!(
-    //     "[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = {}",
-    //     source, target, fstype, flags, data
-    // );
     if unlikely(source == 0 || target == 0 || fstype == 0) {
         return Err(Errno::EFAULT);
     }
@@ -744,21 +740,37 @@ pub fn sys_mount(
         true => String::new(),
         false => user_cstr(data.into())?.unwrap(),
     };
-    // info!("sys_mount: source = {}, target = {}, fstype = {}, flags = {}, data = {}", source, target, fstype, flags, data);
+    info!(
+        "sys_mount: source = {}, target = {}, fstype = {}, flags = {}, data = {}",
+        source, target, fstype, flags, data
+    );
+    // if fstype != "none" {
+    //     debug_point!("");
+    //     return Err(Errno::ENODEV);
+    // }
 
     let check_flags = MountFlags::from_bits(flags).unwrap();
+    debug_point!("");
 
     let mut mnt_table = MNT_TABLE.lock();
+    debug_point!("");
 
     if check_flags.contains(MountFlags::MS_REMOUNT) && !mnt_table.is_mounted(source.clone())
         || check_flags.contains(MountFlags::MS_MOVE) && source == "/"
     {
+        debug_point!("");
         return Err(Errno::EINVAL);
     }
 
     match mnt_table.mount(source, target, fstype, flags as u32, data) {
-        0 => Ok(0),
-        _ => Err(Errno::EBADCALL),
+        0 => {
+            debug_point!("");
+            Ok(0)
+        }
+        _ => {
+            debug_point!("");
+            Err(Errno::EBADCALL)
+        }
     }
 }
 
