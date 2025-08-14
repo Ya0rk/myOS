@@ -78,6 +78,7 @@ impl TrapContext {
     ) -> Self {
         let mut sstatus = sstatus::read();
         sstatus.set_spp(SPP::User);
+        sstatus.set_sie(false);
         let mut cx = Self {
             user_gp: GPRegs::new(),
             sstatus,
