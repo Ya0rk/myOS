@@ -1,6 +1,6 @@
 use alloc::{collections::btree_map::BTreeMap, string::{String, ToString}, sync::Arc, vec::Vec, boxed::Box};
 use async_trait::async_trait;
-use crate::fs::{dirent::build_dirents, procfs::exe::ExeInode, AbsPath, Dirent, InodeMeta, InodeTrait, Kstat};
+use crate::fs::{dirent::build_dirents, procfs::_self::{exe::ExeInode, maps::MapsInode}, AbsPath, Dirent, InodeMeta, InodeTrait, Kstat};
 
 
 pub struct _SelfInode{
@@ -12,6 +12,7 @@ impl _SelfInode {
     pub fn new() -> Arc<dyn InodeTrait> {
         let mut children = BTreeMap::new();
         children.insert("exe".to_string(), ExeInode::new());
+        children.insert("maps".to_string(), MapsInode::new());
         Arc::new(Self{
             inodeMeta: InodeMeta::new(
                 crate::fs::InodeType::Dir,
@@ -43,7 +44,8 @@ impl InodeTrait for _SelfInode {
         let mut entries = alloc::vec![
             (".", 2, 4), 
             ("..", 1, 4), 
-            ("exe", 4, 8),
+            ("exe", 4, 8), 
+            ("maps", 6, 8)
         ];
         Some(build_dirents(entries))
     }

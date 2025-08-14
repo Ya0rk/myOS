@@ -3,6 +3,6 @@ pub mod irqtable;
 mod root;
 mod meminfo;
 mod mounts;
-mod exe;
 mod _self;
 mod interrupts;
+mod sys;

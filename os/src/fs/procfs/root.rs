@@ -1,6 +1,6 @@
 use crate::{
     fs::{
-        dirent::build_dirents, ffi::MEMINFO, open, procfs::{_self::_SelfInode, interrupts::InterruptInode, irqtable::{SupervisorExternal, SupervisorTimer, IRQTABLE}, meminfo::MeminfoInode, mounts::MountsInode}, AbsPath, Dirent, FileClass, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags
+        dirent::build_dirents, ffi::MEMINFO, open, procfs::{_self::_SelfInode, interrupts::InterruptInode, irqtable::{SupervisorExternal, SupervisorTimer, IRQTABLE}, meminfo::MeminfoInode, mounts::MountsInode, sys::SysDirInode}, AbsPath, Dirent, FileClass, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags
     },
     mm::frame_allocator::{FrameAllocator, StackFrameAllocator, FRAME_ALLOCATOR},
     sync::{SpinNoIrqLock, TimeStamp},
@@ -16,46 +16,6 @@ use async_trait::async_trait;
 use log::error;
 use lwext4_rust::bindings::O_RDONLY;
 
-/// ProcFsInodeInner 是一个枚举类型, 代表proc文件系统中的inode的类型
-///
-/// 它有四种类型:
-///
-/// - root: 代表proc文件系统的根目录
-///
-/// - _self: 代表当前进程的内容, 应当是一个文件夹
-///
-/// - exe: 代表当前执行的文件
-///
-/// - meminfo: 代表内存使用信息
-// pub enum ProcFsInodeInner {
-//     /// 根目录
-//     root,
-//     /// 当前进程的内容, 应当是一个文件夹
-//     _self,
-//     /// 当前执行的文件
-//     exe,
-//     /// 内存使用信息
-//     meminfo,
-//     /// 记录当前系统挂载的所有文件系统信息(busybox的df测例)
-//     mounts,
-//     /// 记录中断次数
-//     interrupts,
-// }
-
-/// ProcFsInode is a struct that represents an inode in the proc filesystem.
-///
-/// ProcFsInode 是一个表示proc文件系统中的inode的结构体
-///
-/// inner: 代表类型, 有root, _self, exe, meminfo四种类型
-///
-/// ptah: 代表路径, 例如"/proc/self", "/proc/meminfo"等
-///
-/// 讲道理是要为ProcFsInodeInner中的所有类型都实现一个ProcFsInode的
-///
-/// 但是就这几个就用模式匹配了
-///
-/// 也可以用继承的方式
-///
 pub struct ProcFsRootInode {
     metadata: InodeMeta,
     children: BTreeMap<String, Arc<dyn InodeTrait>>,
@@ -69,6 +29,7 @@ impl ProcFsRootInode {
         children.insert("_self".to_string(), _SelfInode::new());
         children.insert("mounts".to_string(), MountsInode::new());
         children.insert("interrupts".into(), InterruptInode::new());
+        children.insert("sys".into(), SysDirInode::new());
         Self {
             metadata: InodeMeta::new(
                 InodeType::Dir,
