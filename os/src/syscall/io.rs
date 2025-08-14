@@ -117,11 +117,12 @@ pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
         "[sys_ioctl] start fd: {}, op: {:#x}, arg: {:#x}",
         fd, op, arg
     );
-    if unlikely(arg == 0) {
-        return Err(Errno::EFAULT);
-    }
+    // if unlikely(arg == 0) {
+    //     return Err(Errno::EFAULT);
+    // }
     let task = current_task().unwrap();
     if unlikely(fd > task.fd_table_len()) {
+        debug_point!("");
         return Err(Errno::EBADF);
     }
     // Ok(0)
@@ -134,8 +135,10 @@ pub fn sys_ioctl(fd: usize, op: usize, arg: usize) -> SysResult<usize> {
             info!("no device");
             return Ok(0);
         }
+        debug_point!("");
         file.get_inode().ioctl(op, arg)
     } else {
+        debug_point!("");
         Err(Errno::EBADF)
     }
 }
@@ -155,11 +158,9 @@ pub async fn sys_pselect(
     sigmask: usize,
 ) -> SysResult<usize> {
     info!("[sys_pselect] start.");
-    let mut get_fdset = |ptr: usize| {
-        match ptr {
-            0 => None,
-            _ => Some(unsafe { &mut *(ptr as *mut FdSet) }),
-        }
+    let mut get_fdset = |ptr: usize| match ptr {
+        0 => None,
+        _ => Some(unsafe { &mut *(ptr as *mut FdSet) }),
     };
     let mut readfds = get_fdset(readfds_ptr);
     let mut writefds = get_fdset(writefds_ptr);
