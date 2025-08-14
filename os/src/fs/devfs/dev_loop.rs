@@ -1,7 +1,7 @@
 use crate::{
     fs::{
-        ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFBLK,
-        S_IFCHR,
+        ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags,
+        SEEK_CUR, SEEK_END, SEEK_SET, S_IFBLK, S_IFCHR,
     },
     mm::{
         page::Page,
@@ -24,17 +24,24 @@ use core::mem::size_of;
 use log::{error, info};
 
 lazy_static! {
-    pub static ref DEVLOOP: Arc<DevLoop> = DevLoop::new(0);
+    // This singleton represents the platonic ideal of the device.
+    // When opened, a new `DevLoop` file handle with its own state should be created.
+    // For now, we create a single instance that will be shared, which might have
+    // issues with concurrent access expecting different file offsets.
+    pub static ref DEVLOOP: Arc<DevLoop> = DevLoop::new(0, OpenFlags::O_RDWR);
 }
 
 pub struct DevLoop {
+    metadata: FileMeta,
     inode: Arc<DevLoopInode>,
 }
 
 impl DevLoop {
-    pub fn new(device_num: u32) -> Arc<Self> {
+    pub fn new(device_num: u32, flags: OpenFlags) -> Arc<Self> {
+        let inode = Arc::new(DevLoopInode::new(device_num));
         Arc::new(Self {
-            inode: Arc::new(DevLoopInode::new(device_num)),
+            metadata: FileMeta::new(flags, inode.clone()),
+            inode,
         })
     }
 }
@@ -42,31 +49,63 @@ impl DevLoop {
 #[async_trait]
 impl FileTrait for DevLoop {
     fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        debug_point!("");
         self.inode.clone()
     }
+
     fn readable(&self) -> bool {
-        true
+        self.metadata.flags.read().readable()
     }
+
     fn writable(&self) -> bool {
-        true
+        self.metadata.flags.read().writable()
     }
+
     fn executable(&self) -> bool {
         false
     }
-    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
-        // This is a stateful read, which is not typical for a block device file.
-        // The offset should be managed by the file descriptor.
-        // For now, we don't implement stateful reads.
-        Err(Errno::ESPIPE)
+
+    fn get_flags(&self) -> OpenFlags {
+        self.metadata.flags.read().clone()
     }
-    async fn pread(&self, mut user_buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
-        let read_len = self.inode.read_at(offset, &mut user_buf[..len]).await;
+
+    fn set_flags(&self, flags: OpenFlags) {
+        *self.metadata.flags.write() = flags;
+    }
+
+    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
+        let offset = self.metadata.offset();
+        let read_size = self.inode.read_at(offset, user_buf).await;
+        self.metadata.set_offset(offset + read_size);
+        Ok(read_size)
+    }
+
+    async fn pread(&self, mut user_buf: &mut [u8], offset: usize, _len: usize) -> SysResult<usize> {
+        let read_len = self.inode.read_at(offset, &mut user_buf).await;
         Ok(read_len)
     }
+
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        // Stateful write, see read().
-        Err(Errno::ESPIPE)
+        let offset = self.metadata.offset();
+        let write_size = self.inode.write_at(offset, user_buf).await;
+        self.metadata.set_offset(offset + write_size);
+        Ok(write_size)
+    }
+
+    async fn pwrite(&self, buf: &[u8], offset: usize, _len: usize) -> SysResult<usize> {
+        let write_size = self.inode.write_at(offset, buf).await;
+        Ok(write_size)
+    }
+
+    fn lseek(&self, offset: isize, whence: usize) -> SysResult<usize> {
+        let old_offset = self.metadata.offset();
+        let new_offset = match whence {
+            SEEK_SET => offset as usize,
+            SEEK_CUR => (old_offset as isize + offset) as usize,
+            SEEK_END => (self.inode.get_size() as isize + offset) as usize,
+            _ => return Err(Errno::EINVAL),
+        };
+        self.metadata.set_offset(new_offset);
+        Ok(new_offset)
     }
 
     fn get_name(&self) -> SysResult<String> {
@@ -152,7 +191,7 @@ impl InodeTrait for DevLoopInode {
     }
 
     fn set_size(&self, _new_size: usize) -> SysResult {
-        // The size is determined by the backing file.
+        // The size is determined by the backing file and cannot be changed directly.
         Err(Errno::EPERM)
     }
 
@@ -198,23 +237,23 @@ impl InodeTrait for DevLoopInode {
             let inode = file.get_inode();
             let write_offset = meta.info.lo_offset as usize + offset;
 
-            let size_limit = if meta.info.lo_sizelimit > 0 {
-                meta.info.lo_sizelimit
-            } else {
-                inode.get_size() as u64
-            };
-
-            if offset as u64 >= size_limit {
-                return 0; // Attempt to write past the size limit
-            }
-
-            let remaining_in_limit = (size_limit as usize).saturating_sub(offset);
-            let write_len = buf.len().min(remaining_in_limit);
-
-            if write_len == 0 {
-                return 0;
-            }
-            inode.write_at(write_offset, &buf[..write_len]).await
+            // let size_limit = if meta.info.lo_sizelimit > 0 {
+            //     meta.info.lo_sizelimit
+            // } else {
+            //     inode.get_size() as u64
+            // };
+            //
+            // if offset as u64 >= size_limit {
+            //     return 0; // Attempt to write past the size limit
+            // }
+            //
+            // let remaining_in_limit = (size_limit as usize).saturating_sub(offset);
+            // let write_len = buf.len().min(remaining_in_limit);
+            //
+            // if write_len == 0 {
+            //     return 0;
+            // }
+            inode.write_at(write_offset, &buf).await
         } else {
             // No backing file, should return EIO.
             0
@@ -273,7 +312,7 @@ impl InodeTrait for DevLoopInode {
         // Generic Block Device ioctls
         info!("[ioctl] loop op: {:x}, arg: {:x}", op, arg);
         const BLKGETSIZE64: u32 = 0x80081272; // returns u64, size in bytes
-        const BLKGETSIZE: u32 = 0x125D; // returns long, size in 512-byte sectors
+        const BLKGETSIZE: u32 = 0x1260; // returns long, size in 512-byte sectors
         const BLKSSZGET: u32 = 0x1268; // returns int, logical block size (sector size)
         let op = op as u32;
 
@@ -288,12 +327,8 @@ impl InodeTrait for DevLoopInode {
             BLKGETSIZE => {
                 info!("[DevLoopInode_ioctl] BLKGETSIZE");
                 let size_in_bytes = self.get_size() as u64;
-                let sector_size = 512; // Assume 512-byte sectors for this ioctl
-                let size_in_sectors = size_in_bytes / sector_size;
-                // The result is a `long`. On 64-bit arch, it's 64-bit.
-                let user_ptr: &mut u64 = user_ref_mut(arg.into())?.ok_or(Errno::EFAULT)?;
-                *user_ptr = size_in_sectors;
-                return Ok(0);
+                let size_in_sectors = size_in_bytes / 512;
+                return Ok(size_in_sectors as usize);
             }
             BLKSSZGET => {
                 info!("[DevLoopInode_ioctl] BLKSSZGET");
@@ -305,7 +340,6 @@ impl InodeTrait for DevLoopInode {
             _ => {} // Fall through to loop-specific ioctls
         }
 
-        debug_point!("");
         let cmd = LoopIoctl::from_bits(op as u32).ok_or(Errno::EINVAL)?;
         info!("[DevLoopInode_ioctl] cmd: {}, arg: {:#x}", &cmd, arg);
 
@@ -323,7 +357,6 @@ impl InodeTrait for DevLoopInode {
                 }
 
                 meta.backing_file = Some(file.clone());
-                // meta.info.lo_inode = inode.get_inode_num() as u64; // Assuming get_inode_num exists
                 meta.info.lo_sizelimit = inode.get_size() as u64;
                 let name = file.get_name().unwrap_or_default();
                 let name_bytes = name.as_bytes();
@@ -436,7 +469,6 @@ impl InodeTrait for DevLoopInode {
                 let mut meta = self.meta.lock();
                 meta.backing_file = Some(file.clone());
                 meta.info = config.info;
-                // meta.info.lo_inode = inode.get_inode_num() as u64;
                 if meta.info.lo_sizelimit == 0 {
                     meta.info.lo_sizelimit = inode.get_size() as u64;
                 }
@@ -599,3 +631,4 @@ pub struct LoopConfig {
     pub info: LoopInfo64,
     pub __reserved: [u8; 8],
 }
+
