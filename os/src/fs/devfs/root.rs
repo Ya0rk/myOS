@@ -13,7 +13,6 @@ use crate::{
 use super::urandom;
 
 pub struct DevFsRootInode {
-    // timestamp: SpinNoIrqLock<TimeStamp>,
     metadata: InodeMeta,
     children: BTreeMap<String, Arc<dyn InodeTrait>>,
 }
@@ -31,7 +30,6 @@ impl DevFsRootInode {
         children.insert("zero".into(), DevZeroInode::new());
         children.insert("loop0".into(), DevLoopInode::new());
         Self {
-            // timestamp: SpinNoIrqLock::new(TimeStamp::new()),
             metadata: InodeMeta::new(
                 InodeType::Dir, 
                 0,

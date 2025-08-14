@@ -4,13 +4,6 @@ use async_trait::async_trait;
 
 use crate::{drivers::{device_new::{dev_number::MajorNumber, manager::DEVICE_MANAGER}, tty::tty_core::{CharDevice, TtyIoctlCmd}}, fs::{Dirent, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, Page, PageCache, S_IFCHR}, sync::{block_on, SpinNoIrqLock, TimeStamp}, utils::{downcast::Downcast, Errno, SysResult}};
 
-
-// lazy_static!{
-//     pub static ref VF2_TTY_INODE: Arc<CharDevInode> = Arc::new(
-//         CharDevInode::new()
-//     );
-// }
-
 pub struct CharDev {
     metadata: FileMeta,
 }
@@ -117,9 +110,6 @@ impl InodeTrait for CharDevInode {
     fn metadata(&self) -> &InodeMeta {
         &self.metadata
     }
-    // fn abspath(&self) -> &String {
-    //     &self.metadata.abspath
-    // }
 
     async fn read_dirctly(&self, _offset: usize, buf: &mut [u8]) -> usize {
         self.dev.read(buf).await

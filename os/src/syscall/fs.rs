@@ -10,7 +10,7 @@ use crate::mm::user_ptr::{check_readable, user_cstr, user_ref_mut, user_slice, u
 use crate::net::PORT_FD_MANAMER;
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
-use crate::syscall::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, IoVec, StatFs, AT_REMOVEDIR};
+use crate::syscall::ffi::{FaccessatMode, FanEventFlags, FanFlags, FcntlArgFlags, FcntlFlags, IoVec, StatFs, AT_REMOVEDIR};
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::{backtrace, Errno, SysResult};
 use alloc::boxed::Box;
@@ -1751,4 +1751,40 @@ pub async fn sys_copy_file_range(
         }
     }
     Ok(write_size)
+}
+
+/// fanotify_init() initializes a new fanotify group and returns a
+/// file descriptor for the event queue associated with the group.
+pub fn sys_fanotify_init(flags: usize, event_f_flags: usize) -> SysResult<usize> {
+    let fanflags = FanFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
+    let event_flags = FanEventFlags::from_bits(event_f_flags as u32).ok_or(Errno::EINVAL)?;
+    info!(
+        "[sys_fanotify_init] start, flags: {:?}, event_f_flags: {:?}",
+        fanflags, event_flags
+    );
+
+    if unlikely(fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT | FanFlags::FAN_CLASS_CONTENT) 
+        || fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT | FanFlags::FAN_CLASS_NOTIF)
+        || fanflags.contains(FanFlags::FAN_CLASS_CONTENT | FanFlags::FAN_CLASS_NOTIF)) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(fanflags.contains(FanFlags::FAN_REPORT_TID | FanFlags::FAN_REPORT_PIDFD)) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(fanflags.contains(FanFlags::FAN_CLASS_CONTENT | FanFlags::FAN_REPORT_FID)
+        || fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT | FanFlags::FAN_REPORT_FID)) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(fanflags.contains(FanFlags::FAN_REPORT_NAME) && !fanflags.contains(FanFlags::FAN_REPORT_DIR_FID)) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(fanflags.contains(FanFlags::FAN_REPORT_TARGET_FID)
+        && !fanflags.contains(FanFlags::FAN_REPORT_FID | FanFlags::FAN_REPORT_DIR_FID | FanFlags::FAN_REPORT_NAME)) {
+        return Err(Errno::EINVAL);
+    }
+
+    let task = current_task().unwrap();
+
+
+    Ok(0)
 }

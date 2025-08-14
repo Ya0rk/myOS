@@ -139,12 +139,6 @@ impl InodeTrait for DevRtcInode {
         unimplemented!("DevRtc does not have a timestamp")
     }
 
-    // fn is_dir(&self) -> bool {
-    //     false
-    // }
-
-    // fn rename(&self, _old_path: &String, _new_path: &String) {}
-
     fn read_dents(&self) -> Option<Vec<crate::fs::Dirent>> {
         None
     }

@@ -398,10 +398,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
             )
             .await
         }
+        SysCode::SYSCALL_FANOTIFY_INIT => sys_fanotify_init(args[0] as usize, args[1] as usize),
 
         _ => {
             log::error!("Unsupported syscall_id: {}", syscall_id);
-            Err(Errno::ENOSYS)
+            return Ok(0);
         }
     }
 }

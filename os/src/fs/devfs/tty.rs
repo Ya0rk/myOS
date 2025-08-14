@@ -22,10 +22,6 @@ use log::{error, info};
 
 type Pid = u32;
 
-// lazy_static! {
-//     pub static ref SBI_TTY: Arc<DevTty> = Arc::new(DevTty::new());
-// }
-
 pub struct DevTty {
     metadata: FileMeta,
 }

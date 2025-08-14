@@ -29,10 +29,9 @@ impl InodeTrait for _SelfInode {
         &self.inodeMeta
     }
     fn look_up(&self,path: &str) -> Option<Arc<dyn InodeTrait> > {
-        match AbsPath::new(String::from(path)).get_filename().as_str() {
-            "exe" => Some(Arc::clone(&self.children["exe"])),
-            _ => None
-        }
+        let binding = AbsPath::new(String::from(path)).get_filename();
+        let pattern = binding.as_str();
+        return self.children.get(pattern).cloned();
     }
     fn fstat(&self) -> Kstat {
         let mut res = Kstat::new();

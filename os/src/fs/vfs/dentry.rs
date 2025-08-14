@@ -89,7 +89,7 @@ lazy_static! {
     static ref DENTRY_ROOT: Arc<Dentry> = Dentry::new_root();
 }
 lazy_static! {
-    static ref DENTRY_CACHE: Cache<String, Arc<Dentry>> = Cache::new(10);
+    static ref DENTRY_CACHE: Cache<String, Arc<Dentry>> = Cache::new(20);
 }
 
 impl CacheStatus for Arc<Dentry> {
