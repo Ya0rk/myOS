@@ -86,8 +86,8 @@ pub async fn sys_read(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 /// iov: 指向一个结构体数组，结构体的定义如下：
 /// ```
 /// struct iovec {
-///    void *iov_base;	// 指向数据缓冲区的指针
-///   size_t iov_len;	// 缓冲区的长度
+///    void *iov_base; // 指向数据缓冲区的指针
+///   size_t iov_len; // 缓冲区的长度
 /// };
 ///```
 /// len: 数组的长度
@@ -329,7 +329,7 @@ pub fn sys_statx(
     }
 
     info!(
-        "[sys_statx] start cwd: {}, pathname: {}, flags: {}",
+        "[sys_statx] start cwd: {}, pathname: {}, flags: " ,
         cwd, path, flags
     );
 
@@ -386,7 +386,7 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     let flags = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
     info!(
-        "[sys_openat] fd: {}, path = {}, flags = {:?}, _mode: {}",
+        "[sys_openat] fd: {}, path = {}, flags = {:?}, _mode: " ,
         fd, path, flags, _mode
     );
 
@@ -412,7 +412,7 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     match open(target_path, flags) {
         Ok(file) => {
             let fd = task.alloc_fd(FdInfo::new(file, flags))?;
-            info!("[sys_openat] finished path = {}, flags = {:?}", path, flags);
+            info!("[sys_openat] finished path = {}, flags = ?", path, flags);
             info!(
                 "[sys_openat] finished taskid = {}, alloc fd finished, new fd = {}",
                 task.get_pid(),
@@ -449,7 +449,7 @@ pub fn sys_close(fd: usize) -> SysResult<usize> {
 
 /// 创建一个管道：https://man7.org/linux/man-pages/man2/pipe.2.html
 ///
-/// pipefd\[0] 指向管道的读取端，pipefd\[1] 指向管道的写入端
+/// pipefd[0] 指向管道的读取端，pipefd[1] 指向管道的写入端
 ///
 /// Success: 返回0; Fail: 返回-1
 pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
@@ -464,7 +464,7 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
         )
     };
     info!(
-        "[sys_pipe] taskid = {}, alloc read_fd = {}, write_fd = {}",
+        "[sys_pipe] taskid = {}, alloc read_fd = {}, write_fd = " ,
         task.get_pid(),
         read_fd,
         write_fd
@@ -488,11 +488,11 @@ pub fn sys_pipe2(pipefd: *mut u32, flags: i32) -> SysResult<usize> {
 ///
 /// ```
 /// struct dirent {
-///     uint64 d_ino;	            // 索引结点号
-///     int64 d_off;	            // 到下一个dirent的偏移
-///     unsigned short d_reclen;	// 当前dirent的长度
-///     unsigned char d_type;	    // 文件类型
-///     char d_name[];	            // 文件名
+///     uint64 d_ino; // 索引结点号
+///     int64 d_off; // 到下一个dirent的偏移
+///     unsigned short d_reclen; // 当前dirent的长度
+///     unsigned char d_type; // 文件类型
+///     char d_name[]; // 文件名
 /// };
 /// ```
 ///
@@ -526,7 +526,7 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 
 /// 获取当前工作目录： https://man7.org/linux/man-pages/man3/getcwd.3.html
 ///
-/// Success: 返回当前工作目录的长度;  Fail: 返回-1
+/// Success: 返回当前工作目录的长度; Fail: 返回-1
 pub fn sys_getcwd(buf: usize, size: usize) -> SysResult<usize> {
     info!("[sys_getcwd] start");
     info!("[sys_getcwd] buf = {:#x}, size = {}", buf, size);
@@ -611,7 +611,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 
     let task = current_task().unwrap();
     info!(
-        "[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = {}",
+        "[sys_dup3] start, oldfd={oldfd}, newfd={newfd}, taskid = " ,
         task.get_pid()
     );
 
@@ -688,8 +688,7 @@ pub fn sys_umount2(target: usize, flags: u32) -> SysResult<usize> {
     info!("[sys_umount2] start");
     let ufg = UmountFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
     if ufg.contains(UmountFlags::MNT_EXPIRE)
-        && (ufg.contains(UmountFlags::MNT_DETACH) || ufg.contains(UmountFlags::MNT_FORCE))
-    {
+        && (ufg.contains(UmountFlags::MNT_DETACH) || ufg.contains(UmountFlags::MNT_FORCE)) {
         return Err(Errno::EINVAL);
     }
 
@@ -713,7 +712,7 @@ pub fn sys_mount(
 ) -> SysResult<usize> {
     info!("[sys_mount] start");
     // println!(
-    //     "[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = {}",
+    //     "[sys_mount] start, source = {}, target = {}, fstype = {}, flags = {}, data = " ,
     //     source, target, fstype, flags, data
     // );
     if unlikely(source == 0 || target == 0 || fstype == 0) {
@@ -727,7 +726,9 @@ pub fn sys_mount(
         true => String::new(),
         false => user_cstr(data.into())?.unwrap(),
     };
-    // info!("sys_mount: source = {}, target = {}, fstype = {}, flags = {}, data = {}", source, target, fstype, flags, data);
+    // info!("sys_mount: source = {}, target = {}, fstype = {}, flags = {}, data = " ,
+    //     source, target, fstype, flags, data
+    // );
 
     let check_flags = MountFlags::from_bits(flags).unwrap();
 
@@ -749,7 +750,7 @@ pub fn sys_mount(
 ///
 /// 输入： path:  需要切换到的路径
 ///
-/// Success: 返回0； 失败： 返回-1；
+/// Success: 返回0； Fail: 返回-1；
 pub fn sys_chdir(path: usize) -> SysResult<usize> {
     info!("[sys_chdir] start, path = {:#x}", path);
     match check_readable(path.into(), 1) {
@@ -780,7 +781,7 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
     let path = user_cstr(path.into())?.unwrap();
     let base = task.get_current_path();
     info!(
-        "[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}",
+        "[sys_unlinkat] start fd: {}, base: {}, path: {}, flags: " ,
         fd, base, path, flags
     );
 
@@ -798,7 +799,7 @@ pub fn sys_unlinkat(fd: isize, path: usize, flags: u32) -> SysResult<usize> {
             let target_dentry = Dentry::get_dentry_from_path(&target_path.get())?;
             file.metadata().inode.unlink(target_dentry)?;
             // drop(target_dentry);
-            // error!("[unlink] path: {}, inode ref count: {}", target_path.get() , Arc::strong_count(&file.get_inode()));
+            // error!("[unlink] path: {}, inode ref count: {}" , target_path.get() , Arc::strong_count(&file.get_inode()));
         }
         Err(e) => {
             return Err(e);
@@ -815,7 +816,7 @@ pub fn ksys_unlinkat(fd: isize, path: String, flags: u32) -> SysResult<usize> {
     // let base = task.get_current_path();
     let base = String::from("/");
     info!(
-        "[ksys_unlinkat] start fd: {}, base: {}, path: {}, flags: {}",
+        "[ksys_unlinkat] start fd: {}, base: {}, path: {}, flags: " ,
         fd, base, path, flags
     );
 
@@ -833,7 +834,10 @@ pub fn ksys_unlinkat(fd: isize, path: String, flags: u32) -> SysResult<usize> {
             let target_dentry = Dentry::get_dentry_from_path(&target_path.get())?;
             file.metadata().inode.unlink(target_dentry)?;
             // drop(target_dentry);
-            // error!("[unlink] path: {}, inode ref count: {}", target_path.get() , Arc::strong_count(&file.get_inode()));
+            // error!("[unlink] path: {}, inode ref count: " ,
+            // target_path.get() ,
+            // Arc::strong_count(&file.get_inode())
+            // );
         }
         Err(e) => {
             return Err(e);
@@ -858,7 +862,7 @@ pub fn sys_renameat2(
     let new_path = user_cstr(newpath.into())?.unwrap();
     let cwd = task.get_current_path();
     info!(
-        "[sys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: {} ",
+        "[sys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: " ,
         &olddirfd, &old_path, &newdirfd, &new_path
     );
 
@@ -935,7 +939,7 @@ pub fn ksys_renameat2(
     let flags = RenameFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
     let cwd = String::from("/");
     info!(
-        "[ksys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: {} ",
+        "[ksys_renameat2] start olddirfd: {}, old: {}, newdirfd: {}, new: " ,
         &olddirfd, &old_path, &newdirfd, &new_path
     );
 
@@ -1016,7 +1020,9 @@ pub fn sys_linkat(
     let old_path = user_cstr(oldpath.into())?.unwrap();
     let new_path = user_cstr(newpath.into())?.unwrap();
     let cwd = task.get_current_path();
-    // info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: {}", &olddirfd, &old_path, &newdirfd, &new_path);
+    // info!("[sys_linkat] start olddirfd: {}, oldpath: {}, newdirfd: {}, newpath: " ,
+    //     &olddirfd, &old_path, &newdirfd, &new_path
+    // );
 
     let old_path = if olddirfd == AT_FDCWD {
         resolve_path(cwd.clone(), old_path)
@@ -1079,7 +1085,7 @@ pub async fn sys_sendfile(
     //     if src.is_pipe() {
     //         src.clone()
     //             .downcast_arc::<Pipe>()
-    //             .map_err( |_| Errno::EINVAL )?
+    //             .map_err( |_| Errno::EINVAL )? 
     //             .with_mut_buffer( | buffer | {
     //                 buffer.buf.len()
     //             } )
@@ -1144,7 +1150,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         // 相对路径，以 fd 对应的目录为起点
         if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
             // error!(
-            //     "[sys_faccessat] return EBADF dirfd: {}, pathname: {}",
+            //     "[sys_faccessat] return EBADF dirfd: {}, pathname: " ,
             //     dirfd, path
             // );
             return Err(Errno::EBADF);
@@ -1162,35 +1168,35 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         let inode = file.metadata().inode.clone();
         if mode.contains(FaccessatMode::F_OK) {
             // error!(
-            //     "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
+            //     "[sys_faccessat] return Ok dirfd: {}, pathname: " ,
             //     dirfd, path
             // );
             return Ok(0);
         }
         if mode.contains(FaccessatMode::R_OK) && !file.metadata().flags.read().readable() {
             // error!(
-            //     "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
+            //     "[sys_faccessat] return no readable dirfd: {}, pathname: " ,
             //     dirfd, path
             // );
             return Err(Errno::EACCES);
         }
         if mode.contains(FaccessatMode::W_OK) && !file.metadata().flags.read().writable() {
             // error!(
-            //     "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
+            //     "[sys_faccessat] return no writeable dirfd: {}, pathname: " ,
             //     dirfd, path
             // );
             return Err(Errno::EACCES);
         }
         // if mode.contains(FaccessatMode::X_OK) && !file.metadata().flags.read().executable() {
         //     // error!(
-        //     //     "[sys_faccessat] return no executable dirfd: {}, pathname: {}",
+        //     //     "[sys_faccessat] return no executable dirfd: {}, pathname: " ,
         //     //     dirfd, path
         //     // );
         //     return Err(Errno::EACCES);
         // }
     } else {
         // error!(
-        //     "[sys_faccessat] return ENOENT dirfd: {}, pathname: {}",
+        //     "[sys_faccessat] return ENOENT dirfd: {}, pathname: " ,
         //     dirfd, path
         // );
         return Err(Errno::ENOENT);
@@ -1221,7 +1227,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
     let task = current_task().unwrap();
     let cmd = FcntlFlags::from_bits(cmd).ok_or(Errno::EINVAL)?;
     info!(
-        "[sys_fcntl] start, fd = {}, cmd = {:?}, arg = {}",
+        "[sys_fcntl] start, fd = {}, cmd = {:?}, arg = " ,
         fd, cmd, arg
     );
     if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
@@ -1418,7 +1424,9 @@ pub fn sys_utimensat(
         new_time = inode.get_timestamp().lock().clone();
     }
     info!(
-        "[sys_utimensat] new_time: \n{:?} \n{:?}",
+        "[sys_utimensat] new_time: 
+{:?} 
+{:?}" ,
         new_time.atime, new_time.mtime
     );
     if !times.is_null() {
@@ -1479,7 +1487,7 @@ pub fn sys_readlinkat(
     let cwd = task.get_current_path();
     let pathname = user_cstr(pathname.into())?.unwrap();
     info!(
-        "[sys_readlinkat] start, dirfd: {}, pathname: {}.",
+        "[sys_readlinkat] start, dirfd: {}, pathname: {}." ,
         dirfd, pathname
     );
 
@@ -1583,7 +1591,7 @@ pub async fn sys_splice(
 ) -> SysResult<usize> {
     // INFO: 决赛系统调用
     info!(
-        "[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = {}",
+        "[sys_splice] start, fd_in = {}, off_in = {}, fd_out = {}, off_out = {}, size = " ,
         fd_in, off_in, fd_out, off_out, size
     );
 
@@ -1629,7 +1637,7 @@ pub async fn sys_splice(
 
     if in_offset < 0 || out_offet < 0 {
         info!(
-            "[sys_splice] in_offset = {}, out_offset = {}",
+            "[sys_splice] in_offset = {}, out_offset = " ,
             in_offset, out_offet
         );
         return Err(Errno::EINVAL);
@@ -1655,7 +1663,7 @@ pub async fn sys_splice(
         false => {
             file_out
                 .write_at(out_offet as usize, &buffer[..len])
-                .await?
+                .await?;
         }
     };
     if unlikely(write_size == 0) {
@@ -1705,7 +1713,7 @@ pub async fn sys_copy_file_range(
         .unwrap_or(0);
 
     info!(
-        "[sys_copy_file_range] fd_in: {}, off_in: {}, fd_out: {}, off_out: {}, len: {}",
+        "[sys_copy_file_range] fd_in: {}, off_in: {}, fd_out: {}, off_out: {}, len: " ,
         fd_in, offset_in, fd_out, offset_out, len,
     );
     let mut buffer = vec![0u8; len];
@@ -1713,11 +1721,11 @@ pub async fn sys_copy_file_range(
     let read_size = match file_in.metadata().inode.metadata()._type.is_fifo() | (off_in == 0) {
         true => {
             debug_point!("read by file's off");
-            file_in.read(&mut buffer).await?
+            file_in.read(&mut buffer).await?;
         }
         false => {
             debug_point!("read by offset sended");
-            file_in.read_at(offset_in, &mut buffer).await?
+            file_in.read_at(offset_in, &mut buffer).await?;
         }
     };
     if unlikely(read_size == 0) {
@@ -1730,11 +1738,11 @@ pub async fn sys_copy_file_range(
     let write_size = match file_out.metadata().inode.metadata()._type.is_fifo() | (off_out == 0) {
         true => {
             debug_point!("write by file's off");
-            file_out.write(&buffer).await?
+            file_out.write(&buffer).await?;
         }
         false => {
             debug_point!("write by offset sended");
-            file_out.write_at(offset_out, &buffer).await?
+            file_out.write_at(offset_out, &buffer).await?;
         }
     };
     if unlikely(write_size == 0) {
@@ -1753,38 +1761,167 @@ pub async fn sys_copy_file_range(
     Ok(write_size)
 }
 
+use crate::sync::RwLock;
+use alloc::collections::BTreeMap;
+use bitflags::bitflags;
+use lazy_static::lazy_static;
+use spin::Mutex;
+
+bitflags! {
+    /// Flags for fanotify_mark.
+    pub struct FanMarkFlags: u32 {
+        const FAN_MARK_ADD = 0x00000001;
+        const FAN_MARK_REMOVE = 0x00000002;
+        const FAN_MARK_DONT_FOLLOW = 0x00000004;
+        const FAN_MARK_ONLYDIR = 0x00000008;
+        const FAN_MARK_MOUNT = 0x00000010;
+        const FAN_MARK_IGNORED_MASK = 0x00000020;
+        const FAN_MARK_IGNORED_SURV_MODIFY = 0x00000040;
+        const FAN_MARK_FLUSH = 0x00000080;
+    }
+}
+
+/// Represents a mark on a filesystem object.
+#[derive(Clone)]
+pub struct FanotifyMark {
+    mask: u64,
+    flags: FanMarkFlags,
+}
+
+/// Represents an fanotify group, which holds marks and an event queue.
+pub struct FanotifyGroup {
+    pub flags: FanFlags,
+    pub event_f_flags: FanEventFlags,
+    /// Maps absolute path to a mark. A real implementation would use inode numbers.
+    pub marks: Mutex<BTreeMap<String, FanotifyMark>>,
+    // In a complete implementation, a pipe or other mechanism would be stored here
+    // to write events to the user. 
+}
+
+impl FanotifyGroup {
+    pub fn new(flags: FanFlags, event_f_flags: FanEventFlags) -> Self {
+        Self {
+            flags,
+            event_f_flags,
+            marks: Mutex::new(BTreeMap::new()),
+        }
+    }
+}
+
+lazy_static! {
+    // A global manager to hold fanotify groups, associated with their file descriptors.
+    // This is a workaround for not being able to add a new `FileClass` variant for fanotify.
+    static ref FANOTIFY_GROUPS: Mutex<BTreeMap<usize, Arc<FanotifyGroup>>> = 
+        Mutex::new(BTreeMap::new());
+}
+
 /// fanotify_init() initializes a new fanotify group and returns a
 /// file descriptor for the event queue associated with the group.
 pub fn sys_fanotify_init(flags: usize, event_f_flags: usize) -> SysResult<usize> {
     let fanflags = FanFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
     let event_flags = FanEventFlags::from_bits(event_f_flags as u32).ok_or(Errno::EINVAL)?;
     info!(
-        "[sys_fanotify_init] start, flags: {:?}, event_f_flags: {:?}",
+        "[sys_fanotify_init] start, flags: {:?}, event_f_flags: ?",
         fanflags, event_flags
     );
 
-    if unlikely(fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT | FanFlags::FAN_CLASS_CONTENT) 
-        || fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT | FanFlags::FAN_CLASS_NOTIF)
-        || fanflags.contains(FanFlags::FAN_CLASS_CONTENT | FanFlags::FAN_CLASS_NOTIF)) {
+    if unlikely(
+        (fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT) 
+            && fanflags.contains(FanFlags::FAN_CLASS_CONTENT)) 
+            || (fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT) 
+                && fanflags.contains(FanFlags::FAN_CLASS_NOTIF))
+            || (fanflags.contains(FanFlags::FAN_CLASS_CONTENT) 
+                && fanflags.contains(FanFlags::FAN_CLASS_NOTIF)),
+    ) {
         return Err(Errno::EINVAL);
     }
-    if unlikely(fanflags.contains(FanFlags::FAN_REPORT_TID | FanFlags::FAN_REPORT_PIDFD)) {
+    if unlikely(fanflags.contains(FanFlags::FAN_REPORT_TID) && fanflags.contains(FanFlags::FAN_REPORT_PIDFD)) {
         return Err(Errno::EINVAL);
     }
-    if unlikely(fanflags.contains(FanFlags::FAN_CLASS_CONTENT | FanFlags::FAN_REPORT_FID)
-        || fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT | FanFlags::FAN_REPORT_FID)) {
+    if unlikely(fanflags.contains(FanFlags::FAN_CLASS_CONTENT) && fanflags.contains(FanFlags::FAN_REPORT_FID)
+        || fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT) && fanflags.contains(FanFlags::FAN_REPORT_FID)) {
         return Err(Errno::EINVAL);
     }
     if unlikely(fanflags.contains(FanFlags::FAN_REPORT_NAME) && !fanflags.contains(FanFlags::FAN_REPORT_DIR_FID)) {
         return Err(Errno::EINVAL);
     }
     if unlikely(fanflags.contains(FanFlags::FAN_REPORT_TARGET_FID)
-        && !fanflags.contains(FanFlags::FAN_REPORT_FID | FanFlags::FAN_REPORT_DIR_FID | FanFlags::FAN_REPORT_NAME)) {
+        && !(fanflags.contains(FanFlags::FAN_REPORT_FID) || fanflags.contains(FanFlags::FAN_REPORT_DIR_FID) || fanflags.contains(FanFlags::FAN_REPORT_NAME))) {
         return Err(Errno::EINVAL);
     }
 
     let task = current_task().unwrap();
+    let group = Arc::new(FanotifyGroup::new(fanflags, event_flags));
 
+    // Workaround: Create a pipe for event notification and associate the group with the fd.
+    // The user reads events from this pipe. A full implementation of permission-based events
+    // would require a custom FileTrait object to handle write() responses.
+    let (read_pipe, _write_pipe) = Pipe::new();
+    let open_flags = OpenFlags::from_bits_truncate(event_flags.bits() as i32);
+    let fd_info = FdInfo::new(read_pipe, open_flags);
+    let fd = task.alloc_fd(fd_info)?;
+
+    FANOTIFY_GROUPS.lock().insert(fd, group);
+    info!("[sys_fanotify_init] created fanotify group, fd: {}", fd);
+
+    Ok(fd)
+}
+
+/// fanotify_mark() adds, removes, or modifies an fanotify mark on a
+/// filesystem object.
+pub fn sys_fanotify_mark(
+    fanotify_fd: usize,
+    flags: u32,
+    mask: u64,
+    dirfd: isize,
+    pathname: usize,
+) -> SysResult<usize> {
+    let mark_flags = FanMarkFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
+    info!(
+        "[sys_fanotify_mark] fanotify_fd: {}, flags: {:?}, mask: {:#x}, dirfd: {}, pathname: {:#x}",
+        fanotify_fd, mark_flags, mask, dirfd, pathname
+    );
+
+    let group = FANOTIFY_GROUPS
+        .lock()
+        .get(&fanotify_fd)
+        .cloned()
+        .ok_or(Errno::EINVAL)?;
+
+    let task = current_task().unwrap();
+    let path = user_cstr(pathname.into())?.ok_or(Errno::EINVAL)?;
+    let cwd = task.get_current_path();
+
+    let target_path = if dirfd == AT_FDCWD {
+        resolve_path(cwd, path)
+    } else {
+        let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
+        if !file.metadata().inode.metadata()._type.is_dir() {
+            return Err(Errno::ENOTDIR);
+        }
+        resolve_path(file.abspath(), path)
+    };
+
+    let mut marks = group.marks.lock();
+
+    if mark_flags.contains(FanMarkFlags::FAN_MARK_ADD) {
+        let mark = FanotifyMark {
+            mask,
+            flags: mark_flags,
+        };
+        marks.insert(target_path.get(), mark);
+        info!("[fanotify] Added mark for path: {}", target_path.get());
+    } else if mark_flags.contains(FanMarkFlags::FAN_MARK_REMOVE) {
+        if marks.remove(&target_path.get()).is_some() {
+            info!("[fanotify] Removed mark for path: {}", target_path.get());
+        }
+        // Removing a non-existent mark is not an error according to man page.
+    } else if mark_flags.contains(FanMarkFlags::FAN_MARK_FLUSH) {
+        marks.clear();
+        info!("[fanotify] Flushed all marks for fd: {}", fanotify_fd);
+    }else {
+        return Err(Errno::EINVAL);
+    }
 
     Ok(0)
 }
