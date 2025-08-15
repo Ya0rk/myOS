@@ -128,6 +128,7 @@ impl InodeTrait for DevRtcInode {
 
     fn fstat(&self) -> Kstat {
         let mut stat = Kstat::new();
+        stat.st_ino = self.metadata.ino as u64;
         stat.st_mode = S_IFCHR;
         stat.st_nlink = 1;
         stat.st_size = 0;

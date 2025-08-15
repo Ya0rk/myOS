@@ -51,6 +51,7 @@ impl InodeTrait for DevNullInode {
     fn fstat(&self) -> Kstat {
         let mut stat = Kstat::new();
         stat.st_mode = S_IFCHR; // 字符设备
+        stat.st_ino = self.metadata.ino as u64;
         stat
     }
 

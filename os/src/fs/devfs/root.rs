@@ -93,6 +93,7 @@ impl InodeTrait for DevFsRootInode {
     }
     fn fstat(&self) -> Kstat {
         let mut res = Kstat::new();
+        res.st_ino = self.metadata.ino as u64;
         res.st_mode = 16877;
         res.st_nlink = 1;
         res
