@@ -158,7 +158,7 @@ pub async fn sys_accept(sockfd: usize, addr: usize, addrlen_ptr: usize) -> SysRe
     );
     let task = current_task().unwrap();
     let file = task.get_file_by_fd(sockfd).ok_or(Errno::EBADF)?;
-    let flags = file.get_flags();
+    let flags = file.metadata().flags.read().clone();
     let socket = file.get_socket()?;
 
     let (remote_end, newfd) = socket.accept(sockfd, flags).await?;

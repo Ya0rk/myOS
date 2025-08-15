@@ -1,6 +1,6 @@
 use crate::{
-    fs::{ffi::RenameFlags, FileTrait, InodeTrait, Kstat, OpenFlags, S_IFCHR},
-    mm::{page::Page},
+    fs::{ffi::RenameFlags, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
+    mm::page::Page,
     utils::SysResult,
 };
 use alloc::boxed::Box;
@@ -15,83 +15,6 @@ use core::{
     cmp::min,
     fmt::{Debug, Formatter},
 };
-
-pub struct DevRtc;
-
-impl DevRtc {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl FileTrait for DevRtc {
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        todo!()
-    }
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        true
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
-        let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
-        let str = format!("{:?}", time);
-        let bytes = str.as_bytes();
-        let len = min(user_buf.len(), bytes.len());
-        // user_buf.write(bytes);
-        Ok(len)
-    }
-    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        // do nothing
-        Ok(user_buf.len())
-    }
-
-    fn get_name(&self) -> SysResult<String> {
-        Ok("/dev/rtc".to_string())
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
-    }
-
-    fn fstat(&self, stat: &mut Kstat) -> SysResult {
-        *stat = Kstat::new();
-        stat.st_mode = S_IFCHR;
-        Ok(())
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
-        todo!()
-    }
-}
-
-// impl Ioctl for DevRtc {
-//     fn ioctl(&self, cmd: usize, arg: usize) -> isize {
-//         let cmd = IoctlCommand::from(cmd);
-//         let task = current_task().unwrap();
-//         let mut inner = task.inner_lock();
-//         let token = inner.get_user_token();
-
-//         match cmd {
-//             IoctlCommand::RTC_RD_TIME => {
-//                 let time = RtcTime::new(2000, 1, 1, 0, 0, 0);
-//                 let mut arg = UserBuffer::new(
-//                     translated_byte_buffer(token, arg as *const u8, size_of::<RtcTime>()),
-//                 );
-//                 arg.write(time.as_bytes());
-//             }
-//             _ => return -1,
-//         }
-//         0
-//     }
-// }
 
 pub struct RtcTime {
     pub year: u32,
@@ -130,8 +53,27 @@ impl Debug for RtcTime {
     }
 }
 
+pub struct DevRtcInode {
+    metadata: InodeMeta,
+}
+
+impl DevRtcInode {
+    pub fn new() -> Arc<dyn InodeTrait> {
+        Arc::new(Self {
+            metadata: InodeMeta::new(
+                InodeType::CharDevice, 
+                0, 
+                "/dev/rtc"
+            ),
+        })
+    }
+}
+
 #[async_trait]
-impl InodeTrait for DevRtc {
+impl InodeTrait for DevRtcInode {
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
+    }
     fn get_page_cache(&self) -> Option<Arc<crate::fs::page_cache::PageCache>> {
         None
     }
@@ -142,10 +84,6 @@ impl InodeTrait for DevRtc {
 
     fn set_size(&self, _new_size: usize) -> SysResult {
         Ok(())
-    }
-
-    fn node_type(&self) -> crate::fs::InodeType {
-        crate::fs::InodeType::CharDevice
     }
 
     async fn read_at(&self, offset: usize, buf: &mut [u8]) -> usize {
@@ -190,7 +128,7 @@ impl InodeTrait for DevRtc {
 
     fn fstat(&self) -> Kstat {
         let mut stat = Kstat::new();
-        stat.st_mode = crate::fs::InodeType::CharDevice as u32;
+        stat.st_mode = S_IFCHR;
         stat.st_nlink = 1;
         stat.st_size = 0;
         stat
@@ -200,12 +138,6 @@ impl InodeTrait for DevRtc {
         // 如果需要返回一个实际值，需要给 DevRtc 加 timestamp 字段
         unimplemented!("DevRtc does not have a timestamp")
     }
-
-    fn is_dir(&self) -> bool {
-        false
-    }
-
-    // fn rename(&self, _old_path: &String, _new_path: &String) {}
 
     fn read_dents(&self) -> Option<Vec<crate::fs::Dirent>> {
         None

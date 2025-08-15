@@ -1,11 +1,14 @@
 use super::ffi::RenameFlags;
-use super::devfs::tty::SBI_TTY_INODE;
+use super::devfs::tty::SBI_TTY;
 use super::devfs::char::VF2_TTY_INODE;
 use super::FileTrait;
 use super::InodeTrait;
 use super::Kstat;
 use super::OpenFlags;
 use crate::fs::devfs::char::CharDevInode;
+use crate::fs::pipe::DummyInode;
+use crate::fs::FileMeta;
+use crate::fs::InodeType;
 use crate::fs::Page;
 use crate::utils::downcast::Downcast;
 use crate::utils::{Errno, SysResult};
@@ -17,6 +20,7 @@ use async_trait::async_trait;
 // --- Stdin ---
 
 pub struct Stdin {
+    metadata: FileMeta,
     inode: Arc<dyn InodeTrait>,
 }
 
@@ -36,24 +40,27 @@ impl Stdin {
 
 #[async_trait]
 impl FileTrait for Stdin {
-    fn readable(&self) -> bool {
-        true
+    fn metadata(&self) -> &FileMeta {
+        &self.metadata
     }
-    fn writable(&self) -> bool {
-        false
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    fn get_flags(&self) -> OpenFlags {
-        OpenFlags::O_RDONLY
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        self.inode.clone()
-    }
+    // fn readable(&self) -> bool {
+    //     true
+    // }
+    // fn writable(&self) -> bool {
+    //     false
+    // }
+    // fn executable(&self) -> bool {
+    //     false
+    // }
+    // fn flags(&self) -> OpenFlags {
+    //     OpenFlags::O_RDONLY
+    // }
+    // fn is_dir(&self) -> bool {
+    //     false
+    // }
+    // fn get_inode(&self) -> Arc<dyn InodeTrait> {
+    //     self.inode.clone()
+    // }
 
     async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
         if user_buf.is_empty() {
@@ -71,20 +78,20 @@ impl FileTrait for Stdin {
         Ok(())
     }
 
-    fn get_name(&self) -> SysResult<String> {
-        Ok("stdin".into())
-    }
+    // fn get_name(&self) -> SysResult<String> {
+    //     Ok("stdin".into())
+    // }
 
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        Err(Errno::EPERM)
-    }
+    // fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
+    //     Err(Errno::EPERM)
+    // }
 
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> {
         None
     }
-    fn is_device(&self) -> bool {
-        true
-    }
+    // fn is_device(&self) -> bool {
+    //     true
+    // }
     async fn pollin(&self) -> SysResult<bool> {
         Ok(self.inode
             .clone()
@@ -108,6 +115,7 @@ impl FileTrait for Stdin {
 // --- Stdout ---
 
 pub struct Stdout {
+    metadata: FileMeta,
     inode: Arc<dyn InodeTrait>,
 }
 
@@ -127,27 +135,30 @@ impl Stdout {
 
 #[async_trait]
 impl FileTrait for Stdout {
-    fn readable(&self) -> bool {
-        false
+    fn metadata(&self) -> &FileMeta {
+        &self.metadata
     }
-    fn writable(&self) -> bool {
-        true
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    fn get_flags(&self) -> OpenFlags {
-        OpenFlags::O_WRONLY
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        self.inode.clone()
-    }
-    fn is_device(&self) -> bool {
-        true
-    }
+    // fn readable(&self) -> bool {
+    //     false
+    // }
+    // fn writable(&self) -> bool {
+    //     true
+    // }
+    // fn executable(&self) -> bool {
+    //     false
+    // }
+    // fn flags(&self) -> OpenFlags {
+    //     OpenFlags::O_WRONLY
+    // }
+    // fn is_dir(&self) -> bool {
+    //     false
+    // }
+    // fn get_inode(&self) -> Arc<dyn InodeTrait> {
+    //     self.inode.clone()
+    // }
+    // fn is_device(&self) -> bool {
+    //     true
+    // }
 
     async fn read(&self, _user_buf: &mut [u8]) -> SysResult<usize> {
         Err(Errno::EINVAL)
@@ -162,13 +173,13 @@ impl FileTrait for Stdout {
         Ok(())
     }
 
-    fn get_name(&self) -> SysResult<String> {
-        Ok("stdout".into())
-    }
+    // fn get_name(&self) -> SysResult<String> {
+    //     Ok("stdout".into())
+    // }
 
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        Err(Errno::EPERM)
-    }
+    // fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
+    //     Err(Errno::EPERM)
+    // }
 
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> {
         None

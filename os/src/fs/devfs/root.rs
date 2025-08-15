@@ -1,29 +1,50 @@
 use async_trait::async_trait;
-
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
-
+use alloc::{boxed::Box, collections::btree_map::BTreeMap, string::String, sync::Arc, vec::Vec};
+#[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+use crate::fs::devfs::char::CharDevInode;
+#[cfg(feature = "vf2")]
+use crate::fs::devfs::char::CharDevInode;
 use crate::{
-    fs::{dirent::build_dirents, Dirent, InodeTrait, Kstat},
+    fs::{devfs::{dev_loop::DevLoopInode, DevNullInode, DevRandomInode, DevRtcInode, DevTtyInode, DevZeroInode}, dirent::build_dirents, AbsPath, Dirent, InodeMeta, InodeTrait, InodeType, Kstat},
     sync::{Shared, SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult},
 };
 
 use super::urandom;
 
-struct DevFsInode {
-    timestamp: SpinNoIrqLock<TimeStamp>,
+pub struct DevFsRootInode {
+    metadata: InodeMeta,
+    children: BTreeMap<String, Arc<dyn InodeTrait>>,
 }
 
-impl DevFsInode {
+impl DevFsRootInode {
     pub fn new() -> Self {
+        let mut children = BTreeMap::new();
+        children.insert("null".into(), DevNullInode::new());
+        children.insert("rtc".into(), DevRtcInode::new());
+        #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+        children.insert("tty".into(), DevTtyInode::new());
+        #[cfg(feature = "vf2")]
+        children.insert("tty".into(), CharDevInode::new());
+        children.insert("urandom".into(), DevRandomInode::new());
+        children.insert("zero".into(), DevZeroInode::new());
+        children.insert("loop0".into(), DevLoopInode::new());
         Self {
-            timestamp: SpinNoIrqLock::new(TimeStamp::new()),
+            metadata: InodeMeta::new(
+                InodeType::Dir, 
+                0,
+                "/dev"
+            ),
+            children,
         }
     }
 }
 
 #[async_trait]
-impl InodeTrait for DevFsInode {
+impl InodeTrait for DevFsRootInode {
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
+    }
     fn get_page_cache(&self) -> Option<alloc::sync::Arc<crate::fs::page_cache::PageCache>> {
         None
     }
@@ -32,9 +53,6 @@ impl InodeTrait for DevFsInode {
     }
     fn set_size(&self, new_size: usize) -> crate::utils::SysResult {
         Ok(())
-    }
-    fn node_type(&self) -> crate::fs::InodeType {
-        crate::fs::InodeType::Dir
     }
     async fn read_at(&self, offset: usize, mut buf: &mut [u8]) -> usize {
         0
@@ -66,19 +84,18 @@ impl InodeTrait for DevFsInode {
 
     fn look_up(&self, path: &str) -> Option<Arc<dyn InodeTrait>> {
         // 暂时不实现
-        None
+        let binding = AbsPath::new(String::from(path)).get_filename();
+        let pattern = binding.as_str();
+        match pattern {
+            "rtc" | "rtc0" => self.children.get("rtc").cloned(),
+            _ => self.children.get(pattern).cloned(),
+        }
     }
     fn fstat(&self) -> Kstat {
         let mut res = Kstat::new();
         res.st_mode = 16877;
         res.st_nlink = 1;
         res
-    }
-    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
-        &self.timestamp
-    }
-    fn is_dir(&self) -> bool {
-        true
     }
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         // (path, ino, d_type)
@@ -90,6 +107,7 @@ impl InodeTrait for DevFsInode {
             ("tty", 4, 2),
             ("urandom", 5, 8),
             ("zero", 6, 8),
+            ("loop0", 7, 8)
         ];
         Some(build_dirents(entries))
     }

@@ -3,7 +3,7 @@ use core::{cmp::min, fmt::Display, intrinsics::unlikely};
 // #![allow(unused)]
 use super::current_task;
 use crate::{
-    fs::{open, socketfs::{socketfile::SocketFile, socketinode::SocketInode}, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags, Stdin, Stdout}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::{Socket, PORT_FD_MANAMER}, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
+    fs::{open, socketfs::{socketfile::SocketFile, socketinode::SocketInode}, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::{Socket, PORT_FD_MANAMER}, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
 };
 use alloc::{collections::binary_heap::BinaryHeap, format, string::String, sync::Arc, vec::Vec};
 use log::info;
@@ -77,7 +77,7 @@ impl Display for FdTable {
         let mut msgs = String::from("FD TABLE:");
         for (i, item) in self.table.iter().enumerate() {
             if let Some(file) = &item.file {
-                let msg = format!("\n   {}: {}", i, file.get_name().unwrap());
+                let msg = format!("\n   {}: {}", i, file.abspath());
                 msgs.push_str(&msg);
             }
         }
@@ -90,7 +90,7 @@ impl FdTable {
     fn free_fd_slot(&mut self, fd: usize) {
         // 只缓存非末尾的FD (末尾FD在扩展时会自动重用)
         if fd < self.table_len() - 1 {
-            info!("push to freed stask, fd = {}", fd);
+            // info!("push to freed stask, fd = {}", fd);
             self.freed_stack.push(fd);
         }
 
@@ -157,10 +157,24 @@ impl FdTable {
 
 impl FdTable {
     pub fn new() -> Self {
+        let mut stdin;
+        let mut stdout;
+        let mut stderr;
         // 自带三个文件描述符，分别是标准输入、标准输出、标准错误
-        let stdin = FdInfo::new(Arc::new(Stdin::new()), OpenFlags::O_RDONLY);
-        let stdout = FdInfo::new(Arc::new(Stdout::new()), OpenFlags::O_WRONLY);
-        let stderr = FdInfo::new(Arc::new(Stdout::new()), OpenFlags::O_WRONLY);
+        #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+        {
+            use crate::fs::DevTty;
+            stdin = FdInfo::new(Arc::new(DevTty::new_in()), OpenFlags::O_RDONLY);
+            stdout = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
+            stderr = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
+        }
+        #[cfg(feature = "vf2")]
+        {
+            use crate::fs::CharDev;
+            stdin = FdInfo::new(Arc::new(CharDev::new_in()), OpenFlags::O_RDONLY);
+            stdout = FdInfo::new(Arc::new(CharDev::new_out()), OpenFlags::O_WRONLY);
+            stderr = FdInfo::new(Arc::new(CharDev::new_out()), OpenFlags::O_WRONLY);
+        }
         let mut fd_table = Vec::new();
         fd_table.push(stdin);
         fd_table.push(stdout);
@@ -203,11 +217,11 @@ impl FdTable {
     /// 找到一个空位分配fd，返回数组下标就是新fd
     pub fn alloc_fd(&mut self, info: FdInfo) -> SysResult<usize> {
         // 1. 优先使用最近释放的缓存
-        info!("freed stask {:?}", self.freed_stack);
+        // info!("freed stask {:?}", self.freed_stack);
         if let Some(fd) = self.freed_stack.pop() {
             self.update_bitmap(fd, false); // 标记为已使用
             self.put_in(info, fd)?;
-            info!("from freed stask, fd = {}", fd);
+            // info!("from freed stask, fd = {}", fd);
             return Ok(fd);
         }
 
@@ -215,7 +229,7 @@ impl FdTable {
         if let Some(fd) = self.find_free_by_bitmap() {
             self.update_bitmap(fd, false); // 标记为已使用
             self.put_in(info, fd)?;
-            info!("from bitmap, fd = {}", fd);
+            // info!("from bitmap, fd = {}", fd);
             return Ok(fd);
         }
 
@@ -300,7 +314,7 @@ impl FdTable {
             return Err(Errno::EBADF);
         }
         let file = self.table[fd].file.take().unwrap();
-        if file.get_name()? == "SocketFile" {
+        if file.metadata().inode.metadata()._type.is_socket() {
             let pid = current_task().unwrap().get_pid();
             PORT_FD_MANAMER.lock().remove_all_fds_by_pid_and_fd(pid, fd);
         }
@@ -347,7 +361,7 @@ pub fn sock_map_fd(socket: Arc<dyn Socket>, cloexec_enable: bool) -> SysResult<u
     let mut flag = OpenFlags::O_RDWR; // 这里的flag基本没用
     let socketinode = Arc::new(SocketInode::new(socket));
     let socketfile = Arc::new(SocketFile::new(flag, socketinode));
-    
+
     let fdInfo = FdInfo::new(socketfile, flag);
     let new_info = fdInfo.off_Ocloexec(!cloexec_enable);
     let task = current_task().expect("no current task");
@@ -358,11 +372,11 @@ pub fn sock_map_fd(socket: Arc<dyn Socket>, cloexec_enable: bool) -> SysResult<u
 pub fn exchange_sock_fdinfo(oldfd: usize, newfd: usize) -> SysResult<()> {
     let task = current_task().unwrap();
     if unlikely(oldfd >= task.fd_table_len() || newfd >= task.fd_table_len()) {
-        info!("[exchange_sock_fdinfo] out of range: oldfd = {}, newfd = {}, fdtable len = {}", 
-            oldfd, 
-            newfd, 
-            task.fd_table_len()
-        );
+        // info!("[exchange_sock_fdinfo] out of range: oldfd = {}, newfd = {}, fdtable len = {}",
+        //     oldfd,
+        //     newfd,
+        //     task.fd_table_len()
+        // );
         return Err(Errno::EBADF);
     }
     let mut fdtable = task.fd_table.lock();
@@ -376,8 +390,6 @@ pub fn test_fd_performance() {
 
     println!("Starting FD table performance tests...");
     let testfile = open("/aaa".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-        .unwrap()
-        .file()
         .unwrap();
 
     // 测试1: 顺序分配性能

@@ -30,12 +30,13 @@ pub fn kernel_trap_handler() {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             // 5
             // info!("[kernel_trap_handler] kernel timer interrupt");
-
             use log::error;
+            use crate::fs::procfs::irqtable::{SupervisorTimer, IRQTABLE};
 
             // error!("[kernel_trap_handler] kernel timer interrupt");
             TIMER_QUEUE.handle_expired();
             get_current_cpu().timer_irq_inc();
+            IRQTABLE.lock().inc(SupervisorTimer);
             set_next_trigger();
         }
         Trap::Exception(e) => match e {
@@ -85,7 +86,9 @@ pub fn kernel_trap_handler() {
         },
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
             use log::error;
+            use crate::fs::procfs::irqtable::{SupervisorExternal, IRQTABLE};
             // error!("got a supervisor external interrupt. do nothing");
+            IRQTABLE.lock().inc(SupervisorExternal);
             crate::hal::arch::interrupt::irq_handler();
         },
         _ => {

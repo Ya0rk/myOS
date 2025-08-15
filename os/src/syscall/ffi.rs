@@ -3,9 +3,7 @@ use num_enum::{FromPrimitive, TryFromPrimitive};
 use zerocopy::{Immutable, IntoBytes};
 
 use crate::{
-    hal::config::{BLOCK_SIZE, PATH_MAX},
-    net::{HOST_NAME, NIS_DOMAIN_NAME},
-    sync::{timer::get_time_s, TimeSpec, TimeVal},
+    fs::OpenFlags, hal::config::{BLOCK_SIZE, PATH_MAX}, net::{HOST_NAME, NIS_DOMAIN_NAME}, sync::{timer::get_time_s, TimeSpec, TimeVal}
 };
 
 #[derive(IntoBytes, Immutable)]
@@ -179,9 +177,11 @@ pub enum SysCode {
     SYSCALL_GET_MEMPOLICY = 236,
     SYSCALL_ACCEPT4 = 242,
     SYSCALL_WAIT4 = 260,
+    SYSCALL_FANOTIFY_INIT = 262,
     SYSCALL_RENAMEAT2 = 276,
     SYSCALL_PRLIMIT64 = 261,
     GETRANDOM = 278,
+    SYSCALL_MEMFD_CREATE = 279,
     MEMEBARRIER = 283,
     SYSCALL_COPY_FILE_RANGE = 285,
     SYS_STATX = 291,
@@ -200,6 +200,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str {
         match self {
+            Self::SYSCALL_FANOTIFY_INIT => "fanotify_init",
+            Self::SYSCALL_MEMFD_CREATE => "memfd_create",
             Self::SYSCALL_SETDOMINNAME => "setdominname",
             Self::SYSCALL_SETHOSTNAME => "sethostname",
             Self::SYSCALL_CLONE3 => "clone3",
@@ -930,4 +932,40 @@ pub struct CloneArgs {
 
     /// 目标 cgroup 的文件描述符（Linux 5.7+）
     pub cgroup: u64,
+}
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct FanEventFlags: u32 {
+        const O_RDONLY = OpenFlags::O_RDONLY.bits() as u32;
+        const O_WRONLY = OpenFlags::O_WRONLY.bits() as u32;
+        const O_RDWR = OpenFlags::O_RDWR.bits() as u32;
+        const O_LARGEFILE = OpenFlags::O_LARGEFILE.bits() as u32;
+        const O_CLOEXEC = OpenFlags::O_CLOEXEC.bits() as u32;
+        const O_APPEND = OpenFlags::O_APPEND.bits() as u32;
+        const O_DSYNC = OpenFlags::O_DSYNC.bits() as u32;
+        const O_NOATIME = OpenFlags::O_NOATIME.bits() as u32;
+        const O_NONBLOCK = OpenFlags::O_NONBLOCK.bits() as u32;
+        const O_SYNC = OpenFlags::O_SYNC.bits() as u32;
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct FanFlags: u32 {
+        const FAN_CLASS_PRE_CONTENT = 0x00000008;
+        const FAN_CLASS_CONTENT = 0x00000004;
+        const FAN_CLASS_NOTIF = 0x00000000;
+        const FAN_CLOEXEC = 0x00000001;
+        const FAN_NONBLOCK = 0x00000002;
+        const FAN_UNLIMITED_QUEUE = 0x00000010;
+        const FAN_UNLIMITED_MARKS = 0x00000020;
+        const FAN_REPORT_TID = 0x00000100;
+        const FAN_ENABLE_AUDIT = 0x00000040;
+        const FAN_REPORT_FID = 0x00000200;
+        const FAN_REPORT_DIR_FID = 0x00000400;
+        const FAN_REPORT_NAME = 0x00000800;
+        const FAN_REPORT_DFID_NAME = 0x00000400 | 0x00000800;
+        const FAN_REPORT_TARGET_FID = 0x00001000;
+        const FAN_REPORT_DFID_NAME_TARGET = (Self::FAN_REPORT_DFID_NAME.bits() | Self::FAN_REPORT_FID.bits() | Self::FAN_REPORT_TARGET_FID.bits());
+        const FAN_REPORT_PIDFD = 0x00000080;
+    }
 }

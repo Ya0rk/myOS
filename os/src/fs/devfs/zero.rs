@@ -1,6 +1,6 @@
 use crate::{
-    fs::{ffi::RenameFlags, Dirent, FileTrait, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
-    mm::{page::Page},
+    fs::{ffi::RenameFlags, Dirent, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, S_IFCHR},
+    mm::page::Page,
     sync::{SpinNoIrqLock, TimeStamp},
     utils::{Errno, SysResult},
 };
@@ -13,69 +13,27 @@ use alloc::{
 use async_trait::async_trait;
 use log::info;
 
-pub struct DevZero;
+pub struct DevZeroInode {
+    metadata: InodeMeta,
+}
 
-impl DevZero {
-    pub fn new() -> Self {
-        Self
+impl DevZeroInode {
+    pub fn new() -> Arc<dyn InodeTrait> {
+        Arc::new(Self {
+            metadata: InodeMeta::new(
+                InodeType::CharDevice,
+                0,
+                "/dev/zero",
+            ),
+        })
     }
 }
 
 #[async_trait]
-impl FileTrait for DevZero {
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        todo!()
+impl InodeTrait for DevZeroInode {
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
     }
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        true
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    async fn read(&self, mut user_buf: &mut [u8]) -> SysResult<usize> {
-        let len = user_buf.len();
-        user_buf.fill(0);
-        Ok(len)
-    }
-    /// 填满0
-    async fn pread(&self, mut user_buf: &mut [u8], offset: usize, len: usize) -> SysResult<usize> {
-        info!("[pread] from zerofs, fill 0");
-        user_buf.fill(0);
-        Ok(len)
-    }
-    async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        // do nothing
-        Ok(user_buf.len())
-    }
-
-    fn get_name(&self) -> SysResult<String> {
-        Ok("/dev/zero".to_string())
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        todo!()
-    }
-    fn read_dents(&self, mut ub: usize, len: usize) -> usize {
-        0
-    }
-    fn fstat(&self, stat: &mut Kstat) -> SysResult {
-        *stat = Kstat::new();
-        stat.st_mode = S_IFCHR;
-        Ok(())
-    }
-    fn is_dir(&self) -> bool {
-        false
-    }
-    async fn get_page_at(&self, offset: usize) -> Option<Arc<Page>> {
-        // self.metadata.inode.get_page_cache().unwrap().get_page(offset).unwrap()
-        Some(Page::new())
-    }
-}
-
-#[async_trait]
-impl InodeTrait for DevZero {
     fn get_page_cache(&self) -> Option<Arc<crate::fs::page_cache::PageCache>> {
         None
     }
@@ -86,10 +44,6 @@ impl InodeTrait for DevZero {
 
     fn set_size(&self, _new_size: usize) -> SysResult {
         Ok(())
-    }
-
-    fn node_type(&self) -> InodeType {
-        InodeType::CharDevice
     }
 
     async fn read_at(&self, _offset: usize, buf: &mut [u8]) -> usize {
@@ -123,15 +77,6 @@ impl InodeTrait for DevZero {
         let mut stat = Kstat::new();
         stat.st_mode = S_IFCHR;
         stat
-    }
-
-    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
-        // 你可以给 DevZero 加一个 timestamp 字段并返回它
-        unimplemented!("DevZero does not have a timestamp")
-    }
-
-    fn is_dir(&self) -> bool {
-        false
     }
 
     fn read_dents(&self) -> Option<Vec<Dirent>> {

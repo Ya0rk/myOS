@@ -1,6 +1,6 @@
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 
-#[cfg(all(target_arch = "riscv64", not(feature = "vf2")))]
+#[cfg(all(target_arch = "riscv64", feature = "board_qemu"))]
 pub const CLOCK_FREQ: usize = 1250_0000;
 
 #[cfg(target_arch = "loongarch64")]

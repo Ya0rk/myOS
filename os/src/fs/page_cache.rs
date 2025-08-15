@@ -121,6 +121,7 @@ impl PageCache {
             buf_cur += len;
             page_offset = 0;
             if get_current_cpu().timer_irq_cnt() >= 2 {
+                get_current_cpu().timer_irq_reset();
                 yield_now().await;
             }
         }
@@ -147,6 +148,7 @@ impl PageCache {
             // 这里需要yield一下，防止cpu占用过高
             if get_current_cpu().timer_irq_cnt() >= 2 {
                 info!("[PageCache] yield now!");
+                get_current_cpu().timer_irq_reset();
                 yield_now().await;
             }
         }

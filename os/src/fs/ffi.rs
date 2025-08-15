@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use bitflags::*;
 use lwext4_rust::Ext4InodeType;
 
@@ -213,6 +214,12 @@ pub enum InodeType {
 
 impl InodeType {
     /// Tests whether this node type represents a regular file.
+    pub const fn is_device(self) -> bool {
+        match self {
+            Self::BlockDevice | Self::CharDevice => true,
+            _ => false,
+        }
+    }
     pub const fn is_file(self) -> bool {
         matches!(self, Self::File)
     }
@@ -310,3 +317,126 @@ impl From<InodeType> for Ext4InodeType {
 pub const S_IFCHR: u32 = 0o0020000;
 pub const S_IFDIR: u32 = 0o0040000;
 pub const S_IFBLK: u32 = 0o0060000;
+
+use bitflags::bitflags;
+use core::fmt;
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct StMode {
+    pub mode: ModeFlag,
+}
+
+impl fmt::Debug for StMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StMode")
+            .field("mode", &format_args!("{}", self.mode))
+            .finish()
+    }
+}
+
+impl StMode {
+    pub fn new(mode: ModeFlag) -> Self {
+        Self { mode }
+    }
+
+    pub fn is_regular(&self) -> bool {
+        self.mode.contains(ModeFlag::S_IFREG)
+    }
+    pub fn is_dir(&self) -> bool {
+        self.mode.contains(ModeFlag::S_IFDIR)
+    }
+    pub fn is_symlink(&self) -> bool {
+        self.mode.contains(ModeFlag::S_IFLNK)
+    }
+    pub fn is_executable(&self) -> bool {
+        self.mode
+            .intersects(ModeFlag::S_IXUSR | ModeFlag::S_IXGRP | ModeFlag::S_IXOTH)
+    }
+}
+
+bitflags! {
+    #[derive(Clone, Copy)]
+    pub struct ModeFlag: u32 {
+        // ===== 文件类型（高位掩码） =====
+        /// 文件类型掩码（用来屏蔽出 S_IFSOCK~S_IFIFO 这几类类型位）
+        const S_IFMT   = 0o170000;
+        /// 套接字（socket）
+        const S_IFSOCK = 0o140000;
+        /// 符号链接（symbolic link）
+        const S_IFLNK  = 0o120000;
+        /// 普通文件（regular file）
+        const S_IFREG  = 0o100000;
+        /// 块设备（block device）
+        const S_IFBLK  = 0o060000;
+        /// 目录（directory）
+        const S_IFDIR  = 0o040000;
+        /// 字符设备（character device）
+        const S_IFCHR  = 0o020000;
+        /// FIFO / 管道（named pipe）
+        const S_IFIFO  = 0o010000;
+
+        // ===== 特殊权限位 =====
+        /// 设置用户 ID（set-user-ID on execution）
+        const S_ISUID  = 0o004000;
+        /// 设置组 ID（set-group-ID on execution）
+        const S_ISGID  = 0o002000;
+        /// 粘滞位（sticky bit）
+        /// 对目录：防止非目录所有者删除或重命名目录下文件
+        const S_ISVTX  = 0o001000;
+
+        // ===== 用户权限位（owner） =====
+        /// 用户读权限（read permission, owner）
+        const S_IRUSR  = 0o000400;
+        /// 用户写权限（write permission, owner）
+        const S_IWUSR  = 0o000200;
+        /// 用户执行权限（execute/search permission, owner）
+        const S_IXUSR  = 0o000100;
+
+        // ===== 组权限位（group） =====
+        /// 组读权限（read permission, group）
+        const S_IRGRP  = 0o000040;
+        /// 组写权限（write permission, group）
+        const S_IWGRP  = 0o000020;
+        /// 组执行权限（execute/search permission, group）
+        const S_IXGRP  = 0o000010;
+
+        // ===== 其他用户权限位（others） =====
+        /// 其他用户读权限（read permission, others）
+        const S_IROTH  = 0o000004;
+        /// 其他用户写权限（write permission, others）
+        const S_IWOTH  = 0o000002;
+        /// 其他用户执行权限（execute/search permission, others）
+        const S_IXOTH  = 0o000001;
+    }
+}
+
+impl fmt::Display for ModeFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.iter_names()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>()
+            .join(" | ")
+            .fmt(f)
+    }
+}
+
+impl From<u32> for StMode {
+    fn from(bits: u32) -> Self {
+        Self {
+            mode: ModeFlag::from_bits_truncate(bits),
+        }
+    }
+}
+
+impl From<ModeFlag> for StMode {
+    fn from(mode: ModeFlag) -> Self {
+        Self { mode }
+    }
+}
+
+impl From<StMode> for u32 {
+    fn from(st: StMode) -> Self {
+        st.mode.bits()
+    }
+}

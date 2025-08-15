@@ -16,7 +16,7 @@ spin = { path = "../vendor/spin", version = "0.9.8" }
 sbi-spec = { path = "../vendor/sbi-spec",  version = "0.0.7"}
 num_enum = { path = "../vendor/num_enum", version = "0.7.2", default-features = false }
 zerocopy = { path = "../vendor/zerocopy", version = "0.8.21", features = ["derive"]}
-lwext4_rust= {path = "../lwext4_rust"}
+lwext4_rust= {path = "../vendor/lwext4_rust"}
 hashbrown = { path = "../vendor/hashbrown", version = "0.15.2" }
 async-task = { path = "../vendor/async-task", version = "4.7.1", default-features = false }
 async-trait = { path = "../vendor/async-trait", version = "0.1.88"}
@@ -43,6 +43,7 @@ num-traits = { version = "0.2.19", default-features = false}
 visionfive2-sd = { path = "../vendor/visionfive2-sd" }
 bitfield-struct = "0.11"
 embedded-hal = "=1.0.0-alpha.7"
+ahci_driver = { path = "../vendor/ahci_driver" }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = { path = "../vendor/riscv", features = ["inline-asm"] }
@@ -53,7 +54,7 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 default = [
-    "info", 
+    "error", 
     "test", 
     "autorun", 
     # "board_qemu" # 在quem上就开这个

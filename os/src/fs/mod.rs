@@ -9,13 +9,14 @@ mod pipe;
 pub mod pre_data;
 pub mod procfs;
 mod stat;
-mod stdio;
+// mod stdio;
 pub mod vfs;
 // pub mod tmp;
 pub mod ffi;
 pub mod ltp;
 pub mod socketfs;
 
+pub use devfs::{DevTty, CharDev};
 use core::error;
 pub use dirent::Dirent;
 use ext4::{file, Ext4Inode};
@@ -28,7 +29,8 @@ pub use path::{path_test, resolve_path, AbsPath};
 // pub use inode_cache::*;
 pub use mount::MNT_TABLE;
 pub use pipe::Pipe;
-use procfs::{inode, PROCFS_SUPER_BLOCK};
+use procfs::super_block::PROCFS_SUPER_BLOCK;
+use crate::fs::devfs::superblock::DEVFS_SUPER_BLOCK;
 // use sbi_rt::NonRetentive;
 pub use crate::mm::page::Page;
 use crate::mm::page::PageType;
@@ -37,7 +39,7 @@ use crate::net::dev;
 use crate::utils::{Errno, SysResult};
 use alloc::string::{String, ToString};
 use alloc::{sync::Arc, vec::Vec};
-use devfs::{find_device, open_device_file, register_device, DevNull, DevZero};
+// use devfs::{find_device, open_device_file, register_device};
 use ext4::file::NormalFile;
 use ffi::{MEMINFO, MOUNTS};
 use log::{debug, error, info};
@@ -46,7 +48,7 @@ pub use pre_data::*;
 use sbi_spec::pmu::cache_event::NODE;
 pub use stat::Kstat;
 pub use stat::Statx;
-pub use stdio::{Stdin, Stdout};
+// pub use stdio::{Stdin, Stdout};
 pub use vfs::*;
 
 pub const SEEK_SET: usize = 0;
@@ -93,93 +95,27 @@ pub async fn init() {
 
     // 挂载dev文件系统 todo
     mkdir("/dev".into(), 0);
+    Dentry::get_dentry_from_path("/dev")
+        .unwrap()
+        .mount(DEVFS_SUPER_BLOCK.clone());
 
     create_init_files().await;
-
-    // Test case for file hole created by truncate and write
-    println!("[fs test] start test file hole (truncate scenario)");
-    let test_file_path = "/hole_test_truncate".into();
-    if let Ok(FileClass::File(file)) = open(test_file_path, OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-    {
-        // 1. Write initial data
-        let initial_data = "initial data".as_bytes();
-        file.write(initial_data).await.unwrap();
-        println!("[fs test] wrote initial data");
-
-        // 2. Truncate to 0
-        let inode = file.get_inode();
-        inode.truncate(0);
-        println!("[fs test] truncated file to 0");
-
-        // 3. Seek to a position > 0 to create a hole
-        let hole_size = 10;
-        file.lseek(hole_size as isize, SEEK_SET).unwrap();
-        println!("[fs test] seeked to {}", hole_size);
-
-        // 4. Write new data, creating a hole from 0 to 9
-        let new_data = "new data".as_bytes();
-        file.write(new_data).await.unwrap();
-        println!("[fs test] wrote new data after hole");
-
-        // 5. Seek back to the beginning to verify the hole
-        file.lseek(0, SEEK_SET).unwrap();
-        println!("[fs test] seeked to 0");
-
-        // 6. Read from the hole and verify it's all zeros
-        let mut hole_buf = [1u8; 10]; // Pre-fill with non-zero to be sure
-        let read_len = file.read(&mut hole_buf).await.unwrap();
-        assert_eq!(read_len, hole_size);
-        for &byte in hole_buf.iter() {
-            assert_eq!(byte, 0, "Byte in hole is not zero!");
-        }
-        println!("[fs test] hole content is verified to be zero");
-
-        // 7. Verify the data written after the hole
-        // The offset is now at the end of the hole (10)
-        let mut data_buf = [0u8; 8];
-        let read_len_data = file.read(&mut data_buf).await.unwrap();
-        assert_eq!(read_len_data, new_data.len());
-        assert_eq!(&data_buf[..read_len_data], new_data);
-        println!("[fs test] data after hole is verified");
-
-        println!("[fs test] file hole (truncate scenario) test pass");
-    } else {
-        println!("[fs test] file hole test fail: cannot create file");
-    }
-    // panic!("temp test");
 }
 
 pub async fn create_init_files() -> SysResult {
     mkdir("/usr".into(), 0);
-    //创建./dev/misc文件夹
-    mkdir("/dev/misc".into(), 0);
     // libctest中的pthread_cancel_points测试用例需要
     mkdir("/dev/shm".into(), 0);
     mkdir("/lib".into(), 0);
     mkdir("/lib64".into(), 0);
     mkdir("/bin".into(), 0);
     mkdir("/etc".into(), 0);
-    if let Ok(FileClass::File(file)) =
+    if let Ok(file) =
         open("/etc/passwd".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR)
     {
         let buf = "nobody:x:0:0:nobody:/nonexistent:/usr/sbin/nologin\0".as_bytes(); // 这里是提前往里面写数据
         file.write(&buf).await;
     };
-
-    //注册设备/dev/rtc和/dev/rtc0
-    register_device("/dev/rtc");
-    register_device("/dev/null");
-    register_device("/dev/rtc0");
-    //注册设备/dev/tty
-    register_device("/dev/tty");
-    //注册设备/dev/zero
-    register_device("/dev/zero");
-    register_device("/dev/loop0");
-    register_device("/dev/urandom");
-    //注册设备/dev/null
-    // register_device("/dev/null");
-    //注册设备/dev/misc/rtc
-    register_device("/dev/misc/rtc");
 
     if cfg!(feature = "autorun") {
         open("/bin/ls".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR);
@@ -190,7 +126,7 @@ pub async fn create_init_files() -> SysResult {
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     );
     //创建./etc/localtime记录时区
-    if let Ok(FileClass::File(file)) = open(
+    if let Ok(file) = open(
         "/etc/localtime".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
@@ -198,7 +134,7 @@ pub async fn create_init_files() -> SysResult {
         file.write(&buf).await;
     };
 
-    if let Ok(FileClass::File(file)) = open(
+    if let Ok(file) = open(
         "/ltp_testcode_musl.sh".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
@@ -206,7 +142,7 @@ pub async fn create_init_files() -> SysResult {
         file.write(&buf).await;
     }
 
-    if let Ok(FileClass::File(file)) = open(
+    if let Ok(file) = open(
         "/ltp_testcode_glibc.sh".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
@@ -238,7 +174,7 @@ fn create_open_file(
     target_abs_path: &str,
     parent_path: &str,
     flags: OpenFlags,
-) -> SysResult<FileClass> {
+) -> SysResult<Arc<dyn FileTrait>> {
     info!(
         "    [create_open_file] flags={:?}, abs_path={}, parent_path={}",
         flags, target_abs_path, parent_path
@@ -248,18 +184,26 @@ fn create_open_file(
 
     // 逻辑为获得一个Option<Arc InodeTrait>如果返回None直接返回None,因为代表父母节点都没有
     // 如果父母节点存在, 那么当父母节点是Dir的时候获得inode,如果父母节点不是Dir页直接返回None
-    if find_device(parent_path) {
-        return Err(Errno::ENOTDIR);
-    };
-    let parent_dir = { Dentry::get_inode_from_path(parent_path)? };
-    if parent_dir.node_type() != InodeType::Dir {
-        info!(
-            "    [create_open_file] parent_path {} is not a directory",
+    // if find_device(parent_path) {
+    //     return Err(Errno::ENOTDIR);
+    // };
+    // let parent_dir = { Dentry::get_inode_from_path(parent_path)? };
+    // if parent_dir.node_type() != InodeType::Dir {
+    //     info!(
+    //         "    [create_open_file] parent_path {} is not a directory",
+    //         parent_path
+    //     );
+    //     return Err(Errno::ENOTDIR);
+    // }
+    let parent_dentry = Dentry::get_dentry_from_path(parent_path)?;
+    let parent_dir = parent_dentry.get_inode().ok_or(Errno::ENOTDIR)?;
+    if !parent_dir.metadata()._type.is_dir() {
+        error!(
+            "[create_open_file] parent_dentry {} is not a directory",
             parent_path
         );
         return Err(Errno::ENOTDIR);
     }
-    let parent_dentry = Dentry::get_dentry_from_path(parent_path)?;
     debug_point!("");
     let target_inode = match flags.contains(OpenFlags::O_CREAT) {
         false => Dentry::get_inode_from_path(target_abs_path)?,
@@ -292,15 +236,7 @@ fn create_open_file(
         }
     };
 
-    // if !target_inode.is_valid() {
-    //     info!(
-    //         "    [create_open_file] last check inode is no valid path: {}",
-    //         target_abs_path
-    //     );
-    //     return Err(Errno::ENOENT);
-    // }
-
-    if flags.contains(OpenFlags::O_DIRECTORY) && target_inode.node_type() != InodeType::Dir {
+    if flags.contains(OpenFlags::O_DIRECTORY) && !target_inode.metadata()._type.is_dir() {
         debug!(
             "[create_open_file] target_path {} is not a directory",
             target_abs_path
@@ -316,14 +252,14 @@ fn create_open_file(
             target_inode,
             target_abs_path.to_string(),
         );
-        FileClass::File(Arc::new(osinode))
+        Arc::new(osinode)
     };
 
     Ok(res)
 }
 
 /// path为绝对路径
-pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<FileClass> {
+pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<Arc<dyn FileTrait>> {
     info!(
         "    [fs_open] abspath = {}, flags = {:?}",
         path.get(),
@@ -337,12 +273,12 @@ pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<FileClass> {
     }
 
     // 临时保存这个机制,后期应当使用设备文件系统去代替
-    if find_device(&path.get()) {
-        if let Some(device) = open_device_file(&path.get()) {
-            return Ok(FileClass::Abs(device));
-        }
-        return Err(Errno::EIO);
-    }
+    // if find_device(&path.get()) {
+    //     if let Some(device) = open_device_file(&path.get()) {
+    //         return Ok(device);
+    //     }
+    //     return Err(Errno::EIO);
+    // }
 
     create_open_file(&path.get(), &path.get_parent_abs(), flags)
 }
@@ -355,9 +291,9 @@ pub fn mkdir(target_abs_path: AbsPath, mode: usize) -> SysResult<()> {
     debug!("[mkdir] new dir abs_path is {}", target_abs_path.get());
 
     // 查看当前路径是否是设备
-    if find_device(&target_abs_path.get()) {
-        return Err(Errno::EEXIST);
-    }
+    // if find_device(&target_abs_path.get()) {
+    //     return Err(Errno::EEXIST);
+    // }
 
     debug!("[mkdir] path {}, mode {}", target_abs_path.get(), mode);
     debug_point!("[mkdir]");
@@ -381,7 +317,7 @@ pub fn chdir(target: AbsPath) -> SysResult<()> {
     info!("[chdir] target = {}", target.get());
 
     let inode = Dentry::get_inode_from_path(&target.get())?;
-    if inode.node_type() == InodeType::Dir {
+    if inode.metadata()._type.is_dir() {
         return Ok(());
     }
     return Err(Errno::ENOTDIR);

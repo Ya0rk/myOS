@@ -18,61 +18,43 @@ impl SocketFile {
 
 #[async_trait]
 impl FileTrait for SocketFile {
-    fn get_inode(&self) -> Arc<dyn InodeTrait>  {
-        self.metadata.inode.clone()
-    }
-
-    fn readable(&self) -> bool {
-        true
-    }
-
-    fn writable(&self) -> bool {
-        true
-    }
-
-    fn executable(&self) -> bool {
-        false
+    fn metadata(&self) -> &FileMeta {
+        &self.metadata
     }
 
     async fn read(&self, buf: &mut [u8]) -> SysResult<usize> {
-        let inode = self.get_inode();
+        let inode = self.metadata().inode.clone();
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
         let (res, _) = socketinode.socket.recv_msg(buf).await?;
         Ok(res)
     }
 
     async fn write(&self, buf: &[u8]) -> SysResult<usize> {
-        let inode = self.get_inode();
+        let inode = self.metadata().inode.clone();
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
         let res = socketinode.socket.send_msg(buf, None).await?;
         Ok(res)
     }
 
     async fn pollin(&self) -> SysResult<bool> {
-        let inode = self.get_inode();
+        let inode = self.metadata().inode.clone();
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
         socketinode.socket.pollin().await
     }
 
     async fn pollout(&self) -> SysResult<bool> {
-        let inode = self.get_inode();
+        let inode = self.metadata().inode.clone();
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
         socketinode.socket.pollout().await
     }
 
     fn get_socket(&self) -> SysResult<Arc<dyn Socket>> {
-        let inode = self.get_inode();
+        let inode = self.metadata().inode.clone();
         let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
         Ok(socketinode.socket.clone())
     }
 
-    fn get_flags(&self) -> OpenFlags {
-        let inode = self.get_inode();
-        let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
-        socketinode.socket.get_flags().unwrap_or(OpenFlags::empty())
-    }
-
-    fn get_name(&self) -> SysResult<String> {
-        Ok("SocketFile".to_string())
+    fn abspath(&self) -> String {
+        "SocketFile".to_string()
     }
 }

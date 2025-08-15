@@ -2,8 +2,7 @@
 use crate::{
     drivers::{device::uart::UART_DEVICE, tty::{termios::Termios, tty_core::TtyIoctlCmd}},
     fs::{
-        ffi::RenameFlags, page_cache::PageCache, Dirent, FileTrait, InodeTrait, InodeType, Kstat,
-        OpenFlags, Page, S_IFCHR,
+        ffi::RenameFlags, page_cache::PageCache, Dirent, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, Page, S_IFCHR
     },
     mm::user_ptr::{user_mut_ptr, user_ref},
     sync::{SpinNoIrqLock, TimeStamp},
@@ -23,65 +22,80 @@ use log::{error, info};
 
 type Pid = u32;
 
-lazy_static! {
-    pub static ref SBI_TTY_INODE: Arc<DevTty> = Arc::new(DevTty::new());
-}
-
 pub struct DevTty {
-    inner: SpinNoIrqLock<DevTtyInner>,
+    metadata: FileMeta,
 }
 
 impl DevTty {
-    pub fn new() -> Self {
+    pub fn new_in() -> Self {
         Self {
-            inner: SpinNoIrqLock::new(DevTtyInner::new()),
+            metadata: FileMeta::new(
+                OpenFlags::O_RDONLY,
+                DevTtyInode::new(),
+            ),
+        }
+    }
+    pub fn new_out() -> Self {
+        Self {
+            metadata: FileMeta::new(
+                OpenFlags::O_WRONLY,
+                DevTtyInode::new(),
+            ),
         }
     }
 }
 
 #[async_trait]
 impl FileTrait for DevTty {
-    fn readable(&self) -> bool {
-        true
-    }
-    fn writable(&self) -> bool {
-        true
-    }
-    fn executable(&self) -> bool {
-        false
-    }
-    fn get_inode(&self) -> Arc<dyn InodeTrait> {
-        SBI_TTY_INODE.clone()
+    fn metadata(&self) -> &FileMeta {
+        &self.metadata
     }
     async fn read(&self, user_buf: &mut [u8]) -> SysResult<usize> {
-        Ok(self.read_dirctly(0, user_buf).await)
+        assert!(self.metadata.flags.read().readable());
+        if user_buf.is_empty() {
+            return Ok(0);
+        }
+        Ok(self.metadata.inode.read_dirctly(0, user_buf).await)
     }
     async fn write(&self, user_buf: &[u8]) -> SysResult<usize> {
-        Ok(self.write_directly(0, user_buf).await)
+        assert!(self.metadata.flags.read().writable());
+        Ok(self.metadata.inode.write_directly(0, user_buf).await)
     }
-    fn get_name(&self) -> SysResult<String> {
-        Ok("/dev/tty".to_string())
-    }
-    fn rename(&mut self, _new_path: String, _flags: RenameFlags) -> SysResult<usize> {
-        Err(Errno::EPERM)
+    fn abspath(&self) -> String {
+        "/dev/tty".to_string()
     }
     fn fstat(&self, stat: &mut Kstat) -> SysResult {
         stat.st_mode = S_IFCHR;
         Ok(())
     }
-    fn is_dir(&self) -> bool {
-        false
-    }
     async fn get_page_at(&self, _offset: usize) -> Option<Arc<Page>> {
         None
     }
-    fn is_device(&self) -> bool {
-        true
+}
+
+pub struct DevTtyInode {
+    metadata: InodeMeta,
+    inner: SpinNoIrqLock<DevTtyInner>,
+}
+
+impl DevTtyInode {
+    pub fn new() -> Arc<dyn InodeTrait> {
+        Arc::new(Self {
+            metadata: InodeMeta::new(
+                InodeType::CharDevice,
+                0,
+                "/dev/tty",
+            ),
+            inner: SpinNoIrqLock::new(DevTtyInner::new()),
+        })
     }
 }
 
 #[async_trait]
-impl InodeTrait for DevTty {
+impl InodeTrait for DevTtyInode {
+    fn metadata(&self) -> &InodeMeta {
+        &self.metadata
+    }
     async fn read_dirctly(&self, _offset: usize, buf: &mut [u8]) -> usize {
         // error!("getchar");
         if buf.is_empty() {
@@ -166,17 +180,12 @@ impl InodeTrait for DevTty {
     fn get_page_cache(&self) -> Option<Arc<PageCache>> {
         None
     }
-    fn set_size(&self, _new_size: usize) -> SysResult {
-        Ok(())
-    }
-    fn node_type(&self) -> InodeType {
-        InodeType::CharDevice
-    }
-    fn get_timestamp(&self) -> &SpinNoIrqLock<TimeStamp> {
-        unimplemented!("DevTty does not have a timestamp")
-    }
-    fn is_dir(&self) -> bool {
-        false
+    fn fstat(&self) -> Kstat {
+        let mut res = Kstat::new();
+        res.st_ino = self.metadata.ino as u64;
+        res.st_mode = S_IFCHR;
+        res.st_nlink = 1;
+        res
     }
     fn read_dents(&self) -> Option<Vec<Dirent>> {
         None

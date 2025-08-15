@@ -112,13 +112,17 @@ pub async fn user_trap_handler() {
             task.set_zombie();
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
+            use crate::fs::procfs::irqtable::{SupervisorTimer, IRQTABLE};
             TIMER_QUEUE.handle_expired();
             set_next_trigger();
+            IRQTABLE.lock().inc(SupervisorTimer);
             yield_now().await;
         }
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
             use log::error;
+            use crate::fs::procfs::irqtable::{SupervisorExternal, IRQTABLE};
             error!("got a supervisor external interrupt. do nothing");
+            IRQTABLE.lock().inc(SupervisorExternal);
             crate::hal::arch::interrupt::irq_handler();
         }
         _ => {
