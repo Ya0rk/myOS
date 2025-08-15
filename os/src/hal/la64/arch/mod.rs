@@ -17,7 +17,7 @@ use crate::hal::PAGE_SIZE_BITS;
 pub fn tp_read() -> usize {
     unsafe {
         let mut tp: usize;
-        asm!("add.w {}, $tp, $r0", out(reg) tp);
+        asm!("add.d {}, $tp, $r0", out(reg) tp);
         tp
     }
 }
@@ -25,7 +25,7 @@ pub fn tp_read() -> usize {
 pub fn fp_read() -> usize {
     unsafe {
         let mut fp: usize;
-        asm!("add.w {}, $fp, $r0", out(reg) fp);
+        asm!("add.d {}, $fp, $r0", out(reg) fp);
         fp
     }
 }
@@ -33,7 +33,7 @@ pub fn fp_read() -> usize {
 pub fn ra_read() -> usize {
     unsafe {
         let mut ra: usize;
-        asm!("add.w {}, $ra, $r0", out(reg) ra);
+        asm!("add.d {}, $ra, $r0", out(reg) ra);
         ra
     }
 }
