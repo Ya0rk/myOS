@@ -21,6 +21,9 @@ MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
 
+FEAT ?= board_qemu
+
+
 # eval will copy to root dir named kernel-rv or kernel-la
 ifeq ($(ARCH), riscv64)
 	EVAL_FROM := $(KERNEL_BIN)
@@ -41,9 +44,16 @@ FS = lwext4_rust
 CPUS ?= 1
 
 # BOARD
-BOARD := qemu
+BOARD ?= qemu
 SBI ?= rustsbi
 BOOTLOADER := ../bootloader/$(SBI)-$(BOARD).bin
+
+ifeq ($(BOARD), 2k1000)
+	FEAT := 2k1000la
+endif
+ifeq ($(BOARD), vf2)
+	FEAT := vf2
+endif
 
 # GDB wrapper to handle virtual path to core lib and types display in Rust
 GDB_PATH := /home/ya0/comp/gdb-16.2/build-riscv64/bin/riscv64-unknown-elf-gdb
@@ -62,7 +72,12 @@ KERNEL_ENTRY_PA := 0x80200000
 
 # Binutils
 OBJDUMP := rust-objdump --arch-name=riscv64
-OBJCOPY := rust-objcopy --binary-architecture=riscv64
+ifeq ($(ARCH), riscv64)
+	OBJCOPY := rust-objcopy --binary-architecture=riscv64
+endif
+ifeq ($(ARCH), loongarch64)
+	OBJCOPY := rust-objcopy --binary-architecture=loongarch64
+endif
 
 # Disassembly
 DISASM ?= -x
@@ -139,12 +154,17 @@ kernel:
 	cd ../user && make build TEST=$(TEST)
 	echo Platform: $(BOARD)
 	cp ./linker/linker-$(BOARD)-$(ARCH).ld ./src/linker.ld
-	cargo build $(MODE_ARG) --target $(TARGET) -j 20
+	cargo build $(MODE_ARG) --target $(TARGET) -F $(FEAT) -j 20
 	rm src/linker.ld
 PHONY += kernel
 
 eval: build
 	cp $(EVAL_FROM) $(EVAL_OUTPUT) -f
+
+bin: build
+	cp $(KERNEL_BIN) $(EVAL_OUTPUT) -f
+PHONY += bin
+
 
 clean:
 	cargo clean

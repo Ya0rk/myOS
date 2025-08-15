@@ -131,6 +131,10 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
         net::init_net_dev();
         // 此时完成初始化工作，准备载入进程开始执行
 
+        #[cfg(feature = "board_qemu")]
+        {
+            
+        }
         // 测试代码应当放在这里
         #[cfg(feature = "test")]
         {

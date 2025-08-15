@@ -15,9 +15,9 @@ const TEST: &[&str] = &[
 ];
 
 const FINAL_STAGE1: &[&str] = &[
-    "./copy-file-range_testcode.sh\0",
-    "./interrupts_testcode.sh\0",
-    "./splice_testcode.sh\0",
+    // "./copy-file-range_testcode.sh\0",
+    // "./interrupts_testcode.sh\0",
+    // "./splice_testcode.sh\0",
 ];
 
 const MUSL_LTP: &[&str] = &[
@@ -29,10 +29,10 @@ const GLIBC_LTP: &[&str] = &[
 ];
 
 const TESTCASES: &[&str] = &[
-    // "./libctest_testcode.sh\0",
+    "./libctest_testcode.sh\0",
     // "./lua_testcode.sh\0",
     // "./libcbench_testcode.sh\0",
-    // "./iozone_testcode.sh\0",
+    "./iozone_testcode.sh\0",
     // "./lmbench_testcode.sh\0",
     // "./iperf_testcode.sh\0",
     // "./netperf_testcode.sh\0",

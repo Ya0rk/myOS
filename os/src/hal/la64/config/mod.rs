@@ -1,4 +1,7 @@
-pub const UART_ADDR: usize = 0x0_1FE0_01E0 + 0x9000_0000_0000_0000;
+#[cfg(feature = "board_qemu")]
+pub const UART_ADDR: usize = 0x0_1FE0_01E0 + 0x8000_0000_0000_0000;
+#[cfg(feature = "2k1000la")]
+pub const UART_ADDR: usize = 0x0_1FE0_0000 + 0x8000_0000_0000_0000;
 
 pub const TICKS_PER_SEC: usize = 100;
 pub const MSEC_PER_SEC: usize = 1000;

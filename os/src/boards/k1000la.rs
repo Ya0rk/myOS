@@ -1,1 +1,1 @@
-pub const UART_BASE: usize = 0x1fe20000 + 0x9000_0000_0000_0000;
+pub const UART_BASE: usize = 0x1fe20000 + 0x8000_0000_0000_0000;
