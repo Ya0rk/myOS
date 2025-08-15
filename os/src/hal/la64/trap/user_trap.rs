@@ -86,6 +86,14 @@ pub async fn user_trap_handler() {
                         }
                     }
                 }
+                Exception::AddressNotAligned => {
+                    // panic!("{:?} pc: {:#x}", estat.cause(), era.pc());
+
+                    // use crate::hal::trap::unaligned::emulate_load_store_insn;
+
+                    use crate::hal::trap::unaligned::emulate_load_store_insn;
+                    unsafe { emulate_load_store_insn(current_trap_cx()) };
+                }
 
                 Exception::LoadPageFault
                 | Exception::StorePageFault

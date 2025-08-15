@@ -67,6 +67,13 @@ impl GPRegs {
     pub fn new() -> Self {
         Self::default()
     }
+    pub fn as_slice(&self) -> &[usize; 32] {
+        unsafe { core::mem::transmute(self) }
+        // core::slice::from_raw_parts(self as *const usize, 32)
+    }
+    pub fn as_mut_slice(&mut self) -> &mut [usize; 32] {
+        unsafe { core::mem::transmute(self) }
+    }    
 }
 
 impl TrapContext {
@@ -92,6 +99,9 @@ impl TrapContext {
         };
         cx.set_sp(sp);
         cx
+    }
+    pub fn gp_regs(&mut self) -> &mut [usize; 32] {
+        self.user_gp.as_mut_slice()
     }
     /// 设置context参数
     pub fn set_arg(&mut self, argc: usize, argv: usize, env: usize) {

@@ -57,7 +57,9 @@ pub fn boot_all_harts(hartid: usize) {
     }
 }
 
+#[inline(always)]
 pub fn arch_init() {
+    crate::hal::trap::init();
     mmu_init();
     euen::set_fpe(true);
     tlb_init(tlb_fill as usize);
