@@ -336,7 +336,7 @@ impl Socket for TcpSocket {
         newsock.listen(0)?;
         // newsock.set_state(TcpState::Established);
         let newsock = Arc::new(newsock);
-        let newfd = sock_map_fd(newsock, cloexec_enable).map_err(|_| Errno::EAFNOSUPPORT)?;
+        let newfd = sock_map_fd(newsock, cloexec_enable, flags).map_err(|_| Errno::EAFNOSUPPORT)?;
         // 在accept成功后，oldsock的状态会转化为established，我们后面只能用oldsock来进行数据传输
         // 然后服务器端任然需要一个socket来监听，所以使用newsock来监听
         // 所以这里需要将oldsock对应fd的file和newsock对应的file进行交换

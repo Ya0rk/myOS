@@ -357,15 +357,16 @@ impl FdTable {
 }
 
 /// 将一个socket加入到fd表中
-pub fn sock_map_fd(socket: Arc<dyn Socket>, cloexec_enable: bool) -> SysResult<usize> {
-    let mut flag = OpenFlags::O_RDWR; // 这里的flag基本没用
+pub fn sock_map_fd(socket: Arc<dyn Socket>, cloexec_enable: bool, flags: OpenFlags) -> SysResult<usize> {
+    // let mut flag = OpenFlags::O_RDWR; // 这里的flag基本没用
     let socketinode = Arc::new(SocketInode::new(socket));
-    let socketfile = Arc::new(SocketFile::new(flag, socketinode));
+    let socketfile = Arc::new(SocketFile::new(flags, socketinode));
 
-    let fdInfo = FdInfo::new(socketfile, flag);
-    let new_info = fdInfo.off_Ocloexec(!cloexec_enable);
+    let fdInfo = FdInfo::new(socketfile, flags);
+    // let new_info = fdInfo.off_Ocloexec(!cloexec_enable);
     let task = current_task().expect("no current task");
-    let fd = task.alloc_fd(new_info)?;
+    let fd = task.alloc_fd(fdInfo)?;
+    info!("socket map fd: new fd = {}, flags = {:?}", fd, flags);
     Ok(fd)
 }
 
@@ -381,6 +382,9 @@ pub fn exchange_sock_fdinfo(oldfd: usize, newfd: usize) -> SysResult<()> {
     }
     let mut fdtable = task.fd_table.lock();
     fdtable.table.swap(oldfd, newfd);
+    let temp = fdtable.table[newfd].flags;
+    fdtable.table[newfd].flags = fdtable.table[oldfd].flags;
+    fdtable.table[oldfd].flags = temp;
     Ok(())
 }
 

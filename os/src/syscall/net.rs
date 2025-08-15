@@ -30,7 +30,7 @@ pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usi
     let socket = <dyn Socket>::new(domain as u16, type_).map_err(|_| Errno::EAFNOSUPPORT)?;
 
     // 将socket和一个fd绑定
-    let fd = sock_map_fd(socket.get(), cloexec_enable).map_err(|_| Errno::EMFILE)?;
+    let fd = sock_map_fd(socket.get(), cloexec_enable, OpenFlags::O_RDWR).map_err(|_| Errno::EMFILE)?;
 
     info!("[sys_socket] finished, create socket fd = {}", fd);
     Ok(fd)

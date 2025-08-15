@@ -43,11 +43,11 @@ impl PortManager {
         }
     }
     fn alloc(&mut self, domain: Sock) -> SysResult<u16> {
-        if let Some(port) = self.recycled.pop_front() {
-            info!("[port alloc] recycled port: {}", port);
-            self.mark_used(domain, port);
-            return Ok(port);
-        }
+        // if let Some(port) = self.recycled.pop_front() {
+        //     info!("[port alloc] recycled port: {}", port);
+        //     self.mark_used(domain, port);
+        //     return Ok(port);
+        // }
 
         let chance = self.end - self.start - self.recycled.len() as u16;
         for _ in 0..chance {
@@ -75,7 +75,10 @@ impl PortManager {
             self.recycled.push_back(port);
         }
         match domain {
-            Sock::Tcp | Sock::Udp => {
+            // Sock::Tcp | Sock::Udp => {
+            //     self.tcp_used_ports.set(port as usize, false);
+            // }
+            Sock::Tcp => {
                 self.tcp_used_ports.set(port as usize, false);
             }
             Sock::Udp => {
@@ -86,7 +89,10 @@ impl PortManager {
     }
     fn mark_used(&mut self, domain: Sock, port: u16) {
         match domain {
-            Sock::Tcp | Sock::Udp => {
+            // Sock::Tcp | Sock::Udp => {
+            //     self.tcp_used_ports.set(port as usize, true);
+            // }
+            Sock::Tcp => {
                 self.tcp_used_ports.set(port as usize, true);
             }
             Sock::Udp => {
@@ -97,7 +103,13 @@ impl PortManager {
     }
     fn try_mark_used(&mut self, domain: &Sock, port: u16) -> bool {
         match domain {
-            Sock::Tcp | Sock::Udp => {
+            // Sock::Tcp | Sock::UDP => {
+            //     if !self.tcp_used_ports[port as usize] {
+            //         self.tcp_used_ports.set(port as usize, true);
+            //         return true;
+            //     }
+            // }
+            Sock::Tcp => {
                 if !self.tcp_used_ports[port as usize] {
                     self.tcp_used_ports.set(port as usize, true);
                     return true;

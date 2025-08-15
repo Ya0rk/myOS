@@ -1255,7 +1255,8 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
             let fd_info = task.get_fd(fd)?;
             let flag = fd_info.flags;
             let mut res = 0;
-            if flag.contains(OpenFlags::O_CLOEXEC) {
+            // info!("flags = {:?}", flag);
+            if flag.contains(OpenFlags::O_CLOEXEC) || flag.contains(OpenFlags::O_NONBLOCK){
                 res = FcntlArgFlags::FD_CLOEXEC.bits() as usize;
             }
             // println!("ok res = {:?}", res);
