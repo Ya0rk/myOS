@@ -409,7 +409,7 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     let flags = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
     error!(
-        "[sys_openat] fd: {}, path = {}, flags = {:?}, _mode: {:o}",
+        "[sys_openat] fd: {}, path = {}, flags = {:?}, _mode: {:#o}",
         fd, path, flags, _mode
     );
 
@@ -1238,22 +1238,29 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
                 Some(x) => x.metadata.i_mode.lock().mode,
                 None => return Ok(0),
             };
-
-            if mode.contains(FaccessatMode::R_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
-                error!(
-                    "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
-                    dirfd, path
-                );
-                return Err(Errno::EACCES);
-            }
-            if mode.contains(FaccessatMode::W_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
-                error!(
-                    "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
-                    dirfd, path
-                );
-                return Err(Errno::EACCES);
-            }
-            if mode.contains(FaccessatMode::X_OK) && !i_mode.contains(ModeFlag::S_IXOTH) {
+            // 注意到在鉴权的时候应当只关注 others 的位置就好了
+            // if mode.contains(FaccessatMode::F_OK) {
+            //     // error!(
+            //     //     "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
+            //     //     dirfd, path
+            //     // );
+            //     return Ok(0);
+            // }
+            // if mode.contains(FaccessatMode::R_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
+            //     error!(
+            //         "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
+            //         dirfd, path
+            //     );
+            //     return Err(Errno::EACCES);
+            // }
+            // if mode.contains(FaccessatMode::W_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
+            //     error!(
+            //         "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
+            //         dirfd, path
+            //     );
+            //     return Err(Errno::EACCES);
+            // }
+            if !i_mode.contains(ModeFlag::S_IXOTH) {
                 error!(
                     "[sys_faccessat] return no executable dirfd: {}, pathname: {}",
                     dirfd, path
@@ -1283,6 +1290,9 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         info!("[sys_faccessat] got i_mode: {:0}", i_mode);
 
         if is_root {
+            if mode.contains(FaccessatMode::X_OK) && !i_mode.intersects(ModeFlag::S_IXOTH | ModeFlag::S_IXGRP | ModeFlag::S_IXUSR) {
+                return Err(Errno::EACCES);
+            }
             return Ok(0);
         }
 
