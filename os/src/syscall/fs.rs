@@ -1,9 +1,9 @@
-use crate::fs::ext4::NormalFile;
+use crate::fs::ext4::{Ext4Inode, NormalFile};
 use crate::fs::fanotify::{FanEventFlags, FanFlags, FanMarkFlags};
 use crate::fs::procfs::inode;
 use crate::fs::{
     chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType,
-    Kstat, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, Stdout, StxMask, UmountFlags,
+    Kstat, ModeFlag, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, Stdout, StxMask, UmountFlags,
     MNT_TABLE, SEEK_CUR,
 };
 use crate::hal::config::{AT_FDCWD, PAGE_SIZE, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
@@ -14,6 +14,7 @@ use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
 use crate::syscall::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, IoVec, StatFs, AT_REMOVEDIR};
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
+use crate::utils::downcast::Downcast;
 use crate::utils::{backtrace, Errno, SysResult};
 use alloc::boxed::Box;
 use alloc::ffi::CString;
@@ -24,6 +25,7 @@ use alloc::vec::Vec;
 use core::cell::SyncUnsafeCell;
 use core::cmp::{max, min};
 use core::mem::offset_of;
+use core::sync::atomic::AtomicUsize;
 use num_traits::Zero;
 // use core::error;
 use core::intrinsics::unlikely;
@@ -384,6 +386,14 @@ pub fn sys_statx(
     }
 }
 
+/// 路径太长了，接口改不过来
+/// 使用全局变脸存储inode 的 mode 信息
+/// 用于创建 inode 的 i_mode 字段
+/// 目前只在 sys_openat 系统调用中设置
+lazy_static! {
+    pub static ref SYS_OPENAT_MODE: AtomicUsize = AtomicUsize::new(0);
+}
+
 /// 打开或创建一个文件：https://man7.org/linux/man-pages/man2/open.2.html
 ///
 /// Success: 返回文件描述符; Fail: 返回-1
@@ -401,6 +411,9 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         "[sys_openat] fd: {}, path = {}, flags = {:?}, _mode: {}",
         fd, path, flags, _mode
     );
+
+    // NOTE: 需要注意是在这里设置i_mode 供给真正创建 inode 的时候调用
+    SYS_OPENAT_MODE.store(_mode, core::sync::atomic::Ordering::Relaxed);
 
     // 计算目标路径
     let target_path = if fd == AT_FDCWD {
@@ -1166,8 +1179,19 @@ pub async fn sys_sendfile(
 pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> SysResult<usize> {
     let task = current_task().unwrap();
     let mut path = user_cstr(pathname.into())?.unwrap();
-    // error!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
+    info!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
     let mode = FaccessatMode::from_bits(mode).ok_or(Errno::EINVAL)?;
+    // pub struct FaccessatMode: u32 {
+    //     /// 检查文件是否存在
+    //     const F_OK = 0;
+    //     /// 检查文件是否可读
+    //     const R_OK = 4;
+    //     /// 检查文件是否可写
+    //     const W_OK = 2;
+    //     /// 检查文件是否可执行
+    //     const X_OK = 1;
+    // }
+    info!("access mode: {:o}", mode.bits());
     let cwd = task.get_current_path();
 
     let abs = if dirfd == AT_FDCWD {
@@ -1190,36 +1214,91 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         let other_cwd = inode.get_name()?;
         resolve_path(other_cwd, path.clone())
     };
+    // TODO:  缺少去判断父文件夹的逻辑
+    // let parent_abs = AbsPath::from(abs.get_parent_abs());
+    // if let Ok(file_class) = open(parent_abs, OpenFlags::O_RDONLY) {
+    //     let file = file_class.file()?;
+    //     let inode = file.get_inode();
+    //     // BUG: 临时去这样子做，如果不是 ext4 的就直接返回许可，只判断 ext4 的
+    //     let i_mode = match inode.downcast_arc::<Ext4Inode>() {
+    //         Some(x) => x.metadata.i_mode.lock().mode,
+    //         None => return Ok(0),
+    //     };
+    //     // 注意到在鉴权的时候应当只关注 others 的位置就好了
+    //     if mode.contains(FaccessatMode::F_OK) {
+    //         // error!(
+    //         //     "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
+    //         //     dirfd, path
+    //         // );
+    //         return Ok(0);
+    //     }
+    //     if mode.contains(FaccessatMode::R_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
+    //         // error!(
+    //         //     "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
+    //         //     dirfd, path
+    //         // );
+    //         return Err(Errno::EACCES);
+    //     }
+    //     if mode.contains(FaccessatMode::W_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
+    //         // error!(
+    //         //     "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
+    //         //     dirfd, path
+    //         // );
+    //         return Err(Errno::EACCES);
+    //     }
+    //     if mode.contains(FaccessatMode::X_OK) && !i_mode.contains(ModeFlag::S_IXOTH) {
+    //         // error!(
+    //         //     "[sys_faccessat] return no executable dirfd: {}, pathname: {}",
+    //         //     dirfd, path
+    //         // );
+    //         return Err(Errno::EACCES);
+    //     }
+    // } else {
+    //     // error!(
+    //     //     "[sys_faccessat] return ENOENT dirfd: {}, pathname: {}",
+    //     //     dirfd, path
+    //     // );
+    //     return Err(Errno::ENOENT);
+    // }
 
+    // BUG: 这里应当根据的是根据 INODE 的i_mode 字段而不是 file 的打开标记位
     if let Ok(file_class) = open(abs, OpenFlags::O_RDONLY) {
         let file = file_class.file()?;
         let inode = file.get_inode();
-        if mode.contains(FaccessatMode::F_OK) {
-            // error!(
-            //     "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
-            //     dirfd, path
-            // );
-            return Ok(0);
-        }
-        if mode.contains(FaccessatMode::R_OK) && !file.readable() {
-            // error!(
-            //     "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
-            //     dirfd, path
-            // );
+        // BUG: 临时去这样子做，如果不是 ext4 的就直接返回许可，只判断 ext4 的
+        let i_mode = match inode.downcast_arc::<Ext4Inode>() {
+            Some(x) => x.metadata.i_mode.lock().mode,
+            None => return Ok(0),
+        };
+        info!("i_mode: {:0}", i_mode);
+
+        // 注意到在鉴权的时候应当只关注 others 的位置就好了
+        // if mode.contains(FaccessatMode::F_OK) {
+        //     error!(
+        //         "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
+        //         dirfd, path
+        //     );
+        //     return Ok(0);
+        // }
+        if mode.contains(FaccessatMode::R_OK) && !i_mode.contains(ModeFlag::S_IROTH) {
+            error!(
+                "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
+                dirfd, path
+            );
             return Err(Errno::EACCES);
         }
-        if mode.contains(FaccessatMode::W_OK) && !file.writable() {
-            // error!(
-            //     "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
-            //     dirfd, path
-            // );
+        if mode.contains(FaccessatMode::W_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
+            error!(
+                "[sys_faccessat] return no writeable dirfd: {}, pathname: {}",
+                dirfd, path
+            );
             return Err(Errno::EACCES);
         }
-        if mode.contains(FaccessatMode::X_OK) && !file.executable() {
-            // error!(
-            //     "[sys_faccessat] return no executable dirfd: {}, pathname: {}",
-            //     dirfd, path
-            // );
+        if mode.contains(FaccessatMode::X_OK) && !i_mode.contains(ModeFlag::S_IXOTH) {
+            error!(
+                "[sys_faccessat] return no executable dirfd: {}, pathname: {}",
+                dirfd, path
+            );
             return Err(Errno::EACCES);
         }
     } else {
@@ -1577,6 +1656,7 @@ pub fn sys_fsync() -> SysResult<usize> {
 }
 
 pub fn sys_umask() -> SysResult<usize> {
+    // TODO: 和 access 有关
     info!("[sys_umak] start, Ok(0)");
     Ok(0)
 }

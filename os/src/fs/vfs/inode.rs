@@ -3,7 +3,7 @@ use core::{any::Any, sync::atomic::AtomicUsize};
 use crate::{
     fs::{
         ext4::NormalFile, ffi::InodeType, page_cache::PageCache, vfs::alloc_ino, AbsPath, Dentry,
-        Dirent, FileClass, FileTrait, Kstat, OpenFlags, SEEK_END,
+        Dirent, FileClass, FileTrait, Kstat, ModeFlag, OpenFlags, StMode, SEEK_END,
     },
     sync::{once::LateInit, MutexGuard, NoIrqLock, SpinNoIrqLock, TimeStamp},
     utils::{downcast::Downcast, Errno, SysResult},
@@ -33,6 +33,7 @@ pub struct InodeMeta {
     /// 时间戳
     pub timestamp: SpinNoIrqLock<TimeStamp>,
     pub path: String,
+    pub i_mode: SpinNoIrqLock<StMode>,
 }
 
 impl InodeMeta {
@@ -43,6 +44,7 @@ impl InodeMeta {
             file_type,
             timestamp: SpinNoIrqLock::new(TimeStamp::new()),
             path: String::from(path),
+            i_mode: SpinNoIrqLock::new(StMode::new(ModeFlag::empty())),
         }
     }
 }
