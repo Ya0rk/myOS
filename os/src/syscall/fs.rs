@@ -1700,7 +1700,9 @@ lazy_static! {
 pub fn sys_umask(mask: usize) -> SysResult<usize> {
     // TODO: 和 access 有关
     info!("[sys_umask] mask: {:o}", mask);
+    let res = GLOBAL_UMASK.load(core::sync::atomic::Ordering::Relaxed);
     GLOBAL_UMASK.store(mask as u32, core::sync::atomic::Ordering::Relaxed);
+    Ok(res as usize)
 }
 
 /// 一个 POSIX 系统调用，用于将进程的当前工作目录更改为指定文件描述符对应的目录
