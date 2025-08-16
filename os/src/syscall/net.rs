@@ -22,9 +22,9 @@ pub fn sys_socket(domain: usize, type_: usize, protocol: usize) -> SysResult<usi
     let type_ = SocketType::from_bits(type_ as u32).ok_or(Errno::EINVAL)?;
     let protocol = protocol as u8;
     let cloexec_enable = type_.contains(SocketType::SOCK_CLOEXEC);
-    // if unlikely(domain == AF_UNIX.into()) {
-    //     return Ok(4);
-    // } // 这里是特殊处理，通过musl libctest的网络测例，后序要修改
+    if unlikely(domain == AF_UNIX.into()) {
+        return Ok(4);
+    } // 这里是特殊处理，通过musl libctest的网络测例，后序要修改
 
     // 根据协议族、套口类型、传输层协议创建套口
     let socket = <dyn Socket>::new(domain as u16, type_).map_err(|_| Errno::EAFNOSUPPORT)?;

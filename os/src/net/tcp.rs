@@ -458,7 +458,7 @@ impl Socket for TcpSocket {
         NET_DEV.lock().poll();
         let mut binding = SOCKET_SET.lock();
         let socket = binding.get_mut::<tcp::Socket>(self.handle);
-        let remote_end: SockAddr = socket.remote_endpoint().unwrap().into();
+        let remote_end: SockAddr = socket.remote_endpoint().ok_or(Errno::ENOTCONN)?.into();
         Ok(remote_end)
     }
     fn set_keep_alive(&self, action: u32) -> SysResult<()> {

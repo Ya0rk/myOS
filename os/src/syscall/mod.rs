@@ -233,7 +233,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_YIELD => sys_yield().await,
         SysCode::SYSCALL_TIMES => sys_times(args[0] as usize),
         SysCode::SYSCALL_UNAME => sys_uname(args[0] as usize),
-        SysCode::SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0] as usize, args[1] as *mut u8),
+        SysCode::SYSCALL_GETTIMEOFDAY => sys_gettimeofday(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_GETPID => sys_getpid(),
         SysCode::SYSCALL_GETPPID => sys_getppid(),
         SysCode::SYSCALL_BRK => sys_brk(args[0] as *const u8),
@@ -293,7 +293,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
             sys_readv(args[0] as usize, args[1] as usize, args[2] as usize).await
         }
         SysCode::SYSCALL_FTRUNCATE64 => sys_ftruncate64(args[0] as usize, args[1] as usize),
-        SysCode::SYSCALL_FCHMODAT => sys_fchmodat(),
+        SysCode::SYSCALL_FCHMODAT => sys_fchmodat(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize),
         SysCode::SYSCALL_PREAD64 => {
             sys_pread64(
                 args[0] as usize,
@@ -309,6 +309,26 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
                 args[1] as usize,
                 args[2] as usize,
                 args[3] as usize,
+            )
+            .await
+        }
+        SysCode::SYSCALL_PREADV2 => {
+            sys_preadv2(
+                args[0] as usize,
+                args[1] as usize,
+                args[2] as usize,
+                args[3] as usize,
+                args[4] as usize,
+            )
+            .await
+        }
+        SysCode::SYSCALL_PWRITEV2 => {
+            sys_pwritev2(
+                args[0] as usize,
+                args[1] as usize,
+                args[2] as usize,
+                args[3] as usize,
+                args[4] as usize,
             )
             .await
         }

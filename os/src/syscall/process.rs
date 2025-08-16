@@ -107,12 +107,13 @@ pub fn sys_times(tms: usize) -> SysResult<usize> {
 /// 输入： timespec结构体指针用于获得时间值；
 ///
 /// 返回值：成功返回0，失败返回-1;
-pub fn sys_gettimeofday(tv: usize, _tz: *const u8) -> SysResult<usize> {
+pub fn sys_gettimeofday(tv: usize, _tz: usize) -> SysResult<usize> {
     info!("[sys_gettimeofday] start");
-    let ptr = tv as *mut TimeVal;
-    if unlikely(tv == 0) {
+    if unlikely(tv == 0 || tv >= USER_SPACE_TOP || _tz == 0 || _tz >= USER_SPACE_TOP) {
         return Err(Errno::EFAULT);
     }
+    let ptr = tv as *mut TimeVal;
+    
     let data = TimeVal::new();
     unsafe {
         core::ptr::write(ptr, data);
@@ -142,7 +143,7 @@ pub fn sys_uname(buf: usize) -> SysResult<usize> {
 
 pub fn sys_getpid() -> SysResult<usize> {
     info!("[sys_getpid] start");
-    Ok(current_task().unwrap().get_pid() as usize)
+    Ok(current_task().unwrap().get_tgid() as usize)
 }
 
 pub fn sys_getppid() -> SysResult<usize> {
@@ -1001,6 +1002,9 @@ pub fn sys_tgkill(tgid: usize, tid: usize, sig: i32) -> SysResult<usize> {
     if unlikely(sig < 0 || sig as usize > MAX_SIGNUM) {
         return Err(Errno::EINVAL);
     }
+    if unlikely((tid as isize) < 0 || (tgid as isize) < 0) {
+        return Err(Errno::EINVAL);
+    }
     let signom = SigNom::from(sig as usize);
     // 如果task是leader，那么tgid = pid；我们的内核中只存在process，没有线程
     let task = get_task_by_pid(tgid as usize).ok_or(Errno::ESRCH)?;
@@ -1149,14 +1153,18 @@ pub fn sys_madvise() -> SysResult<usize> {
 /// get resource usage
 pub fn sys_getrusage(who: isize, usage: usize) -> SysResult<usize> {
     info!("[sys_getrusage] start, who = {}", who);
+    if unlikely(usage == 0 || usage > USER_SPACE_TOP) {
+        info!("[sys_getrusage] usage is null.");
+        return Err(Errno::EFAULT);
+    }
     let task = current_task().unwrap();
     let mut res;
     match who {
-        RUSAGE_SELF => {
+        RUSAGE_SELF | RUSAGE_CHILDREN | RUSAGE_THREAD => {
             let (user_time, sys_time) = task.process_ustime();
             res = Rusage::new(user_time.into(), sys_time.into());
         }
-        _ => unimplemented!(),
+        _ => return Err(Errno::EINVAL),
     }
     let ptr = unsafe { usage as *mut Rusage };
     unsafe {
@@ -1252,7 +1260,7 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
 /// TODO(YJJ): 这个和getitimer是适配cyclic测例的，分数较低，最后实现。
 pub fn sys_getitimer(which: usize, curr_value: usize) -> SysResult<usize> {
     info!("[sys_getitimer] start");
-    if unlikely(curr_value == 0) {
+    if unlikely(curr_value == 0 || curr_value > USER_SPACE_TOP) {
         info!("[sys_getitimer] curr_value is null.");
         return Err(Errno::EFAULT);
     }

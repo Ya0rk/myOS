@@ -184,6 +184,8 @@ pub enum SysCode {
     SYSCALL_MEMFD_CREATE = 279,
     MEMEBARRIER = 283,
     SYSCALL_COPY_FILE_RANGE = 285,
+    SYSCALL_PREADV2 = 286,
+    SYSCALL_PWRITEV2 = 287,
     SYS_STATX = 291,
     SYSCALL_CLONE3 = 435,
     #[num_enum(default)]
@@ -200,6 +202,8 @@ impl Display for SysCode {
 impl SysCode {
     pub fn get_info(&self) -> &'static str {
         match self {
+            Self::SYSCALL_PWRITEV2 => "pwritev2",
+            Self::SYSCALL_PREADV2 => "preadv2",
             Self::SYSCALL_FANOTIFY_INIT => "fanotify_init",
             Self::SYSCALL_MEMFD_CREATE => "memfd_create",
             Self::SYSCALL_SETDOMINNAME => "setdominname",

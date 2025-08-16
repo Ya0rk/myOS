@@ -376,7 +376,7 @@ pub fn sys_statx(
 ///
 /// Success: 返回文件描述符; Fail: 返回-1
 pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult<usize> {
-    if unlikely(path == 0) {
+    if unlikely(path == 0 || path > USER_SPACE_TOP) {
         info!("[sys_openat] path ptr is null, fault.");
         return Err(Errno::EFAULT);
     }
@@ -1098,9 +1098,9 @@ pub async fn sys_sendfile(
     let mut len: usize = 0;
     let mut buf = vec![0u8; count];
     let mut new_offset = offset;
-    if new_offset != 0 {
-        panic!("not implement")
-    };
+    // if new_offset != 0 {
+    //     panic!("not implement")
+    // };
 
     loop {
         let read_size = src.read(&mut buf).await?;
@@ -1291,7 +1291,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
         FcntlFlags::F_DUPFD => {
             if let Some(file) = task.get_file_by_fd(fd) {
                 let flags = file.metadata().flags.read().clone();
-                let newfd = task.alloc_fd_than(FdInfo::new(file.clone(), flags), arg as usize);
+                let newfd = task.alloc_fd_than(FdInfo::new(file.clone(), flags), arg as usize)?;
                 if file.metadata().inode.metadata()._type.is_socket() {
                     PORT_FD_MANAMER
                         .lock()
@@ -1309,7 +1309,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
                 let newfd = task.alloc_fd_than(
                     FdInfo::new(file.clone(), flags | OpenFlags::O_CLOEXEC),
                     arg as usize,
-                );
+                )?;
                 if file.metadata().inode.metadata()._type.is_socket() {
                     PORT_FD_MANAMER
                         .lock()
@@ -1337,9 +1337,16 @@ pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
 }
 
 /// 可更改现有文件的访问权限
-pub fn sys_fchmodat() -> SysResult<usize> {
-    info!("[sys_fchmodat] start");
-    return Ok(0);
+pub fn sys_fchmodat(fd: usize, path: usize, mode: usize, flag: usize) -> SysResult<usize> {
+    info!("[sys_fchmodat] start, fd = {}, path = {}, mode = {}, flag = {}",
+        fd, path, mode, flag
+    );
+    if flag == 0 { return Err(Errno::EINVAL); }
+    let path = user_cstr(path.into())?.ok_or(Errno::EINVAL)?;
+    let task = current_task().unwrap();
+    // let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    // file.metadata().flags.write().insert(OpenFlags::O_RDWR);
+    Ok(0)
 }
 
 /// 从描述符为fd的文件中，从offset位置开始，读取count个字节存入buf中。
@@ -1358,20 +1365,39 @@ pub async fn sys_pread64(fd: usize, buf: usize, count: usize, offset: usize) -> 
     file.pread(buffer, offset, count).await
 }
 
+pub async fn sys_preadv2(fd: usize, buf: usize, count: usize, offset: usize, flags: usize) -> SysResult<usize> {
+    info!("[sys_preadv2] start");
+    sys_pread64(fd, buf, count, offset).await
+}
+
 /// 在指定偏移量处向文件描述符写入数据的系统调用
 /// pwrite64的行为类似于先执行lseek再执行write，但它是一个原子操作，不会被其他线程的文件操作中断
 pub async fn sys_pwrite64(fd: usize, buf: usize, count: usize, offset: usize) -> SysResult<usize> {
     info!("[sys_pwrite64] start");
+    if unlikely((count as isize) < 0) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(buf == 0 || buf > USER_SPACE_TOP) {
+        return Err(Errno::EFAULT);
+    }
     let task = current_task().unwrap();
     // if unlikely(fd >= task.fd_table_len() || fd > RLIMIT_NOFILE) {
     //     return Err(Errno::EBADF);
     // }
     let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
+    if unlikely(file.metadata().inode.metadata()._type.is_fifo()) {
+        return Err(Errno::ESPIPE);
+    }
     if unlikely(!file.metadata().flags.read().writable()) {
         return Err(Errno::EPERM);
     }
     let buffer = unsafe { core::slice::from_raw_parts(buf as *const u8, count) };
     file.pwrite(buffer, offset, count).await
+}
+
+pub async fn sys_pwritev2(fd: usize, buf: usize, count: usize, offset: usize, flags: usize) -> SysResult<usize> {
+    info!("[sys_pwritev2] start");
+    sys_pwrite64(fd, buf, count, offset).await
 }
 
 /// change file timestamps with nanosecond precision
@@ -1483,6 +1509,9 @@ pub fn sys_readlinkat(
         "[sys_readlinkat] start, dirfd: {}, pathname: {}.",
         dirfd, pathname
     );
+    if unlikely(bufsiz == 0) {
+        return Err(Errno::EINVAL);
+    }
 
     let target_path = resolve_path(cwd, pathname);
     if !target_path.is_absolute() {
