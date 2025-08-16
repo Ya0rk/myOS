@@ -111,7 +111,7 @@ pub async fn create_init_files() -> SysResult {
     if let Ok(FileClass::File(file)) =
         open("/etc/passwd".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR)
     {
-        let buf = "nobody:x:0:0:nobody:/nonexistent:/usr/sbin/nologin\0".as_bytes(); // 这里是提前往里面写数据
+        let buf = "nobody:x:1:0:nobody:/nonexistent:/usr/sbin/nologin\0".as_bytes(); // 这里是提前往里面写数据
         file.write(&buf).await;
     };
 

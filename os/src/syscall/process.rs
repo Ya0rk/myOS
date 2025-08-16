@@ -649,8 +649,8 @@ pub fn sys_sysinfo(sysinfo: usize) -> SysResult<usize> {
 }
 
 pub fn sys_getuid() -> SysResult<usize> {
-    info!("[sys_getuid]: 0");
-    Ok(0)
+    // info!("[sys_getuid]: 0");
+    Ok(current_task().unwrap().get_euid())
 }
 
 /// examine and change blocked signals
@@ -779,7 +779,8 @@ pub fn sys_gettid() -> SysResult<usize> {
 }
 
 pub fn sys_geteuid() -> SysResult<usize> {
-    Ok(0)
+    // Ok(0)
+    Ok(current_task().unwrap().get_euid())
 }
 
 pub fn sys_getegid() -> SysResult<usize> {
@@ -1388,13 +1389,14 @@ pub async fn sys_sigsuspend(mask: usize) -> SysResult<usize> {
     Err(Errno::EINTR)
 }
 
-lazy_static! {
-    pub static ref GLOBAL_UID: AtomicU32 = AtomicU32::new(0);
-}
+// lazy_static! {
+//     pub static ref GLOBAL_UID: AtomicU32 = AtomicU32::new(0);
+// }
 
 pub fn sys_setuid(uid: usize) -> SysResult<usize> {
     info!("[sys_setuid] set uid: {}", uid);
-    GLOBAL_UID.store(uid as u32, core::sync::atomic::Ordering::Relaxed);
+    // GLOBAL_UID.store(uid as u32, core::sync::atomic::Ordering::Relaxed);
+    current_task().unwrap().set_euid(uid);
     Ok(0)
 }
 
