@@ -109,7 +109,7 @@ pub fn sys_times(tms: usize) -> SysResult<usize> {
 /// 返回值：成功返回0，失败返回-1;
 pub fn sys_gettimeofday(tv: usize, _tz: usize) -> SysResult<usize> {
     info!("[sys_gettimeofday] start");
-    if unlikely(tv == 0 || tv >= USER_SPACE_TOP || _tz == 0 || _tz >= USER_SPACE_TOP) {
+    if unlikely(tv == 0 || tv >= USER_SPACE_TOP || _tz >= USER_SPACE_TOP) {
         return Err(Errno::EFAULT);
     }
     let ptr = tv as *mut TimeVal;

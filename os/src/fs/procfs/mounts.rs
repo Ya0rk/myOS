@@ -1,6 +1,6 @@
 use alloc::{string::String, sync::Arc, boxed::Box};
 use async_trait::async_trait;
-use crate::fs::{InodeMeta, InodeTrait, InodeType};
+use crate::fs::{InodeMeta, InodeTrait, InodeType, Kstat};
 
 
 pub struct MountsInode(pub InodeMeta);
@@ -27,6 +27,13 @@ impl InodeTrait for MountsInode {
     async fn write_at(&self, offset: usize, buf: &[u8]) -> usize {
         // 非常重要
         return 0;
+    }
+    fn fstat(&self) -> Kstat {
+        let mut res = Kstat::new();
+        res.st_mode = 16877;
+        res.st_ino = self.0.ino as u64;
+        res.st_nlink = 1;
+        res
     }
     fn get_size(&self) -> usize {
         4000
