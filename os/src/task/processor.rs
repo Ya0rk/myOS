@@ -100,12 +100,12 @@ impl CPU {
         task.get_time_data_mut().set_sched_in_time();
         self.set_cpu_task(task.clone());
         task.switch_pgtable();
-        // enable_supervisor_interrupt();
+        enable_supervisor_interrupt();
     }
 
     /// 将当前任务从处理器中取出，为下一个task让出处理器
     pub fn user_task_checkout(&mut self, task: &mut Arc<TaskControlBlock>) {
-        // disable_supervisor_interrupt();
+        disable_supervisor_interrupt();
         // TODO:完善TIME_STAT
         // 实现float reg的保存
         // enable_kernel_pgtable();

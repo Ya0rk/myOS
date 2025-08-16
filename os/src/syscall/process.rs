@@ -143,7 +143,7 @@ pub fn sys_uname(buf: usize) -> SysResult<usize> {
 
 pub fn sys_getpid() -> SysResult<usize> {
     info!("[sys_getpid] start");
-    Ok(current_task().unwrap().get_pid() as usize)
+    Ok(current_task().unwrap().get_tgid() as usize)
 }
 
 pub fn sys_getppid() -> SysResult<usize> {
@@ -852,7 +852,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
             // let cur_task = current_task().unwrap();
             let recv_task = get_task_by_pid(p).ok_or(Errno::ESRCH)?;
             if recv_task.is_leader() && signum != SigNom::NOSIG {
-                let recv_pid = recv_task.get_pid();
+                let recv_pid = recv_task.get_tgid();
                 let siginfo = SigInfo::new(
                     signum,
                     SigCode::User,
@@ -1131,7 +1131,7 @@ pub fn sys_tkill(tid: usize, sig: i32) -> SysResult<usize> {
     let signom = SigNom::from(sig as usize);
     let target = get_task_by_pid(tid).ok_or(Errno::ESRCH)?;
     let task = current_task().unwrap();
-    let sender_pid = task.get_pid();
+    let sender_pid = task.get_tgid();
     let siginfo = SigInfo::new(
         signom,
         SigCode::TKILL,
@@ -1200,7 +1200,7 @@ pub async fn sys_setitimer(which: usize, new_value: usize, old_value: usize) -> 
     }
 
     let task = current_task().unwrap();
-    let pid = task.get_pid();
+    let pid = task.get_tgid();
 
     // 先保存旧的itimer配置
     if old_value != 0 {

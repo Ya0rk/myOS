@@ -489,7 +489,7 @@ impl TaskControlBlock {
                     SigCode::CLD_EXITED,
                     SigErr::empty(),
                     SigDetails::Chld {
-                        pid,
+                        pid: self.get_tgid(),
                         status: self.get_status(),
                         // 这里需要将exitcode移回去，因为在sys_exit中位移过
                         // exit_code: (self.get_exit_code() & 0xff00) >> 8
