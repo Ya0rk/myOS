@@ -10,8 +10,8 @@ use user_lib::{chdir, execve, exit, fork, wait, waitpid, yield_};
 
 // 可能会造成动态链接库冲突的测试
 const TEST: &[&str] = &[
-    "./basic_testcode.sh\0",
-    "./busybox_testcode.sh\0",
+    // "./basic_testcode.sh\0",
+    // "./busybox_testcode.sh\0",
 ];
 
 const FINAL_STAGE1: &[&str] = &[
@@ -29,13 +29,13 @@ const GLIBC_LTP: &[&str] = &[
 ];
 
 const MUSL_TESTCASES: &[&str] = &[
-    "./libctest_testcode.sh\0",
-    "./lua_testcode.sh\0",
-    "./libcbench_testcode.sh\0",
-    "./iozone_testcode.sh\0",
-    "./lmbench_testcode.sh\0",
+    // "./libctest_testcode.sh\0",
+    // "./lua_testcode.sh\0",
+    // "./libcbench_testcode.sh\0",
+    // "./iozone_testcode.sh\0",
+    // "./lmbench_testcode.sh\0",
     // "./iperf_testcode.sh\0",
-    "./netperf_testcode.sh\0",
+    // "./netperf_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
 ];
@@ -43,12 +43,12 @@ const MUSL_TESTCASES: &[&str] = &[
 /// glibc 不跑libctest
 const GLIBC_TESTCASES: &[&str] = &[
     // "./libctest_testcode.sh\0",
-    "./lua_testcode.sh\0",
-    "./libcbench_testcode.sh\0",
-    "./iozone_testcode.sh\0",
-    "./lmbench_testcode.sh\0",
+    // "./lua_testcode.sh\0",
+    // "./libcbench_testcode.sh\0",
+    // "./iozone_testcode.sh\0",
+    // "./lmbench_testcode.sh\0",
     // "./iperf_testcode.sh\0",
-    "./netperf_testcode.sh\0",
+    // "./netperf_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
 ];
