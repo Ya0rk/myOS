@@ -47,7 +47,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_SCHED_GETPARAM => sys_sched_getparam(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SCHED_SETPARAM => sys_sched_setparam(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SETRESUID => sys_setresuid(),
-        SysCode::SYSCALL_SETUID => sys_setuid(),
+        SysCode::SYSCALL_SETUID => sys_setuid(args[0] as usize),
         SysCode::SYSCALL_FCHDIR => sys_fchdir(args[0] as usize),
         SysCode::SYSCALL_SETGID => sys_setgid(args[0] as usize),
         SysCode::SYSCALL_SIGSUSPEND => sys_sigsuspend(args[0] as usize).await,
