@@ -68,7 +68,8 @@ fn main() -> i32 {
     if child_pid == 0 {
         // println!("main run sh");
         run_cmd("/musl/busybox --install /bin\0");
-        run_cmd("/bin/sh\0");
+        // run_cmd("/bin/sh\0");
+        run_cmd("./ltp/testcases/bin/access01\0");
         // execve("/musl/busybox\0", &["/musl/busybox\0", "sh\0"], ENV);
         exit(0);
     } else {

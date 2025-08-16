@@ -70,7 +70,7 @@ DISASM ?= -x
 # Run usertests or usershell
 TEST ?=
 
-FS_IMG_PREFIX := final
+FS_IMG_PREFIX := sdcard
 
 #qemu
 QEMU_NAME := qemu-system-$(ARCH)
