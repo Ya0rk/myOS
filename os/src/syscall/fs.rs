@@ -3,8 +3,8 @@ use crate::fs::fanotify::{FanEventFlags, FanFlags, FanMarkFlags};
 use crate::fs::procfs::inode;
 use crate::fs::{
     chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType,
-    Kstat, ModeFlag, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, Stdout, StxMask, UmountFlags,
-    MNT_TABLE, SEEK_CUR,
+    Kstat, ModeFlag, MountFlags, OpenFlags, Pipe, RenameFlags, StMode, Statx, Stdout, StxMask,
+    UmountFlags, MNT_TABLE, SEEK_CUR,
 };
 use crate::hal::config::{AT_FDCWD, PAGE_SIZE, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
 use crate::mm::user_ptr::{check_readable, user_cstr, user_ref_mut, user_slice, user_slice_mut};
@@ -1233,13 +1233,6 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
                 None => return Ok(0),
             };
             // 注意到在鉴权的时候应当只关注 others 的位置就好了
-            // if mode.contains(FaccessatMode::F_OK) {
-            //     // error!(
-            //     //     "[sys_faccessat] return Ok dirfd: {}, pathname: {}",
-            //     //     dirfd, path
-            //     // );
-            //     return Ok(0);
-            // }
             if mode.contains(FaccessatMode::R_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
                 error!(
                     "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
@@ -1281,7 +1274,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
             Some(x) => x.metadata.i_mode.lock().mode,
             None => return Ok(0),
         };
-        info!("i_mode: {:0}", i_mode);
+        info!("[sys_faccessat] got i_mode: {:0}", i_mode);
 
         // 注意到在鉴权的时候应当只关注 others 的位置就好了
         if mode.bits() == 0 {
@@ -1461,8 +1454,41 @@ pub fn sys_ftruncate64(fd: usize, length: usize) -> SysResult<usize> {
 }
 
 /// 可更改现有文件的访问权限
-pub fn sys_fchmodat() -> SysResult<usize> {
-    info!("[sys_fchmodat] start");
+pub fn sys_fchmodat(dirfd: isize, path: usize, mode: usize, _flags: u32) -> SysResult<usize> {
+    let task = current_task().unwrap();
+    let path = user_cstr(path.into())?.unwrap();
+
+    let cwd = task.get_current_path();
+    let abs_path = if dirfd == AT_FDCWD {
+        // 相对路径，以当前目录为起点
+        resolve_path(cwd, path.clone())
+    } else {
+        // 相对路径，以 fd 对应的目录为起点
+        if unlikely(dirfd < 0 || dirfd as usize > RLIMIT_NOFILE) {
+            return Err(Errno::EBADF);
+        }
+        let inode = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
+        if unlikely(!inode.is_dir()) {
+            log::info!("[sys_fchmodat] dirfd = {} is not a dir.", dirfd);
+            return Err(Errno::ENOTDIR);
+        }
+        let other_cwd = inode.get_name()?;
+        resolve_path(other_cwd, path.clone())
+    };
+    info!("[sys_chmodeat], path: {}, mode: {:o}", abs_path.get(), mode);
+
+    if let Ok(file_class) = open(abs_path, OpenFlags::O_RDONLY) {
+        let file = file_class.file()?;
+        let inode = file.get_inode();
+        // BUG: 临时去这样子做，如果不是 ext4 的就直接返回许可，只判断 ext4 的
+        let inode = match inode.downcast_arc::<Ext4Inode>() {
+            Some(x) => x,
+            None => return Ok(0),
+        };
+        let mode = StMode::from(mode as u32);
+        *inode.metadata.i_mode.lock() = mode;
+        return Ok(0);
+    }
     return Ok(0);
 }
 
@@ -1668,14 +1694,13 @@ pub fn sys_fsync() -> SysResult<usize> {
 }
 
 lazy_static! {
-    pub static ref GLOBAL_UMASK: AtomicU32 = AtomicU32::new(0);
+    pub static ref GLOBAL_UMASK: AtomicU32 = AtomicU32::new(0o22);
 }
 
 pub fn sys_umask(mask: usize) -> SysResult<usize> {
     // TODO: 和 access 有关
     info!("[sys_umask] mask: {:o}", mask);
     GLOBAL_UMASK.store(mask as u32, core::sync::atomic::Ordering::Relaxed);
-    Ok(0)
 }
 
 /// 一个 POSIX 系统调用，用于将进程的当前工作目录更改为指定文件描述符对应的目录

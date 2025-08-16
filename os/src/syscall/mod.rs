@@ -293,7 +293,12 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
             sys_readv(args[0] as usize, args[1] as usize, args[2] as usize).await
         }
         SysCode::SYSCALL_FTRUNCATE64 => sys_ftruncate64(args[0] as usize, args[1] as usize),
-        SysCode::SYSCALL_FCHMODAT => sys_fchmodat(),
+        SysCode::SYSCALL_FCHMODAT => sys_fchmodat(
+            args[0] as isize,
+            args[1] as usize,
+            args[2] as usize,
+            args[3] as u32,
+        ),
         SysCode::SYSCALL_PREAD64 => {
             sys_pread64(
                 args[0] as usize,
