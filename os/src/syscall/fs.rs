@@ -1,4 +1,5 @@
 use crate::fs::ext4::NormalFile;
+use crate::fs::fanotify::{FanEventFlags, FanFlags, FanMarkFlags};
 use crate::fs::procfs::inode;
 use crate::fs::{
     chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType,
@@ -1794,4 +1795,168 @@ pub async fn sys_copy_file_range(
         }
     }
     Ok(write_size)
+}
+
+use alloc::collections::BTreeMap;
+use bitflags::bitflags;
+use lazy_static::lazy_static;
+use spin::Mutex;
+
+/// Represents a mark on a filesystem object.
+#[derive(Clone)]
+pub struct FanotifyMark {
+    mask: u64,
+    flags: FanMarkFlags,
+}
+
+/// Represents an fanotify group, which holds marks and an event queue.
+pub struct FanotifyGroup {
+    pub flags: FanFlags,
+    pub event_f_flags: FanEventFlags,
+    /// Maps absolute path to a mark. A real implementation would use inode numbers.
+    pub marks: Mutex<BTreeMap<String, FanotifyMark>>,
+    // In a complete implementation, a pipe or other mechanism would be stored here
+    // to write events to the user.
+}
+
+impl FanotifyGroup {
+    pub fn new(flags: FanFlags, event_f_flags: FanEventFlags) -> Self {
+        Self {
+            flags,
+            event_f_flags,
+            marks: Mutex::new(BTreeMap::new()),
+        }
+    }
+}
+
+lazy_static! {
+    // A global manager to hold fanotify groups, associated with their file descriptors.
+    // This is a workaround for not being able to add a new `FileClass` variant for fanotify.
+    static ref FANOTIFY_GROUPS: Mutex<BTreeMap<usize, Arc<FanotifyGroup>>> =
+        Mutex::new(BTreeMap::new());
+}
+
+/// fanotify_init() initializes a new fanotify group and returns a
+/// file descriptor for the event queue associated with the group.
+pub fn sys_fanotify_init(flags: usize, event_f_flags: usize) -> SysResult<usize> {
+    let fanflags = FanFlags::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
+    let event_flags = FanEventFlags::from_bits(event_f_flags as u32).ok_or(Errno::EINVAL)?;
+    info!(
+        "[sys_fanotify_init] start, flags: {:?}, event_f_flags: {:?}",
+        fanflags, event_flags
+    );
+
+    if unlikely(
+        (fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT)
+            && fanflags.contains(FanFlags::FAN_CLASS_CONTENT))
+            || (fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT)
+                && fanflags.contains(FanFlags::FAN_CLASS_NOTIF))
+            || (fanflags.contains(FanFlags::FAN_CLASS_CONTENT)
+                && fanflags.contains(FanFlags::FAN_CLASS_NOTIF)),
+    ) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(
+        fanflags.contains(FanFlags::FAN_REPORT_TID)
+            && fanflags.contains(FanFlags::FAN_REPORT_PIDFD),
+    ) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(
+        fanflags.contains(FanFlags::FAN_CLASS_CONTENT)
+            && fanflags.contains(FanFlags::FAN_REPORT_FID)
+            || fanflags.contains(FanFlags::FAN_CLASS_PRE_CONTENT)
+                && fanflags.contains(FanFlags::FAN_REPORT_FID),
+    ) {
+        return Err(Errno::EINVAL);
+    }
+    if unlikely(
+        fanflags.contains(FanFlags::FAN_REPORT_NAME)
+            && !fanflags.contains(FanFlags::FAN_REPORT_DIR_FID),
+    ) {
+        return Err(Errno::EINVAL);
+    }
+    // if unlikely(
+    //     fanflags.contains(FanFlags::FAN_REPORT_TARGET_FID)
+    //         && !(fanflags.contains(FanFlags::FAN_REPORT_FID)
+    //             || fanflags.contains(FanFlags::FAN_REPORT_DIR_FID)
+    //             || fanflags.contains(FanFlags::FAN_REPORT_NAME)),
+    // ) {
+    //     return Err(Errno::EINVAL);
+    // }
+
+    let task = current_task().unwrap();
+    let group = Arc::new(FanotifyGroup::new(fanflags, event_flags));
+
+    // Workaround: Create a pipe for event notification and associate the group with the fd.
+    // The user reads events from this pipe. A full implementation of permission-based events
+    // would require a custom FileTrait object to handle write() responses.
+    let (read_pipe, _write_pipe) = Pipe::new();
+    let open_flags = OpenFlags::from_bits_truncate(event_flags.bits() as i32);
+    let fd_info = FdInfo::new(read_pipe, open_flags);
+    let fd = task.alloc_fd(fd_info)?;
+
+    FANOTIFY_GROUPS.lock().insert(fd, group);
+    info!("[sys_fanotify_init] created fanotify group, fd: {}", fd);
+
+    Ok(fd)
+}
+
+/// fanotify_mark() adds, removes, or modifies an fanotify mark on a
+/// filesystem object.
+pub fn sys_fanotify_mark(
+    fanotify_fd: usize,
+    flags: u32,
+    mask: u64,
+    dirfd: isize,
+    pathname: usize,
+) -> SysResult<usize> {
+    let mark_flags = FanMarkFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
+    info!(
+        "[sys_fanotify_mark] fanotify_fd: {}, flags: {:?}, mask: {:#x}, dirfd: {}, pathname: {:#x}",
+        fanotify_fd, mark_flags, mask, dirfd, pathname
+    );
+
+    let group = FANOTIFY_GROUPS
+        .lock()
+        .get(&fanotify_fd)
+        .cloned()
+        .ok_or(Errno::EINVAL)?;
+
+    let task = current_task().unwrap();
+    let path = user_cstr(pathname.into())?.ok_or(Errno::EINVAL)?;
+    let cwd = task.get_current_path();
+
+    let target_path = if dirfd == AT_FDCWD {
+        resolve_path(cwd, path)
+    } else {
+        let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
+        if !file.is_dir() {
+            return Err(Errno::ENOTDIR);
+        }
+        resolve_path(file.get_name()?, path)
+    };
+
+    let mut marks = group.marks.lock();
+
+    if mark_flags.contains(FanMarkFlags::FAN_MARK_ADD) {
+        let mark = FanotifyMark {
+            mask,
+            flags: mark_flags,
+        };
+        marks.insert(target_path.get(), mark);
+        info!("[fanotify] Added mark for path: {}", target_path.get());
+    } else if mark_flags.contains(FanMarkFlags::FAN_MARK_REMOVE) {
+        if marks.remove(&target_path.get()).is_some() {
+            info!("[fanotify] Removed mark for path: {}", target_path.get());
+        }
+        // Removing a non-existent mark is not an error according to man page.
+    } else if mark_flags.contains(FanMarkFlags::FAN_MARK_FLUSH) {
+        marks.clear();
+        info!("[fanotify] Flushed all marks for fd: {}", fanotify_fd);
+    } else {
+        return Err(Errno::EINVAL);
+    }
+
+    Ok(0)
 }

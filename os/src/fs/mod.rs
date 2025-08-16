@@ -1,5 +1,6 @@
 mod devfs;
 mod dirent;
+pub mod fanotify;
 // mod inode_cache;
 pub mod ext4;
 mod mount;
