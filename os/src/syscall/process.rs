@@ -143,7 +143,7 @@ pub fn sys_uname(buf: usize) -> SysResult<usize> {
 
 pub fn sys_getpid() -> SysResult<usize> {
     info!("[sys_getpid] start");
-    Ok(current_task().unwrap().get_tgid() as usize)
+    Ok(current_task().unwrap().get_pid() as usize)
 }
 
 pub fn sys_getppid() -> SysResult<usize> {

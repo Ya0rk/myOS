@@ -461,11 +461,11 @@ impl TaskControlBlock {
             info!("[do_exit] task has child");
             let init_proc = get_init_proc();
             for (child_pid, child) in lock_child.iter() {
+                child.set_parent(Some(Arc::downgrade(&init_proc)));
                 if child.is_zombie() {
                     info!("[do_exit] child pdi = {} is zmobie", child_pid);
                     child.exit_notify(&init_proc);
                 }
-                child.set_parent(Some(Arc::downgrade(&init_proc)));
             }
             init_proc.children.lock().extend(lock_child.clone());
             lock_child.clear();
