@@ -8,7 +8,7 @@ use crate::{
         Dentry, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat, StMode,
     },
     sync::{block_on, new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
-    syscall::fs::SYS_OPENAT_MODE,
+    syscall::fs::{GLOBAL_UMASK, SYS_OPENAT_MODE},
     utils::{downcast::Downcast, Errno, SysResult},
 };
 use async_trait::async_trait;
@@ -163,7 +163,9 @@ impl InodeTrait for Ext4Inode {
 
         let nf = Ext4Inode::new(&path, types.clone().into(), page_cache.clone());
         debug_point!("[ext4_inode] set st_mode start");
-        let i_mode_origin = SYS_OPENAT_MODE.load(Ordering::Relaxed) as u32;
+        let mut i_mode_origin = SYS_OPENAT_MODE.load(Ordering::Relaxed) as u32;
+        let mask = GLOBAL_UMASK.load(Ordering::Relaxed);
+        i_mode_origin = i_mode_origin & !mask;
         let i_mode = StMode::from(i_mode_origin);
         error!(
             "set path: {}, st_mode: {:?}, i_mode_origin: {:o}",

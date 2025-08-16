@@ -51,7 +51,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_FCHDIR => sys_fchdir(args[0] as usize),
         SysCode::SYSCALL_SETGID => sys_setgid(args[0] as usize),
         SysCode::SYSCALL_SIGSUSPEND => sys_sigsuspend(args[0] as usize).await,
-        SysCode::SYSCALL_UMASK => sys_umask(),
+        SysCode::SYSCALL_UMASK => sys_umask(args[0] as usize),
         SysCode::SYSCALL_FSYNC => sys_fsync(),
         SysCode::SYSCALL_PSELECT => {
             sys_pselect(

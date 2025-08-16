@@ -25,7 +25,7 @@ use alloc::vec::Vec;
 use core::cell::SyncUnsafeCell;
 use core::cmp::{max, min};
 use core::mem::offset_of;
-use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicU32, AtomicUsize};
 use num_traits::Zero;
 // use core::error;
 use core::intrinsics::unlikely;
@@ -407,8 +407,8 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     let path = user_cstr(path.into())?.unwrap();
     let flags = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
-    info!(
-        "[sys_openat] fd: {}, path = {}, flags = {:?}, _mode: {}",
+    error!(
+        "[sys_openat] fd: {}, path = {}, flags = {:?}, _mode: {:o}",
         fd, path, flags, _mode
     );
 
@@ -1217,8 +1217,13 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
     // TODO:  缺少去判断父文件夹的逻辑
     let parent_abs = AbsPath::new(abs.get_parent_abs());
     // error!("[sys_faccessat] parent_abs: {}", parent_abs.get());
-    if parent_abs.get().starts_with("/tmp/LTP") && !parent_abs.split_last_with("/").1.starts_with("LTP") {
-        error!("[sys_faccessat] parent_dir: {}", parent_abs.split_last_with("/").1);
+    if parent_abs.get().starts_with("/tmp/LTP")
+        && !parent_abs.split_last_with("/").1.starts_with("LTP")
+    {
+        error!(
+            "[sys_faccessat] parent_dir: {}",
+            parent_abs.split_last_with("/").1
+        );
         if let Ok(file_class) = open(parent_abs, OpenFlags::O_RDONLY) {
             let file = file_class.file()?;
             let inode = file.get_inode();
@@ -1264,7 +1269,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
             return Err(Errno::ENOENT);
         }
     }
-    
+
     error!("parent passed");
 
     // BUG: 这里应当根据的是根据 INODE 的i_mode 字段而不是 file 的打开标记位
@@ -1308,12 +1313,13 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
             return Err(Errno::EACCES);
         }
     } else {
-        // error!(
-        //     "[sys_faccessat] return ENOENT dirfd: {}, pathname: {}",
-        //     dirfd, path
-        // );
+        error!(
+            "[sys_faccessat] return ENOENT dirfd: {}, pathname: {}",
+            dirfd, path
+        );
         return Err(Errno::ENOENT);
     }
+    debug_point!("");
     Ok(0)
 }
 
@@ -1661,9 +1667,14 @@ pub fn sys_fsync() -> SysResult<usize> {
     Ok(0)
 }
 
-pub fn sys_umask() -> SysResult<usize> {
+lazy_static! {
+    pub static ref GLOBAL_UMASK: AtomicU32 = AtomicU32::new(0);
+}
+
+pub fn sys_umask(mask: usize) -> SysResult<usize> {
     // TODO: 和 access 有关
-    info!("[sys_umak] start, Ok(0)");
+    info!("[sys_umask] mask: {:o}", mask);
+    GLOBAL_UMASK.store(mask as u32, core::sync::atomic::Ordering::Relaxed);
     Ok(0)
 }
 
