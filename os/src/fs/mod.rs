@@ -308,7 +308,7 @@ pub fn mkdir(target_abs_path: AbsPath, mode: usize) -> SysResult<()> {
         return Err(Errno::EEXIST);
     }
 
-    debug!("[mkdir] path {}, mode {}", target_abs_path.get(), mode);
+    error!("[mkdir] path {}, mode {:o}", target_abs_path.get(), mode);
     debug_point!("[mkdir]");
     // 首先探测有没有这个文件,如果有就报错
     // 否则使用 OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT 去创建

@@ -675,6 +675,7 @@ pub fn sys_dup3(oldfd: usize, newfd: usize, flags: u32) -> SysResult<usize> {
 ///
 /// Success: 0; Fail: 返回-1
 pub fn sys_mkdirat(dirfd: isize, path: usize, mode: usize) -> SysResult<usize> {
+    SYS_OPENAT_MODE.store(mode, core::sync::atomic::Ordering::Relaxed);
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = user_cstr(path.into())?.unwrap();
@@ -1192,7 +1193,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
     //     /// 检查文件是否可执行
     //     const X_OK = 1;
     // }
-    info!("access mode: {:o}", mode.bits());
+    error!("access mode: {:o}", mode.bits());
     let cwd = task.get_current_path();
 
     let abs = if dirfd == AT_FDCWD {
@@ -1238,6 +1239,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
                 Some(x) => x.metadata.i_mode.lock().mode,
                 None => return Ok(0),
             };
+            error!("[sys_faccessat] parent inode mode: {:o}", i_mode);
             // 注意到在鉴权的时候应当只关注 others 的位置就好了
             // if mode.contains(FaccessatMode::F_OK) {
             //     // error!(
@@ -1495,7 +1497,7 @@ pub fn sys_fchmodat(dirfd: isize, path: usize, mode: usize, _flags: u32) -> SysR
         let other_cwd = inode.get_name()?;
         resolve_path(other_cwd, path.clone())
     };
-    info!("[sys_chmodeat], path: {}, mode: {:o}", abs_path.get(), mode);
+    error!("[sys_f1chmodat], path: {}, mode: {:o}", abs_path.get(), mode);
 
     if let Ok(file_class) = open(abs_path, OpenFlags::O_RDONLY) {
         let file = file_class.file()?;
