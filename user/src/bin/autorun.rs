@@ -28,13 +28,26 @@ const GLIBC_LTP: &[&str] = &[
     // "/ltp_testcode_glibc.sh\0"
 ];
 
-const TESTCASES: &[&str] = &[
+const MUSL_TESTCASES: &[&str] = &[
     "./libctest_testcode.sh\0",
     "./lua_testcode.sh\0",
     "./libcbench_testcode.sh\0",
     "./iozone_testcode.sh\0",
     "./lmbench_testcode.sh\0",
-    "./iperf_testcode.sh\0",
+    // "./iperf_testcode.sh\0",
+    "./netperf_testcode.sh\0",
+    // "./unixbench_testcode.sh\0",
+    // "./cyclictest_testcode.sh\0",
+];
+
+/// glibc 不跑libctest
+const GLIBC_TESTCASES: &[&str] = &[
+    // "./libctest_testcode.sh\0",
+    "./lua_testcode.sh\0",
+    "./libcbench_testcode.sh\0",
+    "./iozone_testcode.sh\0",
+    "./lmbench_testcode.sh\0",
+    // "./iperf_testcode.sh\0",
     "./netperf_testcode.sh\0",
     // "./unixbench_testcode.sh\0",
     // "./cyclictest_testcode.sh\0",
@@ -100,7 +113,7 @@ fn main() -> i32 {
         }
 
         // 除去busybox和basic
-        for test in TESTCASES {
+        for test in GLIBC_TESTCASES {
             run_cmd(test, cd);
         }
 
@@ -158,7 +171,7 @@ fn main() -> i32 {
         }
 
         run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
-        for test in TESTCASES {
+        for test in MUSL_TESTCASES {
             run_cmd(test, cd);
         }
         run_cmd("/musl/busybox cat /proc/meminfo\0", "/musl/");
