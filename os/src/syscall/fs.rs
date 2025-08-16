@@ -13,6 +13,7 @@ use crate::net::PORT_FD_MANAMER;
 use crate::sync::time::{UTIME_NOW, UTIME_OMIT};
 use crate::sync::{time_duration, TimeSpec, TimeStamp, CLOCK_MANAGER};
 use crate::syscall::ffi::{FaccessatMode, FcntlArgFlags, FcntlFlags, IoVec, StatFs, AT_REMOVEDIR};
+use crate::syscall::process::GLOBAL_UID;
 use crate::task::{current_task, current_user_token, FdInfo, FdTable};
 use crate::utils::downcast::Downcast;
 use crate::utils::{backtrace, Errno, SysResult};
@@ -1214,11 +1215,16 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         let other_cwd = inode.get_name()?;
         resolve_path(other_cwd, path.clone())
     };
+    let is_root = {
+        let uid_now = GLOBAL_UID.load(core::sync::atomic::Ordering::Relaxed);
+        uid_now == 0
+    };
     // TODO:  缺少去判断父文件夹的逻辑
     let parent_abs = AbsPath::new(abs.get_parent_abs());
     // error!("[sys_faccessat] parent_abs: {}", parent_abs.get());
     if parent_abs.get().starts_with("/tmp/LTP")
         && !parent_abs.split_last_with("/").1.starts_with("LTP")
+        && !is_root
     {
         error!(
             "[sys_faccessat] parent_dir: {}",
@@ -1232,7 +1238,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
                 Some(x) => x.metadata.i_mode.lock().mode,
                 None => return Ok(0),
             };
-            // 注意到在鉴权的时候应当只关注 others 的位置就好了
+
             if mode.contains(FaccessatMode::R_OK) && !i_mode.contains(ModeFlag::S_IWOTH) {
                 error!(
                     "[sys_faccessat] return no readable dirfd: {}, pathname: {}",
@@ -1275,6 +1281,10 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
             None => return Ok(0),
         };
         info!("[sys_faccessat] got i_mode: {:0}", i_mode);
+
+        if is_root {
+            return Ok(0);
+        }
 
         // 注意到在鉴权的时候应当只关注 others 的位置就好了
         if mode.bits() == 0 {
