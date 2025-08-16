@@ -32,6 +32,7 @@ use alloc::collections::btree_map::BTreeMap;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
+use num_traits::ops::euclid;
 use core::cell::SyncUnsafeCell;
 use core::fmt::{Debug, Display};
 use core::future::Ready;
@@ -49,6 +50,7 @@ pub struct TaskControlBlock {
     // 可变
     pub tgid: AtomicUsize, // 所属线程组的leader的 pid，如果自己是leader，那tgid = pid
     pub pgid: AtomicUsize, // 所属进程组id号
+    pub euid: AtomicUsize,
     pub task_status: SpinNoIrqLock<TaskStatus>,
 
     pub thread_group: Shared<ThreadGroup>,
@@ -110,6 +112,7 @@ impl TaskControlBlock {
             // Shared
             pgid: AtomicUsize::new(1),
             tgid: AtomicUsize::new(tgid),
+            euid: AtomicUsize::new(0),
             task_status: SpinNoIrqLock::new(TaskStatus::Ready),
             thread_group: new_shared(ThreadGroup::new()),
             memory_space: SyncUnsafeCell::new(new_shared(memory_space)),
@@ -197,11 +200,20 @@ impl TaskControlBlock {
         debug!("task.exec.pid={}", self.pid.0);
     }
 
+    pub fn get_euid(&self) -> usize {
+        self.euid.load(core::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn set_euid(&self, euid: usize) {
+        self.euid.store(euid, core::sync::atomic::Ordering::Relaxed);
+    }
+
     pub fn do_process_fork(self: &Arc<Self>, flag: CloneFlags) -> Arc<Self> {
         info!("[process_fork] start, flags = {:?}", flag);
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(pid.0);
+        let euid = AtomicUsize::new(self.get_euid());
         let pending = AtomicBool::new(false);
         let ucontext = AtomicUsize::new(0);
         let sig_pending = SpinNoIrqLock::new(SigPending::new());
@@ -270,6 +282,7 @@ impl TaskControlBlock {
             // Shared
             pgid,
             tgid,
+            euid,
             thread_group,
             task_status,
             memory_space,
@@ -319,6 +332,7 @@ impl TaskControlBlock {
         let pid = pid_alloc();
         let pgid = AtomicUsize::new(self.get_pgid());
         let tgid = AtomicUsize::new(self.get_tgid());
+        let euid = AtomicUsize::new(self.get_euid());
         let pending = AtomicBool::new(false);
         let ucontext = AtomicUsize::new(0);
         let fsz_limit = self.fsz_limit.clone();
@@ -381,7 +395,7 @@ impl TaskControlBlock {
 
             pgid,
             tgid,
-
+            euid,
             pending,
             ucontext,
             sig_pending,
