@@ -1,4 +1,7 @@
+use alloc::{collections::BTreeMap, string::String, sync::Arc};
 use bitflags::bitflags;
+use lazy_static::lazy_static;
+use spin::Mutex;
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,4 +45,37 @@ bitflags! {
         const FAN_MARK_IGNORED_SURV_MODIFY = 0x00000040;
         const FAN_MARK_TARGET_FID = 0x00000200;
     }
+}
+/// Represents a mark on a filesystem object.
+#[derive(Clone)]
+pub struct FanotifyMark {
+    pub mask: u64,
+    pub flags: FanMarkFlags,
+}
+
+/// Represents an fanotify group, which holds marks and an event queue.
+pub struct FanotifyGroup {
+    pub flags: FanFlags,
+    pub event_f_flags: FanEventFlags,
+    /// Maps absolute path to a mark. A real implementation would use inode numbers.
+    pub marks: Mutex<BTreeMap<String, FanotifyMark>>,
+    // In a complete implementation, a pipe or other mechanism would be stored here
+    // to write events to the user.
+}
+
+impl FanotifyGroup {
+    pub fn new(flags: FanFlags, event_f_flags: FanEventFlags) -> Self {
+        Self {
+            flags,
+            event_f_flags,
+            marks: Mutex::new(BTreeMap::new()),
+        }
+    }
+}
+
+lazy_static! {
+    // A global manager to hold fanotify groups, associated with their file descriptors.
+    // This is a workaround for not being able to add a new `FileClass` variant for fanotify.
+    pub static ref FANOTIFY_GROUPS: Mutex<BTreeMap<usize, Arc<FanotifyGroup>>> =
+        Mutex::new(BTreeMap::new());
 }

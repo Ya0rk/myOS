@@ -1797,44 +1797,10 @@ pub async fn sys_copy_file_range(
     Ok(write_size)
 }
 
+use crate::fs::fanotify::*;
 use alloc::collections::BTreeMap;
 use bitflags::bitflags;
-use lazy_static::lazy_static;
 use spin::Mutex;
-
-/// Represents a mark on a filesystem object.
-#[derive(Clone)]
-pub struct FanotifyMark {
-    mask: u64,
-    flags: FanMarkFlags,
-}
-
-/// Represents an fanotify group, which holds marks and an event queue.
-pub struct FanotifyGroup {
-    pub flags: FanFlags,
-    pub event_f_flags: FanEventFlags,
-    /// Maps absolute path to a mark. A real implementation would use inode numbers.
-    pub marks: Mutex<BTreeMap<String, FanotifyMark>>,
-    // In a complete implementation, a pipe or other mechanism would be stored here
-    // to write events to the user.
-}
-
-impl FanotifyGroup {
-    pub fn new(flags: FanFlags, event_f_flags: FanEventFlags) -> Self {
-        Self {
-            flags,
-            event_f_flags,
-            marks: Mutex::new(BTreeMap::new()),
-        }
-    }
-}
-
-lazy_static! {
-    // A global manager to hold fanotify groups, associated with their file descriptors.
-    // This is a workaround for not being able to add a new `FileClass` variant for fanotify.
-    static ref FANOTIFY_GROUPS: Mutex<BTreeMap<usize, Arc<FanotifyGroup>>> =
-        Mutex::new(BTreeMap::new());
-}
 
 /// fanotify_init() initializes a new fanotify group and returns a
 /// file descriptor for the event queue associated with the group.
