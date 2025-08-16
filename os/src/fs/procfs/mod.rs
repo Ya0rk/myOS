@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use super_block::ProcFsSuperBlock;
 
 pub mod domainname;
-pub mod info_node;
+// pub mod info_node;
 pub mod inode;
 pub mod irqtable;
 pub mod super_block;
