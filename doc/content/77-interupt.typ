@@ -82,10 +82,4 @@ icu.route(test_irq, route_config);
 
 EIOINTC 和 PCH-PIC 配置方式和 LIOINTC 类似
 
-
-
-
-
-
-
-
+#pagebreak()  // 强制分页
