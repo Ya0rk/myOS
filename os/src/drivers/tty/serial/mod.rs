@@ -1,4 +1,4 @@
-use crate::{drivers::{device_new::{dev_core::PhysDriver, irq::HandleHardIrq}, tty::termios, uart}, hal::config::{KERNEL_ADDR_OFFSET, UART_ADDR}, sync::{get_waker, new_shared}};
+use crate::{drivers::{device::{dev_core::PhysDriver, irq::HandleHardIrq}, tty::termios, uart}, hal::config::{KERNEL_ADDR_OFFSET, UART_ADDR}, sync::{get_waker, new_shared}};
 use core::task::Waker;
 use alloc::{collections::vec_deque::VecDeque, sync::Arc, boxed::Box};
 use async_trait::async_trait;

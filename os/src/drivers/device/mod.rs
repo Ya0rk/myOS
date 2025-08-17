@@ -1,37 +1,42 @@
-pub mod uart;
-/// 对应着一个设备的实例
-use alloc::sync::Arc;
-#[derive(Clone)]
-pub enum Device {
-    /// 只实现了BaseDriver的设备
-    PlainDevice(Arc<dyn BaseDriver>),
-    /// 额外实现了BlockDriver的设备
-    BlockDevice(Arc<dyn BlockDriver>),
-    // // 可以补充更多设备和对应的trait...
-    // GenericDevice(Arc<dyn BaseDriver>),
-}
 
-/// All supported device types.
+use alloc::sync::Arc;
+
+use crate::drivers::{device::dev_number::MajorNumber, tty::tty_core::CharDevice};
+
+pub mod dev_core;
+pub mod dev_number;
+pub mod irq;
+pub mod manager;
+pub mod uart;
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum DeviceType {
-    /// Block storage device (e.g., disk).
     Block,
-    /// Character device (e.g., serial port).
     Char,
-    /// Network device (e.g., ethernet card).
-    Net,
-    /// Graphic display device (e.g., GPU)
-    Display,
+    Unknown,
+    // Net,
+    // Display
 }
 
-pub trait BaseDriver: Send + Sync {
-    /// The name of the device.
-    fn device_name(&self) -> &str;
 
-    /// The type of the device.
-    fn device_type(&self) -> DeviceType;
+
+pub trait Device : Send + Sync {
+    fn get_type(&self) -> DeviceType;
+    fn get_major(&self) -> MajorNumber;
+    fn get_minor(&self) -> usize;
+    fn as_char(self: Arc<Self>) -> Option<Arc<dyn CharDevice>> {
+        None
+    }
+    // TODO: BlockDriver -> BlockDevice
+    fn as_block(self: Arc<Self>) -> Option<Arc<dyn BlockDevice>> {
+        None
+    }
+    // fn as_abs(self: Arc<Self>) -> Option<Arc<dyn BlockDevice>> {
+    //     None
+    // }
 }
-
+pub type DevResult<T = ()> = Result<T, DevError>;
+/// A specialized `Result` type for device operations.
+// pub type DevResult<T = ()> = Result<T, DevError>;
 /// The error type for device operation failures.
 #[derive(Debug)]
 pub enum DevError {
@@ -53,11 +58,9 @@ pub enum DevError {
     Unsupported,
 }
 
-/// A specialized `Result` type for device operations.
-pub type DevResult<T = ()> = Result<T, DevError>;
-
+// TODO: make it async
 /// Operations that require a block storage device driver to implement.
-pub trait BlockDriver: BaseDriver {
+pub trait BlockDevice: Device {
     /// The number of blocks in this storage device.
     ///
     /// The total size of the device is `num_blocks() * block_size()`.
@@ -80,5 +83,3 @@ pub trait BlockDriver: BaseDriver {
     /// Flushes the device to write all pending data to the storage.
     fn flush(&self) -> DevResult;
 }
-
-

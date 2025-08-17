@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use log::{debug, error, info, warn};
 use lwext4_rust::KernelDevOp;
 
-use crate::{drivers::{device_new::BlockDevice, BlockDriver}, utils::logger};
+use crate::{drivers::{device::BlockDevice}, utils::logger};
 
 use super::DevResult;
 

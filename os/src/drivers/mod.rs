@@ -1,5 +1,5 @@
+// pub mod device_old;
 pub mod device;
-pub mod device_new;
 pub mod disk;
 pub mod tty;
 // pub mod dev_core;
@@ -11,11 +11,11 @@ pub mod irqchip;
 pub mod vf2;
 pub mod virtio_driver;
 
-use crate::{drivers::device_new::{dev_number::BlockMajorNum, manager::DEVICE_MANAGER, BlockDevice}, hal::config::KERNEL_ADDR_OFFSET};
+pub use crate::{drivers::device::{DevResult, DeviceType, DevError, uart, dev_number::BlockMajorNum, manager::DEVICE_MANAGER, BlockDevice}, hal::config::KERNEL_ADDR_OFFSET};
 use alloc::{sync::Arc, vec::Vec};
 use core::any::Any;
 use core::ptr::NonNull;
-pub use device::*;
+// pub use device::*;
 pub use disk::*;
 use log::*;
 use spin::RwLock;
@@ -30,16 +30,16 @@ use virtio_drivers::{
     },
 };
 
-use device::Device;
+// use device::Device;
 
-lazy_static::lazy_static! {
-    pub static ref DEVICE_SET: RwLock<Vec<Device>> = RwLock::new(Vec::new());
-}
+// lazy_static::lazy_static! {
+//     pub static ref DEVICE_SET: RwLock<Vec<Device>> = RwLock::new(Vec::new());
+// }
 
-pub fn register_block_device(dev: Arc<dyn BlockDriver>) {
-    let device = Device::BlockDevice(dev);
-    DEVICE_SET.write().push(device);
-}
+// pub fn register_block_device(dev: Arc<dyn BlockDriver>) {
+//     let device = Device::BlockDevice(dev);
+//     DEVICE_SET.write().push(device);
+// }
 
 /// 获得一个任意一个块设备
 pub fn get_block_device() -> Option<Arc<dyn BlockDevice>> {

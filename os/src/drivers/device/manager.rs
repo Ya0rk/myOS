@@ -11,7 +11,7 @@ use virtio_drivers::{device::blk::VirtIOBlk, transport::{mmio::MmioTransport, pc
 
 use crate::{
     drivers::{
-        device_new::{
+        device::{
             dev_core::{PhysDriver, PhysDriverProbe}, 
             dev_number::{BlockMajorNum, CharMajorNum, MajorNumber}, 
             irq::HardIrqHandler, BlockDevice, Device

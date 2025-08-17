@@ -5,7 +5,7 @@
 use alloc::sync::Arc;
 use sbi_spec::pmu::NUM_COUNTERS;
 
-use crate::{drivers::{device_new::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::{config::KERNEL_ADDR_OFFSET, DEVICE_ADDR_OFFSET}};
+use crate::{drivers::{device::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::{config::KERNEL_ADDR_OFFSET, DEVICE_ADDR_OFFSET}};
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct PLIC {

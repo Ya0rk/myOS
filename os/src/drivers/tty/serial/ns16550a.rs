@@ -6,7 +6,7 @@ use riscv::addr::PhysAddr;
 
 use crate::{
     drivers::{
-        device_new::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, 
+        device::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, 
         tty::serial::UartDriver
     }, 
     hal::{

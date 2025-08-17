@@ -1,4 +1,4 @@
-use crate::{drivers::device_new::dev_core::{PhysDriver, PhysDriverProbe}, hal::config::DEVICE_ADDR_OFFSET};
+use crate::{drivers::device::dev_core::{PhysDriver, PhysDriverProbe}, hal::config::DEVICE_ADDR_OFFSET};
 
 use super::probe::virtio_device;
 use super::VirtIoHalImpl;

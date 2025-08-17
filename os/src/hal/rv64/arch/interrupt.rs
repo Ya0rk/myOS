@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::{sie, sstatus};
 
-use crate::{drivers::{device_new::manager::DEVICE_MANAGER, irqchip::riscv_plic::{IntrTargetPriority, PLIC}}, START_HART_ID};
+use crate::{drivers::{device::manager::DEVICE_MANAGER, irqchip::riscv_plic::{IntrTargetPriority, PLIC}}, START_HART_ID};
 
 const VIRT_PLIC: usize = 0xffff_ffc0_0000_0000 + 0xC00_0000;
 

@@ -4,8 +4,8 @@
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
 use log::info;
-use crate::drivers::device_new::dev_number::{BlockMajorNum, MajorNumber};
-use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
+use crate::drivers::device::dev_number::{BlockMajorNum, MajorNumber};
+use crate::drivers::{VirtIoBlkDev};
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 use crate::sync::SpinNoIrqLock;
 use alloc::sync::Arc;
@@ -166,11 +166,11 @@ fn virtio_blk<T: Transport + 'static>(transport: T) {
     //     assert_eq!(input, output);
     // }
     // println!("virtio-blk test finished");
-    info!("create a virtio block device");
-    let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport, MajorNumber::Block(BlockMajorNum::VirtBlock), 0));
-    info!("register");
-    register_block_device(blk);
-    info!("finished register");
+    // info!("create a virtio block device");
+    // let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport, MajorNumber::Block(BlockMajorNum::VirtBlock), 0));
+    // info!("register");
+    // register_block_device(blk);
+    // info!("finished register");
 }
 
 fn virtio_gpu<T: Transport>(transport: T) {

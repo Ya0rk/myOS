@@ -2,7 +2,7 @@ pub mod riscv_plic;
 use alloc::sync::Arc;
 pub use riscv_plic::PLIC;
 
-use crate::drivers::{device_new::{dev_core::PhysDriverProbe as _, manager::DeviceManager}, irqchip::IrqController};
+use crate::drivers::{device::{dev_core::PhysDriverProbe as _, manager::DeviceManager}, irqchip::IrqController};
 
 impl DeviceManager {
     pub fn probe_riscv_plic(&mut self) {

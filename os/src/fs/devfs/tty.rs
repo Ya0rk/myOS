@@ -1,11 +1,11 @@
 // deprecated
 use crate::{
-    drivers::{device::uart::UART_DEVICE, tty::{termios::Termios, tty_core::TtyIoctlCmd}},
+    drivers::{uart::UART_DEVICE, tty::{termios::Termios, tty_core::TtyIoctlCmd}},
     fs::{
-        ffi::RenameFlags, page_cache::PageCache, Dirent, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, Page, S_IFCHR
+        page_cache::PageCache, Dirent, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, Page, S_IFCHR
     },
     mm::user_ptr::{user_mut_ptr, user_ref},
-    sync::{SpinNoIrqLock, TimeStamp},
+    sync::SpinNoIrqLock,
     utils::{Errno, SysResult},
 };
 use alloc::{

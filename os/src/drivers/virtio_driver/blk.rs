@@ -7,14 +7,14 @@ use virtio_drivers::transport::DeviceType as VirtIODeviceType;
 
 use crate::{
     drivers::{
-        device_new::{
+        device::{
             self, 
             dev_core::{PhysDriver, PhysDriverProbe}, 
             dev_number::{BlockMajorNum, MajorNumber}, 
             BlockDevice, Device
         }, 
         virtio_driver::pci::{allocate_bars, dump_bar_contents, PciDriverProbe, PciMemory32Allocator}, 
-        BaseDriver, BlockDriver, DevResult, DeviceType, VirtIoHalImpl
+        DevResult, DeviceType, VirtIoHalImpl
     }, 
     hal::config::{DEVICE_ADDR_OFFSET, KERNEL_ADDR_OFFSET}, 
     sync::SpinNoIrqLock
@@ -43,49 +43,49 @@ impl<H: Hal, T: Transport> VirtIoBlkDev<H, T> {
     }
 }
 
-impl<H: Hal, T: Transport> BaseDriver for VirtIoBlkDev<H, T> {
-    fn device_name(&self) -> &str {
-        "virtio-blk"
-    }
+// impl<H: Hal, T: Transport> BaseDriver for VirtIoBlkDev<H, T> {
+//     fn device_name(&self) -> &str {
+//         "virtio-blk"
+//     }
 
-    fn device_type(&self) -> DeviceType {
-        DeviceType::Block
-    }
-}
+//     fn device_type(&self) -> DeviceType {
+//         DeviceType::Block
+//     }
+// }
 
-impl<H: Hal, T: Transport> BlockDriver for VirtIoBlkDev<H, T> {
-    #[inline]
-    fn num_blocks(&self) -> usize {
-        self.inner.lock().capacity() as usize
-    }
+// impl<H: Hal, T: Transport> BlockDriver for VirtIoBlkDev<H, T> {
+//     #[inline]
+//     fn num_blocks(&self) -> usize {
+//         self.inner.lock().capacity() as usize
+//     }
 
-    #[inline]
-    fn block_size(&self) -> usize {
-        512
-    }
+//     #[inline]
+//     fn block_size(&self) -> usize {
+//         512
+//     }
 
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) -> DevResult {
-        self.inner
-            .lock()
-            .read_blocks(block_id as _, buf)
-            .map_err(as_dev_err)
-    }
+//     fn read_block(&self, block_id: usize, buf: &mut [u8]) -> DevResult {
+//         self.inner
+//             .lock()
+//             .read_blocks(block_id as _, buf)
+//             .map_err(as_dev_err)
+//     }
 
-    fn write_block(&self, block_id: usize, buf: &[u8]) -> DevResult {
-        self.inner
-            .lock()
-            .write_blocks(block_id as _, buf)
-            .map_err(as_dev_err)
-    }
+//     fn write_block(&self, block_id: usize, buf: &[u8]) -> DevResult {
+//         self.inner
+//             .lock()
+//             .write_blocks(block_id as _, buf)
+//             .map_err(as_dev_err)
+//     }
 
-    fn flush(&self) -> DevResult {
-        Ok(())
-    }
-}
+//     fn flush(&self) -> DevResult {
+//         Ok(())
+//     }
+// }
 
 impl<H: Hal + 'static, T: Transport + 'static> Device for VirtIoBlkDev<H, T> {
-    fn get_type(&self) -> device_new::DeviceType {
-        device_new::DeviceType::Block
+    fn get_type(&self) -> device::DeviceType {
+        device::DeviceType::Block
     }
 
     fn get_major(&self) -> MajorNumber {

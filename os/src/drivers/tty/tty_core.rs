@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use alloc::{boxed::Box, sync::Arc, vec::{self, Vec}};
 use log::{error, info};
 use spin::RwLock;
-use crate::{drivers::{device_new::{dev_number::MajorNumber, Device, DeviceType}, tty::{self, termios::{self, Termios, WinSize}}}, mm::user_ptr::{user_ref, user_ref_mut}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, Errno, SysResult}};
+use crate::{drivers::{device::{dev_number::MajorNumber, Device, DeviceType}, tty::{self, termios::{self, Termios, WinSize}}}, mm::user_ptr::{user_ref, user_ref_mut}, sync::{new_shared, Shared, SleepShared}, utils::{container::ring_buffer::LineBuffer, Errno, SysResult}};
 
 #[async_trait]
 pub trait CharDevice : Device + Send + Sync + 'static {
@@ -154,21 +154,23 @@ impl LineDiscPolicy for TtyLineDisc {
 }
 
 pub struct TtyStruct {
+    // 对接下一层，SerialDriver实现这个trait
     pub driver: Arc<dyn TtyDriver>,
-
+    // 用于设置行规程、输入输出格式和设备控制信息
     pub termios: RwLock<termios::Termios>,
-
+    // 为 N_TTY 行规程使用，判断当前是否为行编辑模式
     pub n_tty_mode: RwLock<TtyLineDiscMode>,
+    // 存储行规程，行规程使用策略模式
     pub ldisc: SyncUnsafeCell<Arc<dyn LineDiscPolicy>>,
-
+    // 前台进程组
     pub fg_pgid: RwLock<u32>,
-
+    // 终端窗口尺寸
     pub win_size: RwLock<WinSize>,
-
+    // 行缓冲区
     pub lbuffer: Shared<LineBuffer>,
-
+    // 主设备号
     pub major: MajorNumber,
-
+    // 次设备号
     pub minor: usize,
     
 }

@@ -5,7 +5,7 @@ use log::{debug, info, warn};
 
 use crate::{
     drivers::{
-        device_new::{
+        device::{
             dev_core::{PhysDriver, PhysDriverProbe},
             dev_number::{BlockMajorNum, MajorNumber},
             BlockDevice, Device, DeviceType
@@ -16,7 +16,7 @@ use crate::{
             CMDARG, CTRL, CTYPE, DBADDRL, DBADDRU, 
             IDSTS, PWREN, RESP, RINSTS, STATUS
         }, 
-        BaseDriver, BlockDriver, DevResult
+        DevResult
     }, 
     hal::config::{BLOCK_SIZE, GB, KERNEL_ADDR_OFFSET},
     mm::{frame_alloc, user_ptr::user_ref, FrameTracker, PhysAddr}
@@ -544,59 +544,59 @@ impl Vf2SDIO {
     }
 }
 
-impl BlockDriver for Vf2SDIO {
-    fn num_blocks(&self) -> usize {
-        32 * GB / BLOCK_SIZE
-    }
+// impl BlockDriver for Vf2SDIO {
+//     fn num_blocks(&self) -> usize {
+//         32 * GB / BLOCK_SIZE
+//     }
 
-    fn block_size(&self) -> usize {
-        BLOCK_SIZE
-    }
+//     fn block_size(&self) -> usize {
+//         BLOCK_SIZE
+//     }
 
-    fn read_block(&self, block_id: usize, buf: &mut [u8]) -> DevResult {
-        assert!(buf.len() == BLOCK_SIZE);
+//     fn read_block(&self, block_id: usize, buf: &mut [u8]) -> DevResult {
+//         assert!(buf.len() == BLOCK_SIZE);
 
-        let buf_trans: &mut [usize] = unsafe {
-            let len = buf.len() / mem::size_of::<usize>();
-            core::slice::from_raw_parts_mut(buf.as_ptr() as *mut usize, len)
-        };
-        debug!("reading block {}", block_id);
-        // Read one block
-        self.set_size(512, 512);
-        let cmd = CMD::data_cmd(0, 17); // TODO: card number hard coded to 0
-        let cmdarg = CMDARG::from(block_id as u32);
-        self.send_cmd(cmd, cmdarg, Some(buf_trans), true)
-            .expect("Error sending command");
-        Ok(())
-    }
+//         let buf_trans: &mut [usize] = unsafe {
+//             let len = buf.len() / mem::size_of::<usize>();
+//             core::slice::from_raw_parts_mut(buf.as_ptr() as *mut usize, len)
+//         };
+//         debug!("reading block {}", block_id);
+//         // Read one block
+//         self.set_size(512, 512);
+//         let cmd = CMD::data_cmd(0, 17); // TODO: card number hard coded to 0
+//         let cmdarg = CMDARG::from(block_id as u32);
+//         self.send_cmd(cmd, cmdarg, Some(buf_trans), true)
+//             .expect("Error sending command");
+//         Ok(())
+//     }
 
-    fn write_block(&self, block_id: usize, buf: &[u8]) -> DevResult {
-        assert!(buf.len() == BLOCK_SIZE);
+//     fn write_block(&self, block_id: usize, buf: &[u8]) -> DevResult {
+//         assert!(buf.len() == BLOCK_SIZE);
 
-        #[allow(mutable_transmutes)]
-        let buf = unsafe { core::mem::transmute(buf) };
-        debug!("writing block {}", block_id);
-        self.set_size(512, 512);
-        // CMD24 single block write
-        let cmd = CMD::data_cmd(0, 24).with_read_write(true); // TODO: card number hard coded to 0
+//         #[allow(mutable_transmutes)]
+//         let buf = unsafe { core::mem::transmute(buf) };
+//         debug!("writing block {}", block_id);
+//         self.set_size(512, 512);
+//         // CMD24 single block write
+//         let cmd = CMD::data_cmd(0, 24).with_read_write(true); // TODO: card number hard coded to 0
 
-        let cmdarg = CMDARG::from(block_id as u32);
-        self.send_cmd(cmd, cmdarg, Some(buf), false)
-            .expect("Error sending command");
-        Ok(())
-    }
+//         let cmdarg = CMDARG::from(block_id as u32);
+//         self.send_cmd(cmd, cmdarg, Some(buf), false)
+//             .expect("Error sending command");
+//         Ok(())
+//     }
 
-    fn flush(&self) -> DevResult {
-        todo!()
-    }
-}
+//     fn flush(&self) -> DevResult {
+//         todo!()
+//     }
+// }
 
 impl Device for Vf2SDIO {
     fn get_type(&self) -> DeviceType {
         DeviceType::Block
     }
 
-    fn get_major(&self) -> crate::drivers::device_new::dev_number::MajorNumber {
+    fn get_major(&self) -> crate::drivers::device::dev_number::MajorNumber {
         // todo!()
         MajorNumber::Block(self.meta.dev_id.major)
     }
@@ -692,12 +692,12 @@ impl<'b, 'a> PhysDriverProbe<'b, 'a> for Vf2SDIO {
     }
 }
 
-impl BaseDriver for Vf2SDIO {
-    fn device_name(&self) -> &str {
-        "vf2-sdio"
-    }
+// impl BaseDriver for Vf2SDIO {
+//     fn device_name(&self) -> &str {
+//         "vf2-sdio"
+//     }
 
-    fn device_type(&self) -> crate::drivers::DeviceType {
-        crate::drivers::DeviceType::Block
-    }
-}
+//     fn device_type(&self) -> crate::drivers::DeviceType {
+//         crate::drivers::DeviceType::Block
+//     }
+// }
