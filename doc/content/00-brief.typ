@@ -99,8 +99,8 @@ Del0n1x 内核主要模块和完成情况如下表格：
 os
 ├── linker                  # 程序链接脚本
 ├── src
-│   ├── boards              # 架构相关的参数
-│   ├── driver              # 块设备驱动
+│   ├── boards              # 平台相关的参数
+│   ├── driver              # 设备驱动
 │   ├── fs                  # 文件系统
 │   ├── hal                 # 硬件抽象层
 │   ├── ipc                 # 进程间通信相关的部分代码
@@ -108,7 +108,7 @@ os
 │   ├── net                 # 网络
 │   ├── signal              # 信号
 │   ├── task                # TCB
-│   ├── utils               # 一些工具
+│   ├── utils               # 辅助工具
 │   ├── sync                # 同步相关
 │   ├── syscall             # 系统调用
 │   ├── test                # 测试模块
