@@ -13,7 +13,7 @@
   teamname: "Del0n1x",
   teammates: ("姚俊杰", "卢家鼎", "林顺喆"),
   teachers: ("夏文", "仇洁婷"),
-  date: (2025, 6),
+  date: (2025, 8),
   logopath: "./content/assets/hitsz-logo.jpg"
 )
 

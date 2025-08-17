@@ -27,7 +27,7 @@ clean:
 
 doc: 
 	make -C ./doc
-	cp ./doc/main.pdf ./Del0n1x初赛文档.pdf
+	cp ./doc/main.pdf ./Del0n1x决赛文档.pdf
 
 extract:
 	tar -xvzf vendor.tar.gz 

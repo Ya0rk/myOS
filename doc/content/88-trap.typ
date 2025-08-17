@@ -174,5 +174,65 @@ pub fn user_trap_return() {
     label-name: "user_trap_return",
 )
 
+== 中断控制器
+
+=== 中断控制器总览
+
+中断控制器（Interrupt Controller）是位于 SoC 或计算机电路板上的一种设备，用于管理外设中断线到CPU中断引脚的路由方式、外设中断触发方式等。RISC-V Qemu 和 Starfive Visionfive2 开发板等平台下，主要中断控制器为 RISC-V PLIC（Platform Level Interrupt Controller，板级中断控制器）；而 LoongArch 架构下的情况略有不同。 龙芯平台的中断控制器单元包括了以下几种：
+
+#list(
+    [CPUINTC： CPU Core Interrupt Controller，无需驱动],
+    [LIOINTC： Local IO Interrupt Controller],
+    [EIOINTC： Extended IO Interrupt Controller],
+    [PCH-PIC： 位于南桥芯片组 LS7A 的可编程中断控制器],
+    [PCH-LPC： 位于南桥芯片组 LS7A],
+    [PCH-MSI： 位于南桥芯片组 LS7A],
+    indent: 2em
+)
+
+#h(2em)这些中断控制单元使用级联的方式相连，构成了龙芯平台上的中断控制模型，为板上的诸多硬件提供中断服务。不同平台的中断控制模型和中断信号流有不小的差距。
+
+Del0n1x 为 RISC-V 各平台通用的 PLIC、龙芯平台的 LIOINTC、EIOINTC、PCH-PIC 提供了驱动支持。
+
+=== 统一中断控制接口
+
+Del0n1x 定义了如下的中断控制器抽象：
+
+#code-figure(
+```rs
+pub trait IrqController: Send + Sync {
+    /// 使能中断号为irq_no的外部中断
+    fn enable_irq(&self, hart_id: usize, irq_no: usize);
+    /// 禁用中断号为irq_no的外部中断
+    fn disable_irq(&self, hart_id: usize, irq_no: usize);
+    /// 获取当前陷入外部中断的中断号
+    fn claim_irq(&self, hart_id: usize) -> Option<usize>;
+    /// 通知中断控制器完成中断
+    fn finish_irq(&self, hart_id: usize, irq_no: usize);
+}
+```,
+    caption: [中断控制器 Trait],
+    label-name: "icu-trait",
+)
+
+#h(2em)上述所有的中断控制器均实现这个`trait`，显著提高了代码的复用率。
+
+=== 龙芯平台中断模型
+
+LoongSon 2K1000 平台和 LoongArch Qemu Virt 平台的中断控制模型如下：
+
+#figure(
+  image("assets/loongarch_2k1000_int.png"),
+  caption: [龙芯 2k1000 中断模型],
+  supplement: [图]
+)
+
+#figure(
+  image("assets/loongarch_qemu_int.png"),
+  caption: [龙芯 qemu 中断模型],
+  supplement: [图]
+)
+
+#h(2em)Del0n1x 为两种模型均实现了适配，可以在赛事提供的四个平台上成功触发串口中断。
 
 #pagebreak()  // 强制分页

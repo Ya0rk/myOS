@@ -143,5 +143,9 @@ Del0n1x 使用`0x8000_xxxx_xxxx_xxxx`和`0x9000_xxxx_xxxx_xxxx`两个直接映�
 
 LoongArch 架构使用软件管理 TLB。当发生 TLB 中没有匹配项时，将触发 TLB 重填异常，跳转到内核设置的 TLB 重填入口执行软件重填。现阶段 Del0n1x 使用了往届优秀作品 NPUCore-IMPACT 编写的 TLB 重填代码。
 
+=== 地址不对齐访问异常处理
+
+由于 LLVM 支持不足，使用 rustc 编译出来的 LoongArch 架构二进制文件存在不对齐读写问题。如果使用龙芯 2K1000 开发板运行读写不对齐的代码，会陷入不对齐读写异常。现阶段 Del0n1x 使用了参考项目 Polyhal 实现的不对齐读写处理逻辑。
+
 
 #pagebreak()  // 强制分页
