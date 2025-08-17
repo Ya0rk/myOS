@@ -41,7 +41,7 @@ pub struct TrapContext {
 
 === 内核中断异常处理
 
-以下均以RISC-V64为例。Del0n1x的内核态中断异常处理目前支持时钟中断和地址缺页异常（外部中断将于比赛下一阶段进行完善） ，代码如下：
+以下均以RISC-V64为例。Del0n1x的内核态中断异常处理目前支持时钟中断、地址缺页异常、外部中断，代码如下：
 
 #code-figure(
 ```rs
@@ -51,6 +51,7 @@ Trap::Interrupt(Interrupt::SupervisorTimer) => {
     set_next_trigger();
 }
 Trap::Exception(e) => match e {
+    // 处理异常
     Exception::StorePageFault
     | Exception::InstructionPageFault
     | Exception::LoadPageFault => {
@@ -70,6 +71,13 @@ Trap::Exception(e) => match e {
             use crate::hal::arch::current_inst_len;
             sepc::write(sepc + current_inst_len());
         });
+    },
+    // 处理外部中断
+    Trap::Interrupt(Interrupt::SupervisorExternal) => {
+        use crate::fs::procfs::irqtable::{SupervisorExternal, IRQTABLE};
+        IRQTABLE.lock().inc(SupervisorExternal);
+        // 跳转到外部中断处理函数
+        crate::hal::arch::interrupt::irq_handler();
     }
 
 set_ktrap_ret(result);
@@ -82,7 +90,7 @@ set_ktrap_ret(result);
 
 === 用户中断异常处理
 
-在Del0n1x中除了对用户态的缺页异常处理之外，还实现了时钟中断和系统调用处理。对于时钟中断，Del0n1x检查了全局定时器中是否有超时任务，然后设置下一次时钟中断时间点，最后需要调用 `yield` 释放当前任务对CPU的使用权，调度下一个任务，避免任务长时间占用CPU导致其他任务饥饿。对于系统调用处理，会先将中断上下文中的返回地址加 4，使得从内核态返回到用户态后能够跳转到下一条指令。然后，调用`syscall`函数执行系统调用。系统调用完成后，将返回值保存在`a0`寄存器。
+在Del0n1x中除了对用户态的缺页异常处理之外，还实现了时钟中断、系统调用处理和外部中断。对于外部中断，将登记中断事件后跳转到外部中断处理流程中。对于时钟中断，Del0n1x检查了全局定时器中是否有超时任务，然后设置下一次时钟中断时间点，最后需要调用 `yield` 释放当前任务对CPU的使用权，调度下一个任务，避免任务长时间占用CPU导致其他任务饥饿。对于系统调用处理，会先将中断上下文中的返回地址加 4，使得从内核态返回到用户态后能够跳转到下一条指令。然后，调用`syscall`函数执行系统调用。系统调用完成后，将返回值保存在`a0`寄存器。
 
 #code-figure(
 ```rs
@@ -119,11 +127,17 @@ Trap::Exception(Exception::UserEnvCall) => { // 7
       }
   }
 }
-
+// 时钟中断
 Trap::Interrupt(Interrupt::SupervisorTimer) => { // 5
     TIMER_QUEUE.handle_expired();
     set_next_trigger();
     yield_now().await;
+}
+// 外部中断
+Trap::Interrupt(Interrupt::SupervisorExternal) => {
+    use crate::fs::procfs::irqtable::{SupervisorExternal, IRQTABLE};
+    IRQTABLE.lock().inc(SupervisorExternal);
+    crate::hal::arch::interrupt::irq_handler();
 }
 ....
 ```,
