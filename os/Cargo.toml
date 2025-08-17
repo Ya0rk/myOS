@@ -54,9 +54,9 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 default = [
-    "error", 
+    # "error",   # 跑分时注意关掉这里的日志
     "test", 
-    "autorun", 
+    "mbshell", 
     "board_qemu" # 在quem上就开这个
     #"vf2",      # 上板riscv需要打开,否则关闭
     #"2k1000la", # 上板龙芯需要打开，否则关闭

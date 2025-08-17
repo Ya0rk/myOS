@@ -489,7 +489,7 @@ pub fn test_fd_performance() {
     };
 
     // 运行测试
-    const TEST_SIZE: usize = 10_000;
+    const TEST_SIZE: usize = 10_00;
     println!("\n[Test 1] Sequential allocation ({} FD)", TEST_SIZE);
     let (start, end) = test_sequential_allocation(TEST_SIZE);
     println!(
