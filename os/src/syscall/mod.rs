@@ -47,11 +47,11 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
         SysCode::SYSCALL_SCHED_GETPARAM => sys_sched_getparam(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SCHED_SETPARAM => sys_sched_setparam(args[0] as usize, args[1] as usize),
         SysCode::SYSCALL_SETRESUID => sys_setresuid(),
-        SysCode::SYSCALL_SETUID => sys_setuid(),
+        SysCode::SYSCALL_SETUID => sys_setuid(args[0] as usize),
         SysCode::SYSCALL_FCHDIR => sys_fchdir(args[0] as usize),
         SysCode::SYSCALL_SETGID => sys_setgid(args[0] as usize),
         SysCode::SYSCALL_SIGSUSPEND => sys_sigsuspend(args[0] as usize).await,
-        SysCode::SYSCALL_UMASK => sys_umask(),
+        SysCode::SYSCALL_UMASK => sys_umask(args[0] as usize),
         SysCode::SYSCALL_FSYNC => sys_fsync(),
         SysCode::SYSCALL_PSELECT => {
             sys_pselect(
@@ -293,7 +293,7 @@ pub async fn syscall(syscall_id: usize, args: [usize; 6]) -> SysResult<usize> {
             sys_readv(args[0] as usize, args[1] as usize, args[2] as usize).await
         }
         SysCode::SYSCALL_FTRUNCATE64 => sys_ftruncate64(args[0] as usize, args[1] as usize),
-        SysCode::SYSCALL_FCHMODAT => sys_fchmodat(args[0] as usize, args[1] as usize, args[2] as usize, args[3] as usize),
+        SysCode::SYSCALL_FCHMODAT => sys_fchmodat(args[0] as isize, args[1] as usize, args[2] as usize, args[3] as u32),
         SysCode::SYSCALL_PREAD64 => {
             sys_pread64(
                 args[0] as usize,

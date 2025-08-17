@@ -1,3 +1,4 @@
+pub mod char;
 mod dev_loop;
 mod null;
 mod root;
@@ -5,7 +6,6 @@ mod rtc;
 pub mod tty;
 mod urandom;
 mod zero;
-pub mod char;
 pub mod superblock;
 
 // use dev_loop::{DevLoop, DEVLOOP};

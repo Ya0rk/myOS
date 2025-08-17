@@ -21,7 +21,11 @@ fn run_cmd(cmd: &str) {
     chdir(&conert_str2byte(cd));
     if fork() == 0 {
         // println!("task run cmd child: {}, pid: {}", cmd, getpid());
-        execve("/musl/busybox\0", &["/musl/busybox\0", "sh\0", "-c\0", cmd], ENV);
+        execve(
+            "/musl/busybox\0",
+            &["/musl/busybox\0", "sh\0", "-c\0", cmd],
+            ENV,
+        );
         exit(0);
     } else {
         // println!("task run cmd parent: {}", cmd);
@@ -51,7 +55,6 @@ fn main() -> i32 {
     }
     let child_pid = fork();
     if child_pid == 0 {
-        // println!("main run sh");
         run_cmd("/musl/busybox --install /bin\0");
         run_cmd("/bin/sh\0");
         // execve("/musl/busybox\0", &["/musl/busybox\0", "sh\0"], ENV);

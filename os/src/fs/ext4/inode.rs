@@ -5,10 +5,11 @@ use crate::{
         page_cache::PageCache,
         root_inode,
         stat::as_inode_stat,
-        Dentry, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat,
+        Dentry, Dirent, FileTrait, InodeMeta, InodeTrait, Kstat, StMode,
     },
     sync::{block_on, new_shared, MutexGuard, NoIrqLock, Shared, SpinNoIrqLock, TimeStamp},
-    utils::{Errno, SysResult},
+    syscall::fs::{GLOBAL_UMASK, SYS_OPENAT_MODE},
+    utils::{downcast::Downcast, Errno, SysResult},
 };
 use async_trait::async_trait;
 use core::{error, sync::atomic::Ordering};
@@ -156,7 +157,19 @@ impl InodeTrait for Ext4Inode {
             _ => {}
         }
 
-        let nf = Ext4Inode::new(path, types.clone().into(), page_cache.clone());
+        let nf = Ext4Inode::new(&path, types.clone().into(), page_cache.clone());
+        debug_point!("[ext4_inode] set st_mode start");
+        let mut i_mode_origin = SYS_OPENAT_MODE.load(Ordering::Relaxed) as u32;
+        let mask = GLOBAL_UMASK.load(Ordering::Relaxed);
+        i_mode_origin = i_mode_origin & !mask;
+        let i_mode = StMode::from(i_mode_origin);
+        // error!(
+        //     "set path: {}, st_mode: {:?}, i_mode_origin: {:o}",
+        //     &path, i_mode, i_mode_origin
+        // );
+        let ext4_inode = nf.clone().downcast_arc::<Ext4Inode>().unwrap();
+        *ext4_inode.metadata.i_mode.lock() = i_mode;
+        debug_point!("[ext4_inode] set st_mode end");
         bare_dentry.bind(nf.clone());
         if nf.is_valid() {
             // 这里的判断没用

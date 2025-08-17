@@ -1,5 +1,6 @@
 mod devfs;
 mod dirent;
+pub mod fanotify;
 // mod inode_cache;
 pub mod ext4;
 mod mount;
@@ -113,7 +114,7 @@ pub async fn create_init_files() -> SysResult {
     if let Ok(file) =
         open("/etc/passwd".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR)
     {
-        let buf = "nobody:x:0:0:nobody:/nonexistent:/usr/sbin/nologin\0".as_bytes(); // 这里是提前往里面写数据
+        let buf = "nobody:x:1:0:nobody:/nonexistent:/usr/sbin/nologin\0".as_bytes(); // 这里是提前往里面写数据
         file.write(&buf).await;
     };
 
@@ -295,7 +296,7 @@ pub fn mkdir(target_abs_path: AbsPath, mode: usize) -> SysResult<()> {
     //     return Err(Errno::EEXIST);
     // }
 
-    debug!("[mkdir] path {}, mode {}", target_abs_path.get(), mode);
+    // error!("[mkdir] path {}, mode {:o}", target_abs_path.get(), mode);
     debug_point!("[mkdir]");
     // 首先探测有没有这个文件,如果有就报错
     // 否则使用 OpenFlags::O_DIRECTORY | OpenFlags::O_CREAT 去创建

@@ -330,7 +330,7 @@ impl FdTable {
     /// 通过fd获取文件
     pub fn get_file_by_fd(&self, idx: usize) -> SysResult<Option<Arc<dyn FileTrait>>> {
         if idx >= self.table_len() {
-            info!("[getfilebyfd] fdtable len = {}", self.table_len());
+            // info!("[getfilebyfd] fdtable len = {}", self.table_len());
             return Err(Errno::EBADF);
         }
         Ok(self.table[idx].file.as_ref().map(|fd| fd.clone()))

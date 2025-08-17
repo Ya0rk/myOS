@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+
 use alloc::sync::Arc;
 use log::info;
 

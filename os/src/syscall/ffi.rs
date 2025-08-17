@@ -937,39 +937,3 @@ pub struct CloneArgs {
     /// 目标 cgroup 的文件描述符（Linux 5.7+）
     pub cgroup: u64,
 }
-
-bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct FanEventFlags: u32 {
-        const O_RDONLY = OpenFlags::O_RDONLY.bits() as u32;
-        const O_WRONLY = OpenFlags::O_WRONLY.bits() as u32;
-        const O_RDWR = OpenFlags::O_RDWR.bits() as u32;
-        const O_LARGEFILE = OpenFlags::O_LARGEFILE.bits() as u32;
-        const O_CLOEXEC = OpenFlags::O_CLOEXEC.bits() as u32;
-        const O_APPEND = OpenFlags::O_APPEND.bits() as u32;
-        const O_DSYNC = OpenFlags::O_DSYNC.bits() as u32;
-        const O_NOATIME = OpenFlags::O_NOATIME.bits() as u32;
-        const O_NONBLOCK = OpenFlags::O_NONBLOCK.bits() as u32;
-        const O_SYNC = OpenFlags::O_SYNC.bits() as u32;
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct FanFlags: u32 {
-        const FAN_CLASS_PRE_CONTENT = 0x00000008;
-        const FAN_CLASS_CONTENT = 0x00000004;
-        const FAN_CLASS_NOTIF = 0x00000000;
-        const FAN_CLOEXEC = 0x00000001;
-        const FAN_NONBLOCK = 0x00000002;
-        const FAN_UNLIMITED_QUEUE = 0x00000010;
-        const FAN_UNLIMITED_MARKS = 0x00000020;
-        const FAN_REPORT_TID = 0x00000100;
-        const FAN_ENABLE_AUDIT = 0x00000040;
-        const FAN_REPORT_FID = 0x00000200;
-        const FAN_REPORT_DIR_FID = 0x00000400;
-        const FAN_REPORT_NAME = 0x00000800;
-        const FAN_REPORT_DFID_NAME = 0x00000400 | 0x00000800;
-        const FAN_REPORT_TARGET_FID = 0x00001000;
-        const FAN_REPORT_DFID_NAME_TARGET = (Self::FAN_REPORT_DFID_NAME.bits() | Self::FAN_REPORT_FID.bits() | Self::FAN_REPORT_TARGET_FID.bits());
-        const FAN_REPORT_PIDFD = 0x00000080;
-    }
-}

@@ -121,7 +121,7 @@ pub async fn user_trap_handler() {
         Trap::Interrupt(Interrupt::SupervisorExternal) => {
             use log::error;
             use crate::fs::procfs::irqtable::{SupervisorExternal, IRQTABLE};
-            error!("got a supervisor external interrupt. do nothing");
+            // error!("got a supervisor external interrupt. do nothing");
             IRQTABLE.lock().inc(SupervisorExternal);
             crate::hal::arch::interrupt::irq_handler();
         }

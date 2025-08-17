@@ -36,6 +36,7 @@ use alloc::task;
 use alloc::vec::Vec;
 use core::intrinsics::unlikely;
 use core::mem::{size_of, uninitialized};
+use core::sync::atomic::{AtomicU32, AtomicUsize};
 use core::time::{self, Duration};
 use log::{debug, error, info};
 use lwext4_rust::bindings::true_;
@@ -649,8 +650,8 @@ pub fn sys_sysinfo(sysinfo: usize) -> SysResult<usize> {
 }
 
 pub fn sys_getuid() -> SysResult<usize> {
-    info!("[sys_getuid]: 0");
-    Ok(0)
+    // info!("[sys_getuid]: 0");
+    Ok(current_task().unwrap().get_euid())
 }
 
 /// examine and change blocked signals
@@ -718,7 +719,9 @@ pub fn sys_sigaction(signum: usize, act: usize, old_act: usize) -> SysResult<usi
     if old_act != 0 {
         let old_act = old_act as *mut SigAction;
         let cur_act = task.handler.lock().fetch_signal_handler(signum).sa;
-        unsafe { core::ptr::write(old_act, cur_act); };
+        unsafe {
+            core::ptr::write(old_act, cur_act);
+        };
     }
     if act != 0 {
         let mut new_act = unsafe { *(act as *const SigAction) };
@@ -730,7 +733,7 @@ pub fn sys_sigaction(signum: usize, act: usize, old_act: usize) -> SysResult<usi
             new_act.sa_handler,
             new_act.sa_flags
         );
- 
+
         match new_act.sa_handler {
             SIG_DFL => {
                 let new_kaction = KSigAction::new(signo);
@@ -777,7 +780,8 @@ pub fn sys_gettid() -> SysResult<usize> {
 }
 
 pub fn sys_geteuid() -> SysResult<usize> {
-    Ok(0)
+    // Ok(0)
+    Ok(current_task().unwrap().get_euid())
 }
 
 pub fn sys_getegid() -> SysResult<usize> {
@@ -814,7 +818,7 @@ pub fn sys_kill(pid: isize, signum: usize) -> SysResult<usize> {
         "[sys_kill] start, to kill pid = {}, signum = {}",
         pid, signum
     );
- 
+
     if unlikely(signum == 0) {
         return Ok(0);
     }
@@ -1393,9 +1397,14 @@ pub async fn sys_sigsuspend(mask: usize) -> SysResult<usize> {
     Err(Errno::EINTR)
 }
 
-pub fn sys_setuid() -> SysResult<usize> {
-    info!("[sys_setuid] start");
+// lazy_static! {
+//     pub static ref GLOBAL_UID: AtomicU32 = AtomicU32::new(0);
+// }
 
+pub fn sys_setuid(uid: usize) -> SysResult<usize> {
+    info!("[sys_setuid] set uid: {}", uid);
+    // GLOBAL_UID.store(uid as u32, core::sync::atomic::Ordering::Relaxed);
+    current_task().unwrap().set_euid(uid);
     Ok(0)
 }
 
