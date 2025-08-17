@@ -126,21 +126,21 @@ pub async fn user_trap_handler() {
                         .unwrap_or_else(|e| {
                             use log::error;
                             task.set_zombie();
-                            error!(
-                                "{:?} pc: {:#x} BADV: {:#x}",
-                                estat.cause(),
-                                era.pc(),
-                                badv::read().vaddr()
-                            );
+                            // error!(
+                            //     "{:?} pc: {:#x} BADV: {:#x}",
+                            //     estat.cause(),
+                            //     era.pc(),
+                            //     badv::read().vaddr()
+                            // );
                         });
                 }
                 Exception::InstructionNotExist => {
-                    error!(
-                        "{:?} pc: {:#x} BADV: {:#x}",
-                        estat.cause(),
-                        era.pc(),
-                        badv::read().vaddr()
-                    );
+                    // error!(
+                    //     "{:?} pc: {:#x} BADV: {:#x}",
+                    //     estat.cause(),
+                    //     era.pc(),
+                    //     badv::read().vaddr()
+                    // );
                     unsafe {
                         let pc = era.pc() as *const usize;
                         info!("[user_trap_handler] inst: {:b}", *pc);
@@ -165,7 +165,7 @@ pub async fn user_trap_handler() {
             unsafe {
                 let mut fcsr0 = current_trap_cx().float_regs.fcsr;
                 // asm!("movfcsr2gr {}, $fcsr0", out(reg) fcsr0);
-                error!("[user_trap_handler] fcsr: {:#b}", fcsr0);
+                // error!("[user_trap_handler] fcsr: {:#b}", fcsr0);
             }
             panic!(
                 "Cause:{:?} ecode:{:#x} is:{:#x} pc: {:#x} BADV: {:#x} BADI: {:#x}",

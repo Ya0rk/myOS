@@ -269,7 +269,7 @@ impl InodeTrait for Ext4Inode {
             .map_err(|_| Errno::EIO)
             .unwrap();
         let r = file.file_write(buf);
-        error!("ext4 inode write_directly res: {}", r.unwrap());
+        // error!("ext4 inode write_directly res: {}", r.unwrap());
         file.file_close()
             .expect("[write_directly]: file close fail!");
         r.map_err(|_| Errno::EIO).unwrap()
@@ -298,7 +298,7 @@ impl InodeTrait for Ext4Inode {
     }
     /// 同步文件
     async fn sync(&self) {
-        error!("[ext4Inode sync] do sync with pagecache");
+        // error!("[ext4Inode sync] do sync with pagecache");
         if let Some(cache) = &self.page_cache {
             cache.flush().await;
         }

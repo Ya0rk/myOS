@@ -164,7 +164,7 @@ impl Uart16550Driver {
             // Enable interrupts now
             reg.byte_add(IER << self.reg_shift).write_volatile(0x01);
         }
-        error!("UART initialized");
+        // error!("UART initialized");
     }
 
     fn init_u32(&self) {
@@ -343,7 +343,7 @@ impl<'b, 'a> PhysDriverProbe<'b, 'a> for Uart16550Driver {
 
         let interrupt = uart0.interrupts().next().map(|i| if i >= 64 {2} else {i}).or(Some(2));
 
-        error!("uart interrupt: {:?}", interrupt);
+        // error!("uart interrupt: {:?}", interrupt);
 
         let is_snps = compatible.contains("snps");
 

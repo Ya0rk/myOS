@@ -199,10 +199,10 @@ fn create_open_file(
     let parent_dentry = Dentry::get_dentry_from_path(parent_path)?;
     let parent_dir = parent_dentry.get_inode().ok_or(Errno::ENOTDIR)?;
     if !parent_dir.metadata()._type.is_dir() {
-        error!(
-            "[create_open_file] parent_dentry {} is not a directory",
-            parent_path
-        );
+        // error!(
+        //     "[create_open_file] parent_dentry {} is not a directory",
+        //     parent_path
+        // );
         return Err(Errno::ENOTDIR);
     }
     debug_point!("");

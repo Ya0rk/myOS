@@ -264,7 +264,7 @@ pub fn sys_shmctl(shmid: isize, op: isize, buf: *const u8) -> SysResult<usize> {
             Ok(0)
         }
         _ => {
-            error!("[sys_shmctl] unimplemented");
+            // error!("[sys_shmctl] unimplemented");
             Err(Errno::EINVAL)
         }
     }

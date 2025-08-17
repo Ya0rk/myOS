@@ -107,7 +107,7 @@ impl InodeTrait for DevTtyInode {
             ch = b'\n';
         }
         if termios.is_echo() {
-            error!("ECHO");
+            // error!("ECHO");
             print!("{}", ch as char);
         }
         buf[0] = ch;
@@ -170,7 +170,7 @@ impl InodeTrait for DevTtyInode {
                 }
                 TtyIoctlCmd::TCSBRK => Ok(0),
                 _ => {
-                    error!("[DevTty::ioctl] Unsupported command: {:?}", cmd);
+                    // error!("[DevTty::ioctl] Unsupported command: {:?}", cmd);
                     Err(Errno::EINVAL)
                 }
             }

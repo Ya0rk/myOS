@@ -514,7 +514,7 @@ impl TaskControlBlock {
             }
             None => {
                 use log::error;
-                error!("proc {} has no parent!", self.get_pid());
+                // error!("proc {} has no parent!", self.get_pid());
             }
         }
 

@@ -31,7 +31,7 @@ impl<U: Ord + Copy + Add<usize, Output = U>, V> RangeMap<U, V> {
             // xstart.......xend
             //        start.........end
             if *xend > range.start {
-                log::error!("[range map] try_insert error");
+                // log::error!("[range map] try_insert error");
                 return Err(value);
             }
         }

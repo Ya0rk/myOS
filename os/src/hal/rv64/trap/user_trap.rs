@@ -87,7 +87,7 @@ pub async fn user_trap_handler() {
                 use log::error;
                 task.set_zombie();
                 // println!("task {} 's children len = {}", task.get_pid(), task.children.lock().len());
-                error!("user trap: {:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
+                // error!("user trap: {:?} pc: {:#x} BADV: {:#x}", cause, sepc, stval);
             });;
 
 

@@ -1382,7 +1382,7 @@ pub fn sys_get_mempolicy() -> SysResult<usize> {
 pub async fn sys_sigsuspend(mask: usize) -> SysResult<usize> {
     info!("[sys_sigsuspend] start");
     if unlikely(mask == 0) {
-        error!("[sys_sigsuspend] mask invalid");
+        // error!("[sys_sigsuspend] mask invalid");
     }
     let mut mask = unsafe { *(mask as *const SigMask) };
     mask.remove(SigMask::SIGSTOP | SigMask::SIGKILL); // 不能屏蔽这两个信号

@@ -273,7 +273,7 @@ impl CharDevice for TtyStruct {
                 }
                 TtyIoctlCmd::TCSBRK => Ok(0),
                 _ => {
-                    error!("[DevTty::ioctl] Unsupported command: {:?}", cmd);
+                    // error!("[DevTty::ioctl] Unsupported command: {:?}", cmd);
                     Err(Errno::EINVAL)
                 }
             }

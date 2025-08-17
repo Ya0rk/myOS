@@ -357,7 +357,7 @@ impl InodeTrait for DevLoopInode {
                 Ok(0)
             }
             _ => {
-                error!("unimplemented or invalid loop ioctl: {}", &cmd);
+                // error!("unimplemented or invalid loop ioctl: {}", &cmd);
                 Err(Errno::EINVAL)
             }
         }
