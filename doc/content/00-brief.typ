@@ -8,7 +8,7 @@ Del0n1x 是一个使用 Rust 语言编写的同时适配 RISC-V64 和 LoongArch6
 
 Del0n1x 致力于实现高效清晰的代码逻辑，遵守 System Manual 手册，实现 105 个相关系统调用，并且对于其中大部分系统调用做了相对完善的错误检查和处理机制，这为我们后来适配ltp带来了便利。
 
-Del0n1x 初赛阶段的内核主要模块和完成情况如下表格：
+Del0n1x 内核主要模块和完成情况如下表格：
 
 #table(
   columns: (2.5cm, 12cm),  // 固定列宽，第一列1.2cm，第二列12cm
@@ -47,7 +47,11 @@ Del0n1x 初赛阶段的内核主要模块和完成情况如下表格：
   ],
   [网络模块], 
   [
-    初步完成网络模块相关代码，由于时间原因还没有适配通过网络测例
+    初步完成网络模块相关代码，通过了netperf网络测例
+  ],
+  [中断模块], 
+  [
+    支持外部中断，支持上板的串口中断处理
   ],
 )
 
@@ -63,6 +67,14 @@ Del0n1x 初赛阶段的内核主要模块和完成情况如下表格：
 )<Del0n1x整体架构图>
 
 #v(1em)
+
+#h(2em)截至8月17日决赛结束前，Del0n1x的排名如下图（决赛满分）：
+
+#figure(
+  image("assets/决赛排名.png"),
+  caption: [决赛排名],
+  supplement: [图]
+)
 
 #h(2em)截至6月30日初赛结束前，Del0n1x的排名如下图：
 
@@ -80,18 +92,19 @@ Del0n1x 初赛阶段的内核主要模块和完成情况如下表格：
 os
 ├── linker                  # 程序链接脚本
 ├── src
-│   ├── arch                # 架构相关的汇编
+│   ├── boards              # 架构相关的参数
 │   ├── driver              # 块设备驱动
-│   ├── fuse                # 文件系统
-│   ├── hal                 # 架构相关代码
+│   ├── fs                  # 文件系统
+│   ├── hal                 # 硬件抽象层
 │   ├── ipc                 # 进程间通信相关的部分代码
 │   ├── mm                  # 内存页表
-│   ├── net                 # 网络模块
-│   ├── signal              # 信号模块
-│   ├── task                # 任务控制块，任务调度
+│   ├── net                 # 网络
+│   ├── signal              # 信号
+│   ├── task                # TCB
 │   ├── utils               # 一些工具
 │   ├── sync                # 同步相关
 │   ├── syscall             # 系统调用
+│   ├── test                # 测试模块
 │   ├── entry_la.asm        # 龙芯入口初始化汇编函数
 │   ├── entry.asm           # riscv入口初始化函数
 │   ├── console.rs
@@ -107,8 +120,9 @@ user                        # 用户程序
 │   │   ├── initproc.rs     # 调用user_shell，进入自己实现的终端
 │   │   ├── mbshell.rs      # musl的busybox shell
 │   │   └── user_shell.rs
+doc                         # 设计文档
 vendor                      # 第三方依赖
-report                      # 文档
+report                      # 过程文档
 bootloader                  # 引导加载程序
 ```
 

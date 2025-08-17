@@ -8,6 +8,7 @@
 
 - 初赛阶段幻灯片、演示视频：[百度网盘](https://pan.baidu.com/s/19P5LKVmHvv3Uh7tCzk3CPA?pwd=nm92) 提取码: nm92
 - 初赛文档：[Del0n1x初赛文档](./Del0n1x初赛文档.pdf)
+- 决赛文档：[Del0n1x决赛文档] TODO
 
 Del0n1x 是一个使用 Rust 语言编写的同时适配 RISC-V64 和 LoongArch64 的跨平台操作系统，目标是实现一个 Linux 兼容的多核操作系统，支持进程调度、文件系统、网络等功能。
 
@@ -19,10 +20,13 @@ Del0n1x 是一个使用 Rust 语言编写的同时适配 RISC-V64 和 LoongArch6
 | 内存管理 | 实现基本的内存管理功能； 实现CoW、懒分配内存优化    |
 | 时钟模块 | 实现时间轮混合最小堆的数据结构管理方式； 支持定时器唤醒机制    |
 | IPC系统 | 支持处理用户自定义信号和sigreturn机制； 实现支持读者写者同步的管道机制； 支持 System V 共享内存    |
-| 网络模块 | 初步完成网络模块相关代码，由于时间原因还没有适配通过网络测例    |
-
+| 网络模块 | 初步完成网络模块相关代码，通过了netperf网络测例    |
+| 中断模块   | 支持外部中断，支持上板的串口中断处理    |
 
 ![](./report/image/整体架构图.png)
+
+截止8月17日决赛结束前，Del0n1x的排名如下（决赛测例满分）：
+![](./report/image/决赛分数.png)
 
 截至6月30日初赛结束前，Del0n1x的排名如下图：
 
@@ -34,10 +38,10 @@ Del0n1x 是一个使用 Rust 语言编写的同时适配 RISC-V64 和 LoongArch6
 os
 ├── linker                  # 程序链接脚本
 ├── src
-│   ├── arch                # 架构相关的汇编
+│   ├── boards              # 架构相关的参数
 │   ├── driver              # 块设备驱动
-│   ├── fuse                # 文件系统
-│   ├── hal                 # 架构相关代码
+│   ├── fs                  # 文件系统
+│   ├── hal                 # 硬件抽象层
 │   ├── ipc                 # 进程间通信相关的部分代码
 │   ├── mm                  # 内存页表
 │   ├── net                 # 网络
@@ -46,6 +50,7 @@ os
 │   ├── utils               # 一些工具
 │   ├── sync                # 同步相关
 │   ├── syscall             # 系统调用
+│   ├── test                # 测试模块
 │   ├── entry_la.asm        # 龙芯入口初始化汇编函数
 │   ├── entry.asm           # riscv入口初始化函数
 │   ├── console.rs
@@ -61,8 +66,9 @@ user                        # 用户程序
 │   │   ├── initproc.rs     # 调用user_shell，进入自己实现的终端
 │   │   ├── mbshell.rs      # musl的busybox shell
 │   │   └── user_shell.rs
+doc                         # 设计文档
 vendor                      # 第三方依赖
-report                      # 文档
+report                      # 过程文档
 bootloader                  # 引导加载程序
 ```
 
@@ -100,9 +106,6 @@ bootloader                  # 引导加载程序
 
 - 完善net模块，支持网络上板。
 - 完善loop设备，实现功能更加完善的mount机制。
-- 适配龙芯板和riscv板，完善相关驱动。
-- 支持外设中断。
-- 支持更多ltp测例，修复更多内核不稳定的bug。
 - 支持更多现实应用。
 
 ## 参考
@@ -110,6 +113,7 @@ bootloader                  # 引导加载程序
 - [Phoenix](https://github.com/ChenRuiwei/Phoenix)：无栈协程、内存管理
 - [Polyhal](https://github.com/Byte-OS/polyhal)，[NPUCore-­IMPACT](https://gitlab.eduxiji.net/educg-group-26011-2376549/T202410699992496-312)： 硬件抽象层
 - [Phoenix](https://github.com/ChenRuiwei/Phoenix)、[MinotaurOS](https://github.com/Dr-TSNG/MinotaurOS)：设计文档模板
+- [MankorOs](https://gitlab.eduxiji.net/MankorOS/OSKernel2023-MankorOS)：星光二板块设备驱动
 
 ## 工具链
 
