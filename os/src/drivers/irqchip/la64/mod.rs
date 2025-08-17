@@ -2,7 +2,7 @@ pub mod loongson_eiointc;
 pub mod loongson_liointc;
 pub mod loongson_pch_pic;
 
-use {crate::{drivers::{device_new::manager::DeviceManager, irqchip::IrqController as _}, hal::DEVICE_ADDR_OFFSET}, alloc::sync::Arc};
+use {crate::{drivers::{device::manager::DeviceManager, irqchip::IrqController as _}, hal::DEVICE_ADDR_OFFSET}, alloc::sync::Arc};
 pub use {
     loongson_pch_pic::PCHIntController,
     loongson_liointc::LocalIOIntController,

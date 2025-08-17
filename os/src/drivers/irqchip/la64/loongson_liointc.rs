@@ -34,7 +34,7 @@ use alloc::sync::Arc;
 use bitflags::bitflags;
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::{drivers::{device_new::dev_core::{PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::DEVICE_ADDR_OFFSET};
+use crate::{drivers::{device::dev_core::{PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::DEVICE_ADDR_OFFSET};
 
 // 根据龙芯 3A5000 用户手册，定义的寄存器偏移地址
 // const OFFSET_INTISR: usize = 0x1420;

@@ -5,7 +5,7 @@ use loongarch64::register::ecfg::LineBasedInterrupt;
 use loongarch64::register::estat::{Exception, Interrupt, Trap};
 use loongarch64::register::*;
 
-use crate::drivers::device_new::manager::DEVICE_MANAGER;
+use crate::drivers::device::manager::DEVICE_MANAGER;
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{disable_supervisor_interrupt, set_next_trigger, TIMER_QUEUE};
 use crate::task::{current_task, get_current_cpu, get_current_hart_id, set_ktrap_ret};

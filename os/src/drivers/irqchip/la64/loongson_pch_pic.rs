@@ -9,7 +9,7 @@ use bitflags::bitflags;
 use log::error;
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::{drivers::{device_new::dev_core::{PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::DEVICE_ADDR_OFFSET};
+use crate::{drivers::{device::dev_core::{PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::DEVICE_ADDR_OFFSET};
 
 // Register offsets from Loongson 7A documentation (Table 5-3)
 const OFFSET_INT_ID_L: usize = 0x000;
