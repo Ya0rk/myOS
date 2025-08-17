@@ -12,8 +12,7 @@ Del0n1x 基于 RISCV qemu、LoongArch qemu、龙芯2k1000、StarFiveVison平台�
 
 目前基于 LoongArch 的处理器只能和 LS7A 芯片组工作。LoongArch计算机
 中的中断控制器（即IRQ芯片）包括CPUINTC（CPU Core Interrupt Controller）、LIOINTC（
-Legacy I/O Interrupt Controller）、EIOINTC（Extended I/O Interrupt Controller）、
-HTVECINTC（Hyper-Transport Vector Interrupt Controller）、PCH-PIC（LS7A芯片组的主中
+Legacy I/O Interrupt Controller）、EIOINTC（Extended I/O Interrupt Controller）、PCH-PIC（LS7A芯片组的主中
 断控制器）、PCH-LPC（LS7A芯片组的LPC中断控制器）和PCH-MSI（MSI中断控制器）。
 
 我们基于 LoongArch 平台的中断模型，对 LIOINTC、EIOINTC、PCH-PIC 进行抽象与配置
