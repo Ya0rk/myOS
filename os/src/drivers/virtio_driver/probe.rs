@@ -4,6 +4,7 @@
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hashbrown::HashMap;
 use log::info;
+use crate::drivers::device_new::dev_number::{BlockMajorNum, MajorNumber};
 use crate::drivers::{register_block_device, BlockDriver, VirtIoBlkDev};
 use crate::hal::config::KERNEL_ADDR_OFFSET;
 use crate::sync::SpinNoIrqLock;
@@ -129,7 +130,7 @@ pub fn probe_vf2sd(sdionode: &FdtNode) {
         Some(a) => a,
     };
     // 创建 SDIO 设备
-    let sd_device = Vf2SDIO::new(base_address, size, interrupt_number);
+    let sd_device = Vf2SDIO::new(base_address, size, interrupt_number, BlockMajorNum::MmcBlock, 0);
     sd_device.card_init();
     println!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
     register_block_device(Arc::new(sd_device));
@@ -166,7 +167,7 @@ fn virtio_blk<T: Transport + 'static>(transport: T) {
     // }
     // println!("virtio-blk test finished");
     info!("create a virtio block device");
-    let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport));
+    let mut blk = Arc::new(VirtIoBlkDev::<VirtIoHalImpl, T>::new(transport, MajorNumber::Block(BlockMajorNum::VirtBlock), 0));
     info!("register");
     register_block_device(blk);
     info!("finished register");

@@ -25,7 +25,7 @@ const MUSL_LTP: &[&str] = &[
 ];
 
 const GLIBC_LTP: &[&str] = &[
-    // "/ltp_testcode_glibc.sh\0"
+    "/ltp_testcode_glibc.sh\0"
 ];
 
 const MUSL_TESTCASES: &[&str] = &[
@@ -42,7 +42,6 @@ const MUSL_TESTCASES: &[&str] = &[
 
 /// glibc 不跑libctest
 const GLIBC_TESTCASES: &[&str] = &[
-    // "./libctest_testcode.sh\0",
     "./lua_testcode.sh\0",
     "./libcbench_testcode.sh\0",
     "./iozone_testcode.sh\0",

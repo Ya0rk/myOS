@@ -1,4 +1,7 @@
-pub const UART_ADDR: usize = 0x0_1FE0_01E0 + 0x9000_0000_0000_0000;
+#[cfg(feature = "board_qemu")]
+pub const UART_ADDR: usize = 0x0_1FE0_01E0 + 0x8000_0000_0000_0000;
+#[cfg(feature = "2k1000la")]
+pub const UART_ADDR: usize = 0x0_1FE0_0000 + 0x8000_0000_0000_0000;
 
 pub const TICKS_PER_SEC: usize = 100;
 pub const MSEC_PER_SEC: usize = 1000;
@@ -20,6 +23,8 @@ pub const KB: usize = 1024;
 #[allow(unused)]
 pub const MB: usize = 1024 * KB;
 
+pub const GB: usize = 1024 * MB;
+
 // mm
 // TODO:目前是有栈协程，如果将userstack修改为8MB，kernelstack修改为64kB，会导致Kerenlstack爆栈
 // 如果是无栈协程就不会
@@ -37,6 +42,7 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
 // #[cfg(target_arch = "loongarch64")]
 pub const KERNEL_ADDR_OFFSET: usize = 0x9000_0000_0000_0000;
+pub const DEVICE_ADDR_OFFSET: usize = 0x8000_0000_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
 
 pub const KERNEL_PG_ADDR_BASE: usize = 0xffff_ffc0_0000_0000;

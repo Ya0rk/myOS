@@ -27,13 +27,12 @@ pub struct Stdin {
 impl Stdin {
     pub fn new() -> Self {
         Self {
-            metadata: FileMeta::new(
-                OpenFlags::O_RDONLY,
-                DummyInode::new(InodeType::CharDevice, "stdin")
-            ),
-            #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
-            inode: SBI_TTY.clone(),
-            #[cfg(feature = "vf2")]
+            // #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+            // inode: SBI_TTY_INODE.clone(),
+            // #[cfg(feature = "vf2")]
+            #[cfg(target_arch = "loongarch64")]
+            inode: VF2_TTY_INODE.clone(),
+            #[cfg(target_arch = "riscv64")]
             inode: VF2_TTY_INODE.clone(),
         }
     }
@@ -123,13 +122,12 @@ pub struct Stdout {
 impl Stdout {
     pub fn new() -> Self {
         Self {
-            metadata: FileMeta::new(
-                OpenFlags::O_WRONLY,
-                DummyInode::new(InodeType::CharDevice, "stdout")
-            ),
-            #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
-            inode: SBI_TTY.clone(),
-            #[cfg(feature = "vf2")]
+            // #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+            // inode: SBI_TTY_INODE.clone(),
+            // #[cfg(feature = "vf2")]
+            #[cfg(target_arch = "loongarch64")]
+            inode: VF2_TTY_INODE.clone(),
+            #[cfg(target_arch = "riscv64")]
             inode: VF2_TTY_INODE.clone(),
         }
     }

@@ -47,6 +47,18 @@ o888bood8P'   `Y8bod8P' o888o  `Y8bd8P'  o888o o888o o888o o88'   888o
                                                         
     "#
     );
+    #[cfg(feature = "board_qemu")]
+    {
+        println!("Platform: Qemu 7.0.0 Virt");
+    }
+    #[cfg(feature = "vf2")]
+    {
+        println!("Platform: Starfive Visionfive2");
+    }
+    #[cfg(feature = "2k1000la")]
+    {
+        println!("Platform: Loongson 2K1000");
+    }
 }
 
 pub fn clear_bss() {

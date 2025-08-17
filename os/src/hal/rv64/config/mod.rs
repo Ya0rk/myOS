@@ -28,6 +28,7 @@ pub const PAGE_TABLE_LEVEL_NUM: usize = 3;
 
 // TODO: no longer addr offset
 pub const KERNEL_ADDR_OFFSET: usize = 0xffff_ffc0_0000_0000;
+pub const DEVICE_ADDR_OFFSET: usize = 0xffff_ffc0_0000_0000;
 // When directly map: vpn = ppn + kernel direct offset
 pub const KERNEL_PG_ADDR_BASE: usize = 0xffff_ffc0_0000_0000;
 pub const KERNEL_PGNUM_BASE: usize = KERNEL_PG_ADDR_BASE >> PAGE_SIZE_BITS;

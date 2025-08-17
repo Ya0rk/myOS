@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 #[cfg(target_arch = "riscv64")]
 use riscv::register::{sie, sstatus};
 
-use crate::{drivers::{device_new::manager::DEVICE_MANAGER}, START_HART_ID};
+use crate::{drivers::{device_new::manager::DEVICE_MANAGER, irqchip::riscv_plic::{IntrTargetPriority, PLIC}}, START_HART_ID};
 
 const VIRT_PLIC: usize = 0xffff_ffc0_0000_0000 + 0xC00_0000;
 
@@ -55,24 +55,24 @@ pub unsafe fn disenable_supervisor_extern_interrupt() {
 }
 
 pub fn plic_init() {
-    use crate::hal::arch::plic::*;
+    // use crate::hal::arch::plic::*;
     use riscv::register::sie;
-    let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
-    // let hart_id: usize = START_HART_ID.load(Ordering::SeqCst);
-    let supervisor = IntrTargetPriority::Supervisor;
-    let machine = IntrTargetPriority::Machine;
-    // 设置PLIC中外设中断的阈值
-    for hart_id in 0..2 {
-        plic.set_threshold(hart_id, supervisor, 0);
-        plic.set_threshold(hart_id, machine, 0);
-        // 使能PLIC在CPU处于S-Mode下传递键盘/鼠标/块设备/串口外设中断
-        // irq nums: 5 keyboard, 6 mouse, 8 block, 32 uart
-        for intr_src_id in [5usize, 6, 8, 10, 32] {
-            plic.enable(hart_id, supervisor, intr_src_id);
-            plic.enable(hart_id, machine, intr_src_id);
-            plic.set_priority(intr_src_id, 6);
-        }
-    }
+    // let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
+    // // let hart_id: usize = START_HART_ID.load(Ordering::SeqCst);
+    // let supervisor = IntrTargetPriority::Supervisor;
+    // let machine = IntrTargetPriority::Machine;
+    // // 设置PLIC中外设中断的阈值
+    // for hart_id in 0..2 {
+    //     plic.set_threshold(hart_id, supervisor, 0);
+    //     plic.set_threshold(hart_id, machine, 0);
+    //     // 使能PLIC在CPU处于S-Mode下传递键盘/鼠标/块设备/串口外设中断
+    //     // irq nums: 5 keyboard, 6 mouse, 8 block, 32 uart
+    //     for intr_src_id in [5usize, 6, 8, 10, 32] {
+    //         plic.enable(hart_id, supervisor, intr_src_id);
+    //         plic.enable(hart_id, machine, intr_src_id);
+    //         plic.set_priority(intr_src_id, 6);
+    //     }
+    // }
 
     // 设置S-Mode CPU使能中断
     unsafe {
@@ -83,13 +83,14 @@ pub fn plic_init() {
     }
 }
 pub fn irq_handler() {
-    use crate::hal::arch::plic::*;
+    // use crate::hal::arch::plic::*;
     use riscv::register::sie;
     disable_supervisor_interrupt();
-    let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
+    // let mut plic = unsafe { PLIC::new(VIRT_PLIC) };
     let hart_id = START_HART_ID.load(Ordering::SeqCst);
-    let intr_src_id = plic.claim(hart_id, IntrTargetPriority::Supervisor);
-    DEVICE_MANAGER.read().handle_irq(intr_src_id as usize);
+    // let intr_src_id = plic.claim(hart_id, IntrTargetPriority::Supervisor);
+    // let irq_src_id = DEVICE_MANAGER.read().ICU.unwrap().claim_irq(hart_id).unwrap();
+    DEVICE_MANAGER.read().handle_irq(hart_id as usize);
     // use log::info;
     // match intr_src_id {
     //     5 => info!("[irq_handler] extern irq from keyboard"),
@@ -102,7 +103,7 @@ pub fn irq_handler() {
     //     },
     //     _ => panic!("unsupported IRQ {}", intr_src_id),
     // }
-    plic.complete(hart_id, IntrTargetPriority::Supervisor, intr_src_id);
+    // plic.complete(hart_id, IntrTargetPriority::Supervisor, irq_src_id);
 }
 
 /// A guard that disable interrupt when it is created and enable interrupt when it is dropped.

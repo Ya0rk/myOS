@@ -4,7 +4,18 @@ use log::{error, info};
 #[cfg(target_arch = "riscv64")]
 use riscv::addr::PhysAddr;
 
-use crate::{drivers::{device_new::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, tty::serial::UartDriver}, hal::{arch::interrupt, config::KERNEL_ADDR_OFFSET}, utils::SysResult};
+use crate::{
+    drivers::{
+        device_new::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, 
+        tty::serial::UartDriver
+    }, 
+    hal::{
+        arch::interrupt, 
+        config::KERNEL_ADDR_OFFSET, 
+        config::DEVICE_ADDR_OFFSET
+    }, 
+    utils::SysResult
+};
 
 
 
@@ -297,8 +308,8 @@ impl UartDriver for Uart16550Driver {
     }
 }
 
-impl PhysDriverProbe for Uart16550Driver {
-    fn probe(fdt: &flat_device_tree::Fdt) -> Option<Arc<Self>> {
+impl<'b, 'a> PhysDriverProbe<'b, 'a> for Uart16550Driver {
+    fn probe(fdt: &'b flat_device_tree::Fdt<'a>) -> Option<Arc<Self>> {
         // todo!()
         let chosen_stdout = fdt.chosen().ok().and_then(|chosen| chosen.stdout());
         // let Some(chosen_stdout) = chosen_stdout else {
@@ -330,12 +341,13 @@ impl PhysDriverProbe for Uart16550Driver {
             .and_then( |p| p.as_usize())
             .unwrap_or(0); 
 
-        let interrupt = uart0.interrupts().next();
+        let interrupt = uart0.interrupts().next().or(Some(2));
+        error!("uart interrupt: {:?}", interrupt);
 
         let is_snps = compatible.contains("snps");
 
         let uart_driver = Arc::new(Uart16550Driver::new(
-            mmio_base + KERNEL_ADDR_OFFSET,
+            mmio_base + DEVICE_ADDR_OFFSET,
             clock_frequency,
             115200,
             reg_io_width,

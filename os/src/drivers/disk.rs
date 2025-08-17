@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 use log::{debug, error, info, warn};
 use lwext4_rust::KernelDevOp;
 
-use crate::{drivers::BlockDriver, utils::logger};
+use crate::{drivers::{device_new::BlockDevice, BlockDriver}, utils::logger};
 
 use super::DevResult;
 
@@ -12,12 +12,12 @@ const BLOCK_SIZE: usize = 512;
 pub struct Disk {
     block_id: usize,
     offset: usize,
-    dev: Arc<dyn BlockDriver>,
+    dev: Arc<dyn BlockDevice>,
 }
 
 impl Disk {
     /// Create a new disk.
-    pub fn new(dev: Arc<dyn BlockDriver>) -> Self {
+    pub fn new(dev: Arc<dyn BlockDevice>) -> Self {
         log::info!("create a new disk");
         assert_eq!(BLOCK_SIZE, dev.block_size());
         Self {

@@ -1,6 +1,7 @@
 pub mod context;
 pub mod kernel_trap;
 pub mod user_trap;
+pub mod unaligned;
 
 use alloc::sync::Arc;
 use core::arch::global_asm;
@@ -43,6 +44,7 @@ extern "C" {
     fn __return_to_user(ctx: *mut TrapContext);
 }
 
+#[inline(always)]
 pub fn init() {
     set_trap_handler(IndertifyMode::Kernel);
 }

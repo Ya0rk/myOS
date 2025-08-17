@@ -99,117 +99,17 @@ pub struct GPRegs {
     pub s8: usize,
 }
 
-macro_rules! reg_by_num {
-    // 基础寄存器组（r0-r3）
-    ($cx:ident.0) => {
-        $cx.user_gp.zero
-    };
-    ($cx:ident.1) => {
-        $cx.user_gp.ra
-    };
-    ($cx:ident.2) => {
-        $cx.user_gp.tp
-    };
-    ($cx:ident.3) => {
-        $cx.user_gp.sp
-    };
-
-    // 参数/返回值寄存器（r4-r11）
-    ($cx:ident.4) => {
-        $cx.user_gp.a0
-    };
-    ($cx:ident.5) => {
-        $cx.user_gp.a1
-    };
-    ($cx:ident.6) => {
-        $cx.user_gp.a2
-    };
-    ($cx:ident.7) => {
-        $cx.user_gp.a3
-    };
-    ($cx:ident.8) => {
-        $cx.user_gp.a4
-    };
-    ($cx:ident.9) => {
-        $cx.user_gp.a5
-    };
-    ($cx:ident.10) => {
-        $cx.user_gp.a6
-    };
-    ($cx:ident.11) => {
-        $cx.user_gp.a7
-    };
-
-    // 临时寄存器（r12-r20）
-    ($cx:ident.12) => {
-        $cx.user_gp.t0
-    };
-    ($cx:ident.13) => {
-        $cx.user_gp.t1
-    };
-    ($cx:ident.14) => {
-        $cx.user_gp.t2
-    };
-    ($cx:ident.15) => {
-        $cx.user_gp.t3
-    };
-    ($cx:ident.16) => {
-        $cx.user_gp.t4
-    };
-    ($cx:ident.17) => {
-        $cx.user_gp.t5
-    };
-    ($cx:ident.18) => {
-        $cx.user_gp.t6
-    };
-    ($cx:ident.19) => {
-        $cx.user_gp.t7
-    };
-    ($cx:ident.20) => {
-        $cx.user_gp.t8
-    };
-
-    // 保留寄存器（r21）
-    ($cx:ident.21) => {
-        $cx.user_gp.r21
-    };
-
-    // 帧指针/静态寄存器（r22-r31）
-    ($cx:ident.22) => {
-        $cx.user_gp.fp
-    }; // fp对应r22
-    ($cx:ident.23) => {
-        $cx.user_gp.s0
-    };
-    ($cx:ident.24) => {
-        $cx.user_gp.s1
-    };
-    ($cx:ident.25) => {
-        $cx.user_gp.s2
-    };
-    ($cx:ident.26) => {
-        $cx.user_gp.s3
-    };
-    ($cx:ident.27) => {
-        $cx.user_gp.s4
-    };
-    ($cx:ident.28) => {
-        $cx.user_gp.s5
-    };
-    ($cx:ident.29) => {
-        $cx.user_gp.s6
-    };
-    ($cx:ident.30) => {
-        $cx.user_gp.s7
-    };
-    ($cx:ident.31) => {
-        $cx.user_gp.s8
-    };
-}
 
 impl GPRegs {
     pub fn new() -> Self {
         Self::default()
+    }
+    pub fn as_slice(&self) -> &[usize; 32] {
+        unsafe { core::mem::transmute(self) }
+        // core::slice::from_raw_parts(self as *const usize, 32)
+    }
+    pub fn as_mut_slice(&mut self) -> &mut [usize; 32] {
+        unsafe { core::mem::transmute(self) }
     }
 }
 
@@ -237,6 +137,10 @@ impl TrapContext {
         cx.set_sp(sp);
         cx
     }
+    pub fn gp_regs(&mut self) -> &mut [usize; 32] {
+        self.user_gp.as_mut_slice()
+    }
+
     /// 设置context参数
     pub fn set_arg(&mut self, argc: usize, argv: usize, env: usize) {
         self.user_gp.a0 = argc;

@@ -1,5 +1,8 @@
+use crate::{drivers::device_new::dev_core::{PhysDriver, PhysDriverProbe}, hal::config::DEVICE_ADDR_OFFSET};
+
 use super::probe::virtio_device;
 use super::VirtIoHalImpl;
+use alloc::sync::Arc;
 use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use log::info;
 use zerocopy::IntoBytes;
@@ -34,7 +37,7 @@ use virtio_drivers::{
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum PciRangeType {
+pub enum PciRangeType {
     ConfigurationSpace,
     IoSpace,
     Memory32,
@@ -82,7 +85,7 @@ pub fn enumerate_pci(pci_node: FdtNode, cam: Cam) {
 
         let mut pci_root = PciRoot::new(unsafe {
             MmioCam::new(
-                (region.starting_address as usize + 0x9000_0000_0000_0000) as *mut u8,
+                (region.starting_address as usize + DEVICE_ADDR_OFFSET) as *mut u8,
                 cam,
             )
         });
@@ -115,8 +118,12 @@ pub fn enumerate_pci(pci_node: FdtNode, cam: Cam) {
     }
 }
 
+pub trait PciDriverProbe<'b, 'a: 'b>: PhysDriverProbe<'b, 'a> {
+    fn probe_pci(pci_node: FdtNode<'b, 'a>, cam: Cam) -> Option<Arc<Self>>;
+}
+
 /// Allocates 32-bit memory addresses for PCI BARs.
-struct PciMemory32Allocator {
+pub struct PciMemory32Allocator {
     start: u32,
     end: u32,
 }
@@ -183,7 +190,7 @@ const fn align_up(value: u32, alignment: u32) -> u32 {
     ((value - 1) | (alignment - 1)) + 1
 }
 
-fn dump_bar_contents(
+pub fn dump_bar_contents(
     root: &mut PciRoot<impl ConfigurationAccess>,
     device_function: DeviceFunction,
     bar_index: u8,
@@ -207,7 +214,7 @@ fn dump_bar_contents(
 }
 
 /// Allocates appropriately-sized memory regions and assigns them to the device's BARs.
-fn allocate_bars(
+pub fn allocate_bars(
     root: &mut PciRoot<impl ConfigurationAccess>,
     device_function: DeviceFunction,
     allocator: &mut PciMemory32Allocator,

@@ -41,7 +41,12 @@ pub async fn user_trap_handler() {
         }
         Trap::Interrupt(Interrupt::HWI0) => {
             // 中断0 --- 外部中断处理
-            unimplemented!("loongarch64 Trap::Interrupt(Interrupt::HWI0)");
+            // unimplemented!("loongarch64 Trap::Interrupt(Interrupt::HWI0)");
+
+            use crate::drivers::device_new::manager::DEVICE_MANAGER;
+            // disable_supervisor_interrupt();
+            let hart_id = get_current_hart_id();
+            DEVICE_MANAGER.read().handle_irq(hart_id);
         }
 
         Trap::Exception(e) => {
@@ -80,6 +85,14 @@ pub async fn user_trap_handler() {
                             }
                         }
                     }
+                }
+                Exception::AddressNotAligned => {
+                    // panic!("{:?} pc: {:#x}", estat.cause(), era.pc());
+
+                    // use crate::hal::trap::unaligned::emulate_load_store_insn;
+
+                    use crate::hal::trap::unaligned::emulate_load_store_insn;
+                    unsafe { emulate_load_store_insn(current_trap_cx()) };
                 }
 
                 Exception::LoadPageFault

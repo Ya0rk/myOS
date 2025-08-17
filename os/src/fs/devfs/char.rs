@@ -2,7 +2,7 @@ use core::{future::Future, task::Waker};
 use alloc::{boxed::Box, string::{String, ToString}, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 
-use crate::{drivers::{device_new::{dev_number::MajorNumber, manager::DEVICE_MANAGER}, tty::tty_core::{CharDevice, TtyIoctlCmd}}, fs::{Dirent, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, Page, PageCache, S_IFCHR}, sync::{block_on, SpinNoIrqLock, TimeStamp}, utils::{downcast::Downcast, Errno, SysResult}};
+use crate::{drivers::{device_new::{dev_number::{CharMajorNum, MajorNumber}, manager::DEVICE_MANAGER}, tty::tty_core::{CharDevice, TtyIoctlCmd}}, fs::{Dirent, FileMeta, FileTrait, InodeMeta, InodeTrait, InodeType, Kstat, OpenFlags, Page, PageCache, S_IFCHR}, sync::{block_on, SpinNoIrqLock, TimeStamp}, utils::{downcast::Downcast, Errno, SysResult}};
 
 pub struct CharDev {
     metadata: FileMeta,
@@ -87,10 +87,10 @@ impl CharDevInode {
                 "/dev/tty",
             ),
             dev: DEVICE_MANAGER.read()
-                .get_device(MajorNumber::Tty, 64)
+                .get_char_dev(CharMajorNum::Tty, 64)
                 .unwrap()
-                .as_char()
-                .unwrap()
+                // .as_char()
+                // .unwrap()
         })
     }
     pub fn poll_in(&self) -> impl Future<Output = bool> + use<'_> {
