@@ -341,7 +341,8 @@ impl<'b, 'a> PhysDriverProbe<'b, 'a> for Uart16550Driver {
             .and_then( |p| p.as_usize())
             .unwrap_or(0); 
 
-        let interrupt = uart0.interrupts().next().or(Some(2));
+        let interrupt = uart0.interrupts().next().map(|i| if i >= 64 {2} else {i}).or(Some(2));
+
         error!("uart interrupt: {:?}", interrupt);
 
         let is_snps = compatible.contains("snps");
