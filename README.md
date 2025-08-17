@@ -81,7 +81,7 @@ bootloader                  # 引导加载程序
 
 - 第一次运行需要在项目根目录准备`sdcard-rv.img`和`sdcard-la.img`(可以从官方的github测试仓库下载并编译)
 - `ARCH`: 内核架构，如果不加该参数默认是`riscv`；如果需要龙芯，则：`ARCH = loongarch64`
-- `OVERWRITE`：因为我的os实现了真正的向镜像img读和写，为了避免破坏镜像，该参数回复制一份img用于挂载
+- `OVERWRITE`：Del0n1x实现了真正的向镜像img读和写，为了避免破坏镜像，该参数回复制一份img用于挂载
 
 
 ## 项目调试
