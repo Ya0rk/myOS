@@ -4,9 +4,39 @@
 
 在网络模块中，我们使用了官方推荐的smoltcp库作为网络协议栈的底层处理，该库具有十分高效的网络协议栈处理，同时通过 Rust 内存安全、事件驱动模型和高度模块化设计，成为资源受限内核场景的理想网络栈。
 
-为了体现Linux中“一切皆文件”的思想，我们为网络系统中的关键结构体`Socket`实现了`Filetrait`，统一了网络和文件系统，方便内核设计中对其进行高效管理。在此基础上，我们对网络模块实现分层架构设计，从下至上依次为物理网络驱动层、传输层、Socket接口层。
+为了体现Linux中“一切皆文件”的思想，我们为网络系统中的关键结构体`Socket`实现了设计了`Socket File`和`Socket Inode`结构体，统一了网络和文件系统，方便内核设计中对其进行高效管理。在此基础上，我们对网络模块实现分层架构设计，从下至上依次为物理网络驱动层、传输层、Socket接口层。
 
-目前在初赛阶段我们实现了一个简单的本地回环网络，但是由于时间原因，还未适配通过netperf、iperf网络测例，不过这也是我们在决赛阶段的一个目标，努力实现一个简洁高效、易于学习的网络系统模块。
+目前我们实现了一个简单的本地回环网络，通过了netperf网络测例。
+
+== Socket File & Socket Inode
+<Socket File & Socket Inode>
+
+`Socket File`和`Socket Inode`结构设计如下：
+#code-figure(
+```rust
+pub struct SocketFile {
+    pub metadata: FileMeta
+}
+pub struct SocketInode {
+    pub metadata: InodeMeta,
+    pub socket: Arc<dyn Socket>,
+}
+
+/// socket file和socket之间的桥梁
+fn get_socket(&self) -> SysResult<Arc<dyn Socket>> {
+    let inode = self.metadata().inode.clone();
+    let socketinode = inode.downcast_arc::<SocketInode>().unwrap();
+    Ok(socketinode.socket.clone())
+}
+```,
+    caption: [Socket File 和 Inode 结构设计],
+    label-name: "socket file and inode",
+)
+
+当内核在调用`sys_socket`系统调用时，就会可以直接创建`Socket File`，然后将其存放在`FdTable`中，与普通文件进行统一的管理。
+同时为了通过`Socket File`获取到`Socket`类型对象，我们为`Socket File`实现了`get_socket`接口，因为`Socket Inode`中维护了
+`dyn Socket`类型对象，所以我们可以使用`downcast_arc`进行动态类型转化。
+
 
 == Socket套接字
 <Socket套接字>
@@ -54,7 +84,7 @@ pub struct SockMeta {
 #code-figure(
 ```rust
 #[async_trait]
-pub trait Socket: FileTrait {
+pub trait Socket: Send + Sync {
     /// 异步接受一个传入的连接请求
     async fn accept(&self, flags: OpenFlags) 
         -> SysResult<(IpEndpoint, usize)>;
@@ -86,7 +116,7 @@ pub trait Socket: FileTrait {
     label-name: "socket-trait",
 )
 
-#h(2em)该trait标记为`async_trait`以适应现代异步IO需求，同时继承`FileTrait`实现了文件描述符的统一管理，可以通过`Filetrait`中的`pollin`、`pollout`异步检查网络缓冲区是否可读可写。
+// #h(2em)该trait标记为`async_trait`以适应现代异步IO需求，同时继承`FileTrait`实现了文件描述符的统一管理，可以通过`Filetrait`中的`pollin`、`pollout`异步检查网络缓冲区是否可读可写。
 // #code-figure(
 // ```rust
 // #[async_trait]
