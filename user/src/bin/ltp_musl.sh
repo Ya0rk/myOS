@@ -6,6 +6,7 @@ echo "#### OS COMP TEST GROUP START ltp-musl ####"
 target_dir="/musl/ltp/testcases/bin"
 
 backip="
+access01 
 accept01 accept4_01
 add_key01 add_key04
 adjtimex01
@@ -175,6 +176,7 @@ waitid01 waitid04 waitid05 waitid06 waitid11
 # you can add prog you want to test.if it succeed, you can put it in var backip.
 # from jdlu
 ltp_cases="
+access01
 accept01 accept4_01
 add_key01 add_key04
 adjtimex01
