@@ -1,8 +1,8 @@
 use crate::fs::ext4::NormalFile;
 use crate::fs::{
     chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType,
-    Kstat, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, StxMask, UmountFlags,
-    MNT_TABLE, SEEK_CUR,
+    Kstat, MountFlags, OpenFlags, Pipe, RenameFlags, Statx, StxMask, UmountFlags, MNT_TABLE,
+    SEEK_CUR,
 };
 use crate::hal::config::{AT_FDCWD, PAGE_SIZE, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
 use crate::mm::user_ptr::{check_readable, user_cstr, user_ref_mut, user_slice, user_slice_mut};
@@ -1131,6 +1131,9 @@ pub async fn sys_sendfile(
 /// determine accessibility of a file relative to directory file descriptor
 /// If pathname is a symbolic link, it is dereferenced.
 pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> SysResult<usize> {
+    if pathname == -1 {
+        return Err(Errno::EFAULT);
+    }
     let task = current_task().unwrap();
     let mut path = user_cstr(pathname.into())?.unwrap();
     // error!("[sys_faccessat] start dirfd: {}, pathname: {}", dirfd, path);
@@ -1395,7 +1398,9 @@ pub fn sys_utimensat(
         let flags = OpenFlags::from_bits(flags).ok_or(Errno::EINVAL)?;
 
         open(target_path, OpenFlags::O_RDWR | OpenFlags::O_CREAT)?
-            .metadata().inode.clone()
+            .metadata()
+            .inode
+            .clone()
     } else {
         let res = match dirfd {
             AT_FDCWD => {
@@ -1404,7 +1409,9 @@ pub fn sys_utimensat(
                 let target_path = resolve_path(cwd, path);
 
                 open(target_path, OpenFlags::O_RDWR | OpenFlags::O_CREAT)?
-                    .metadata().inode.clone()
+                    .metadata()
+                    .inode
+                    .clone()
             }
             _ => {
                 let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
@@ -1604,7 +1611,13 @@ pub async fn sys_splice(
         return Err(Errno::EBADF);
     }
 
-    if unlikely(file_out.metadata().flags.read().contains(OpenFlags::O_APPEND)) {
+    if unlikely(
+        file_out
+            .metadata()
+            .flags
+            .read()
+            .contains(OpenFlags::O_APPEND),
+    ) {
         info!("[sys_splice] file_out is O_APPEND, return EINVAL");
         return Err(Errno::EINVAL);
     }
@@ -1614,7 +1627,10 @@ pub async fn sys_splice(
     if unlikely(file_out.metadata().inode.metadata()._type.is_fifo() && off_out != 0) {
         return Err(Errno::ESPIPE);
     }
-    if unlikely(!file_in.metadata().inode.metadata()._type.is_fifo() && !file_out.metadata().inode.metadata()._type.is_fifo()) {
+    if unlikely(
+        !file_in.metadata().inode.metadata()._type.is_fifo()
+            && !file_out.metadata().inode.metadata()._type.is_fifo(),
+    ) {
         return Err(Errno::EINVAL);
     }
 
