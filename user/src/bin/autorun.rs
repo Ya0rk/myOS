@@ -205,20 +205,20 @@ fn main() -> i32 {
         }
     }
 
-    // // glibc ltp 测试
-    // let child_pid = fork();
-    // if child_pid == 0 {
-    //     glibc_ltp();
-    //     exit(0);
-    // } else {
-    //     loop {
-    //         let mut exit_code: i32 = 0;
-    //         let pid = waitpid(child_pid as usize, &mut exit_code, 0);
-    //         if pid == child_pid {
-    //             break;
-    //         }
-    //     }
-    // }
+    // glibc ltp 测试
+    let child_pid = fork();
+    if child_pid == 0 {
+        glibc_ltp();
+        exit(0);
+    } else {
+        loop {
+            let mut exit_code: i32 = 0;
+            let pid = waitpid(child_pid as usize, &mut exit_code, 0);
+            if pid == child_pid {
+                break;
+            }
+        }
+    }
 
     0
 }
