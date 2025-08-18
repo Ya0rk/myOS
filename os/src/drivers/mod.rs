@@ -53,7 +53,7 @@ pub fn get_block_device() -> Option<Arc<dyn BlockDevice>> {
     // None
     #[cfg(feature = "board_qemu")]
     let major = BlockMajorNum::VirtBlock;
-    #[cfg(feature = "vf2")]
+    #[cfg(any(feature = "vf2", feature = "2k1000la"))]
     let major = BlockMajorNum::MmcBlock;
     let minor = 0;
     DEVICE_MANAGER.read().get_block_dev(major, minor)
@@ -63,11 +63,25 @@ pub fn get_block_device() -> Option<Arc<dyn BlockDevice>> {
 /// 会注册设备
 /// 特别地在外部使用get_block_device去获得一个块设备
 pub fn init(dtb_root: usize) {
+    let mut dt_root = dtb_root;
+
     #[cfg(target_arch = "riscv64")]
+    {dt_root = dtb_root + KERNEL_ADDR_OFFSET; }// 上板的设备树地址
     // let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
-    let dt_root: usize = dtb_root + KERNEL_ADDR_OFFSET; // 上板的设备树地址
+    
     #[cfg(target_arch = "loongarch64")]
-    let dt_root: usize = 0x9000_0000_0010_0000;
+    {
+        #[cfg(feature = "board_qemu")]
+        {dt_root = 0x9000_0000_0010_0000;}
+        #[cfg(feature = "2k1000la")]
+        {
+            extern "C" {
+                fn ls2k1000_fdt();
+            }
+            dt_root = ls2k1000_fdt as usize;
+        }     
+    }
+
     info!("satrt probe fdt tree root: {:X}", dt_root);
     // crate::drivers::virtio_driver::probe::probe(dt_root as u64);
     DEVICE_MANAGER.write().probe_initial(dt_root);

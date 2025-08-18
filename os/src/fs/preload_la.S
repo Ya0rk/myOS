@@ -48,3 +48,9 @@ autorun_end:
 test_initproc_start:
     .incbin "../user/target/loongarch64-unknown-none/release/test_initproc"
 test_initproc_end:
+
+    .section .data
+    .globl ls2k1000_fdt
+    .align 3
+ls2k1000_fdt:
+    .incbin "./src/boards/ls2k1000_dp.dtb"

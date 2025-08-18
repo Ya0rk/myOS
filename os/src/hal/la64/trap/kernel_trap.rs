@@ -1,19 +1,24 @@
 //！ `hal/la/trap/kernel_trap.rs`
 
-use log::info;
+use log::{error, info};
 use loongarch64::register::ecfg::LineBasedInterrupt;
 use loongarch64::register::estat::{Exception, Interrupt, Trap};
 use loongarch64::register::*;
 
 use crate::drivers::device::manager::DEVICE_MANAGER;
+use crate::hal::trap::TrapContext;
 use crate::mm::memory_space::PageFaultAccessType;
 use crate::sync::{disable_supervisor_interrupt, set_next_trigger, TIMER_QUEUE};
 use crate::task::{current_task, get_current_cpu, get_current_hart_id, set_ktrap_ret};
 use crate::utils::SysResult;
 
 #[no_mangle]
-pub fn kernel_trap_handler() {
+pub fn kernel_trap_handler(base_ctx: usize) {
     // info!("kernel trap");
+    // error!("kernel trap");
+    // println!("kernel trap");
+    // let sp = sp_read();
+    let context = unsafe { &mut *(base_ctx as *mut TrapContext) };
     let estat = estat::read();
     let crmd = crmd::read();
     let era = era::read();
@@ -91,7 +96,10 @@ pub fn kernel_trap_handler() {
                     //     error!("{:?} pc: {:#x} BADV: {:#x}", estat.cause(), era.pc(), badv::read().vaddr());
                     // });
                 }
-
+                Exception::AddressNotAligned => {
+                    use crate::hal::trap::unaligned::emulate_load_store_insn;
+                    unsafe { emulate_load_store_insn(context) };
+                }
                 _ => {
                     panic!(
                         "{:?} pc: {:#x} BADV: {:#x}",

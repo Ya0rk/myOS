@@ -116,8 +116,8 @@ impl InodeTrait for DevTtyInode {
 
     async fn write_directly(&self, _offset: usize, buf: &[u8]) -> usize {
         let termios = self.inner.lock().termios;
-        // if termios.is_opost() {
-        if false {
+        if termios.is_opost() {
+        // if false {
             for &byte in buf {
                 if termios.is_onlcr() && byte == b'\n' {
                     UART_DEVICE.putchar(b'\r');

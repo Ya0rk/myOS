@@ -32,6 +32,22 @@ lazy_static! {
         Arc::new(SpinNoIrqLock::new(PageTable::init_kernel_page_table()));
 }
 
+pub struct TestStruct {}
+
+impl TestStruct {
+    fn new() -> Self {
+        TestStruct {}
+    }
+    
+}
+
+
+lazy_static! {
+    pub static ref TEST_NEW: Arc<SpinNoIrqLock<TestStruct>> = Arc::new(SpinNoIrqLock::new(TestStruct::new()));
+}
+// pub static mut KERNEL_PAGE_TABLE: Arc<SpinNoIrqLock<PageTable>>;
+//         // = Arc::new(SpinNoIrqLock::new(PageTable::init_kernel_page_table()));
+
 pub struct PageTable {
     pub root_ppn: PhysPageNum,
     pub frames: Vec<FrameTracker>,
@@ -179,6 +195,13 @@ impl PageTable {
 
 /// NOTE: should be used no more than init phase
 pub fn enable_kernel_pgtable() {
-    kernel_token_write(KERNEL_PAGE_TABLE.lock().token());
+    println!("before lock");
+    let lock = TEST_NEW.lock();
+    println!("before drop");
+    drop(lock);
+    let lock = KERNEL_PAGE_TABLE.lock();
+    println!("before write");
+    kernel_token_write(lock.token());
+    println!("before sfence");
     sfence();
 }

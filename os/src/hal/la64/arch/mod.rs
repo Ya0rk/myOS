@@ -115,6 +115,7 @@ pub fn shutdown(failuer: bool) -> ! {
         println!("NoReason die no failure; shutdown(false)");
     }
     loop {
+        #[cfg(feature = "board_qemu")]
         unsafe {
             println!("power off!");
             // asm!("idle 1");

@@ -1,11 +1,25 @@
 //! 在这个文件中发挥作用的只有uart_put和uart_get两个函数。
 //! 其他的都是没有用的
-#[cfg(feature = "2k1000la")]
+// #[cfg(feature = "2k1000la")]
 use embedded_hal::serial::nb::{Read, Write};
-#[cfg(feature = "2k1000la")]
-use crate::drivers::k1000la::ns16550a::UART;
 
-#[cfg(feature = "board_qemu")]
+// #[cfg(feature = "2k1000la")]
+use crate::{boards::UART_BASE, drivers::tty::serial::ns16550a::Uart16550Driver};
+use crate::drivers::tty::serial::UartDriver;
+// #[cfg(feature = "2k1000la")]
+// lazy_static!{
+//     static ref UART: Uart16550Driver = Uart16550Driver::new(
+//         UART_BASE,
+//         0,
+//         115200,
+//         1,
+//         0,
+//         false,
+//         None
+//     );
+// }
+
+// #[cfg(feature = "board_qemu")]
 pub fn uart_put(c: usize) {
     let mut ptr = crate::hal::config::UART_ADDR as *mut u8;
     loop {
@@ -22,7 +36,7 @@ pub fn uart_put(c: usize) {
     }
 }
 
-#[cfg(feature = "board_qemu")]
+// #[cfg(feature = "board_qemu")]
 pub fn uart_get() -> usize {
     let ptr = crate::hal::config::UART_ADDR as *mut u8;
     loop {
@@ -41,24 +55,24 @@ pub fn uart_get() -> usize {
     }
 }
 
-#[cfg(feature = "2k1000la")]
-pub fn uart_put(c: usize) {
-    let mut retry = 0;
-    unsafe {
-        UART.write(c as u8);
-    }
-}
+// #[cfg(feature = "2k1000la")]
+// pub fn uart_put(c: usize) {
+//     let mut retry = 0;
+//     unsafe {
+//         UART.putc(c as u8);
+//     }
+// }
 
-#[cfg(feature = "2k1000la")]
-pub fn uart_get() -> usize {
-    unsafe {
-        if let Ok(i) = UART.read() {
-            return i as usize;
-        } else {
-            return 1usize.wrapping_neg();
-        }
-    }
-}
+// #[cfg(feature = "2k1000la")]
+// pub fn uart_get() -> usize {
+//     unsafe {
+//         loop {
+//             if UART.poll_in() {
+//                 return UART.getc() as usize;
+//             }
+//         }
+//     }
+// }
 
 
 // use core::fmt::Error;

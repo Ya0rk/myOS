@@ -101,6 +101,10 @@ pub fn rust_main(hart_id: usize, dt_root: usize) -> ! {
     arch_init();
     // print_checkpoint(4);
     println!("hello world!");
+    println!("hello world!");
+    println!("hello world!");
+    println!("hello world!");
+    println!("hello world!");
     println!("hart id is {:#X}, dt_root is {:#x}", hart_id, dt_root);
 
     if FIRST_HART

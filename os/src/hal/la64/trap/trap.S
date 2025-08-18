@@ -102,8 +102,8 @@ __trap_from_user:
     csrrd $t1, CSR_ERA
     st.d $t1, $sp, 33*8
 
-    csrwr $a0, CSR_SAVE
-    csrwr $a0, CSR_SAVE
+    // csrwr $a0, CSR_SAVE
+    // csrwr $a0, CSR_SAVE
     # 将user stack地址读取到t2，然后保存在r3中(栈指针保存)
     csrrd $t2, CSR_SAVE
     st.d $t2, $sp, 3*8
@@ -253,6 +253,12 @@ ret_debug_p:
     .align 4
 __trap_from_kernel:
     # 这里只需要保存caller saved寄存器
+    csrwr   $sp, CSR_SAVE
+    csrrd   $sp, CSR_SAVE
+
+    srli.d  $sp, $sp, 3
+    slli.d  $sp, $sp, 3
+
     addi.d  $sp, $sp, -34*8
     st.d    $ra, $sp, 1*8
     st.d    $tp, $sp, 2*8
@@ -285,22 +291,23 @@ __trap_from_kernel:
     st.d    $s7, $sp, 30*8
     st.d    $s8, $sp, 31*8
 
-    csrrd   $t0, 0x1        #读取prmd
+    csrrd   $t0, CSR_PRMD   //读取prmd
     st.d    $t0, $sp, 32*8
 
-    // csrrd   $t1, 0x6        #返回地址
-    // st.d    $t1, $sp, 33*8
+    csrrd   $t1, CSR_ERA    //返回地址
+    st.d    $t1, $sp, 33*8
 
+    addi.d  $a0, $sp, 0
     # 跳转到kernel_trap_handler
     la.abs  $t0, kernel_trap_handler
     jirl    $ra, $t0, 0
 
     # 恢复prmd
     ld.d    $t0, $sp, 32*8
-    csrwr   $t0, 0x1
+    csrwr   $t0, CSR_PRMD
 
-    // ld.d    $t1, $sp, 33*8
-    // csrwr   $t1, 0x6
+    ld.d    $t1, $sp, 33*8
+    csrwr   $t1, CSR_ERA
 
     ld.d    $ra, $sp, 1*8
     ld.d    $tp, $sp, 2*8
@@ -333,7 +340,8 @@ __trap_from_kernel:
     ld.d    $s7, $sp, 30*8
     ld.d    $s8, $sp, 31*8
 
-    addi.d  $sp, $sp, 34*8
+    // addi.d  $sp, $sp, 34*8
+    csrrd   $sp, CSR_SAVE
     ertn
 
 .section .text.sigret

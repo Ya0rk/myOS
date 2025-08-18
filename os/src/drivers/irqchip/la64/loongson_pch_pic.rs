@@ -140,7 +140,7 @@ impl PCHIntController {
         let low = value as u32;
         let high = (value >> 32) as u32;
         unsafe {
-            write_volatile((self.base_addr + low_addr) as *mut u32, low);
+        write_volatile((self.base_addr + low_addr) as *mut u32, low);
             write_volatile((self.base_addr + low_addr + 4) as *mut u32, high);
         }
     }
