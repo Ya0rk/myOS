@@ -43,7 +43,8 @@ num-traits = { version = "0.2.19", default-features = false}
 visionfive2-sd = { path = "../vendor/visionfive2-sd" }
 bitfield-struct = "0.11"
 embedded-hal = "=1.0.0-alpha.7"
-ahci_driver = { path = "../vendor/ahci_driver" }
+# ahci_driver = { path = "../vendor/ahci_driver" }
+ahci_driver = {path = "../ls2k1000la_driver/ahci/rust"}
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 riscv = { path = "../vendor/riscv", features = ["inline-asm"] }
