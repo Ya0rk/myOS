@@ -204,9 +204,3 @@ pub struct ahci_device {
 
     pub blk_dev: ahci_blk_dev,
 }
-impl Default for ahci_device {
-    fn default() -> Self {
-        // 使用 unsafe 创建一个全零的实例
-        unsafe { core::mem::zeroed() }
-    }
-}
