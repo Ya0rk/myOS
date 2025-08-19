@@ -3,15 +3,22 @@ pub mod device;
 pub mod disk;
 pub mod tty;
 // pub mod dev_core;
+pub mod ahci_blk;
+pub mod irqchip;
 #[cfg(feature = "2k1000la")]
 pub mod k1000la;
-pub mod irqchip;
 // pub mod loongarch_cic;
 // pub mod loongarch_icu;
 pub mod vf2;
 pub mod virtio_driver;
 
-pub use crate::{drivers::device::{DevResult, DeviceType, DevError, uart, dev_number::BlockMajorNum, manager::DEVICE_MANAGER, BlockDevice}, hal::config::KERNEL_ADDR_OFFSET};
+pub use crate::{
+    drivers::device::{
+        dev_number::BlockMajorNum, manager::DEVICE_MANAGER, uart, BlockDevice, DevError, DevResult,
+        DeviceType,
+    },
+    hal::config::KERNEL_ADDR_OFFSET,
+};
 use alloc::{sync::Arc, vec::Vec};
 use core::any::Any;
 use core::ptr::NonNull;
@@ -66,20 +73,24 @@ pub fn init(dtb_root: usize) {
     let mut dt_root = dtb_root;
 
     #[cfg(target_arch = "riscv64")]
-    {dt_root = dtb_root + KERNEL_ADDR_OFFSET; }// 上板的设备树地址
-    // let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
-    
+    {
+        dt_root = dtb_root + KERNEL_ADDR_OFFSET;
+    } // 上板的设备树地址
+      // let dt_root: usize = 0xffff_ffc0_bfe0_0000; //注意到应当看rustsbi的Device Tree Region信息
+
     #[cfg(target_arch = "loongarch64")]
     {
         #[cfg(feature = "board_qemu")]
-        {dt_root = 0x9000_0000_0010_0000;}
+        {
+            dt_root = 0x9000_0000_0010_0000;
+        }
         #[cfg(feature = "2k1000la")]
         {
             extern "C" {
                 fn ls2k1000_fdt();
             }
             dt_root = ls2k1000_fdt as usize;
-        }     
+        }
     }
 
     info!("satrt probe fdt tree root: {:X}", dt_root);

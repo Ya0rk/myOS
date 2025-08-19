@@ -1,3 +1,4 @@
+use ahci_driver::libahci::ahci_device;
 use core::cell::UnsafeCell;
 
 use alloc::{sync::Arc, vec::Vec};
@@ -9,12 +10,14 @@ use crate::{
         BlockMajorNum, DevResult, DeviceType,
     },
     mm::FrameTracker,
+    sync::SpinNoIrqLock,
 };
 
 pub struct Ahci_blk {
     major: MajorNumber,
     minor: usize,
     frames: UnsafeCell<Vec<FrameTracker>>,
+    inner: SpinNoIrqLock<ahci_device>,
 }
 
 unsafe impl Send for Ahci_blk {}
@@ -54,5 +57,20 @@ impl BlockDevice for Ahci_blk {
     }
     fn flush(&self) -> DevResult {
         todo!()
+    }
+}
+impl Ahci_blk {
+    pub fn new() -> Self {
+        let mut inner = ahci_device::default();
+        use ahci_driver::drv_ahci::ahci_init;
+        unsafe {
+            ahci_init(&mut inner);
+        }
+        Self {
+            major: MajorNumber::Block(BlockMajorNum::MmcBlock),
+            minor: 0,
+            frames: UnsafeCell::new(Vec::new()),
+            inner: SpinNoIrqLock::new(inner),
+        }
     }
 }
