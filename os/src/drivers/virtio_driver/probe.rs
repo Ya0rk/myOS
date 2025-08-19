@@ -49,92 +49,92 @@ lazy_static! {
     pub static ref BLOCKDEVICE_SIZE_REG: SpinNoIrqLock<Option<usize>> = SpinNoIrqLock::new(None);
 }
 
-pub fn probe(fdt_ptr: u64) {
-    println!("fdt addr @{:X}", fdt_ptr);
-    let fdt = unsafe { Fdt::from_ptr(fdt_ptr as _).expect("fdt trans from ptr error") };
-    for node in fdt.all_nodes() {
-        println!(
-            "name: {} {:?}",
-            node.name,
-            node.compatible().map(Compatible::first),
-        );
-        for range in node.reg() {
-            println!(
-                "   {:#018x?}, length {:?}",
-                range.starting_address, range.size
-            )
-        }
-        if let (Some(compatible), Some(region)) = (node.compatible(), node.reg().next()) {
-            if compatible.all().any(|s| s == "virtio,mmio")
-                && region.size.unwrap_or(0) > size_of::<VirtIOHeader>()
-            {
-                println!("Found VirtIO MMIO device at {:?}", region);
-                let size = region.size.unwrap();
-                let addr = region.starting_address as usize + KERNEL_ADDR_OFFSET;
-                let header = NonNull::new(addr as *mut VirtIOHeader).unwrap();
-                println!(
-                    "addr: {:X} size: {:X} start trans to MmioTransport",
-                    addr, size
-                );
-                match unsafe { MmioTransport::new(header, size) } {
-                    Err(e) => println!("Error creating VirtIO MMIO transport: {:?}", e),
-                    Ok(transport) => {
-                        println!(
-                            "Detected virtio MMIO device with vendor id {:#X}, device type {:?}, version {:?}",
-                            transport.vendor_id(),
-                            transport.device_type(),
-                            transport.version(),
-                        );
-                        println!("check is it block");
-                        if transport.device_type() == DeviceType::Block {
-                            let mut addr_guard = BLOCKDEVICE_ADDR_REG.lock();
-                            *addr_guard = Some(addr);
-                            let mut size_guard = BLOCKDEVICE_SIZE_REG.lock();
-                            *size_guard = Some(size);
-                        }
-                        println!("finished check start to transport");
-                        virtio_device(transport);
-                    }
-                }
-            }
-        }
-    }
-    /// 解析sd卡
-    #[cfg(feature = "vf2")]
-    if let Some(sdionode) = fdt.find_node("/soc/sdio1@16020000") {
-        probe_vf2sd(&sdionode);
-    }
+// pub fn probe(fdt_ptr: u64) {
+//     println!("fdt addr @{:X}", fdt_ptr);
+//     let fdt = unsafe { Fdt::from_ptr(fdt_ptr as _).expect("fdt trans from ptr error") };
+//     for node in fdt.all_nodes() {
+//         println!(
+//             "name: {} {:?}",
+//             node.name,
+//             node.compatible().map(Compatible::first),
+//         );
+//         for range in node.reg() {
+//             println!(
+//                 "   {:#018x?}, length {:?}",
+//                 range.starting_address, range.size
+//             )
+//         }
+//         if let (Some(compatible), Some(region)) = (node.compatible(), node.reg().next()) {
+//             if compatible.all().any(|s| s == "virtio,mmio")
+//                 && region.size.unwrap_or(0) > size_of::<VirtIOHeader>()
+//             {
+//                 println!("Found VirtIO MMIO device at {:?}", region);
+//                 let size = region.size.unwrap();
+//                 let addr = region.starting_address as usize + KERNEL_ADDR_OFFSET;
+//                 let header = NonNull::new(addr as *mut VirtIOHeader).unwrap();
+//                 println!(
+//                     "addr: {:X} size: {:X} start trans to MmioTransport",
+//                     addr, size
+//                 );
+//                 match unsafe { MmioTransport::new(header, size) } {
+//                     Err(e) => println!("Error creating VirtIO MMIO transport: {:?}", e),
+//                     Ok(transport) => {
+//                         println!(
+//                             "Detected virtio MMIO device with vendor id {:#X}, device type {:?}, version {:?}",
+//                             transport.vendor_id(),
+//                             transport.device_type(),
+//                             transport.version(),
+//                         );
+//                         println!("check is it block");
+//                         if transport.device_type() == DeviceType::Block {
+//                             let mut addr_guard = BLOCKDEVICE_ADDR_REG.lock();
+//                             *addr_guard = Some(addr);
+//                             let mut size_guard = BLOCKDEVICE_SIZE_REG.lock();
+//                             *size_guard = Some(size);
+//                         }
+//                         println!("finished check start to transport");
+//                         virtio_device(transport);
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     /// 解析sd卡
+//     #[cfg(feature = "vf2")]
+//     if let Some(sdionode) = fdt.find_node("/soc/sdio1@16020000") {
+//         probe_vf2sd(&sdionode);
+//     }
 
-    #[cfg(target_arch = "loongarch64")]
-    if let Some(pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {
-        log::info!("Found PCI node: {}", pci_node.name);
-        super::pci::enumerate_pci(pci_node, Cam::MmioCam);
-    }
-    #[cfg(target_arch = "loongarch64")]
-    if let Some(pcie_node) = fdt.find_compatible(&["pci-host-ecam-generic"]) {
-        log::info!("Found PCIe node: {}", pcie_node.name);
-        super::pci::enumerate_pci(pcie_node, Cam::Ecam);
-    }
-}
+//     #[cfg(target_arch = "loongarch64")]
+//     if let Some(pci_node) = fdt.find_compatible(&["pci-host-cam-generic"]) {
+//         log::info!("Found PCI node: {}", pci_node.name);
+//         super::pci::enumerate_pci(pci_node, Cam::MmioCam);
+//     }
+//     #[cfg(target_arch = "loongarch64")]
+//     if let Some(pcie_node) = fdt.find_compatible(&["pci-host-ecam-generic"]) {
+//         log::info!("Found PCIe node: {}", pcie_node.name);
+//         super::pci::enumerate_pci(pcie_node, Cam::Ecam);
+//     }
+// }
 
-#[cfg(feature = "vf2")]
-pub fn probe_vf2sd(sdionode: &FdtNode) {
-    // let sd_device = Vf2BlkDev::new_and_init(); // for package
+// #[cfg(feature = "vf2")]
+// pub fn probe_vf2sd(sdionode: &FdtNode) {
+//     // let sd_device = Vf2BlkDev::new_and_init(); // for package
 
-    // 获取寄存器信息
-    let base_address = sdionode.reg().next().unwrap().starting_address as usize;
-    let size = sdionode.reg().next().unwrap().size.unwrap();
-    // 获取中断号
-    let interrupt_number = match sdionode.interrupts().next() {
-        None => 33,
-        Some(a) => a,
-    };
-    // 创建 SDIO 设备
-    let sd_device = Vf2SDIO::new(base_address, size, interrupt_number, BlockMajorNum::MmcBlock, 0);
-    sd_device.card_init();
-    println!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
-    register_block_device(Arc::new(sd_device));
-}
+//     // 获取寄存器信息
+//     let base_address = sdionode.reg().next().unwrap().starting_address as usize;
+//     let size = sdionode.reg().next().unwrap().size.unwrap();
+//     // 获取中断号
+//     let interrupt_number = match sdionode.interrupts().next() {
+//         None => 33,
+//         Some(a) => a,
+//     };
+//     // 创建 SDIO 设备
+//     let sd_device = Vf2SDIO::new(base_address, size, interrupt_number, BlockMajorNum::MmcBlock, 0);
+//     sd_device.card_init();
+//     println!("[probe] find sd card, size = {}", sd_device.block_size() * sd_device.num_blocks());
+//     register_block_device(Arc::new(sd_device));
+// }
 
 pub fn virtio_device(transport: impl Transport + 'static) {
     match transport.device_type() {

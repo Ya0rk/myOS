@@ -5,7 +5,7 @@
 use alloc::sync::Arc;
 use sbi_spec::pmu::NUM_COUNTERS;
 
-use crate::{drivers::{device::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::{config::KERNEL_ADDR_OFFSET, DEVICE_ADDR_OFFSET}};
+use crate::{boards::MAX_CORES, drivers::{device::dev_core::{PhysDevice, PhysDriver, PhysDriverProbe}, irqchip::IrqController}, hal::{config::KERNEL_ADDR_OFFSET, DEVICE_ADDR_OFFSET}};
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct PLIC {
@@ -174,16 +174,16 @@ impl<'b, 'a> PhysDriverProbe<'b, 'a> for PLIC {
         let mmio_base = plic_node.reg().next().unwrap().starting_address as usize + DEVICE_ADDR_OFFSET;
         let plic = unsafe{ PLIC::new(mmio_base) };
 
-        #[cfg(feature = "vf2")]
-        let NUM_HARTS = 2;
-        #[cfg(feature = "board_qemu")]
-        let NUM_HARTS = 1;
+        // #[cfg(feature = "vf2")]
+        // let NUM_HARTS = 2;
+        // #[cfg(feature = "board_qemu")]
+        // let NUM_HARTS = 1;
 
         let supervisor = IntrTargetPriority::Supervisor;
         let machine = IntrTargetPriority::Machine;
         let threshold = 0;
 
-        for hart_id in 0..NUM_HARTS {
+        for hart_id in 0..MAX_CORES {
             plic.set_threshold(hart_id, machine, threshold);
             plic.set_threshold(hart_id, supervisor, threshold);
         }

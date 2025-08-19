@@ -126,12 +126,12 @@ pub async fn user_trap_handler() {
                         .unwrap_or_else(|e| {
                             use log::error;
                             task.set_zombie();
-                            // error!(
-                            //     "{:?} pc: {:#x} BADV: {:#x}",
-                            //     estat.cause(),
-                            //     era.pc(),
-                            //     badv::read().vaddr()
-                            // );
+                            error!(
+                                "{:?} pc: {:#x} BADV: {:#x}",
+                                estat.cause(),
+                                era.pc(),
+                                badv::read().vaddr()
+                            );
                         });
                 }
                 Exception::InstructionNotExist => {

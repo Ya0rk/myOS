@@ -123,18 +123,18 @@ impl LineDiscPolicy for TtyLineDisc {
         let onlcr = tty.termios.read().is_onlcr();
         let len = _buf.len();
         for &c in _buf {
-            // #[cfg(any(feature = "2k1000la", feature = "vf2"))]
-            // {
-            //     if opost {
-            //         if onlcr && c == b'\n' {
-            //             buf.push(b'\r');
-            //             buf.push(b'\n');
-            //         } else {
-            //             buf.push(c);
-            //         }
-            //     }                
-            // }
-            // #[cfg(feature = "board_qemu")]
+            #[cfg(any(feature = "2k1000la", feature = "vf2"))]
+            {
+                if opost {
+                    if onlcr && c == b'\n' {
+                        buf.push(b'\r');
+                        buf.push(b'\n');
+                    } else {
+                        buf.push(c);
+                    }
+                }                
+            }
+            #[cfg(feature = "board_qemu")]
             buf.push(c);
 
         }

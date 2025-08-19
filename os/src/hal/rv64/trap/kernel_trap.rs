@@ -18,7 +18,7 @@ use riscv::register::{
 pub fn kernel_trap_handler() {
     use core::result;
 
-    use log::info;
+    use log::{info, error};
 
     use crate::{sync::TIMER_QUEUE, task::get_current_cpu, utils::SysResult};
     let scause = scause::read();
@@ -26,6 +26,7 @@ pub fn kernel_trap_handler() {
     let sepc = sepc::read();
     let cause = scause.cause();
     let mut result: SysResult<()> = Ok(());
+    // error!("[kernel_trap] cause: {:?}", cause);
     match cause {
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
             // 5

@@ -161,14 +161,14 @@ impl FdTable {
         let mut stdout;
         let mut stderr;
         // 自带三个文件描述符，分别是标准输入、标准输出、标准错误
-        #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+        #[cfg(any(feature = "2k1000la"))]
         {
             use crate::fs::DevTty;
             stdin = FdInfo::new(Arc::new(DevTty::new_in()), OpenFlags::O_RDONLY);
             stdout = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
             stderr = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
         }
-        #[cfg(feature = "vf2")]
+        #[cfg(any(feature = "board_qemu", feature = "vf2"))]
         {
             use crate::fs::CharDev;
             stdin = FdInfo::new(Arc::new(CharDev::new_in()), OpenFlags::O_RDONLY);

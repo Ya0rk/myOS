@@ -411,7 +411,7 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         // }
         let file = task.get_file_by_fd(fd as usize).ok_or(Errno::EBADF)?;
         if unlikely(!file.metadata().inode.metadata()._type.is_dir()) {
-            // log::error!("[sys_openat] fd = {} is not a dir.", fd);
+            log::error!("[sys_openat] fd = {} is not a dir.", fd);
             return Err(Errno::ENOTDIR);
         }
         let other_cwd = file.abspath();
@@ -520,14 +520,14 @@ pub fn sys_getdents64(fd: usize, buf: usize, len: usize) -> SysResult<usize> {
 
     let ptr = buf as *mut u8;
     if unlikely(buf == 0) {
-        // log::error!("[sys_getdents64] buf is null");
+        log::error!("[sys_getdents64] buf is null");
         return Err(Errno::EFAULT);
     }
     // TODO: 有待修改
 
     let file = task.get_file_by_fd(fd).ok_or(Errno::EBADF)?;
     if unlikely(!file.metadata().inode.metadata()._type.is_dir()) {
-        // log::error!("[sys_getdents64] fd {} is not a dir", fd);
+        log::error!("[sys_getdents64] fd {} is not a dir", fd);
         return Err(Errno::ENOTDIR);
     }
     let res = file.read_dents(ptr as usize, len)?;
@@ -1189,7 +1189,7 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         }
         let file = task.get_file_by_fd(dirfd as usize).ok_or(Errno::EBADF)?;
         if unlikely(!file.metadata().inode.metadata()._type.is_dir()) {
-            // log::error!("[sys_faccessat] dirfd = {} is not a dir.", dirfd);
+            log::error!("[sys_faccessat] dirfd = {} is not a dir.", dirfd);
             return Err(Errno::ENOTDIR);
         }
         let other_cwd = file.abspath();

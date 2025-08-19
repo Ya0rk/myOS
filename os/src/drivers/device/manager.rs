@@ -10,7 +10,7 @@ use spin::{rwlock::RwLock};
 use virtio_drivers::{device::blk::VirtIOBlk, transport::{mmio::MmioTransport, pci::PciTransport}};
 
 use crate::{
-    drivers::{
+    boards::MAX_CORES, drivers::{
         device::{
             dev_core::{PhysDriver, PhysDriverProbe}, 
             dev_number::{BlockMajorNum, CharMajorNum, MajorNumber}, 
@@ -23,8 +23,7 @@ use crate::{
         }, 
         vf2::Vf2SDIO, 
         VirtIoBlkDev, VirtIoHalImpl
-    }, 
-    hal::config::{DEVICE_ADDR_OFFSET, KERNEL_ADDR_OFFSET}
+    }, hal::config::{DEVICE_ADDR_OFFSET, KERNEL_ADDR_OFFSET}
 };
 
 
@@ -123,7 +122,12 @@ impl DeviceManager {
             self.serials.push(serial.clone());
             if let Some(irq_number) = irq_number {
                 if let Some(icu) = &self.ICU {
-                    const MAX_CORES: usize = 1;
+                    // #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+                    // {
+                    //     // icu.enable_irq(0, irq_number);
+
+                    // }
+                    // const MAX_CORES: usize = 1;
                     for core_id in 0..MAX_CORES {
                         icu.enable_irq(core_id, irq_number);
                     }

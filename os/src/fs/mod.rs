@@ -147,7 +147,7 @@ pub async fn create_init_files() -> SysResult {
         "/ltp_testcode_glibc.sh".into(),
         OpenFlags::O_CREAT | OpenFlags::O_RDWR,
     ) {
-        let buf = ltp::GLIBC_LTP_testcode.as_bytes();
+        // let buf = ltp::GLIBC_LTP_testcode.as_bytes();
         let buf = ltp::GLIBC_LTP_testcode.as_bytes();
         file.write(&buf).await;
     }
@@ -199,10 +199,10 @@ fn create_open_file(
     let parent_dentry = Dentry::get_dentry_from_path(parent_path)?;
     let parent_dir = parent_dentry.get_inode().ok_or(Errno::ENOTDIR)?;
     if !parent_dir.metadata()._type.is_dir() {
-        // error!(
-        //     "[create_open_file] parent_dentry {} is not a directory",
-        //     parent_path
-        // );
+        error!(
+            "[create_open_file] parent_dentry {} is not a directory",
+            parent_path
+        );
         return Err(Errno::ENOTDIR);
     }
     debug_point!("");
@@ -272,6 +272,12 @@ pub fn open(path: AbsPath, flags: OpenFlags) -> SysResult<Arc<dyn FileTrait>> {
         // panic!("    [fs_open] path = {} is not absolte path.", path.get());
         return Err(Errno::ENOENT);
     }
+    // let mut path = path;
+    // if path.get() == "/musl/crtn.o" {
+    //     path = AbsPath::new("/lib/crtn.o".into());
+    // } else if path.get() == "/musl/crtendS.o" {
+    //     path = AbsPath::new("/lib/crtendS.o".into());
+    // }
 
     // 临时保存这个机制,后期应当使用设备文件系统去代替
     // if find_device(&path.get()) {

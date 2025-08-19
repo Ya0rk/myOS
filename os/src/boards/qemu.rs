@@ -18,6 +18,16 @@ pub const MEMORY_END: usize = 0xc000_0000 + KERNEL_ADDR_OFFSET; // 将用户和�
 #[cfg(feature = "2k1000la")]
 pub const MEMORY_END: usize = 0x1_0000_0000 + KERNEL_ADDR_OFFSET;
 
+#[cfg(feature = "board_qemu")]
+pub const MAX_CORES: usize = 1;
+
+#[cfg(feature = "vf2")]
+pub const MAX_CORES: usize = 2;
+
+#[cfg(feature = "2k1000la")]
+pub const MAX_CORES: usize = 1;
+
+
 pub const MMIO: &[(usize, usize)] = &[
     (0x0010_0000, 0x00_2000), // VIRT_TEST/RTC  in virt machine
     (0x1000_1000, 0x00_1000), // Virtio Block in virt machine
