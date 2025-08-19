@@ -10,6 +10,7 @@ pub mod irqchip;
 // pub mod loongarch_icu;
 pub mod vf2;
 pub mod virtio_driver;
+pub mod ahci;
 
 pub use crate::{drivers::device::{DevResult, DeviceType, DevError, uart, dev_number::BlockMajorNum, manager::DEVICE_MANAGER, BlockDevice}, hal::config::KERNEL_ADDR_OFFSET};
 use alloc::{sync::Arc, vec::Vec};

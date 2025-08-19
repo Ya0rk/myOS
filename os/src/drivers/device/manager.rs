@@ -11,18 +11,14 @@ use virtio_drivers::{device::blk::VirtIOBlk, transport::{mmio::MmioTransport, pc
 
 use crate::{
     drivers::{
-        device::{
+        ahci::{self, AhciBlock}, device::{
             dev_core::{PhysDriver, PhysDriverProbe}, 
             dev_number::{BlockMajorNum, CharMajorNum, MajorNumber}, 
             irq::HardIrqHandler, BlockDevice, Device
-        }, 
-        irqchip::*, 
-        tty::{
+        }, irqchip::*, tty::{
             serial::{ns16550a::Uart16550Driver, SerialDriver, UartDriver}, 
             tty_core::{CharDevice, TtyStruct}
-        }, 
-        vf2::Vf2SDIO, 
-        VirtIoBlkDev, VirtIoHalImpl
+        }, vf2::Vf2SDIO, VirtIoBlkDev, VirtIoHalImpl
     }, 
     hal::config::{DEVICE_ADDR_OFFSET, KERNEL_ADDR_OFFSET}
 };
@@ -168,6 +164,18 @@ impl DeviceManager {
         }
     }
 
+    pub fn probe_and_register_ls2k_ahic(&mut self) {
+        let ahci = AhciBlock::probe(&self.FDT.unwrap());
+        let Some(ahci) = ahci else {
+            panic!("[DeviceManager] ahci not found");
+        };
+        let MajorNumber::Block(major) = ahci.get_major() else {
+            panic!("[DeviceManager] bad ahci");
+        };
+        let minor = ahci.get_minor();
+        self.blk_devs.insert((major, minor), ahci);
+    }
+
     pub fn register_virtio_blk_devs(&mut self) {
         /// 不重复就行
         // let mut minor = 0;
@@ -216,6 +224,10 @@ impl DeviceManager {
         {
             self.probe_vf2_sdcards();
             self.register_vf2_sd_devs();            
+        }
+        #[cfg(feature = "2k1000la")]
+        {
+            self.probe_and_register_ls2k_ahic();
         }
 
     }

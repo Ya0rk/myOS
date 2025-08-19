@@ -40,6 +40,13 @@ macro_rules! print {
         $crate::console::print(format_args!($fmt $(, $($arg)+)?));
     }
 }
+#[macro_export]
+/// print string macro
+macro_rules! ahci_printf {
+    ($fmt: literal $(, $($arg: tt)+)?) => {
+        $crate::console::print(format_args!($fmt $(, $($arg)+)?));
+    }
+}
 
 #[macro_export]
 /// println string macro

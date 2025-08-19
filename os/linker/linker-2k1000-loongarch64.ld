@@ -38,6 +38,8 @@ SECTIONS
     erodata = .;
     sdata = .;
     .data : {
+        *(.data.ahci_pool)
+        . = ALIGN(4K);
         *(.data .data.*)
         *(.sdata .sdata.*)
     }
