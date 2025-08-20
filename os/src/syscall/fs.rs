@@ -460,7 +460,15 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         } else if path.contains("libpcre2-8.so.0") {
             path = "/usr/lib/libpcre2-8.so.0.12.0".to_string();
         } else if path.contains("libncursesw.so.6") {
-            path = "/usr/bin/libncursesw.so.6.5".to_string();
+            path = "/usr/lib/libncursesw.so.6.5".to_string();
+        } else if path.contains("/usr/lib/libstdc++.so.6") {
+            path = "/usr/lib/libstdc++.so.6.0.33".to_string();
+        } else if path.contains("libffi.so.8") {
+            path = "/usr/lib/libffi.so.8.1.4".to_string();
+        } else if path.contains("libxml2.so.2") {
+            path = "/usr/lib/libxml2.so.2.13.4".to_string();
+        } else if path.contains("liblzma.so.5") {
+            path = "/usr/lib/liblzma.so.5.6.3".to_string();
         }
     }
 
