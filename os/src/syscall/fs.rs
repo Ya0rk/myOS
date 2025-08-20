@@ -402,15 +402,13 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     SYS_OPENAT_MODE.store(_mode, core::sync::atomic::Ordering::Relaxed);
 
     if path.contains("libisl.so.23") {
-        path = "/usr/lib/libisl.so.23".to_string();
+        path = "/usr/lib/libisl.so.23.3.0".to_string();
     } else if path.contains("libgmp.so.10") {
-        path = "/usr/lib/libgmp.so.10".to_string();
+        path = "/usr/lib/libgmp.so.10.5.0".to_string();
     } else if path.contains("libmpfr.so.6") {
-        path = "/usr/lib/libmpfr.so.6".to_string();
+        path = "/usr/lib/libmpfr.so.6.2.1".to_string();
     } else if path.contains("libmpc.so.3") {
-        path = "/usr/lib/libmpc.so.3".to_string();
-    } else if path.contains("libisl.so.23") {
-        path = "/usr/lib/libisl.so.23".to_string();
+        path = "/usr/lib/libmpc.so.3.3.1".to_string();
     }
 
     // 计算目标路径
