@@ -139,7 +139,7 @@ pub async fn sys_readv(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize>
 /// system call writes iovcnt buffers from the file associated
 /// with the file descriptor fd into the buffers described by iov
 pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize> {
-    if fd != 1 {
+    if fd != 1 && fd != 2 {
         info!("[sys_writev] fd = {}", fd);
     }
     let task = current_task().unwrap();
@@ -166,7 +166,7 @@ pub async fn sys_writev(fd: usize, iov: usize, iovcnt: usize) -> SysResult<usize
         let write_len = file.write(buffer).await?;
         res += write_len;
     }
-    if fd != 1 {
+    if fd != 1 && fd != 2 {
         info!("[sys_writev] write len = {}", res);
     }
     Ok(res)
@@ -455,9 +455,13 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         } else if path.contains("/usr/lib/libsframe.so.1") {
             path = "/usr/lib/libsframe.so.1.0.0".to_string();
         } else if path.contains("/usr/lib/libctf.so.0") {
-            path = "usr/lib/libctf.so.0.0.0".to_string();
+            path = "/usr/lib/libctf.so.0.0.0".to_string();
         } else if path.contains("libjansson.so.4") {
-            path = "usr/lib/libjansson.so.4.14.0".to_string();
+            path = "/usr/lib/libjansson.so.4.14.0".to_string();
+        } else if path.contains("libpcre2-8.so.0") {
+            path = "/usr/lib/libpcre2-8.so.0.12.0".to_string();
+        } else if path.contains("libncursesw.so.6") {
+            path = "/usr/bin/libncursesw.so.6.5".to_string();
         }
     }
 
@@ -1255,6 +1259,11 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         let other_cwd = file.abspath();
         resolve_path(other_cwd, path.clone())
     };
+    if let Ok(file) = open(abs, OpenFlags::O_RDONLY) {
+        return Ok(0);
+    } else {
+        return Err(Errno::ENOENT);
+    }
     let is_root = {
         let uid_now = task.get_euid();
         uid_now == 0

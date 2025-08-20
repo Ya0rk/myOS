@@ -349,9 +349,11 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
                 "/usr/libexec/gcc/loongarch64-alpine-linux-musl/14.2.0/cc1".to_string(),
             );
         } else if path == "/bin/as" {
-            target_path = resolve_path(cwd, "/usr/loongarch64-alpine-linux-musl/bin/as".to_string());
+            target_path =
+                resolve_path(cwd, "/usr/loongarch64-alpine-linux-musl/bin/as".to_string());
         } else if path == "/bin/ld" {
-            target_path = resolve_path(cwd, "/usr/loongarch64-alpine-linux-musl/bin/ld".to_string());
+            target_path =
+                resolve_path(cwd, "/usr/loongarch64-alpine-linux-musl/bin/ld".to_string());
         } else {
             target_path = resolve_path(cwd, path);
         }
@@ -748,7 +750,7 @@ pub fn sys_sigprocmask(
 /// oldact.
 /// 用户可以通过这个系统调用设置自定义信号处理函数，或者获取old的信号处理函数
 pub fn sys_sigaction(signum: usize, act: usize, old_act: usize) -> SysResult<usize> {
-    info!("[sys_sigaction] start signum: {signum}, act:{act}, old_act: {old_act}");
+    // info!("[sys_sigaction] start signum: {signum}, act:{act}, old_act: {old_act}");
     if signum > MAX_SIGNUM || signum == 9 || signum == 19 {
         return Err(Errno::EINVAL);
     }
@@ -764,12 +766,12 @@ pub fn sys_sigaction(signum: usize, act: usize, old_act: usize) -> SysResult<usi
         let mut new_act = unsafe { *(act as *const SigAction) };
         let signo = SigNom::from(signum);
         new_act.sa_mask.remove(SigMask::SIGKILL | SigMask::SIGSTOP);
-        info!(
-            "[sys_sigaction] taskid = {}, sa_handler = {:#x}, sa_flags = {:?}",
-            task.get_pid(),
-            new_act.sa_handler,
-            new_act.sa_flags
-        );
+        // info!(
+        //     "[sys_sigaction] taskid = {}, sa_handler = {:#x}, sa_flags = {:?}",
+        //     task.get_pid(),
+        //     new_act.sa_handler,
+        //     new_act.sa_flags
+        // );
 
         match new_act.sa_handler {
             SIG_DFL => {
