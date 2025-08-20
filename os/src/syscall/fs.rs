@@ -429,6 +429,8 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         path = "/usr/lib/libz.so.1.3.1".to_string();
     } else if path.contains("libzstd.so.1") {
         path = "/usr/lib/libzstd.so.1.5.7".to_string();
+    } else if path.contains("libstdc++.so.6") {
+        path = "/usr/lib/libstdc++.so.6.0.33".to_string();
     }
 
     // 计算目标路径
