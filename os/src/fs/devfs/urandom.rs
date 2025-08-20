@@ -45,8 +45,12 @@ impl InodeTrait for DevRandomInode {
         Ok(())
     }
 
-    async fn read_at(&self, _offset: usize, _buf: &mut [u8]) -> usize {
-        0
+    async fn read_at(&self, _offset: usize, buf: &mut [u8]) -> usize {
+        unsafe {
+            let mut rng = RNG.lock();
+            rng.fill_buf(buf)
+        };
+        buf.len()
     }
 
     async fn write_at(&self, _offset: usize, _buf: &[u8]) -> usize {

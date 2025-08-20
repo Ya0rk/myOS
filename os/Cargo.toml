@@ -54,7 +54,7 @@ loongarch64 = { path = "../vendor/loongArch64", package = "loongArch64" }
 
 [features]
 default = [
-    "info",   # 跑分时注意关掉这里的日志
+    "error",   # 跑分时注意关掉这里的日志
     "test", 
     "mbshell", 
     # "board_qemu" # 在quem上就开这个

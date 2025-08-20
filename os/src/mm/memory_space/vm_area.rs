@@ -382,7 +382,7 @@ impl VmArea {
         // );
 
         if !access_type.can_access(self.perm()) {
-            backtrace();
+            // backtrace();
             // error!(
             //     "[VmArea::handle_page_fault] permission not allowed, perm:{:?}",
             //     self.perm()

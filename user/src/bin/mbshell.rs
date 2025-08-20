@@ -94,7 +94,8 @@ fn run_cmd(cmd: &str) {
     // println!("task run cmd: {}", cmd);
     let cd = "/usr/lib";
     chdir(&conert_str2byte(cd));
-    if fork() == 0 {
+    let child_pid = fork();
+    if child_pid == 0 {
         // println!("task run cmd child: {}, pid: {}", cmd, getpid());
         execve(
             "/bin/busybox\0",
@@ -105,11 +106,14 @@ fn run_cmd(cmd: &str) {
         exit(0);
     } else {
         // println!("task run cmd parent: {}", cmd);
-        let mut exit_code: i32 = 0;
-        let tid = wait(&mut exit_code);
-        // println!("return tid:{}", tid);
-        if tid == -1 {
-            yield_();
+        loop {
+            // println!("back is in front");
+            let mut exit_code: i32 = 0;
+            let pid = waitpid(child_pid as usize, &mut exit_code, 0);
+            if pid == child_pid {
+                println!("main find child");
+                break;
+            }
         }
     }
 }

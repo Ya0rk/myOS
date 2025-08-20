@@ -58,7 +58,7 @@ pub trait InodeTrait: Any + Send + Sync {
     }
 
     fn get_size(&self) -> usize {
-        todo!()
+        0
     }
 
     /// 设置大小
