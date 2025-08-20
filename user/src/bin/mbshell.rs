@@ -17,13 +17,13 @@ pub fn conert_str2byte(input: &str) -> Vec<u8> {
 
 fn run_cmd(cmd: &str) {
     // println!("task run cmd: {}", cmd);
-    let cd = "/musl/";
+    let cd = "/bin/";
     chdir(&conert_str2byte(cd));
     if fork() == 0 {
         // println!("task run cmd child: {}, pid: {}", cmd, getpid());
         execve(
-            "/musl/busybox\0",
-            &["/musl/busybox\0", "sh\0", "-c\0", cmd],
+            "/bin/busybox\0",
+            &["/bin/busybox\0", "sh\0", "-c\0", cmd],
             ENV,
         );
         exit(0);
@@ -48,15 +48,15 @@ fn main() -> i32 {
     }
     #[cfg(target_arch = "riscv64")]
     {
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0");
-        run_cmd("/musl/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0");
-        run_cmd("/musl/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0");
-        run_cmd("/musl/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0");
+        run_cmd("/bin/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64-sf.so.1\0");
+        run_cmd("/bin/busybox cp /musl/lib/libc.so /lib/ld-musl-riscv64.so.1\0");
+        run_cmd("/bin/busybox cp /musl/lib/dlopen_dso.so /lib/dlopen_dso.so\0");
+        run_cmd("/bin/busybox cp /musl/lib/tls_get_new-dtv_dso.so /lib/tls_get_new-dtv_dso.so\0");
     }
     let child_pid = fork();
     if child_pid == 0 {
-        run_cmd("/musl/busybox --install /bin\0");
-        run_cmd("/bin/sh\0");
+        run_cmd("/bin/busybox --install /bin\0");
+        run_cmd("/bin/busybox sh\0");
         // execve("/musl/busybox\0", &["/musl/busybox\0", "sh\0"], ENV);
         exit(0);
     } else {

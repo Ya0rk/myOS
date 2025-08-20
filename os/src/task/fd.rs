@@ -3,7 +3,17 @@ use core::{cmp::min, fmt::Display, intrinsics::unlikely};
 // #![allow(unused)]
 use super::current_task;
 use crate::{
-    fs::{open, socketfs::{socketfile::SocketFile, socketinode::SocketInode}, FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags}, hal::config::RLIMIT_NOFILE, mm::memory_space::{MmapFlags, MmapProt}, net::{Socket, PORT_FD_MANAMER}, sync::time_duration, syscall::RLimit64, utils::{Errno, SysResult}
+    fs::{
+        open,
+        socketfs::{socketfile::SocketFile, socketinode::SocketInode},
+        FileTrait, InodeTrait, Kstat, OpenFlags, Page, RenameFlags,
+    },
+    hal::config::RLIMIT_NOFILE,
+    mm::memory_space::{MmapFlags, MmapProt},
+    net::{Socket, PORT_FD_MANAMER},
+    sync::time_duration,
+    syscall::RLimit64,
+    utils::{Errno, SysResult},
 };
 use alloc::{collections::binary_heap::BinaryHeap, format, string::String, sync::Arc, vec::Vec};
 use log::info;
@@ -161,14 +171,14 @@ impl FdTable {
         let mut stdout;
         let mut stderr;
         // 自带三个文件描述符，分别是标准输入、标准输出、标准错误
-        #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
-        {
-            use crate::fs::DevTty;
-            stdin = FdInfo::new(Arc::new(DevTty::new_in()), OpenFlags::O_RDONLY);
-            stdout = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
-            stderr = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
-        }
-        #[cfg(feature = "vf2")]
+        // #[cfg(any(feature = "board_qemu", feature = "2k1000la"))]
+        // {
+        //     use crate::fs::DevTty;
+        //     stdin = FdInfo::new(Arc::new(DevTty::new_in()), OpenFlags::O_RDONLY);
+        //     stdout = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
+        //     stderr = FdInfo::new(Arc::new(DevTty::new_out()), OpenFlags::O_WRONLY);
+        // }
+        // #[cfg(feature = "vf2")]
         {
             use crate::fs::CharDev;
             stdin = FdInfo::new(Arc::new(CharDev::new_in()), OpenFlags::O_RDONLY);
@@ -357,7 +367,11 @@ impl FdTable {
 }
 
 /// 将一个socket加入到fd表中
-pub fn sock_map_fd(socket: Arc<dyn Socket>, cloexec_enable: bool, flags: OpenFlags) -> SysResult<usize> {
+pub fn sock_map_fd(
+    socket: Arc<dyn Socket>,
+    cloexec_enable: bool,
+    flags: OpenFlags,
+) -> SysResult<usize> {
     // let mut flag = OpenFlags::O_RDWR; // 这里的flag基本没用
     let socketinode = Arc::new(SocketInode::new(socket));
     let socketfile = Arc::new(SocketFile::new(flags, socketinode));
@@ -393,8 +407,7 @@ pub fn test_fd_performance() {
     use core::time::Duration;
 
     println!("Starting FD table performance tests...");
-    let testfile = open("/aaa".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR)
-        .unwrap();
+    let testfile = open("/aaa".into(), OpenFlags::O_CREAT | OpenFlags::O_RDWR).unwrap();
 
     // 测试1: 顺序分配性能
     let test_sequential_allocation = |size: usize| -> (Duration, Duration) {
