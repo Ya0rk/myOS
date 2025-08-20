@@ -411,6 +411,12 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         path = "/usr/lib/libmpc.so.3.3.1".to_string();
     } else if path.contains("libsframe.so.1") {
         path = "/usr/lib/libsframe.so.1.0.0".to_string();
+    } else if path.contains("libjansson.so.4") {
+        path = "/usr/lib/libjansson.so.4.14.1".to_string();
+    } else if path.contains("libctf.so.0") {
+        path = "/usr/lib/libctf.so.0.0.0".to_string();
+    } else if path.contains("libctf-nobfd.so.0") {
+        path = "/usr/lib/libctf-nobfd.so.0.0.0".to_string();
     }
 
     // 计算目标路径

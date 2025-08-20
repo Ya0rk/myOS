@@ -92,8 +92,8 @@ pub fn conert_str2byte(input: &str) -> Vec<u8> {
 
 fn run_cmd(cmd: &str) {
     // println!("task run cmd: {}", cmd);
-    let cd = "/";
-    // chdir(&conert_str2byte(cd));
+    let cd = "/usr/lib";
+    chdir(&conert_str2byte(cd));
     if fork() == 0 {
         // println!("task run cmd child: {}, pid: {}", cmd, getpid());
         execve(
