@@ -2,8 +2,8 @@ use crate::fs::ext4::{Ext4Inode, NormalFile};
 use crate::fs::fanotify::{FanEventFlags, FanFlags, FanMarkFlags};
 use crate::fs::{
     chdir, mkdir, open, resolve_path, AbsPath, Dentry, Dirent, FileClass, FileTrait, InodeType,
-    Kstat, ModeFlag, MountFlags, OpenFlags, Pipe, RenameFlags, StMode, Statx, StxMask,
-    UmountFlags, MNT_TABLE, SEEK_CUR,
+    Kstat, ModeFlag, MountFlags, OpenFlags, Pipe, RenameFlags, StMode, Statx, StxMask, UmountFlags,
+    MNT_TABLE, SEEK_CUR,
 };
 use crate::hal::config::{AT_FDCWD, PAGE_SIZE, PATH_MAX, RLIMIT_NOFILE, USER_SPACE_TOP};
 use crate::mm::user_ptr::{check_readable, user_cstr, user_ref_mut, user_slice, user_slice_mut};
@@ -401,38 +401,40 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     // NOTE: 需要注意是在这里设置i_mode 供给真正创建 inode 的时候调用
     SYS_OPENAT_MODE.store(_mode, core::sync::atomic::Ordering::Relaxed);
 
-    if path.contains("libisl.so.23") {
-        path = "/usr/lib/libisl.so.23.3.0".to_string();
-    } else if path.contains("libgmp.so.10") {
-        path = "/usr/lib/libgmp.so.10.5.0".to_string();
-    } else if path.contains("libmpfr.so.6") {
-        path = "/usr/lib/libmpfr.so.6.2.1".to_string();
-    } else if path.contains("libmpc.so.3") {
-        path = "/usr/lib/libmpc.so.3.3.1".to_string();
-    } else if path.contains("libsframe.so.1") {
-        path = "/usr/lib/libsframe.so.1.0.0".to_string();
-    } else if path.contains("libjansson.so.4") {
-        path = "/usr/lib/libjansson.so.4.14.1".to_string();
-    } else if path.contains("libctf.so.0") {
-        path = "/usr/lib/libctf.so.0.0.0".to_string();
-    } else if path.contains("libctf-nobfd.so.0") {
-        path = "/usr/lib/libctf-nobfd.so.0.0.0".to_string();
-    } else if path.contains("libffi.so.8") {
-        path = "/usr/lib/libffi.so.8.1.4".to_string();
-    } else if path.contains("libncursesw.so.6") {
-        path = "/usr/lib/libncursesw.so.6.5".to_string();
-    } else if path.contains("liblzma.so.5") {
-        path = "/usr/lib/liblzma.so.5.8.1".to_string();
-    } else if path.contains("libxml2.so.2") {
-        path = "/usr/lib/libxml2.so.2.13.8".to_string();
-    } else if path.contains("libz.so.1") {
-        path = "/usr/lib/libz.so.1.3.1".to_string();
-    } else if path.contains("libzstd.so.1") {
-        path = "/usr/lib/libzstd.so.1.5.7".to_string();
-    } else if path.contains("libstdc++.so.6") {
-        path = "/usr/lib/libstdc++.so.6.0.33".to_string();
-    } else if path.contains("libpcre2-8.so.0") {
-        path = "/usr/lib/libpcre2-8.so.0.12.0".to_string();
+    #[cfg(target_arch = "riscv64")]
+    {
+        if path.contains("libisl.so.23") {
+            path = "/usr/lib/libisl.so.23.3.0".to_string();
+        } else if path.contains("libgmp.so.10") {
+            path = "/usr/lib/libgmp.so.10.5.0".to_string();
+        } else if path.contains("libmpfr.so.6") {
+            path = "/usr/lib/libmpfr.so.6.2.1".to_string();
+        } else if path.contains("libmpc.so.3") {
+            path = "/usr/lib/libmpc.so.3.3.1".to_string();
+        } else if path.contains("libsframe.so.1") {
+            path = "/usr/lib/libsframe.so.1.0.0".to_string();
+        } else if path.contains("libjansson.so.4") {
+            path = "/usr/lib/libjansson.so.4.14.1".to_string();
+        } else if path.contains("libctf.so.0") {
+            path = "/usr/lib/libctf.so.0.0.0".to_string();
+        } else if path.contains("libctf-nobfd.so.0") {
+            path = "/usr/lib/libctf-nobfd.so.0.0.0".to_string();
+        } else if path.contains("libffi.so.8") {
+            path = "/usr/lib/libffi.so.8.1.4".to_string();
+        } else if path.contains("libncursesw.so.6") {
+            path = "/usr/lib/libncursesw.so.6.5".to_string();
+        } else if path.contains("liblzma.so.5") {
+            path = "/usr/lib/liblzma.so.5.8.1".to_string();
+        } else if path.contains("libxml2.so.2") {
+            path = "/usr/lib/libxml2.so.2.13.8".to_string();
+        } else if path.contains("libz.so.1") {
+            path = "/usr/lib/libz.so.1.3.1".to_string();
+        } else if path.contains("libzstd.so.1") {
+            path = "/usr/lib/libzstd.so.1.5.7".to_string();
+        } else if path.contains("libstdc++.so.6") {
+            path = "/usr/lib/libstdc++.so.6.0.33".to_string();
+        } else if path.contains("libpcre2-8.so.0") {
+            path = "/usr/lib/libpcre2-8.so.0.12.0".to_string();
     }
 
     // 计算目标路径
@@ -1305,7 +1307,9 @@ pub fn sys_faccessat(dirfd: isize, pathname: usize, mode: u32, _flags: u32) -> S
         info!("[sys_faccessat] got i_mode: {:0}", i_mode);
 
         if is_root {
-            if mode.contains(FaccessatMode::X_OK) && !i_mode.intersects(ModeFlag::S_IXOTH | ModeFlag::S_IXGRP | ModeFlag::S_IXUSR) {
+            if mode.contains(FaccessatMode::X_OK)
+                && !i_mode.intersects(ModeFlag::S_IXOTH | ModeFlag::S_IXGRP | ModeFlag::S_IXUSR)
+            {
                 return Err(Errno::EACCES);
             }
             return Ok(0);
@@ -1409,7 +1413,7 @@ pub fn sys_fcntl(fd: usize, cmd: u32, arg: usize) -> SysResult<usize> {
             let flag = fd_info.flags;
             let mut res = 0;
             // info!("flags = {:?}", flag);
-            if flag.contains(OpenFlags::O_CLOEXEC) || flag.contains(OpenFlags::O_NONBLOCK){
+            if flag.contains(OpenFlags::O_CLOEXEC) || flag.contains(OpenFlags::O_NONBLOCK) {
                 res = FcntlArgFlags::FD_CLOEXEC.bits() as usize;
             }
             // println!("ok res = {:?}", res);
@@ -1544,7 +1548,13 @@ pub async fn sys_pread64(fd: usize, buf: usize, count: usize, offset: usize) -> 
     file.pread(buffer, offset, count).await
 }
 
-pub async fn sys_preadv2(fd: usize, buf: usize, count: usize, offset: usize, flags: usize) -> SysResult<usize> {
+pub async fn sys_preadv2(
+    fd: usize,
+    buf: usize,
+    count: usize,
+    offset: usize,
+    flags: usize,
+) -> SysResult<usize> {
     info!("[sys_preadv2] start");
     sys_pread64(fd, buf, count, offset).await
 }
@@ -1574,7 +1584,13 @@ pub async fn sys_pwrite64(fd: usize, buf: usize, count: usize, offset: usize) ->
     file.pwrite(buffer, offset, count).await
 }
 
-pub async fn sys_pwritev2(fd: usize, buf: usize, count: usize, offset: usize, flags: usize) -> SysResult<usize> {
+pub async fn sys_pwritev2(
+    fd: usize,
+    buf: usize,
+    count: usize,
+    offset: usize,
+    flags: usize,
+) -> SysResult<usize> {
     info!("[sys_pwritev2] start");
     sys_pwrite64(fd, buf, count, offset).await
 }
@@ -2110,3 +2126,4 @@ pub fn sys_fanotify_mark(
 
     Ok(0)
 }
+

@@ -114,7 +114,7 @@ pub fn sys_gettimeofday(tv: usize, _tz: usize) -> SysResult<usize> {
         return Err(Errno::EFAULT);
     }
     let ptr = tv as *mut TimeVal;
-    
+
     let data = TimeVal::new();
     unsafe {
         core::ptr::write(ptr, data);
@@ -273,7 +273,10 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
 
-    info!("[sys_execve]: path: {:?}, argv: {:?}, env: {:?}, cwd: {:?}", path, argv, env, cwd);
+    info!(
+        "[sys_execve]: path: {:?}, argv: {:?}, env: {:?}, cwd: {:?}",
+        path, argv, env, cwd
+    );
     // #[cfg(target_arch = "loongarch64")]
     if unlikely(
         cwd == "/glibc"
@@ -320,16 +323,25 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // 对于路径上文件的问题,返回值应当和open的返回值一样?
     // 当返回的文件不是可执行文件的时候应当返回 Errno::ENOEXEC?
     // 现场赛trick
+
     let mut target_path;
-    if path == "/bin/cc1" {
-        target_path = resolve_path(cwd, "/usr/libexec/gcc/riscv64-alpine-linux-musl/14.2.0/cc1".to_string());
-    } else if path == "/bin/as" {
-        target_path = resolve_path(cwd, "/usr/riscv64-alpine-linux-musl/bin/as".to_string());
-    } else if path == "/bin/ld" {
-        target_path = resolve_path(cwd, "/usr/riscv64-alpine-linux-musl/bin/ld".to_string());
-    } else {
-        target_path = resolve_path(cwd, path);
+
+    #[cfg(target_arch = "riscv64")]
+    {
+        if path == "/bin/cc1" {
+            target_path = resolve_path(
+                cwd,
+                "/usr/libexec/gcc/riscv64-alpine-linux-musl/14.2.0/cc1".to_string(),
+            );
+        } else if path == "/bin/as" {
+            target_path = resolve_path(cwd, "/usr/riscv64-alpine-linux-musl/bin/as".to_string());
+        } else if path == "/bin/ld" {
+            target_path = resolve_path(cwd, "/usr/riscv64-alpine-linux-musl/bin/ld".to_string());
+        } else {
+            target_path = resolve_path(cwd, path);
+        }
     }
+
     if let Ok(file) = open(target_path, OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;
