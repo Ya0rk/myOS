@@ -37,7 +37,7 @@ impl Future for IoFutrue {
             let file = match task.get_file_by_fd(pollfd.fd as usize) {
                 Some(f) => f,
                 None => {
-                    println!("[PpollFuture] fd {} not found", pollfd.fd);
+                    // println!("[PpollFuture] fd {} not found", pollfd.fd);
                     continue;
                 }
             };
