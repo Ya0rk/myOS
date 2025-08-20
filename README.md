@@ -51,7 +51,7 @@ git、vi和llama2.c等现实应用。
 |         | rustc | ✅Task0  ❌Task1        |
 | 龙芯2K1000  |       | 测例运行失败                |
 
-其中，RV Qemu、LA Qemu 平台使用`finet_qemu`分支进行测试，星光二代板平台使用`finet_vf2`分支进行测试。在`finet_lagcc`中，实现了 LA Qemu 平台下`gcc` Task1（编译、运行）测例的稳定运行。
+其中，RV Qemu、LA Qemu 平台使用`finet_qemu`分支进行测试，星光二代板平台使用`finet_vf2`分支进行测试。在`finet_lagcc`分支中，实现了 LA Qemu 平台下`gcc` Task1（编译、运行）测例的稳定运行。
 
 截止8月17日决赛结束前，Del0n1x的排名如下（决赛测例满分）：
 ![](./report/image/决赛分数.png)
