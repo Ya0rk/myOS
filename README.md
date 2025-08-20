@@ -28,6 +28,8 @@ git、vi和llama2.c等现实应用。
 
 ![](./report/image/整体架构图.png)
 
+## 参赛成绩
+
 8月20日决赛现场赛中，Del0n1x以145分的总分位列第8：
 ![](./doc/content/assets/现场赛排名.png)
 
