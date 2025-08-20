@@ -436,6 +436,30 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         } else if path.contains("libpcre2-8.so.0") {
             path = "/usr/lib/libpcre2-8.so.0.12.0".to_string();
     }
+        }
+    }
+    #[cfg(target_arch = "loongarch64")]
+    {
+        if path.contains("libisl.so.23") {
+            path = "/usr/lib/libisl.so.23.3.0".to_string();
+        } else if path.contains("libmpc.so.3") {
+            path = "/usr/lib/libmpc.so.3.3.1".to_string();
+        } else if path.contains("libmpfr.so.6") {
+            path = "/usr/lib/libmpfr.so.6.2.1".to_string();
+        } else if path.contains("libgmp.so.10") {
+            path = "/usr/lib/libgmp.so.10.5.0".to_string();
+        } else if path.contains("libz.so.1") {
+            path = "/usr/lib/libz.so.1.3.1".to_string();
+        } else if path.contains("/usr/lib/libzstd.so.1") {
+            path = "/usr/lib/libzstd.so.1.5.6".to_string();
+        } else if path.contains("/usr/lib/libsframe.so.1") {
+            path = "/usr/lib/libsframe.so.1.0.0".to_string();
+        } else if path.contains("/usr/lib/libctf.so.0") {
+            path = "usr/lib/libctf.so.0.0.0".to_string();
+        } else if path.contains("libjansson.so.4") {
+            path = "usr/lib/libjansson.so.4.14.0".to_string();
+        }
+    }
 
     // 计算目标路径
     let target_path = if fd == AT_FDCWD {
@@ -2126,4 +2150,3 @@ pub fn sys_fanotify_mark(
 
     Ok(0)
 }
-

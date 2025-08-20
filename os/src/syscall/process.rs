@@ -324,7 +324,7 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // 当返回的文件不是可执行文件的时候应当返回 Errno::ENOEXEC?
     // 现场赛trick
 
-    let mut target_path;
+    let mut target_path = resolve_path(cwd.clone(), path.clone());
 
     #[cfg(target_arch = "riscv64")]
     {
@@ -337,6 +337,21 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
             target_path = resolve_path(cwd, "/usr/riscv64-alpine-linux-musl/bin/as".to_string());
         } else if path == "/bin/ld" {
             target_path = resolve_path(cwd, "/usr/riscv64-alpine-linux-musl/bin/ld".to_string());
+        } else {
+            target_path = resolve_path(cwd, path);
+        }
+    }
+    #[cfg(target_arch = "loongarch64")]
+    {
+        if path == "/bin/cc1" {
+            target_path = resolve_path(
+                cwd,
+                "/usr/libexec/gcc/loongarch64-alpine-linux-musl/14.2.0/cc1".to_string(),
+            );
+        } else if path == "/bin/as" {
+            target_path = resolve_path(cwd, "/usr/loongarch64-alpine-linux-musl/bin/as".to_string());
+        } else if path == "/bin/ld" {
+            target_path = resolve_path(cwd, "/usr/loongarch64-alpine-linux-musl/bin/ld".to_string());
         } else {
             target_path = resolve_path(cwd, path);
         }
