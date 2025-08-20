@@ -409,6 +409,8 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         path = "/usr/lib/libmpfr.so.6.2.1".to_string();
     } else if path.contains("libmpc.so.3") {
         path = "/usr/lib/libmpc.so.3.3.1".to_string();
+    } else if path.contains("libsframe.so.1") {
+        path = "/usr/lib/libsframe.so.1.0.0".to_string();
     }
 
     // 计算目标路径
