@@ -273,7 +273,7 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     let env = user_cstr_array(env.into())?.unwrap_or_else(|| Vec::new());
     let cwd = task.get_current_path();
 
-    // error!("[sys_execve]: path: {:?}, argv: {:?}, env: {:?}, cwd: {:?}", path, argv, env, cwd);
+    info!("[sys_execve]: path: {:?}, argv: {:?}, env: {:?}, cwd: {:?}", path, argv, env, cwd);
     // #[cfg(target_arch = "loongarch64")]
     if unlikely(
         cwd == "/glibc"
@@ -319,7 +319,12 @@ pub async fn sys_execve(path: usize, argv: usize, env: usize) -> SysResult<usize
     // 应当去实现复杂的错误处理
     // 对于路径上文件的问题,返回值应当和open的返回值一样?
     // 当返回的文件不是可执行文件的时候应当返回 Errno::ENOEXEC?
-    let target_path = resolve_path(cwd, path);
+    let mut target_path;
+    if path == "/bin/cc1" {
+        target_path = resolve_path(cwd, "/usr/libexec/gcc/riscv64-alpine-linux-musl/14.2.0/cc1".to_string());
+    } else {
+        target_path = resolve_path(cwd, path);
+    }
     if let Ok(file) = open(target_path, OpenFlags::O_RDONLY) {
         let task: alloc::sync::Arc<crate::task::TaskControlBlock> = current_task().unwrap();
         task.execve(file, argv, env).await;

@@ -394,12 +394,24 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
     }
     let task = current_task().unwrap();
     let token = current_user_token();
-    let path = user_cstr(path.into())?.unwrap();
+    let mut path = user_cstr(path.into())?.unwrap();
     let flags = OpenFlags::from_bits(flags as i32).ok_or(Errno::EINVAL)?;
     let cwd = task.get_current_path();
 
     // NOTE: 需要注意是在这里设置i_mode 供给真正创建 inode 的时候调用
     SYS_OPENAT_MODE.store(_mode, core::sync::atomic::Ordering::Relaxed);
+
+    if path.contains("libisl.so.23") {
+        path = "/usr/lib/libisl.so.23".to_string();
+    } else if path.contains("libgmp.so.10") {
+        path = "/usr/lib/libgmp.so.10".to_string();
+    } else if path.contains("libmpfr.so.6") {
+        path = "/usr/lib/libmpfr.so.6".to_string();
+    } else if path.contains("libmpc.so.3") {
+        path = "/usr/lib/libmpc.so.3".to_string();
+    } else if path.contains("libisl.so.23") {
+        path = "/usr/lib/libisl.so.23".to_string();
+    }
 
     // 计算目标路径
     let target_path = if fd == AT_FDCWD {
