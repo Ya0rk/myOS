@@ -435,7 +435,6 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
             path = "/usr/lib/libstdc++.so.6.0.33".to_string();
         } else if path.contains("libpcre2-8.so.0") {
             path = "/usr/lib/libpcre2-8.so.0.12.0".to_string();
-    }
         }
     }
     #[cfg(target_arch = "loongarch64")]
