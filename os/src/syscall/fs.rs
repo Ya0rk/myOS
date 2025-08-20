@@ -417,6 +417,18 @@ pub fn sys_openat(fd: isize, path: usize, flags: u32, _mode: usize) -> SysResult
         path = "/usr/lib/libctf.so.0.0.0".to_string();
     } else if path.contains("libctf-nobfd.so.0") {
         path = "/usr/lib/libctf-nobfd.so.0.0.0".to_string();
+    } else if path.contains("libffi.so.8") {
+        path = "/usr/lib/libffi.so.8.1.4".to_string();
+    } else if path.contains("libncursesw.so.6") {
+        path = "/usr/lib/libncursesw.so.6.5".to_string();
+    } else if path.contains("liblzma.so.5") {
+        path = "/usr/lib/liblzma.so.5.8.1".to_string();
+    } else if path.contains("libxml2.so.2") {
+        path = "/usr/lib/libxml2.so.2.13.8".to_string();
+    } else if path.contains("libz.so.1") {
+        path = "/usr/lib/libz.so.1.3.1".to_string();
+    } else if path.contains("libzstd.so.1") {
+        path = "/usr/lib/libzstd.so.1.5.7".to_string();
     }
 
     // 计算目标路径
